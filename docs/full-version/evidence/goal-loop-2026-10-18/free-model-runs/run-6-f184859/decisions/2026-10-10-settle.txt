@@ -1,0 +1,4 @@
+Weekly numbers on 2026-10-10. Every verdict here was worked out by mc-goals from the readings, never by the run that made the move.
+write-the-first-draft-of-my-short-story-the-lighthouse-keepe: words in drafts/lighthouse-keeper.md (total, read from wc -w drafts/lighthouse-keeper.md)
+  now 0, read 2026-10-10
+read today: none

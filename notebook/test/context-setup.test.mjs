@@ -1,0 +1,266 @@
+import {recordReport,delivered} from '../core/background-reports.mjs';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {spawnSync,execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+import {Store} from '../core/records/store.mjs';
+import {installStarter} from '../core/starter-workspace.mjs';
+import {installSkillTree} from '../core/packaged-skills.mjs';
+import {beginContext,readContext,writeContext,inviteNow,scheduleInvite,markContext,showCard,setTimezone,findZone,contextStatus,
+  INVITE_SCRIPT,INVITE_JOB,INVITE_MINUTES} from '../core/context-setup.mjs';
+import {createService} from '../server/main.mjs';
+
+for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
+
+// The setup in two parts (16 October 2026): the technical part ends when an AI and Telegram
+// work; getting to know the owner is a chat the assistant leads afterwards, started by the word
+// "context", by the one invitation about ten minutes later, or by the dashboard's card.
+const kit=fileURLToPath(new URL('../../',import.meta.url));
+const python=process.env.GODSPEED_TEST_PYTHON||(process.platform==='win32'?'python':'python3');
+const havePython=spawnSync(python,['--version']).status===0;
+function workspace(t,{starter=true}={}){
+  const base=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-context-')),root=path.join(base,'workspace'),home=path.join(base,'hermes');
+  t.after(()=>fs.rmSync(base,{recursive:true,force:true}));
+  fs.mkdirSync(root,{recursive:true});fs.mkdirSync(home,{recursive:true});if(starter)installStarter(root);
+  fs.writeFileSync(path.join(home,'config.yaml'),'model:\n  provider: openrouter\ntimezone: "Europe/Berlin"\n');
+  return {root,home,store:new Store(root,{device:'vps'})};
+}
+
+test('the one invitation is planned once, about ten minutes after the technical part, as a Hermes job that only prints it',async t=>{
+  const {root,home,store}=workspace(t),calls=[];
+  beginContext(store,{ownerName:'Anna',timezone:'Europe/Vienna',timezoneFrom:'browser'});
+  const scheduler={command:async args=>{calls.push(args);fs.mkdirSync(path.join(home,'cron'),{recursive:true});fs.writeFileSync(path.join(home,'cron','jobs.json'),JSON.stringify({jobs:[{id:'j1',name:INVITE_JOB}]}));}};
+  const before=Date.now(),planned=await scheduleInvite(scheduler,{store,home});
+  assert.equal(planned.scheduled,true);assert.equal(calls.length,1);
+  const [create,when,...rest]=calls[0];
+  assert.equal(create,'create');
+  const minutes=(Date.parse(when)-before)/60000;
+  assert.ok(minutes>INVITE_MINUTES-1&&minutes<=INVITE_MINUTES+1,'about ten minutes from now: '+when);
+  assert.match(when,/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\+00:00$/,'a fixed moment, which every Hermes runs once');
+  assert.deepEqual(rest,['--no-agent','--script',INVITE_SCRIPT,'--name',INVITE_JOB,'--deliver','telegram','--failure-deliver','local','--workdir',root]);
+  const script=fs.readFileSync(path.join(home,'scripts',INVITE_SCRIPT),'utf8');
+  assert.match(script,/context-setup\.mjs", "invite"\]/);assert.ok(script.includes(JSON.stringify(root)));
+  assert.equal((await scheduleInvite(scheduler,{store,home})).scheduled,false,'never a second one');assert.equal(calls.length,1);
+});
+
+test('the invitation goes out once, and not at all when the chat began or ended before it was due',t=>{
+  const {store}=workspace(t);
+  beginContext(store,{ownerName:'Anna'});
+  const text=inviteNow(store);
+  assert.equal(text,'Hi Anna, me again. Shall we take five minutes so I get to know you? Three things: where you live, a little about you, and what you would like my help with first.\n\nNo rush: answer whenever you like, today or next week. Just reply when you are ready, or send context.');
+  assert.doesNotMatch(text,/[–—]/);
+  assert.equal(readContext(store).state,'invited');assert.equal(readContext(store).invitation,text,'kept for the assistant to see');
+  assert.equal(inviteNow(store),'','never a reminder');
+  for(const action of ['start','done','skip']){
+    const other=workspace(t);beginContext(other.store,{ownerName:'Ben'});markContext(other.store,action);
+    assert.equal(inviteNow(other.store),'',action+': no invitation');
+  }
+  // A setup run again after it began keeps where the chat stands.
+  markContext(store,'start');beginContext(store,{ownerName:'Anna'});assert.equal(readContext(store).state,'started');
+});
+
+test('the scheduled script prints the invitation once, as Hermes delivers it',t=>{
+  const {root,store}=workspace(t);beginContext(store,{ownerName:'Anna'});
+  const run=()=>execFileSync(process.execPath,['--no-warnings',path.join(kit,'notebook','scripts','context-setup.mjs'),'invite'],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_DEVICE:'vps'},encoding:'utf8'});
+  assert.match(run(),/^Hi Anna, me again\./);assert.equal(run(),'','empty, so Hermes sends nothing');
+});
+
+test('a city sets the notebook\'s clock and Hermes\' own, even over a zone set before',async t=>{
+  const {home,store}=workspace(t);
+  assert.deepEqual(['Vienna','new york','Germany','Asia/Tokyo','Krefeld',''].map(findZone),['Europe/Vienna','America/New_York','Europe/Berlin','Asia/Tokyo',null,null]);
+  const result=await setTimezone(store,{city:'Vienna',home});
+  assert.deepEqual(result,{found:true,zone:'Europe/Vienna',city:'Vienna'});
+  assert.equal(store.get('settings','installation').timezone,'Europe/Vienna');
+  assert.match(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),/^timezone: "Europe\/Vienna"$/m);
+  assert.equal(readContext(store).timezone_from,'answer');
+  assert.deepEqual(await setTimezone(store,{city:'Krefeld',home}),{found:false,city:'Krefeld'});
+  assert.equal(store.get('settings','installation').timezone,'Europe/Vienna','a place it does not know changes nothing');
+});
+
+test('the dashboard card shows until the chat ended or was hidden, and only on a mission control made from the starter',async t=>{
+  const fresh=workspace(t);
+  assert.equal(showCard(fresh.store),true,'nobody wrote on the page about them yet');
+  beginContext(fresh.store,{ownerName:'Anna'});assert.equal(showCard(fresh.store),true);
+  inviteNow(fresh.store);assert.equal(showCard(fresh.store),true);
+  markContext(fresh.store,'start');assert.equal(showCard(fresh.store),true);
+  markContext(fresh.store,'done');assert.equal(showCard(fresh.store),false);
+  const hidden=workspace(t);markContext(hidden.store,'skip');assert.equal(showCard(hidden.store),false);
+  const adopted=workspace(t,{starter:false});fs.writeFileSync(path.join(adopted.root,'AGENTS.md'),'# Mine\n');
+  assert.equal(showCard(adopted.store),false,'an adopted mission control is its owner\'s');
+  const told=workspace(t);fs.appendFileSync(path.join(told.root,'profile','about-me.md'),'\n## In my own words\n\nI keep bees.\n');
+  assert.equal(showCard(told.store),false,'they told it about themselves already');
+  const service=await createService({root:workspace(t).root,port:0}),base='http://127.0.0.1:'+service.address.port;
+  try{
+    assert.deepEqual(await(await fetch(base+'/api/context-setup')).json(),{show:true,state:null});
+    const hide=await fetch(base+'/api/context-setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'skip'})});
+    assert.deepEqual(await hide.json(),{show:false,state:'skipped'});
+    assert.equal((await(await fetch(base+'/api/context-setup')).json()).show,false);
+  }finally{await service.close();}
+});
+
+test('the assistant\'s tool: what is known, where the chat stands, and what it keeps, with the owner\'s own words',async t=>{
+  const {root,store}=workspace(t);process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
+  t.after(()=>{delete process.env.GODSPEED_ASSISTANT_CONFIG;});
+  beginContext(store,{ownerName:'Anna',timezone:'Europe/Vienna',timezoneFrom:'browser'});inviteNow(store);
+  const service=await createService({root,port:0}),base='http://127.0.0.1:'+service.address.port;let id=0;
+  try{
+  const call=async args=>{const reply=await(await fetch(base+'/mcp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:++id,method:'tools/call',params:{name:'context_setup',arguments:args}})})).json();
+    const text=reply.result.content[0].text;return reply.result.isError?{error:text}:JSON.parse(text);};
+  const listed=await(await fetch(base+'/mcp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:0,method:'tools/list'})})).json();
+  assert.ok(listed.result.tools.some(tool=>tool.name==='context_setup'));
+  service.store.save('settings',{id:'installation',owner:'vps',timezone:'Europe/Vienna',delivery:'telegram'});
+  const status=await call({action:'status'});
+  assert.equal(status.state,'invited');assert.deepEqual(status.timezone,{zone:'Europe/Vienna',city:'Vienna',from:'browser'});
+  assert.equal(status.about.told,false);assert.deepEqual(status.goals,[]);assert.match(status.where,/Godspeed's brain/);
+  assert.deepEqual(await call({action:'start'}),{state:'started'});
+  const said='I am a fictional nurse in Leeds, two kids, I run before work.';
+  assert.match((await call({action:'about',text:said,words:said})).error,/owner's own words/,'nothing the owner did not say');
+  service.store.save('conversation_messages',{conversation_id:'telegram',role:'user',content:said,created_at:new Date().toISOString()});
+  assert.deepEqual(await call({action:'about',text:said,words:said}),{kept:true,page:'whole',file:null});
+  assert.match(fs.readFileSync(path.join(root,'profile','about-me.md'),'utf8'),/## In my own words\n\nI am a fictional nurse in Leeds, two kids, I run before work\.\n$/);
+  service.store.save('conversation_messages',{conversation_id:'telegram',role:'user',content:'keeping track of appointments',created_at:new Date().toISOString()});
+  const goal=await call({action:'goal',title:'Keep track of my appointments',words:'keeping track of appointments'});
+  assert.equal(goal.title,'Keep track of my appointments');
+  const after=await call({action:'status'});
+  assert.equal(after.about.told,true);assert.deepEqual(after.goals,['Keep track of my appointments']);
+  assert.deepEqual(await call({action:'done'}),{state:'done'});assert.equal(showCard(new Store(root)),false);
+  assert.match((await call({action:'teleport'})).error,/Choose status/);
+  }finally{await service.close();}
+});
+
+test('before each turn the assistant is told about an unanswered invitation, or a chat under way, and nothing else',{skip:!havePython&&'no Python here'},t=>{
+  const plugin=path.join(kit,'notebook','assistant-files','godspeed-context','__init__.py');
+  const blocks=execFileSync(python,['-c',`import importlib.util,json,sys,datetime
+spec=importlib.util.spec_from_file_location("p",sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+now=datetime.datetime.now(datetime.timezone.utc).isoformat();old=(datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(days=30)).isoformat()
+cases=[{"state":"invited","invited_at":now,"invitation":"Hi Anna, me again."},{"state":"started","started_at":now,"updated_at":now},{"state":"waiting"},{"state":"done"},{"state":"invited","invited_at":old},None]
+print(json.dumps([m.context_block(c) for c in cases]))
+print(json.dumps(m.on_pre_llm_call(platform="cron")))`,plugin],{encoding:'utf8'}).trim().split('\n');
+  const [invited,started,...none]=JSON.parse(blocks[0]);
+  assert.match(invited,/^\[godspeed-context\] You sent your owner one invitation/);assert.match(invited,/"Hi Anna, me again\."/);
+  assert.match(invited,/"ok", "yes", "let's go"/);assert.match(invited,/context-setup recipe/);
+  assert.match(started,/getting-to-know-you chat with your owner/);
+  assert.deepEqual(none,[null,null,null,null],'waiting, done, an invitation weeks old, nothing');
+  assert.equal(blocks[1],'null','never in a scheduled run');
+});
+
+test('a plain yes in the owner\'s private Telegram chat reaches the waiting step command, and nowhere else does',{skip:!havePython&&'no Python here'},t=>{
+  const plugin=path.join(kit,'notebook','assistant-files','godspeed-context','__init__.py');
+  const out=execFileSync(python,['-c',`import importlib.util,json,sys
+spec=importlib.util.spec_from_file_location("p",sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+reports=[{"kind":"answered","context":"[godspeed-step] a"},{"kind":"ask","context":"b"},{"kind":"choose","context":"c"},{"kind":"future","context":"d"},{"kind":"none"},{"kind":"ask"},"x",None]
+print(json.dumps([m.step_block(r) for r in reports]))
+print(json.dumps(m.on_pre_llm_call(platform="telegram",user_message="yes",session_id="s")))
+print(json.dumps(m.on_pre_llm_call(platform="cron",user_message="yes",session_id="s")))`,plugin],{encoding:'utf8'}).trim().split('\n');
+  assert.deepEqual(JSON.parse(out[0]),['[godspeed-step] a','b','c','d',null,null,null,null]);
+  assert.equal(out[1],'null','without the owner\'s Telegram session nothing is asked of the step command');
+  assert.equal(out[2],'null');
+});
+
+test('the installed plugin hands the owner\'s private Telegram yes to a real waiting step, and no other session reaches it',{skip:!havePython&&'no Python here'},async t=>{
+  const base=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-step-plugin-')),root=path.join(base,'workspace'),home=path.join(base,'assistant');t.after(()=>fs.rmSync(base,{recursive:true,force:true}));
+  installStarter(root);
+  execFileSync(process.execPath,[path.join(kit,'notebook','scripts','wire-assistant.mjs'),home],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_PORT:'41990',GODSPEED_DEVICE:'local'},windowsHide:true});
+  fs.mkdirSync(path.join(base,'stubs','gateway'),{recursive:true});fs.writeFileSync(path.join(base,'stubs','gateway','__init__.py'),'');
+  fs.writeFileSync(path.join(base,'stubs','gateway','session_context.py'),'import os\ndef get_session_env(key, default=""):\n    return os.environ.get("STUB_" + key, default)\n');
+  const step=(...args)=>JSON.parse(execFileSync(process.execPath,[path.join(kit,'notebook','bin','godspeed-step.mjs'),...args,'--godspeed',root],{encoding:'utf8'}));
+  const open=async about=>{const {id,message}=step('open','--about',about,'--question','Restart it?','--yes','I restart it.','--no','I leave it.','--by','routine:test','--chat','telegram');const store=new Store(root,{device:'vps'});await recordReport(store,{text:message,steps:[id],delivery:'telegram'});delivered(store,message);return id;};
+  const plugin=path.join(home,'plugins','godspeed-context','__init__.py');
+  const lines=[];
+  const turn=(session,words='yes')=>{
+    const out=execFileSync(python,['-c',`import importlib.util,json,sys,logging
+seen=[];h=logging.Handler();h.emit=lambda r:seen.append(r.getMessage());logging.getLogger("godspeed-step").addHandler(h);logging.getLogger("godspeed-step").setLevel(logging.INFO)
+spec=importlib.util.spec_from_file_location("p",sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+r=m.on_pre_llm_call(platform="telegram",user_message=sys.argv[2],session_id="sess")
+print(json.dumps(seen));print(json.dumps(r))`,plugin,words],
+      {encoding:'utf8',env:{...process.env,PYTHONPATH:path.join(base,'stubs'),TELEGRAM_ALLOWED_USERS:'4242',STUB_HERMES_SESSION_PLATFORM:'telegram',STUB_HERMES_SESSION_CHAT_TYPE:'dm',
+        STUB_HERMES_SESSION_CHAT_ID:session.chat,STUB_HERMES_SESSION_USER_ID:session.user,STUB_HERMES_SESSION_ID:session.id}}).trim().split('\n');
+    lines.push(...JSON.parse(out[0]));
+    return JSON.parse(out[1]);
+  };
+  const owner={chat:'4242',user:'4242',id:'sess'},status=id=>step('get',id).status;
+  const stranger=await open('The disk is full.');
+  for(const other of [{...owner,user:'7'},{...owner,chat:'-100'},{...owner,id:'other'}])assert.equal(turn(other)?.context?.includes('godspeed-step')??false,false);
+  assert.equal(status(stranger),'waiting');
+  const reply=turn(owner);assert.match(reply.context,/the program has recorded it/);assert.equal(status(stranger),'yes');
+  const refused=await open('The cache is stale.');
+  assert.match(turn(owner,'no').context,/the program has recorded it/);assert.equal(status(refused),'no');
+  const command=path.join(home,'plugins','godspeed-context','step-command.txt'),kept=fs.readFileSync(command,'utf8');
+  fs.writeFileSync(command,JSON.stringify([path.join(base,'no-such-node'),'x','y'])+'\n');
+  const failed=turn(owner);assert.match(failed.context,/send it again/);assert.ok(!/no-such-node/.test(failed.context));
+  // The gateway log says what the match did each turn, and never the owner's words (#372).
+  assert.deepEqual(lines.filter(l=>/not the owner's private chat in this session/.test(l)).map(l=>l.match(/session \((.*) differs\)/)[1]),['USER_ID','CHAT_ID','ID'],lines.join('\n'));
+  assert.ok(lines.includes('godspeed-step (telegram): a message of 1 words was heard as answered'),lines.join('\n'));
+  assert.match(lines.at(-1),/^godspeed-step \(telegram\): a message of 1 words could not be matched: /);
+  fs.writeFileSync(command,kept);
+  turn(owner,'the cache one please');
+  assert.equal(lines.at(-1),'godspeed-step (telegram): a message of 4 words was heard as none');
+  assert.ok(lines.every(l=>!/\b(yes|no|cache)\b/.test(l.replace(/^godspeed-step \(telegram\): /,''))),lines.join('\n'));
+  // Hermes can leave the session id empty after the owner's first message (#372). The owner's
+  // decision on #482: an empty id passes only when every other check matches the owner, the chat id
+  // included, and says so in the log; a different id is still refused.
+  const accepted='godspeed-step (telegram): a message in the owner\'s private chat was accepted without a session id (Hermes gave none; every other check matched)';
+  const later=await open('The backup is late.');
+  let from=lines.length;
+  assert.equal(turn({...owner,chat:'-100',id:''})?.context?.includes('godspeed-step')??false,false,'empty id, another chat: refused');
+  assert.equal(status(later),'waiting');
+  assert.ok(!lines.slice(from).includes(accepted),lines.join('\n'));
+  assert.match(lines.at(-1),/not the owner's private chat in this session \(CHAT_ID, ID \(empty\) differs\)/);
+  from=lines.length;
+  assert.equal(turn({...owner,id:'another-session'})?.context?.includes('godspeed-step')??false,false,'a different id: refused');
+  assert.equal(status(later),'waiting');
+  assert.match(lines.at(-1),/not the owner's private chat in this session \(ID differs\)/);
+  from=lines.length;
+  assert.match(turn({...owner,id:''}).context,/the program has recorded it/,'empty id, everything else the owner: accepted');
+  assert.equal(status(later),'yes');
+  assert.deepEqual(lines.slice(from),[accepted,'godspeed-step (telegram): a message of 1 words was heard as answered'],lines.join('\n'));
+});
+
+test('the recipe is installed for a starter-born assistant, names its doors and uses only tools the notebook has',async t=>{
+  const {root,store}=workspace(t),source=path.join(kit,'notebook','recipes','context-setup');
+  installSkillTree(store,source,path.join(root,'skills','context-setup'));
+  const recipe=fs.readFileSync(path.join(root,'skills','context-setup','SKILL.md'),'utf8').replace(/\r/g,'');
+  assert.match(recipe,/^---\nname: context-setup\ndescription: /);
+  const description=recipe.match(/^description: (.*)$/m)[1];
+  for(const door of ['the word "context"','[godspeed-context]','"ok"','"let\'s go"','let me tell you about me'])assert.ok(description.includes(door),door);
+  assert.doesNotMatch(recipe,/[–—]/,'no long dashes');
+  // The book's own first prompt, unchanged, and the two pages that hold the prompts.
+  const book=fs.readFileSync(path.join(kit,'profile','bring-your-context-with-you.md'),'utf8').replace(/\r/g,'');
+  const prompt=book.match(/## Step 1[\s\S]*?```\n([\s\S]*?)\n```/)[1];
+  const shipped=recipe.match(/     ```\n([\s\S]*?)\n     ```/)[1].split('\n').map(l=>l.replace(/^     /,'')).join('\n');
+  assert.equal(shipped,prompt);
+  for(const link of ['https://querino.ai/prompts/about-me-extraction-step-1','https://querino.ai/prompts/download-my-ai-briefing'])assert.ok(recipe.includes(link),link);
+  // Every tool it calls is one the notebook offers its assistant.
+  const tools=[...new Set([...recipe.matchAll(/`([a-z_]+)` with `\{/g)].map(m=>m[1]))];
+  assert.deepEqual(tools,['context_setup']);
+  const service=await createService({root,port:0});let listed;
+  try{listed=await(await fetch('http://127.0.0.1:'+service.address.port+'/mcp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})})).json();}
+  finally{await service.close();}
+  for(const tool of tools)assert.ok(listed.result.tools.some(t=>t.name===tool),tool);
+  for(const action of [...recipe.matchAll(/"action": "([a-z]+)"/g)].map(m=>m[1]))assert.ok(['status','start','done','skip','timezone','about','goal'].includes(action),action);
+  const inventory=JSON.parse(fs.readFileSync(path.join(kit,'notebook','data','recipe-inventory.json'),'utf8'));
+  assert.ok(inventory.some(r=>r.name==='context-setup'),'listed among the product\'s own recipes');
+});
+
+test('wiring the assistant installs and switches on the plugin that tells it about the invitation',t=>{
+  const {root}=workspace(t),home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-context-wire-'));t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
+  const wire=()=>execFileSync(process.execPath,[path.join(kit,'notebook','scripts','wire-assistant.mjs'),home],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_PORT:'41990',GODSPEED_DEVICE:'local'},windowsHide:true});
+  wire();
+  assert.ok(fs.existsSync(path.join(home,'plugins','godspeed-context','__init__.py')));
+  // When this mission control first met this Hermes (starting-routines.mjs, ownRoutines): written at
+  // the install, before anything is made in it, and never moved by a later wiring.
+  const met=()=>JSON.parse(fs.readFileSync(path.join(root,'.godspeed','hermes-met.json'),'utf8')).at,first=met();
+  assert.ok(Date.now()-Date.parse(first)<120000,first);wire();assert.equal(met(),first);
+  assert.equal(fs.readFileSync(path.join(home,'plugins','godspeed-context','mission-control.txt'),'utf8').trim(),root);
+  assert.match(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),/enabled: \[[^\]]*"godspeed-context"/);
+});
+
+test('what the status says lets the chat skip what it knows',t=>{
+  const {store}=workspace(t);
+  writeContext(store,{state:'invited',timezone_from:'answer'});store.save('settings',{id:'installation',owner:'vps',timezone:'Europe/London',delivery:'telegram'});
+  const status=contextStatus(store,{goals:[{title:'Bake on Sundays.',status:'adopted'},{title:'Old',status:'retired'}]});
+  assert.deepEqual(status.timezone,{zone:'Europe/London',city:'London',from:'answer'});assert.deepEqual(status.goals,['Bake on Sundays.']);
+});

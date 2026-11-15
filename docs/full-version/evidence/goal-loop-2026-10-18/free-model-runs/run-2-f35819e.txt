@@ -1,0 +1,51 @@
+
+===== 15:41:48 Goal loop acceptance: commit f35819e8386dcb114ee896d13aef967dac88ff8a, model nvidia/nemotron-3-super-120b-a12b:free, first day 2026-10-10, today 2026-10-18
+PRETTY_NAME="Ubuntu 24.04 LTS"
+systemd: running
+
+===== 15:41:48 A reader on a fresh Ubuntu
+ok    user reader, with sudo for the install only
+this install's notebook will use port 47931
+
+===== 15:42:58 The installer of f35819e8386dcb114ee896d13aef967dac88ff8a, as a release of it would pin it
+export GODSPEED_PRODUCT_REF=f35819e8386dcb114ee896d13aef967dac88ff8a
+export GODSPEED_STARTER_REF=f35819e8386dcb114ee896d13aef967dac88ff8a
+ENGINE=https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/11daa48a1f9deba2f18a23072b3ad2c259ed5918/setup-godspeed.sh
+    "branch": "main",
+    "files": 1172
+  }
+}
+(node:10634) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"wired":true,"isolated":true,"port":47931}
+
+Your mission control is in /home/reader/godspeed-v2.
+To talk to it, open your notebook at http://127.0.0.1:47931/dashboard. The first time, connect your own AI account in Settings, under Your AI: the chat and the daily routines both use it.
+
+I write about what it does and what broke, free: https://michaelzelbel.substack.com/subscribe
+installer exit 0 after 9 minutes
+ok    the installer finished
+ok    sudo taken back: everything after this runs as an ordinary user
+{"ok":true,"format":1,"version":"2.0.0-beta.1","instance":"ea59f20d8e7d436c9feefa5e","scheduler_heartbeat":"2026-10-18T15:52:44.127Z"}
+notebook version folder: f35819e8386dcb114ee896d13aef967dac88ff8a
+ok    the notebook runs commit f35819e8386dcb114ee896d13aef967dac88ff8a
+ok    port 47931 is this install's notebook (/home/reader/godspeed-v2)
+ok    no Claude Code here: the routines can only use Hermes
+
+===== 15:52:46 The AI, connected the way Settings > Your AI does it
+before: {"available":true,"provider":"auto","model":"anthropic/claude-opus-4.6","base_url":"https://openrouter.ai/api/v1","source":"none","key":null,"check":null}
+credit left before connecting the AI: $1.795
+{'connected': None, 'provider': None, 'model': None, 'source': None, 'key': None, 'check': None, 'error': 'Model provider failed with HTTP 502: Provider returned error'}
+FAIL  the routines could not reach the AI after connecting it in Settings
+FAIL  Hermes' config does not name the connected AI
+
+===== 15:52:46 Evidence
+goals
+goals-overview.json
+hermes-cron-output
+hermes-model.txt
+install.out
+routine-ai.json
+routines
+run.log
+work

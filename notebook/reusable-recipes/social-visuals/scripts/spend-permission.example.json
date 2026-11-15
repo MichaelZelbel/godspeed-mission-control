@@ -1,0 +1,22 @@
+{
+  "status": "DRAFT",
+  "approved_by": null,
+  "user_quote": null,
+  "provider": "kie",
+  "approved_at": null,
+  "expires_at": null,
+  "price_checked_at": null,
+  "price_source_url": null,
+  "project_directory": "Choose the actual workspace/work/visuals/project",
+  "models": [
+    "nano-banana-2"
+  ],
+  "max_credits": null,
+  "max_tasks": 13,
+  "task_credits": {
+    "1K": null,
+    "2K": null
+  },
+  "reference_files": [],
+  "allow_generated_references": false
+}

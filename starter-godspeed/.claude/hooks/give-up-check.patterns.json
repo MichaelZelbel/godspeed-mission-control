@@ -1,0 +1,39 @@
+{
+  "about": "What give-up-check.js looks for in the assistant's last message. Each entry is a regular expression, matched case-insensitively against one sentence at a time, with code and quoted output taken out first. givesUp and handsBack mark a sentence that stops early; notGivingUp cancels a match in the same sentence; asksFirst marks a question the assistant must ask before an irreversible step, which is a finished ending and always passes.",
+  "givesUp": [
+    "\\bI (?:can ?not|can't|cannot|couldn't|could not|wasn't able to|was not able to|am unable to|'m unable to|am not able to|'m not able to|was unable to)\\b",
+    "\\bI (?:don't|do not) have (?:access|the (?:access|permissions?|ability|tools?))\\b",
+    "\\b(?:this|that|it|the task|the work|the job|everything) (?:is|was|remains|stays) (?:still |now |currently )?(?:blocked|stuck|not possible|impossible)\\b",
+    "\\bI(?:'m| am) (?:still )?(?:blocked|stuck|giving up)\\b",
+    "\\bI(?:'ll| will) (?:stop|leave it|leave this|leave that|leave the rest) here\\b",
+    "\\bI(?:'ll| will) have to (?:stop|leave)\\b",
+    "\\b(?:is|are|was|were|lies) (?:beyond|outside) (?:my|what I can)\\b",
+    "\\bnot something I can\\b",
+    "\\bthere(?:'s| is) nothing (?:more|else) I can do\\b"
+  ],
+  "handsBack": [
+    "\\byou(?:'ll| will)? (?:need|have) to (?:do|finish|complete|run|fix|handle|take care of|try)\\b",
+    "\\byou(?:'ll| will) need to\\b",
+    "\\b(?:do|finish|complete|run|fix|handle) (?:this|that|it|the rest|these|them)(?: \\w+){0,4} (?:yourself|manually|by hand|on your own|on your side)\\b",
+    "\\b(?:over|back) to you\\b",
+    "\\bleave (?:the rest|this|that|it|the remaining \\w+) (?:to|for) you\\b",
+    "\\b(?:the )?(?:remaining|next) steps? (?:is|are) (?:yours|up to you|for you)\\b",
+    "\\bI(?:'d| would) (?:recommend|suggest) (?:that )?you (?:do|try|run|finish|complete|fix|handle)\\b"
+  ],
+  "notGivingUp": [
+    "\\bnothing (?:is |was )?(?:blocked|blocking|stuck)\\b",
+    "\\bno longer (?:blocked|stuck)\\b",
+    "\\bwas blocked\\b.*\\b(?:now|fixed|unblocked|resolved|so I)\\b",
+    "\\bI can(?:'t|not) (?:wait|recommend it enough)\\b",
+    "\\bif you (?:ever |later )?(?:want|need|prefer|wish|like)\\b",
+    "\\bcould(?:n't| not) (?:find|see|spot) (?:any|a single) (?:errors?|problems?|issues?|bugs?|faults?|failures?)\\b",
+    "\\bcan(?:'t|not) (?:find|see|spot) (?:any|a single) (?:errors?|problems?|issues?|bugs?|faults?|failures?)\\b"
+  ],
+  "asksFirst": [
+    "\\b(?:shall|should|may|can) I\\b",
+    "\\bdo you want me to\\b",
+    "\\bwould you like me to\\b",
+    "\\b(?:ok|okay|all right|alright) to\\b",
+    "\\b(?:go ahead|confirm|your yes|approve|say yes)\\b"
+  ]
+}

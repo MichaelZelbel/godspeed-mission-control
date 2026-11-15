@@ -1,0 +1,70 @@
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import { ShieldAlert } from "lucide-react";
+import { Link } from "react-router-dom";
+
+interface ModerationBlockDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  reason?: string;
+  category?: string;
+  supportHint?: string;
+}
+
+export function ModerationBlockDialog({
+  isOpen,
+  onClose,
+  reason,
+  category,
+  supportHint,
+}: ModerationBlockDialogProps) {
+  return (
+    <AlertDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <ShieldAlert className="h-5 w-5 text-destructive" />
+            Content Blocked
+          </AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-3">
+              <p>{reason || "This content violates our Community Guidelines and cannot be shared publicly."}</p>
+              {category && (
+                <p className="text-xs text-muted-foreground">
+                  Category: <span className="font-medium capitalize">{category}</span>
+                </p>
+              )}
+              {supportHint && (
+                <p className="text-xs text-muted-foreground">{supportHint}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Please review our{" "}
+                {/* The guidelines page itself (this pointed at the Terms of
+                    Service), in a new tab so the note being edited stays open. */}
+                <Link
+                  to="/community-guidelines"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline text-primary"
+                >
+                  Community Guidelines
+                </Link>{" "}
+                for more information.
+              </p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogAction onClick={onClose}>Understood</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}

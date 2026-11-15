@@ -1,0 +1,68 @@
+# Godspeed Mission Control on your own server, confined to one container.
+#
+#   docker compose up -d                                  start it
+#   docker compose exec godspeed godspeed-setup           set it up (again at any time)
+#   docker compose pull && docker compose up -d           update it
+#
+# Everything you own lives in the volume `godspeed-data`: your folder, Hermes' settings,
+# the sign-ins. Back it up by copying that one volume. docker/README.md has the rest.
+
+services:
+  godspeed:
+    image: ghcr.io/michaelzelbel/godspeed-mission-control:${GODSPEED_VERSION:-latest}
+    container_name: godspeed
+    restart: unless-stopped
+    command: gateway run
+    volumes:
+      - godspeed-data:/opt/data
+
+    # Telegram is reached by asking Telegram for new messages, an outgoing connection.
+    # One port, for your own computer and nothing else (docker/README.md, "Lend your computer's
+    # browser"): the Godspeed helper on your Windows or Mac computer connects OUT to it and lends
+    # the assistant a browser window where you are logged in. It is locked with a key that only a
+    # connection code from your assistant gives, and nothing answers on it until you ask your
+    # assistant for one. GODSPEED_COMPUTER=off keeps it closed.
+    ports:
+      - "${GODSPEED_COMPUTER_PORT:-7443}:7443"
+
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      # The patrol that stops runaway commands inside the container. on | off
+      GODSPEED_PATROL: ${GODSPEED_PATROL:-on}
+      # Setup from Telegram, with no terminal: your bot's token from BotFather. With it,
+      # press Start in your bot and the setup arrives as messages (docker/README.md).
+      # Empty means setup by terminal: docker compose exec godspeed godspeed-setup
+      GODSPEED_TELEGRAM_TOKEN: ${GODSPEED_TELEGRAM_TOKEN:-}
+      # Optional: only this Telegram @username (or numeric id) may take the bot. Empty
+      # means the first person to write to it, which is you if you write first.
+      GODSPEED_TELEGRAM_OWNER: ${GODSPEED_TELEGRAM_OWNER:-}
+      # Your computer's browser (see ports above). on | off
+      GODSPEED_COMPUTER: ${GODSPEED_COMPUTER:-on}
+      # The port your computer dials, as published above, and this server's address on the
+      # internet. Empty means the address the internet sees, found by itself.
+      GODSPEED_COMPUTER_PORT: ${GODSPEED_COMPUTER_PORT:-7443}
+      GODSPEED_PUBLIC_HOST: ${GODSPEED_PUBLIC_HOST:-}
+
+    # THE WALLS. Whatever the assistant starts, the container as a whole never gets more
+    # than this. One core by default, which leaves the rest of the server to everything
+    # else on it; raise GODSPEED_CPUS on a bigger machine.
+    cpus: ${GODSPEED_CPUS:-1}
+    mem_limit: ${GODSPEED_MEMORY:-2g}
+    pids_limit: 1024
+    shm_size: 1g          # the browser Hermes drives needs it
+
+    # Only what the image's start-up needs: fixing ownership of the volume and dropping
+    # from root to the assistant's own account. No new privileges after that.
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, KILL]
+    security_opt:
+      - no-new-privileges:true
+
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  godspeed-data:

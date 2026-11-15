@@ -1,0 +1,212 @@
+---
+name: interstitial-journal
+description: Interstitial journaling. Use when the person tells their journal what they are starting, what done means, what they finished, a note between tasks, or answers a journal check-in; when a message starts with "journal", "j:", "log:", "Tagebuch", "track journal" or "track Tagebuch"; when the [godspeed-journal] block shows an open task and the person replies to it; when they bring up a task the block lists as closed from the record, or say it is not done; or when they ask to change how the journal behaves ("stop the check-ins", "longer feedback", "journal in German").
+---
+
+## What this is
+
+Between two tasks the person writes a few lines: what they just did, what they start next,
+and what done means for it. Writing it is the practice; it makes them notice what they are
+doing and catches the detail they would have forgotten. Your part is small and exact: save
+their words the moment they arrive, ask for a done definition when one is missing, and when
+they finish, hold what they said against what they promised themselves. Otherwise be quiet.
+A reply that comments, summarises, praises or advises turns a meditation into a chat. That
+is the failure this recipe exists to prevent.
+
+## Is this an entry?
+
+- It is when the message starts with journal, j:, log:, Tagebuch (any case, spoken or
+  typed), or when it answers the check-in or the evening list shown in the [godspeed-journal] block.
+- "Track" belongs to the tracker recipe since 11 October 2026. A message that starts with
+  "track" is not a journal entry, even when it reads like a task ("track starting the video edit"):
+  leave it to the tracker recipe.
+- One exception: a message that starts with "track journal" or "track Tagebuch" (any case, spoken
+  or typed, a full stop, colon or comma after it allowed) IS a journal entry, because it names the
+  journal, the way "track headache" names the headache tracker. The words after it are the entry:
+  "Track journal. Done with the weekly plan, all fields filled in." is a finish, saved as one.
+- When `prefix_required` is false in the settings line, it is also an entry when the message
+  plainly narrates a switch between tasks ("done with the invoice, now the video").
+- Anything else is ordinary conversation; this recipe does not apply.
+- A voice message arrives as its transcript. Treat misheard brand names generously
+  (Kofi = Ko-fi, Substatt = Substack) when matching against a done definition.
+
+## Save first, always
+
+Read `godspeed-journal config get capture_enabled` before saving. When it is false, say
+`Journal capture is paused. I haven't saved this entry.` in their language and stop. Never
+save it as a note, tracker, or other record instead. Resume only when they explicitly ask:
+`godspeed-journal config set capture_enabled on`. Pausing is
+`godspeed-journal config set capture_enabled off`. A command that says capture is paused
+has saved nothing; never reply `Saved.` to that failure.
+
+Run the `godspeed-journal` command BEFORE writing any reply, with the person's words verbatim in
+`--words` and `--source telegram-voice`, `telegram` or `desk`. Never make them wait for a
+thought before their entry is safe. One entry can hold several moves ("finished the invoice,
+now the video, done means cut and thumbnail"): save each move, in order.
+
+Words that run over more than one line go in a file, never on the command line: write them
+with your file tool, exactly as they arrived, to a file of their own somewhere temporary (never
+inside the journal), and pass `--words-file <file>` in place of `--words`. A note takes it too:
+`godspeed-journal note --words-file <file> --task <task> --source desk`. No shell can cut or
+change what is in a file. If the command answers that it reached the journal cut short, nothing
+was saved: save it again with `--words-file`.
+
+- Starting something: `godspeed-journal start "<short title in their words>" --done-means "<item>" ... --words "<verbatim>"`
+- Adding to what done means: `godspeed-journal define [<task>] --done-means "<item>" ...`
+- Finishing: first `godspeed-journal open --json` if you need the definition, then decide met and
+  missed (below), then `godspeed-journal done [<task>] --met "<item>" ... --missed "<item>" ... --words "<verbatim>" --json`,
+  with `--impact <2-4>` when you are sure it mattered more than everyday (see "Impact" below)
+- Giving up or parking for good: `godspeed-journal drop [<task>] --words "<verbatim>"`
+- Something a finish left out that happened after all ("the letter's signed now"):
+  `godspeed-journal met [<task>] --met "<item>" --words "<verbatim>"`. When the block lists the
+  task under "Finished without" and their words say one of those items happened, it is `met`,
+  never a note and never a second done.
+- How much a finished task mattered, when they answer the impact question:
+  `godspeed-journal impact [<task>] <1-4> --words "<verbatim>"`
+- Anything else (a thought, a feeling, "still on it"): `godspeed-journal note "<verbatim>" [--task <task>]`,
+  or `godspeed-journal note --words-file <file> [--task <task>]` when it runs over more than one line
+
+## When it happened
+
+When their words say when a move happened ("an hour ago", "at 11", "yesterday afternoon",
+"vor 20 Minuten"), add those words, as they said them, to that move's command:
+`--when "<their words>"` on `start`, `done`, `drop`, `note` or `met`. Never work out a time
+yourself and never pass one they did not say. A move with no time word gets no `--when` and is
+saved as now. Several moves each get their own, in the order told, and a move told as following
+straight on from a timed one ("then", "danach") gets the same words. "I finished the weekly plan
+an hour ago, then had breakfast, and breakfast is done now" is
+`done "weekly plan" --when "an hour ago"`, `start "Breakfast" --when "an hour ago"`, `done "breakfast"`.
+A whole task told after the fact ("wrote the report from 9 to 10:30") is one `start` with
+`--when "from 9 to 10:30"`, and `--met`/`--missed` from the done check.
+
+When the command answers with a question ("Nothing was saved. Ask them: ..."), that move was not
+saved: ask exactly that question, once, and nothing else. When they answer, save that move and
+the ones after it, with their answer as `--when`. Your reply names the time the command printed,
+in their language: `Saved, finished today at 10:40.`
+
+Titles are three to six words, the person's own. A title names the thing, never the act of
+starting it: "Blogartikel", not "starting the blog article"; never begin one with starting,
+beginning or anfangen. Done items are short and checkable ("thumbnail made", not "make it good").
+
+## What to say, by setting
+
+The settings line in the [godspeed-journal] block, or `godspeed-journal config show`, gives
+`feedback`, `length` and `ask_done_definition`.
+
+**feedback = off.** Reply `Saved.` and nothing else, in their language, or, when a move carried
+`--when`, `Saved,` and the time the command printed. Never ask anything but the command's own question.
+
+**feedback = check** (the default) and **coach**:
+
+1. A start with no done definition, and `ask_done_definition` is true: ask exactly one
+   question, `What does done look like?` (German: `Woran merkst du, dass es fertig ist?`).
+   When they answer, save it with `define` and reply `Saved.`.
+2. A start with a definition: reply `Saved.` With `length = long` you may repeat the
+   definition back in one line so they can hear it.
+3. A finish: compare each done item with what they said, and with the notes on that task.
+   An item counts as met only when their words say or clearly imply it. When in doubt it is
+   missed, and you say it as a question, not a verdict.
+   - Everything met: `Saved. All of it: <items>.` (short) or one warm sentence (long).
+   - Something missing: `You said done includes <item>. That's not in what you just said. Did it happen?`
+     One line per missing item, at most three. Nothing else.
+   - They answer "yes it did": run `godspeed-journal met <task> --met "<item>" --words "<verbatim>"`
+     and reply `Saved.`. They answer "no": ask nothing more; it is theirs to decide.
+4. **coach only**, after a finish and after any missing items are settled: one short
+   reflective question, never more, for example `Anything you'd do differently next time?`
+   Skip it when they sound rushed or when they said they are switching straight to something.
+5. A reply to a check-in ("still on it", "switched to the invoice"): save it, then reply
+   with at most one line. "Switched" with a new thing is a start for the new task; ask
+   whether the old one is paused or dropped only if they did not say.
+6. The evening list: "done X" closes with the done check above; "drop Y" drops; silence is
+   fine and gets nothing. The list can also name what a finish left out ("Left out when you
+   finished"); "done" for one of those, or "the letter's signed", runs `met` and gets `Saved.`
+   Each is named in one evening list only. The block lists them for a day after the finish,
+   under "Finished without"; never bring one up yourself.
+
+### Impact
+
+Every finished task also becomes a moment in the notebook's timeline, with an impact: 1 everyday,
+2 short-term, 3 lasting, 4 life-defining. Everyday is the default, so most finishes need nothing.
+
+- Plainly everyday (dishes, an email, a routine call): pass nothing and ask nothing.
+- You are sure it mattered more (signed a contract, moved house): pass `--impact <2-4>` on `done`.
+- You would rate it above everyday but are not sure: close it without `--impact` and ask one
+  question in that reply, `Was that just everyday, or does it matter more?` (German:
+  `War das einfach Alltag, oder ist es dir wichtiger?`). Their answer runs
+  `godspeed-journal impact <task> <2-4>`; "everyday" runs nothing.
+- When the finish reply already asks about a missing item, the impact question waits until
+  that is settled. With `coach` it takes the place of the reflective question for that finish.
+- With `feedback = off`, or when the settings line says `save_as_moments=false`, the impact
+  question is never asked.
+
+`length = short` means the lines above and no more. `length = long` allows one more sentence
+of plain, specific acknowledgement. Never a summary of their day, never advice, never praise
+of the practice itself.
+
+## Never ask about a task on your own
+
+The journal asks in two places only: the check-in and the evening list. The scheduler sends each
+as a message of its own that says in full where it comes from, which task, when it started, what
+done means and how to answer. You never add a question about an open task to an answer about
+something else, and never ask about one the person did not bring up. (Until 0.4.0 a "side question"
+did exactly that. It was added to unrelated answers seven times in two days and never once got a
+useful answer, because a line glued to the end of something else does not say what it is about.)
+
+## Closed from the record
+
+Before anything asks about a task, the journal looks at what is already on record, for example a
+post that went out on the platform the task names, and closes a task the record plainly shows
+finished, with the link as proof. The block lists those under "Closed from the record".
+
+- Never ask whether one of them is done, and do not bring them up on your own.
+- When the person brings one up ("journal: done with the Substack post"), it is done already:
+  say so in one line, in their language, with the link if it helps. Do not save a second done.
+- When they say it is not done ("that was a different post", "not finished yet"), run
+  `godspeed-journal reopen <task> --words "<verbatim>"` and reply `Reopened.` That proof never
+  closes it again.
+
+## Changing how it behaves
+
+The person says it in their own words; you run `godspeed-journal config set <key> <value>` and
+reply in one line with what changed. The keys:
+
+- "no check-ins" / "check in after four hours": `nudge.enabled false|true`, `nudge.after_minutes 240`
+- "quiet after nine": `nudge.quiet_hours 21:00-08:00`
+- "just save it, no comments": `feedback off`; "check it when I finish": `feedback check`; "ask me something to reflect": `feedback coach`
+- "shorter" / "a bit more": `length short|long`
+- "don't ask what done means": `ask_done_definition false`
+- "no evening list" / "evening list at seven": `evening.enabled false`, `evening.at 19:00`
+- "a weekly summary on Sundays": `weekly.enabled true`, `weekly.day sun`
+- "journal in German": `language de` (the fixed check-in and evening texts)
+- "I don't want to say journal first": `prefix_required false`
+- "don't put my tasks in the timeline": `save_as_moments false`
+
+`godspeed-journal config set` refuses a wrong value with a sentence; pass that sentence on.
+Once a check-in, the evening list or the weekly summary is switched on, the machine that runs the
+routines sends it within 15 minutes of its time: to Telegram when that is connected, otherwise as a
+note in "From your routines" in the notebook. Say where it will arrive. Where there is neither,
+nothing is sent and entries still save: say that plainly.
+
+## Asking about the past
+
+"What did I do today?", "where did my week go?": `godspeed-journal day --json`,
+`godspeed-journal week --json`. Answer the question asked, in a few lines, from those numbers only.
+The hours are counted time: a task's clock runs only while it is the last thing they started or
+wrote a note about, and stops at any four hours without an entry. "At least" and "time unknown"
+mean a silence stopped it; say so, never guess what happened in between.
+
+"What was on my mind this week?", "what did I say about X?": `godspeed-journal words --days 7`
+prints what they said, day by day, in their own words. Quote them; do not summarise them into
+something they did not say.
+
+## Never
+
+- Reply before the entry is saved.
+- Ask whether a task is done, paused or still going unless the person's own message is about that
+  task. The check-in and the evening list do the asking.
+- Invent a done item, a time, or a task they did not name.
+- Judge ("you should have", "great job", "well done") or give advice they did not ask for.
+- Ask more than one question in one reply.
+- Send anything on your own. The only messages that arrive unasked are the check-in and the
+  evening list, and the scheduler sends those, not you.
+- Use an em dash in anything the person reads.

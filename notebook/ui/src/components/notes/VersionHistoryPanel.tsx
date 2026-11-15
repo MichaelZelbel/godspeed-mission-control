@@ -1,0 +1,214 @@
+import { useRef, useState } from "react";
+import { useGitHubVersionHistory, useGitHubFileAtCommit, useSyncLogForNote } from "@/hooks/useGitHubSync";
+import { useNote, useUpdateNote } from "@/hooks/useNotes";
+import { functionErrorMessage } from "@/lib/function-error";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import { Loader2, GitCommit, X, ChevronRight } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { showToast } from "@/lib/toast";
+import { VersionPreviewDialog } from "./VersionPreviewDialog";
+
+interface Props {
+  noteId: string;
+  onClose: () => void;
+}
+
+interface CommitMeta {
+  sha: string;
+  date?: string | null;
+  author?: string | null;
+  message?: string | null;
+}
+
+/**
+ * A YAML scalar as the export writes it: double-quoted with `\"` and `\\`
+ * escaped, single-quoted with `''` for a quote, or bare. Restoring used to
+ * keep the backslashes, so `Say \"hi\"` became the note's title.
+ */
+function unquoteYamlScalar(value: string): string {
+  const v = value.trim();
+  if (v.length >= 2 && v.startsWith('"') && v.endsWith('"')) {
+    return v.slice(1, -1).replace(/\\(["\\])/g, "$1");
+  }
+  if (v.length >= 2 && v.startsWith("'") && v.endsWith("'")) {
+    return v.slice(1, -1).replace(/''/g, "'");
+  }
+  return v;
+}
+
+/** Browser-safe frontmatter split (gray-matter needs Node Buffer and throws in the browser). */
+function splitFrontmatter(raw: string): { title: string; body: string } {
+  const text = raw.replace(/^\uFEFF/, "");
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
+  if (!match) return { title: "", body: text };
+  const titleLine = /^title:\s*(.*)$/m.exec(match[1]);
+  const title = unquoteYamlScalar(titleLine?.[1] ?? "");
+  return { title, body: text.slice(match[0].length) };
+}
+
+export function VersionHistoryPanel({ noteId, onClose }: Props) {
+  const { data: versions, isLoading, isError: historyFailed, refetch: retryHistory } = useGitHubVersionHistory(noteId);
+  const { data: syncLog } = useSyncLogForNote(noteId);
+  const { data: currentNote } = useNote(noteId);
+  const fetchFile = useGitHubFileAtCommit();
+  const updateNote = useUpdateNote();
+  const [selected, setSelected] = useState<CommitMeta | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [loadingSha, setLoadingSha] = useState<string | null>(null);
+  // `markdown` is both what the preview shows (the preview editor converts
+  // Markdown itself, like the current note's content beside it) and what gets
+  // written back on restore. Converting here as well ran the conversion twice,
+  // so an escaped \* showed as italics.
+  const [parsed, setParsed] = useState<{ sha: string; title: string; markdown: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Only the newest click may fill the preview. Opening version A (slow) and
+  // then B used to land A's content under B's header, and Restore wrote A.
+  const loadRequest = useRef(0);
+
+  const loadVersion = async (commit: CommitMeta) => {
+    if (!syncLog?.github_path) {
+      showToast.error("This note isn't linked to a GitHub file yet");
+      return;
+    }
+    const request = ++loadRequest.current;
+    setSelected(commit);
+    setPreviewOpen(true);
+    setParsed(null);
+    setError(null);
+    setLoadingSha(commit.sha);
+    try {
+      const raw = await fetchFile.mutateAsync({ path: syncLog.github_path, commitSha: commit.sha });
+      if (request !== loadRequest.current) return;
+      const { title, body } = splitFrontmatter(raw);
+      setParsed({ sha: commit.sha, title: title || "Untitled", markdown: body });
+    } catch (e) {
+      // The function's own reason when it is written for people; never the
+      // "Edge Function returned a non-2xx status code" of the client library.
+      // Only the client's Functions* errors go through that reader; the hook's
+      // own error (an answer without content) gets the plain fallback.
+      const fallback = "Couldn't load this version from GitHub.";
+      const fromFunction = e instanceof Error && e.name.startsWith("Functions");
+      const msg = fromFunction ? await functionErrorMessage(e, fallback) : fallback;
+      if (request !== loadRequest.current) return;
+      setError(msg);
+    } finally {
+      if (request === loadRequest.current) setLoadingSha(null);
+    }
+  };
+
+  // Belt and braces: never restore content that is not the selected commit's.
+  const shownVersion = parsed && parsed.sha === selected?.sha ? parsed : null;
+
+  const handleRestore = async () => {
+    const version = shownVersion;
+    if (!version) return;
+    try {
+      await updateNote.mutateAsync({ id: noteId, title: version.title, content: version.markdown });
+      showToast.success("Version restored");
+      setPreviewOpen(false);
+    } catch {
+      // useUpdateNote already toasts the failure; the preview stays open so
+      // the version can be restored again.
+    }
+  };
+
+  const newestSha = versions?.[0]?.sha;
+
+  return (
+    <div className="flex flex-col h-full border-l border-border bg-background w-80">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
+        <h4 className="text-sm font-semibold flex items-center gap-1.5">
+          <GitCommit className="h-3.5 w-3.5 text-primary" />
+          Version History
+        </h4>
+        <button aria-label="Close version history" onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : historyFailed ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-2 p-4 text-center" role="alert">
+          <p className="text-xs text-destructive">
+            The version history could not be loaded from GitHub. Check the GitHub connection in Settings and try again.
+          </p>
+          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void retryHistory()}>
+            Try again
+          </Button>
+        </div>
+      ) : !versions?.length ? (
+        <div className="flex-1 flex items-center justify-center p-4 text-center">
+          <p className="text-xs text-muted-foreground">
+            No version history yet. Versions are created when notes are synced to GitHub.
+          </p>
+        </div>
+      ) : (
+        <ScrollArea className="flex-1">
+          <div className="p-2 space-y-1">
+            {versions.map((commit: any) => {
+              const meta: CommitMeta = {
+                sha: commit.sha,
+                date: commit.commit?.author?.date ?? null,
+                author: commit.commit?.author?.name ?? null,
+                message: commit.commit?.message ?? null,
+              };
+              return (
+                <button
+                  key={commit.sha}
+                  onClick={() => loadVersion(meta)}
+                  className={`w-full text-left px-3 py-2 rounded-md text-xs transition-colors hover:bg-accent/50 ${
+                    selected?.sha === commit.sha ? "bg-accent" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-muted-foreground text-[10px]">{commit.sha.slice(0, 7)}</span>
+                    <div className="flex items-center gap-1">
+                      {commit.sha === newestSha && (
+                        <span className="text-[9px] uppercase tracking-wide text-muted-foreground border border-border rounded px-1 py-px">
+                          Current
+                        </span>
+                      )}
+                      {loadingSha === commit.sha ? (
+                        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-foreground truncate mt-0.5">{meta.message || "No message"}</p>
+                  {meta.date && (
+                    <p className="text-muted-foreground mt-0.5">
+                      {formatDistanceToNow(new Date(meta.date), { addSuffix: true })}
+                    </p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      )}
+
+      <VersionPreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        commitSha={selected?.sha ?? null}
+        commitDate={selected?.date}
+        commitAuthor={selected?.author}
+        commitMessage={selected?.message}
+        isLoading={!!loadingSha}
+        error={error}
+        onRetry={selected ? () => loadVersion(selected) : undefined}
+        versionTitle={shownVersion?.title ?? ""}
+        versionContent={shownVersion?.markdown ?? ""}
+        currentTitle={currentNote?.title ?? ""}
+        currentContent={currentNote?.content ?? ""}
+        onRestore={handleRestore}
+        isRestoring={updateNote.isPending}
+      />
+    </div>
+  );
+}

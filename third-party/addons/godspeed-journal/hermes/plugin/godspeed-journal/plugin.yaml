@@ -1,0 +1,7 @@
+name: godspeed-journal
+version: "0.1.0"
+description: >-
+  Shows the model which journal tasks are open, once per turn, before it reads the message
+  (pre_llm_call). Prints nothing when nothing is open. Installed by `godspeed-journal setup`.
+author: godspeed-journal
+kind: standalone

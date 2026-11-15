@@ -1,0 +1,19 @@
+# Every text file in your mission control is saved with the same line endings on every computer.
+#
+# Why: Windows and Mac or Linux end a line differently. When the same folder lives on two
+# computers, an ordinary edit on one of them can come back as a change to every line of the file,
+# and Git then shows a change nobody can read. This one line stops that.
+* text=auto eol=lf
+
+# Anything that is not text keeps its bytes exactly.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.pdf binary
+*.age binary
+*.mp4 binary
+*.mp3 binary
+*.wav binary
+*.ico binary

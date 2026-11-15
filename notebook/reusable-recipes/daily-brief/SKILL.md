@@ -1,0 +1,45 @@
+---
+name: daily-brief
+description: Collect dated evidence, write and check one morning note, rehearse without live side effects, and explain the exact delivered version.
+---
+
+# Daily brief
+
+Use one maintained path for collection, writing, checking and delivery. Multiple writers and a fallback sender must never independently send the same morning. The morning-note recipe owns the words; mc-brief-operations owns decisions, links and explanations.
+
+## Selected installation and entry points
+
+Read its operating manual, voice, current goals and delivery authorization. Confirm the schedule owner and timezone through normal Settings. Use the normal Routine selector for morning-brief or brief-rehearsal and the normal due-routine control. A rehearsal must send nothing and must operate on a separate retained copy, including reminder completion and source bookkeeping.
+
+Keep results in the notebook unless the user has explicitly enabled the exact delivery connector. A configured credential is not permission to send. Enabling or running a routine must preserve unrelated deliberately paused jobs, other installations and company systems.
+
+The product implementation is notebook/core/briefing.mjs with shared scheduler receipts. Do not invoke private personal-engine executables. A missing stage is a missing implementation; do not disguise it as a missing optional account.
+
+## One path, four stages
+
+1. **Collect before writing.** Read the adopted goals and attention plan, today's saved decision, open obligations, recent actual work, the user's recent words, health observations, configured calendar receipts, watch findings and primary-source articles. Refresh the selected permitted sources. Retain dates, full relevant source text, successful read evidence and source gaps. A failing calendar/news source costs its part, not the whole morning. A title or search snippet is not an opened article. A calendar event records the calendar, not who goes. An event the calendar made from a booking mail, or one whose organizer is the owner only because it is the owner's calendar, does not make the owner its traveller or guest. Record the passenger or guest that the event's description, the booking mail or the notebook names, and "unknown" when none does. Never write "with <owner>" from the organizer alone. Keep the event's description, organizer and created-from-mail marker with it. News is what came out in the last two days, plus one day for each morning without a brief (at most five more). An older item belongs only when no earlier brief could have told it, and then it says its date. When a source could not be read, or fewer than three fresh items came in, first read the owner's other chosen sources once, and record in the pool record that it widened, why and what it added.
+2. **Write facts, then one note.** Apply the common card cap before passing items to the writer. Read user replies back into the cards first. Include current health counts computed from the selected measurements, verified completed work, prior shown/answered/rejected cards, earlier news and the latest rehearsal findings. Use `health_freshness`: a `may_be_incomplete` or `not_judged` measurement (today is not over) is unknown. Say “so far” and name `data_until` when present; count that day as unknown, never short or missed, and give no gap advice. The morning-note method produces one note and a used-card list. A separate maintained lead workflow prepares any social item; the morning writer must not improvise it.
+3. **Check the exact text.** Mechanical gates check links, dates, numbers, rule/voice restrictions, IDs, repeats and exact numbered choices. An independent plain-words reader checks whether a person seeing none of the work can act. A fact check compares every story with its opened source. The fact check also reads the underlying records, not only the collected facts: the calendar event's own fields, and the notebook's notes and facts about the people around the owner. A sentence that says the owner travels, attends or is away fails when the event, a note or a fact names someone else, even when the collected facts say "with" the owner. The writer gets one bounded rewrite with the actual failure reasons. Any smallest mechanical repair must retain meaning. A check names the sentences it fails. A wording finding rewrites that one sentence from the sources, or drops only that sentence; an item goes only when its core fact (its subject, decision or number) is unsupported, and the reason is recorded. Judges may not invent replacement facts. A note with nothing to decide and fewer than two fresh news items fails as thin: it gets one repair that adds the decision or news that was waiting, and if it is still thin it says so and why. Insert an already verified social card by code, then rerun the mechanical gate on the final exact payload. If both drafts fail final review, a separately mechanically checked factual fallback built from visible checked records may be saved with the rejected draft and reasons; otherwise an invalid result stays undelivered with retained evidence.
+4. **Save, then deliver once.** Save the exact final note, source/check records, used cards and delivery parts before sending. Keep draft preparation, a checked notebook result, an attempted send and an acknowledged delivery distinct. Mark only the actually delivered items shown. A page or auxiliary link failure must not turn an otherwise valid note into a fictional delivery success.
+
+## Preview and rehearsal
+
+A preview reads the same evidence and uses the same checks but sends nothing. A rehearsal runs those stages on a copy with the software intended for the next morning. It must not close a real obligation, mark a real watch finding shown, advance a real news cutoff or create live delivery notifications.
+
+Keep the copy and verdict. Record whether native file sources, selected connectors and dependencies were available. A rehearsal that silently lacks a required source is incomplete. File one quiet repair for a crash, no valid note or unreasonable runtime, then feed the actual finding to the morning writer. Repeated failures should share one repair identity and bounded attempts.
+
+## Delivery safety
+
+One scheduler owner controls delivery. Store a stable delivery identity and exact payload before the connector is called. Accept success only from the selected connector's actual acknowledgement. If a send may already have happened, stop automatic replay and retain the uncertainty for review. Resume only parts known not to have been attempted. An explicit resend is a separate authorization.
+
+The keeper owns recovery after a failure: use the newest verified saved parts or an honest actionable notice. Never send a stale preview as though it were the original morning note. Do not make the user approve an ordinary reversible repair the assistant is already authorized to perform.
+
+## Explaining a note later
+
+Locate the actually delivered version from its delivery receipt, then read its saved facts, source evidence, judge results and exact text. A later preview is not what the user received. Answer from the original evidence; re-verify a current claim when needed. Preserve the delivered version and any correction as separate history.
+
+## Acceptance
+
+Exercise a thin news pool, missing calendar, new health evidence, a numbered approval list, a failed check repaired once, an unrepaired failure, an unchanged repeat, a delayed acknowledgement and restart. Check ordinary notebook controls and actual retained state. A source test or a saved note alone does not establish readable receipt, reliable scheduling or completed delivery.
+
+Worked case: the event "Flight to X" at 10:25, organizer the owner, made by the calendar from a booking mail, its description naming another passenger, and a note "<other person> travel X <dates>". The collected facts say "Flight to X, passenger <other person>", or "passenger unknown" when nothing names one, never "with <owner>". The delivered brief says "<other person> flies to X at 10:25" or leaves the trip out, never "you fly". The owner's 17:30 call during that flight is not moved because of it. A flight with no other passenger named and no contradicting note is still told as the owner's.

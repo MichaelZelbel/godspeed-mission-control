@@ -1,0 +1,880 @@
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { randomBytes } from 'node:crypto';
+import { pipeline } from 'node:stream';
+import os from 'node:os';
+import { Store, atomic, hash } from '../core/records/store.mjs';
+import { SearchIndex } from '../core/index/search.mjs';
+import { MeaningIndex, embeddingConfig, saveEmbeddingConfig, embedder } from '../core/index/meaning.mjs';
+import { QueryService } from '../core/query.mjs';
+import { Domains } from '../core/domains.mjs';
+import { Scheduler } from '../core/jobs/scheduler.mjs';
+import {controlRoutine} from '../core/jobs/routine-control.mjs';
+import { modelProvider, jobExecutor,hermesProvider,isHermesExecutable } from '../core/runtime.mjs';
+import {assistantEnvironment} from '../core/assistant-files.mjs';
+import { FileSync } from '../core/sync/git.mjs';
+import {conflictView,resolveSavedConflict} from '../core/conflicts.mjs';
+import { SyncRunner } from '../core/sync/runner.mjs';
+import {GitHubSignIn,connectRecordSync} from '../core/sync/github-sign-in.mjs';
+import { restore } from '../core/archives.mjs';
+import {RecoveryRunner} from '../core/recovery-runner.mjs';
+import {BackupRunner} from '../core/backup-runner.mjs';
+import {BackupSchedule} from '../core/backup-schedule.mjs';
+import {FactClosing} from '../core/fact-closing.mjs';
+import {JournalMoments} from '../core/journal-moments.mjs';
+import {saveConversationState,retainCompletedConversation,bindConversationSession,conversationRuntimeId} from '../core/conversation-state.mjs';
+import { importExport,exportRecords } from '../core/import.mjs';
+import { kinds,setupResults } from '../core/jobs/scheduler.mjs';
+import { MediaSync } from '../core/sync/media.mjs';
+import { mcp } from './mcp.mjs';
+import {notebookTotals} from './memory-tools.mjs';
+import { spawn } from 'node:child_process';
+import {ApiKeys,toolScope} from '../core/api-keys.mjs';
+import {Telegram} from '../core/telegram.mjs';
+import {browserChat} from './browser-chat.mjs';
+import {KEPT_FILE} from '../core/ai-failures.mjs';
+import {transcribeRecording} from '../core/dictation.mjs';
+import {durableRoots,durableFiles} from '../core/file-policy.mjs';
+import { WebAuth, safeReturn } from './web-auth.mjs';
+import { MenerioImport } from './menerio-import.mjs';
+import {TelegramConnection} from './telegram-connect.mjs';
+import {hermesSettingsFor,connectRoutineAI,routineAIStatus,checkRoutineAI,baseAddress,askDirectly,connectPlanMain} from '../core/routine-ai.mjs';
+import {withBackup,readBackupEndpoint,backupEntryFor,connectBackupAI,connectHermesBackup,removeBackupAI,backupStatus,fallbackChain} from '../core/backup-ai.mjs';
+import {PlanSignIn,PLAN_PROVIDER} from '../core/plan-signin.mjs';
+import {voiceStatus,saveVoice} from '../core/voice-replies.mjs';
+import {goalOverview} from '../core/goal-overview.mjs';
+import {nativeAgent} from '../core/native-agent.mjs';
+import {NativeScheduler,hermesJobs} from '../core/native-scheduler.mjs';
+import {WorkoutsAddon} from '../core/workouts.mjs';
+import {enableKinds,readNotebookRoutines} from '../core/notebook-routines.mjs';
+import {routineSwitches,setRoutineSwitch} from '../core/routine-switches.mjs';
+import {notebookAddress} from '../core/notebook-address.mjs';
+import {latestPerDayMetric} from '../core/health-inputs.mjs';
+import {PHONE_HEALTH_STATUS,PHONE_HEALTH_RENEW,phoneHealthAnswer} from '../core/phone-health-protocol.mjs';
+import {BODY_LIMIT as UPLOAD_LIMIT,ensureToken,renewToken,tokenMatches,tokenDamaged,isUploadShape,pruneRaw,acceptUpload} from '../core/phone-health.mjs';
+import {recoverPhoneConnection} from '../core/connection-check.mjs';
+import {now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
+import {about} from '../core/about.mjs';
+import {updateOverview,startUpdate} from '../core/update.mjs';
+import {AutomaticUpdate} from '../core/automatic-update.mjs';
+import {showCard as showContextCard,readContext,markContext} from '../core/context-setup.mjs';
+import {visibleRows} from '../core/visibility.mjs';
+import {NoteProcessing} from '../core/processing.mjs';
+import {mediaObjectName,mediaFileName} from '../core/media-names.mjs';
+import {carriedRoot,carryMedia,findMedia,keepMedia,keptHere,missingHere,removeCarried} from '../core/media-store.mjs';
+import {retireShares} from '../core/shares.mjs';
+import {installFoodTable,foodTableWanted} from '../core/food-table.mjs';
+import {repairTimelineAtStart} from '../core/due-copy.mjs';
+import {IdentityShelf} from '../core/identity-shelf.mjs';
+import {VERSION} from '../core/version.mjs';
+import {recordRunningNotebook} from '../core/running-notebook.mjs';
+import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/hermes-update.mjs';
+import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
+import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
+import {MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
+
+// A backup AI is another service than the main AI, in Settings and in /backupai alike: when one
+// service fails, its other models and keys usually fail with it, and Hermes counts the same service
+// behind itself as no backup (core/backup-ai.mjs).
+const SAME_SERVICE='That is the service your main AI uses already. A backup steps in when the main AI fails, so it has to be another service.';
+const BACKUP_SERVICE='That is the service your backup AI uses. Remove the backup first, or choose another service for your main AI.';
+export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
+const providerView=config=>({configured:true,url:baseAddress(config.url),model:config.model,key:!!config.key});
+const readSavedProvider=file=>{
+  let text;try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code==='ENOENT')return null;throw error;}
+  const config=JSON.parse(text);
+  if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error('The saved AI connection is not valid. Connect it again after checking the server log.');
+  return config;
+};
+
+// What the browser is told each built file is. A module script sent as
+// octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
+// PDFs could not be read in the notebook until 6 October 2026.
+export const staticTypes = { '.html':'text/html; charset=utf-8','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.map':'application/json','.webmanifest':'application/manifest+json','.wasm':'application/wasm','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp','.ico':'image/x-icon','.woff2':'font/woff2','.woff':'font/woff','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8' };
+// What an error may tell the browser. The notebook's own refusals are plain
+// sentences and pass; a file-system or programming error carries server paths
+// and internals, so it is logged and the browser gets a plain sentence instead
+// (until 6 October 2026 it got "ENOENT: no such file or directory, open 'C:\Users\...'").
+// An absolute path left in a passed message is cut out as well. A drive letter counts only when no
+// letter or digit comes before it, so the "s:/" of an https:// address is not a Windows path (#562).
+export function userFacing(error, roots = []) {
+  if (!(error instanceof Error)) return null;
+  const code = String(error.code || '');
+  if (error.syscall || /^E[A-Z]{2,}$/.test(code) || /^ERR_/.test(code)) return null;
+  // JSON.parse quotes a piece of what it read, which may be a saved file.
+  if (error instanceof SyntaxError) return 'The request or a saved file was not valid JSON.';
+  if (error instanceof URIError) return 'This address is not valid.';
+  if (error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError) return null;
+  let message = String(error.message || '');
+  for (const root of roots.filter(Boolean).sort((a, b) => b.length - a.length)) for (const form of new Set([root, root.replaceAll('\\', '/'), root.replaceAll('\\', '\\\\')])) message = message.split(form).join('[path]');
+  message = message.replace(/(?<![A-Za-z0-9])[A-Za-z]:[\\/][^\s'"]*|\\\\[^\s'"]+|(?<![\w.])\/(?:home|opt|root|var|tmp|Users|srv|data|mnt|etc|private)\/[^\s'"]*/g, '[path]');
+  return message || null;
+}
+// The POST routes that act on Hermes' routines; with no verified assistant setup they answer why (#524).
+const ASSISTANT_ROUTES=['/api/owner','/api/routines/switch','/api/delivery','/api/setup','/api/jobs/run','/api/jobs/update','/api/jobs/add'];
+// What is wrong with assistant.json, in plain words. An empty file still "cannot be read" with the
+// original runtime off, as before; with it on, unconnectedAssistant says it is empty (#524, 13 November 2026).
+const unreadableAssistant=file=>`The assistant setup in ${file} cannot be read. Run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.`;
+function readAssistant(file){
+  let text;try{text=fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');}catch{return {problem:unreadableAssistant(file)};}
+  if(!text.trim())return {problem:unreadableAssistant(file),empty:true};
+  try{const descriptor=JSON.parse(text);if(descriptor&&typeof descriptor==='object')return {descriptor};}catch{}
+  return {problem:unreadableAssistant(file)};
+}
+// Why the original runtime has no assistant: the setup is not verified, empty, unreadable or missing.
+function unconnectedAssistant(file,assistant){
+  if(assistant.descriptor)return `The assistant setup in ${file} is not verified, so the assistant is not connected. Run the Godspeed installer again to connect the assistant. Until then the assistant cannot answer.`;
+  if(assistant.empty)return `The assistant setup in ${file} is empty. Run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.`;
+  return assistant.problem||`There is no assistant setup at ${file}. Run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.`;
+}
+export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, webPort, localPort, token, uiRoot, provider, device = 'local', authNow } = {}) {
+  // The store keeps every record in memory and re-reads only the files its
+  // watcher names; the index follows the store's changes row by row.
+  const store = new Store(root,{device,watch:true}), index = new SearchIndex(store,{background:true}), query = new QueryService(store), sync = new FileSync(store);
+  const stopIndexing=store.onChange(({changed,gone})=>{try{index.update(changed);index.forget(gone);}catch{}});
+  // Meaning search, when a service is connected (Settings, or GODSPEED_EMBEDDINGS_*).
+  const connectMeaning=config=>{index.meaning?.close();index.meaning=new MeaningIndex(index,{config});};
+  connectMeaning(embeddingConfig(store.state));
+  const githubSignIn=new GitHubSignIn();
+  const syncNotConnected={state:'not_connected',error:'Sync is not connected, so nothing was synced. Your files are safe on this computer.',detail:'To connect it, open Settings, then Sync and schedule ownership, and press Connect record sync.'};
+  const syncRunner=new SyncRunner(root,{onResult:result=>{sync.last=result;atomic(path.join(store.state,'sync-status.json'),JSON.stringify(result));}});
+  const providerPath=path.join(store.state,'provider.json');
+  // The backup AI the person connected in Settings (core/backup-ai.mjs): the notebook's own calls
+  // try the main address first and the backup only when that failed, for that request only. It is
+  // read when needed, so connecting or removing it counts from the next request on. A main AI
+  // that runs through Hermes needs none of this: Hermes uses its own fallback chain.
+  // A backup only Hermes can reach (a ChatGPT plan) is asked through Hermes, which tries its own main
+  // AI and then that backup.
+  const backupFor=()=>{const saved=readBackupEndpoint(store.state);if(saved){try{return modelProvider(saved);}catch{return null;}}
+    try{return routineAI&&fallbackChain(fs.readFileSync(path.join(routineAI.home,'config.yaml'),'utf8')).length?hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot}):null;}catch{return null;}};
+  const guarded=main=>withBackup(main,backupFor,{state:store.state,model:()=>readBackupEndpoint(store.state)?.model});
+  if(!provider&&fs.existsSync(providerPath))provider=guarded(modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8'))));
+  provider ||= guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}));
+  const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
+  // Where this notebook really runs from, for the tools (core/running-notebook.mjs): Windows only.
+  try{recordRunningNotebook({root:store.root,assistantConfig:process.env.GODSPEED_ASSISTANT_CONFIG});}catch(error){console.error('Godspeed Mission Control: could not record where the notebook runs:',error.message);}
+  // An assistant program that is not Hermes, or an assistant.json that cannot be read, leaves the
+  // notebook running without its AI and says which setting to change (#506, 13 November 2026);
+  // until then it stopped startup, over and over. With the original runtime on, a setup that is
+  // missing, unreadable, empty or not verified does the same (#524): the assistant's own parts
+  // (its chat, routines, updater, chat check and Workouts) are not built and no routine runs until
+  // the setup is fixed and the notebook restarted.
+  const originalRuntime=process.env.GODSPEED_ORIGINAL_RUNTIME==='on';
+  let assistantProblem=null;
+  const assistant=(!provider||originalRuntime)&&fs.existsSync(assistantPath)?readAssistant(assistantPath):{};
+  if(!provider&&assistant.descriptor?.verified){const executable=assistant.descriptor.executable||'hermes';
+    if(typeof executable==='string'&&isHermesExecutable(executable))provider=hermesProvider({executable,home:assistant.descriptor.home,cwd:store.root,sourceRoot:assistant.descriptor.sourceRoot});
+    else assistantProblem=`The assistant program set in ${assistantPath} is "${executable}", which is not Hermes. Set "executable" in that file to your Hermes program (its name is hermes), or run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.`;}
+  else if(!provider&&assistant.problem)assistantProblem=assistant.problem;
+  const assistantMissing=originalRuntime&&!assistant.descriptor?.verified;
+  if(assistantMissing)assistantProblem=unconnectedAssistant(assistantPath,assistant);
+  if(assistantProblem)console.error('Godspeed Mission Control: '+assistantProblem);
+  // What the supervisor reads as "alive" (supervisor-health.mjs): an AI call
+  // beats while it is inside its own time limit, plus a minute to be stopped.
+  let schedulerHeartbeat=new Date().toISOString();const {beatWhile}=await import('../core/supervisor-health.mjs'),beat=()=>{schedulerHeartbeat=new Date().toISOString();};
+  if(provider){const connected=provider;provider=Object.assign(async input=>beatWhile(connected(input),beat,{limitMs:(input?.timeout_ms||600000)+60000}),connected);}
+  const descriptor=originalRuntime?assistant.descriptor??null:null;
+  const lifecycle=originalRuntime?new HermesLifecycle():null,domains=new Domains(query,{provider}),recordRoutines=()=>new Scheduler(store,{device,executor:jobExecutor(provider,query),only:NativeScheduler.recordKinds,delivery:'notebook'}),scheduler=assistantMissing?recordRoutines():originalRuntime?new NativeScheduler(store,{...descriptor,device,lifecycle,records:recordRoutines()}):new Scheduler(store,{device,query,executor:jobExecutor(provider,query)});scheduler.onProgress=beat;scheduler.onFailure=error=>console.error('Godspeed Mission Control: a routine could not be created, the next tick tries again:',error.message);
+  let workouts=null;
+  const automaticUpdate=new AutomaticUpdate({store,lifecycle,start:()=>startUpdate({root:store.root})});
+  domains.assistantProblem=assistantMissing?assistantProblem:null;
+  if(originalRuntime&&!assistantMissing){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root,providerFile:providerPath,keptFile:path.join(store.state,KEPT_FILE),lifecycle});const scenarioReleaseUrl=process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL;const updater=new HermesUpdate({store,descriptor,ask:askDirectly,lifecycle,releaseUrl:isScenarioHermesReleaseUrl(scenarioReleaseUrl)?scenarioReleaseUrl:undefined});scheduler.updater=updater;scheduler.chatHealth=new ChatHealth({store,descriptor,lifecycle});domains.hermesUpdate=updater;domains.nativeScheduler=scheduler;query.nativeHermesHome=descriptor.home;}
+  // Where the routines' AI is set: the Hermes home the routines run in (core/routine-ai.mjs).
+  const routineAI=originalRuntime&&descriptor?.verified&&descriptor.home?{home:descriptor.home,state:store.state}:null;
+  // A CHATGPT PLAN SIGNED IN FROM SETTINGS (core/plan-signin.mjs), one sign-in for the main AI and the
+  // backup alike. Once Hermes holds it, the plan's first model that answers is saved: as the main AI
+  // (the notebook's own address then goes, so the notebook, the chat and the routines use the plan),
+  // or as the backup.
+  const planSignIn=routineAI?new PlanSignIn({executable:descriptor.executable,home:descriptor.home,cwd:store.root,onSignedIn:async as=>{
+    const found=await askDirectly({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot,route:'plan'});
+    if(as==='backup'){connectHermesBackup({home:descriptor.home,state:store.state,entry:{provider:PLAN_PROVIDER,model:found.model},via:'settings'});return found;}
+    connectPlanMain({...routineAI,model:found.model});
+    try{fs.unlinkSync(providerPath);}catch{}
+    const hermes=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});
+    provider=hermes;domains.provider=hermes;scheduler.executor=jobExecutor(hermes,query);
+    await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot});
+    return found;
+  }}):null;
+  domains.sync={reconcile:()=>syncRunner.run(),pendingConflicts:()=>sync.pendingConflicts()};domains.index=index;
+  mediaRoot = path.resolve(mediaRoot || path.join(store.state, 'media')); fs.mkdirSync(mediaRoot, { recursive: true });
+  domains.mediaRoot=mediaRoot;
+  const mediaSync=new MediaSync(store,mediaRoot),pairCodes=new Map(),pairKeysPath=path.join(store.state,'pair-clients.json');
+  const carried=carriedRoot(store),media={mediaRoot,carried};
+  const carry=()=>{try{carryMedia(media);}catch(e){console.error('Godspeed Mission Control: copying media into the notebook failed:',e);}};
+  carry();
+  // A paired device's key, kept as its hash with an id, so the owner can list and revoke it.
+  // Keys saved before 6 October 2026 were bare hashes; they are read as unnamed keys.
+  const pairKeys=(fs.existsSync(pairKeysPath)?JSON.parse(fs.readFileSync(pairKeysPath,'utf8')):[]).map(k=>typeof k==='string'?{id:k.slice(0,16),hash:k,created_at:null}:k);
+  const savePairKeys=()=>{atomic(pairKeysPath,JSON.stringify(pairKeys));fs.chmodSync(pairKeysPath,0o600);};
+  const instance=hash(store.root).slice(0,24);
+  const remote = !['127.0.0.1', '::1', 'localhost'].includes(host);
+  if (remote && !token) throw new Error('Remote access requires an access token');
+  const auth = new WebAuth(store.state, { token, remote, now: authNow });
+  // The web address's own door (webPort, GODSPEED_WEB_PORT). On a server the Linux installer
+  // puts HTTPS in front of it, and every visit through it signs in, while the door on `port`
+  // stays as it is for the assistant, the routines and the tools on this machine. Until
+  // 7 October 2026 a server installed with the Linux installer had only that local door, so
+  // its owner could not open the notebook from any other computer or phone. The owner's
+  // account is made through a private setup link the installer asks the local door for
+  // (/api/login-link), so without a token nothing typed into the web door creates one.
+  const web = webPort === undefined || webPort === null ? null : { port: Number(webPort), auth: new WebAuth(store.state, { token, remote: true, now: authNow }) };
+  // Health Auto Export uploads (core/phone-health.mjs, issue #214) are taken only where a phone can
+  // reach this notebook: a door that faces outside. A Windows or Mac notebook on 127.0.0.1 with no
+  // web door offers nothing, and /ingest there is what it was before.
+  const phoneUploads=remote||!!web,pruneFailed=()=>console.error('Godspeed Mission Control: expired phone health uploads could not be removed');
+  if(phoneUploads){try{ensureToken(store.state);if(tokenDamaged(store.state))console.error('Godspeed Mission Control: the phone health token is damaged, so uploads are off until the address is renewed in Settings');}catch{console.error('Godspeed Mission Control: the phone health token could not be prepared, so uploads are off until the address is renewed in Settings');}try{pruneRaw(store.state);}catch{pruneFailed();}}
+  const pruneTimer=phoneUploads?setInterval(()=>{try{pruneRaw(store.state);}catch{pruneFailed();}},3600000):null;pruneTimer?.unref?.();
+  // What is no longer true ends on its own (core/fact-closing.mjs): once a day
+  // on the machine that runs the routines, and soon after a Menerio import,
+  // which copies old values under their old names beside the new ones.
+  const factClosing=domains.factClosing=new FactClosing({store,query,device});
+  const menerioImport=new MenerioImport(store,mediaRoot,()=>{index.rebuild();factClosing.request();},{beat});
+  const telegramConnection=new TelegramConnection();
+  const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store),backupRunner=new BackupRunner(store,mediaRoot);let dictationBusy=false;
+  // The page that shows who the assistant is (core/identity-shelf.mjs): who it is, its rules, what
+  // it knows about its owner and its skills, with every earlier version. Its assistant's own identity file follows
+  // "who it is"; only the assistant this installation connected is meant (assistant.json).
+  const assistantHome=()=>{try{const d=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^﻿/,''));return d?.verified&&typeof d.home==='string'?d.home:null;}catch{return null;}};
+  const shelf=domains.identity=new IdentityShelf(store,{assistantHome});
+  try{shelf.followPersona();}catch{}
+  const loginLinks=new Map();
+  const apiKeys=new ApiKeys(store);
+  // A pairing key lets the other device copy media, nothing else: until 6 October 2026
+  // it opened every /api/ route, including queries, sync settings and new pairing codes.
+  const pairedMedia = (req, route) => {
+    const media = req.method === 'GET' ? route === '/api/media/manifest' || route.startsWith('/api/media/blob/') : req.method === 'POST' && ['/api/media/transfer', '/api/media/tombstone'].includes(route);
+    const presented = String(req.headers['x-godspeed-pair-key'] || '');
+    return media && !!presented && pairKeys.some(k => !k.revoked_at && k.hash === hash(presented));
+  };
+  function send(res, status, body, headers = {}) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers }); res.end(JSON.stringify(body)); }
+  // A file is opened before the reply starts, so a missing one is a 404, and a
+  // read that fails halfway ends that one reply. Until 6 October 2026 either
+  // stopped the whole server (an 'error' nobody listened for).
+  async function sendFile(res, file, headers) {
+    let handle; try { handle = await fs.promises.open(file, 'r'); } catch { return send(res, 404, { error: 'This file is missing.' }); }
+    let size; try { size = (await handle.stat()).size; } catch (error) { await handle.close().catch(() => {}); throw error; }
+    res.writeHead(200, { ...headers, 'Content-Length': size });
+    pipeline(handle.createReadStream(), res, error => { if (error) res.destroy(); });
+  }
+  async function body(req, limit = 2 * 1024 * 1024) {
+    let size = 0; const chunks = [];
+    for await (const chunk of req) { size += chunk.length; if (size > limit) throw new Error('Request is too large'); chunks.push(chunk); }
+    return Buffer.concat(chunks);
+  }
+  uiRoot = path.resolve(uiRoot || fileURLToPath(new URL('../ui/dist', import.meta.url)));
+  // One handler for both doors; `remote` and `auth` are the door's own.
+  const handle = (remote, auth, onWebDoor = false) => async (req, res) => {
+    const authorized = (req, route) => auth.authorized(req) || pairedMedia(req, route);
+    try {
+      const url = new URL(req.url, 'http://localhost'), route = url.pathname;
+      const hostName = (req.headers.host || '').split(':')[0];
+      if (!remote && !['localhost', '127.0.0.1', '[', '::1'].includes(hostName)) return send(res, 403, { error: 'Unrecognized local host' });
+      // An Origin that is not an address ("null" from a sandboxed page) is cross-site too.
+      // One exception: Continue on a one-time sign-in page. A browser sends "null"
+      // with a form whose page said no-referrer, which that page did until
+      // 16 October 2026, so every link the bot handed out was refused; the
+      // single-use code in the address is the credential there, not a session.
+      const signInPress = req.method === 'POST' && route.startsWith('/login/') && req.headers.origin === 'null';
+      if (req.headers.origin && !signInPress) { let from = null; try { from = new URL(req.headers.origin).host; } catch {} if (from !== req.headers.host) return send(res, 403, { error: 'Cross-site requests are refused' }); }
+      // A one-time sign-in link opens a page with one button, and only pressing
+      // it (a POST) uses the link. Until 6 October 2026 any GET used it, so
+      // Telegram's link-preview fetcher got the session and the owner's tap failed.
+      // The page's own form must carry its origin (same-origin), and the code in
+      // its address still never goes to another site.
+      if(route.startsWith('/login/')){
+        const code=route.slice(7),expiry=loginLinks.get(code),page=(status,text,button)=>{res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'same-origin','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Godspeed Mission Control</title><body style="font-family:system-ui,sans-serif;max-width:28rem;margin:4rem auto;padding:0 1rem;line-height:1.5"><h1 style="font-size:1.3rem">'+text+'</h1>'+(button?'<form method="post"><button type="submit" style="font-size:1.05rem;padding:.6rem 1.4rem">Continue</button></form>':'')+'</body></html>');};
+        if(!expiry||expiry<Date.now())return page(401,'This sign-in link expired or was already used.',false);
+        if(req.method!=='POST')return page(200,'Open your Godspeed Mission Control',true);
+        loginLinks.delete(code);
+        if(!auth.configured()) { res.writeHead(303,{'Location':auth.invite().path,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});return res.end(); }
+        const destination=safeReturn(url.searchParams.get('next')||'/dashboard');
+        res.writeHead(303,{'Location':destination,'Cache-Control':'no-store','Referrer-Policy':'no-referrer','Set-Cookie':auth.startSession(auth.read())});return res.end();
+      }
+      if (route.startsWith('/api/auth/') || route === '/api/login' || route === '/api/logout') {
+        const input = req.method === 'POST' ? JSON.parse(await body(req, 8192)) : {};
+        const result = await auth.handle(route,req,input), cookie = result.cookie;delete result.cookie;
+        return send(res,200,result,cookie?{'Set-Cookie':cookie}:{});
+      }
+      if(route==='/api/pair/claim'&&req.method==='POST'){
+        const input=JSON.parse(await body(req)),expires=pairCodes.get(input.code);if(!expires||expires<Date.now())return send(res,401,{error:'Pairing code expired or was already used'});
+        pairCodes.delete(input.code);const key=randomBytes(32).toString('hex');pairKeys.push({id:randomBytes(8).toString('hex'),hash:hash(key),created_at:new Date().toISOString()});savePairKeys();return send(res,200,{key,device});
+      }
+      if (route === '/health') return send(res, 200, { ok: true, format: 1, version: VERSION,instance,scheduler_heartbeat:schedulerHeartbeat,chat:chatStatus(store) });
+      // The token in this address is the phone's credential, so nothing on this path reaches the
+      // generic catch below, which logs the address; no line here carries the token, a health
+      // value or the sender's address.
+      if(phoneUploads&&(route==='/ingest'||route.startsWith('/ingest/'))){
+        if(route==='/ingest/health'&&req.method==='GET')return send(res,200,{ok:true});
+        if(req.method!=='POST'||route.slice(8).includes('/')||!tokenMatches(store.state,route.slice(8)))return send(res,404,{error:'Not found'});
+        try{
+          if(menerioImport.mutating)return send(res,503,{error:'Try again soon'});
+          let upload;try{upload=JSON.parse(await body(req,UPLOAD_LIMIT));}catch(error){const tooLarge=error.message==='Request is too large';
+            // The rest of an oversized body is never read, so the connection is closed once the answer is out; left open it would stay for good (and hold the server open at shutdown).
+            if(tooLarge){res.setHeader('Connection','close');res.once('finish',()=>req.socket?.destroy());}
+            return send(res,tooLarge?413:400,{error:tooLarge?'Too large':'Not JSON'});}
+          // A renewal while the body was on its way revokes this address at once, so the token is checked again before anything is stored.
+          if(!tokenMatches(store.state,route.slice(8)))return send(res,404,{error:'Not found'});
+          const data=upload?.data;
+          if(!isUploadShape(data))return send(res,400,{error:'Not a Health Auto Export upload'});
+          acceptUpload(store,data);
+          const now=clockNow(),timezone=store.get('settings','installation')?.timezone||'UTC',day=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+          try{await recoverPhoneConnection({store,day,now:()=>now});}catch{console.error('Godspeed Mission Control: the phone health connection could not be marked recovered; the daily check will try again');}
+          return send(res,200,{ok:true});
+        }catch(error){
+          if(error.retained){const problem=error.receiptFailed?'could not update its connection receipt':`could not be turned into day records: ${error.message}; the rollback also failed: ${error.rollbackMessage}`;console.error('Godspeed Mission Control: a phone upload is kept but '+problem);return send(res,202,{ok:true,pending:true});}console.error('Godspeed Mission Control: a phone upload was not kept: '+error.message);return send(res,500,{error:'Not kept'});}
+      }
+      if(route==='/api/shared-note'&&req.method==='GET'){const share=query.rows('shared_notes').find(s=>s.share_token===url.searchParams.get('token')&&s.is_active),note=share&&store.get('notes',share.note_id);if(!note||note.removed_at||note.is_trashed)return send(res,404,{error:'This share is unavailable'});return send(res,200,{title:note.title,content:note.content,tags:note.tags,entity_type:note.entity_type,created_at:note.created_at,updated_at:note.updated_at});}
+      if (route.startsWith('/api/') && !authorized(req, route)) return send(res, 401, { error: 'Sign in to continue.', code: auth.cookie(req)?'SESSION_EXPIRED':'SIGN_IN_REQUIRED' });
+      if(route==='/api/menerio/import'){
+        if(!auth.authorized(req))return send(res,403,{error:'Sign in as the server owner to import.'});
+        if(req.method==='GET')return send(res,200,menerioImport.status());
+        if(req.method==='POST')return send(res,202,{job:await menerioImport.start(JSON.parse(await body(req,16384)))});
+        return send(res,405,{error:'Use GET or POST'});
+      }
+      // Telegram, connected from the page after the account is made (telegram-connect.mjs).
+      if(route==='/api/telegram'||route.startsWith('/api/telegram/')){
+        if(!auth.authorized(req))return send(res,403,{error:'Sign in as the server owner to connect Telegram.'});
+        if(route==='/api/telegram'&&req.method==='GET')return send(res,200,telegramConnection.status());
+        if(route==='/api/telegram/connect'&&req.method==='POST'){const input=JSON.parse(await body(req,4096));return send(res,200,await telegramConnection.connect(input.token,{timezone:input.timezone,address:input.address}));}
+        if(route==='/api/telegram/disconnect'&&req.method==='POST')return send(res,200,telegramConnection.disconnect());
+        return send(res,404,{error:'Unknown operation'});
+      }
+      // The dashboard's "Tell Godspeed about you" card (core/context-setup.mjs): shown until the
+      // getting-to-know-you chat ended; "Hide" ends it as skipped.
+      if(route==='/api/context-setup'){
+        if(req.method==='GET')return send(res,200,{show:showContextCard(store),state:readContext(store)?.state||null});
+        if(req.method==='POST'){const input=JSON.parse(await body(req,1024));if(input.action!=='skip')return send(res,400,{error:'Use skip'});markContext(store,'skip');return send(res,200,{show:false,state:readContext(store)?.state});}
+        return send(res,405,{error:'Use GET or POST'});
+      }
+      if(menerioImport.mutating&&(route==='/mcp'||route.startsWith('/api/'))&&!['/api/session','/api/status','/api/chat/options'].includes(route))return send(res,423,{error:'Your Menerio content is being copied. Wait for the import to finish.'});
+      if(req.method==='POST'&&route.startsWith('/api/')&&!['/api/chat/stop','/api/backup','/api/functions/draft-event'].includes(route))await store.waitForWriter();
+      if(route==='/chat'&&req.method==='GET'){
+        res.writeHead(303,{'Location':'/dashboard/chat'+url.search,'Cache-Control':'no-store'});return res.end();
+      }
+      if(route==='/api/browser-chat'){
+        const input=req.method==='POST'?JSON.parse(await body(req)):{},talkId=input.talk_id||url.searchParams.get('talk'),talk=talkId?query.rows('coach_talks').find(t=>t.id===talkId):null;if(talkId&&!talk)throw Error('Coaching conversation missing');
+        const conversation=talk?'browser-owner-'+talk.id:'browser-owner';
+        if(req.method==='GET')return send(res,200,{talk,messages:query.rows('conversation_messages').filter(m=>m.conversation_id===conversation).sort((a,b)=>a.created_at.localeCompare(b.created_at))});
+        if(req.method==='POST'){
+          if(typeof input.message!=='string'||!input.message.trim()||input.message.length>20000)throw new Error('Write a message of at most 20000 characters');
+          const receiptId=input.request_id?'browser-request-'+hash([conversation,input.request_id]):null,requestHash=hash({conversation,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
+          if(receiptId&&chatRequests.has(receiptId))throw Error('This chat request is already running');
+          if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,previous.result);throw Error('This interrupted chat request needs review before replay');}
+          const controller=new AbortController();if(receiptId)chatRequests.set(receiptId,controller);
+          try{
+            if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'attempted',request_hash:requestHash},undefined,{signal:controller.signal});
+            const sourceId=input.request_id?'browser-message-'+hash([conversation,input.request_id]):undefined;if(!sourceId||!store.get('conversation_messages',sourceId))await store.saveAsync('conversation_messages',{id:sourceId,role:'user',content:input.message,conversation_id:conversation,source_app:'browser-chat'},undefined,{signal:controller.signal});
+            const result=await domains.invoke('conversation-chat',{message:input.message,conversation_id:conversation,request_id:input.request_id,talk_id:talk?.id,signal:controller.signal}),saved={reply:result.reply};
+            if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'verified',result:saved},undefined,{signal:controller.signal});return send(res,200,saved);
+          }catch(error){if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message});throw error;}finally{if(receiptId)chatRequests.delete(receiptId);}
+        }
+        return send(res,405,{error:'Use GET or POST'});
+      }
+      if(route==='/api/login-link'&&req.method==='POST'){if(!auth.configured())return send(res,200,auth.invite());const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return send(res,200,{path:'/login/'+code,expires_minutes:5});}
+      if(route==='/api/assistant/open'&&req.method==='POST'){
+        if(remote||process.platform!=='win32')throw new Error('Open the assistant on your Windows computer');
+        const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));if(!descriptor.verified||path.basename(descriptor.desktop)!=='Hermes.exe'||!fs.existsSync(descriptor.desktop))throw new Error('The Hermes desktop app is not on this computer');
+        const child=spawn(descriptor.desktop,[],{cwd:store.root,detached:true,stdio:'ignore',windowsHide:false,env:{...assistantEnvironment({home:descriptor.home,workspace:store.root}),HERMES_DESKTOP_USER_DATA_DIR:path.join(path.dirname(assistantPath),'hermes-desktop-data'),HERMES_DESKTOP_APP_NAME:'Godspeed Mission Control Assistant',HERMES_DESKTOP_HERMES_ROOT:descriptor.sourceRoot,HERMES_DESKTOP_CWD:store.root,PLAYWRIGHT_BROWSERS_PATH:path.join(path.dirname(assistantPath),'hermes-runtime','browser-cache')}});child.unref();return send(res,200,{opened:true});
+      }
+      if(route==='/mcp'){
+        const accessKey=apiKeys.authenticate(String(req.headers.authorization||'').replace(/^Bearer /,''));
+        if(!auth.authorized(req)&&!accessKey)return send(res,401,{error:'Authentication required'});
+        if(req.method!=='POST'){res.writeHead(405,{'Allow':'POST'});return res.end();}
+        const input=JSON.parse(await body(req));if(accessKey&&input.method==='tools/call'&&!accessKey.scopes.includes(toolScope(input.params.name,input.params.arguments||{})))return send(res,403,{error:'This API key does not grant that capability'});
+        const explain=error=>{const shown=userFacing(error,[store.root,store.state,mediaRoot,uiRoot,os.homedir(),os.tmpdir()]);if(!shown||error instanceof SyntaxError)console.error('Godspeed Mission Control: MCP '+String(input.params?.name||input.method)+' failed:',error);return shown||'Something went wrong on the server. The details are in its log.';};
+        const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes,delegated:!!accessKey&&!apiKeys.installationAssistant(accessKey),explain});if(response===null){res.writeHead(202);return res.end();}return send(res,200,response);
+      }
+      if(route==='/api/pair/keys'&&req.method==='GET')return send(res,200,{data:pairKeys.map(({id,created_at,revoked_at})=>({id,created_at,revoked_at:revoked_at||null}))});
+      if(route==='/api/pair/revoke'&&req.method==='POST'){const input=JSON.parse(await body(req)),key=pairKeys.find(k=>k.id===input.id);if(!key)throw new Error('Choose a paired device to disconnect');key.revoked_at||=new Date().toISOString();savePairKeys();return send(res,200,{revoked:true});}
+      if(route==='/api/pair/create'&&req.method==='POST'){if(device!=='vps')throw new Error('Create a pairing code on your server');const code=randomBytes(16).toString('hex');pairCodes.set(code,Date.now()+300000);return send(res,200,{code,expires_minutes:5});}
+      if(route==='/api/pair/connect'&&req.method==='POST'){const input=JSON.parse(await body(req));const result=await mediaSync.pair(input.origin,input.code);return send(res,200,{...result,media:await mediaSync.reconcile()});}
+      if(route==='/api/media/sync'&&req.method==='POST')return send(res,200,await mediaSync.reconcile());
+      if(route==='/api/media/offline'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['all','selected'].includes(input.offline))throw new Error('Choose all or selected media');const config=mediaSync.config();if(!config)throw new Error('Pair this device first');atomic(mediaSync.configPath,JSON.stringify({...config,offline:input.offline,selected:input.selected||[]}));return send(res,200,{ok:true});}
+      if(route==='/api/media/manifest')return send(res,200,{data:mediaSync.manifest()});
+      if(route==='/api/media/tombstone'&&req.method==='POST'){const input=JSON.parse(await body(req)),old=mediaSync.manifest().find(m=>m.path===input.path);if(!old||old.sha256!==input.sha256||!input.removed_at||!Number.isFinite(Date.parse(input.removed_at)))throw new Error('This removal does not match the saved media version');atomic(path.join(mediaRoot,hash(old.path)+'.mapping.json'),JSON.stringify({...old,removed_at:input.removed_at}));return send(res,200,{ok:true});}
+      if(route.startsWith('/api/media/blob/')&&req.method==='GET'){const filename=mediaFileName(decodeURIComponent(route.slice('/api/media/blob/'.length)));if(!mediaSync.manifest().some(m=>m.file===filename&&!m.removed_at))return send(res,404,{error:'Unknown media object'});return sendFile(res,path.join(mediaRoot,filename),{'Content-Type':'application/octet-stream','X-Content-Type-Options':'nosniff'});}
+      if(route==='/api/media/transfer'&&req.method==='POST'){
+        const input=JSON.parse(await body(req,140*1024*1024)),mapping=input.mapping,data=Buffer.from(input.data,'base64');
+        if(hash(data)!==mapping.sha256||data.length!==mapping.size)throw new Error('Transfer integrity mismatch');
+        mediaFileName(mapping.file);if(!mapping.file.startsWith(mapping.sha256+'-'))throw new Error('Invalid media object name');
+        const old=mediaSync.manifest().find(m=>m.path===mapping.path);if(old&&old.sha256!==mapping.sha256)throw new Error('A different media version exists. Resolve it before transfer');
+        atomic(path.join(mediaRoot,mapping.file),data);atomic(path.join(mediaRoot,hash(mapping.path)+'.mapping.json'),JSON.stringify(mapping));return send(res,200,{ok:true});
+      }
+      if (route === '/api/session') return send(res, 200, { user: { id: 'owner' }, profile: query.rows('profiles')[0] || { id: 'owner', display_name: auth.read().owner?.username || 'Owner' }, expires_at:auth.session(req)?.expires || null });
+      // Settings, About: the version and release, this installation's folders, the food table's licence (core/about.mjs).
+      if(route==='/api/about'&&req.method==='GET')return send(res,200,await about({store,mediaRoot,device}));
+      // Settings, About: the newest release, the Update now button, which runs godspeed-update (core/update.mjs),
+      // and the choice to update automatically (core/automatic-update.mjs).
+      if(route==='/api/update'){
+        if(req.method==='GET')return send(res,200,{...await updateOverview({root:store.root,refresh:url.searchParams.get('refresh')==='1'}),automatic:automaticUpdate.overview()});
+        if(req.method!=='POST')return send(res,405,{error:'Use GET or POST'});
+        const {code,...answer}=await startUpdate({root:store.root});return send(res,code,answer);
+      }
+      if(route==='/api/update/automatic'){
+        if(req.method!=='POST')return send(res,405,{error:'Use POST'});
+        return send(res,200,automaticUpdate.save(JSON.parse(await body(req,4096))));
+      }
+      if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,runtimeConfigured:!!domains.provider&&!assistantMissing,assistantProblem:domains.provider&&!assistantMissing?null:assistantProblem,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime&&!assistantMissing?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
+      if(route==='/api/hermes-update'){
+        if(!domains.hermesUpdate)return send(res,200,{available:false});
+        if(req.method==='GET')return send(res,200,{available:true,...updateStatus(store)});
+        if(req.method!=='POST')return send(res,405,{error:'Use GET or POST'});
+        const input=JSON.parse(await body(req,4096));if(typeof input.enabled!=='boolean')throw Error('Choose whether to keep the assistant program up to date');
+        domains.hermesUpdate.setEnabled(input.enabled);return send(res,200,{available:true,...updateStatus(store)});
+      }
+      if(route==='/api/personal')return query.withSnapshot(()=>send(res,200,{goals:query.rows('goals'),work:query.rows('work_items'),deadlines:query.rows('deadlines'),talks:query.rows('coach_talks'),habits:query.rows('habits'),journal:query.rows('journal'),health:latestPerDayMetric(query.rows('health_observations')),forecasts:query.rows('forecasts'),watch:query.rows('watch_topics'),jobs:query.rows('jobs')}));
+      // The AI the person connects in Settings serves the notebook and, unless they untick it,
+      // the routines and the chat too: it is written into Hermes' own home (core/routine-ai.mjs),
+      // and one short request through Hermes shows whether the routines can reach it.
+      if(route==='/api/provider'&&req.method==='GET'){
+        const saved=readSavedProvider(providerPath);return send(res,200,saved?providerView(saved):{configured:false,key:false});
+      }
+      if(route==='/api/provider'&&req.method==='POST'){
+        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),saved=readSavedProvider(providerPath),submittedKey=typeof input.key==='string'?input.key.trim():input.key;
+        const normalizedAddress=!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions';
+        const retainedKey=!submittedKey&&saved&&baseAddress(normalizedAddress)===baseAddress(saved.url)?saved.key:submittedKey;
+        const config={url:normalizedAddress,key:retainedKey,model:typeof input.model==='string'?input.model.trim():input.model};
+        const chosen=modelProvider(config);if(!chosen)throw new Error('Provide a model endpoint, key and model name');
+        const routines=routineAI&&input.routines!==false;
+        if(routines)hermesSettingsFor(config);
+        // The main AI is not the backup's service either (SAME_SERVICE): the backup would be no backup.
+        try{const want=hermesSettingsFor(config),saved=readBackupEndpoint(store.state);
+          const backups=[saved&&backupEntryFor(saved),routineAI&&fallbackChain(fs.readFileSync(path.join(routineAI.home,'config.yaml'),'utf8'))[0]];
+          if(backups.some(b=>sameService(want,b)))throw Object.assign(new Error(BACKUP_SERVICE),{backupService:true});}
+        catch(error){if(error.backupService)throw error;}
+        await chosen({kind:'connection-test',contract:'Reply with Connected.'});
+        const kept=guarded(chosen);
+        atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);provider=kept;domains.provider=kept;scheduler.executor=jobExecutor(kept,query);
+        if(!routines)return send(res,200,{connected:true,provider:providerView(config),routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
+        connectRoutineAI({...routineAI,config});
+        return send(res,200,{connected:true,provider:providerView(config),routines:{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})}});
+      }
+      // The Goals page: each goal's weekly number and readings, bets and verdicts, today's decision, the
+      // work and its checks, what went out, the research brief, and the routines' AI (core/goal-overview.mjs).
+      if(route==='/api/goals/overview'&&req.method==='GET')return send(res,200,{...goalOverview({store,query}),ai:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
+      if(route==='/api/routine-ai'&&req.method==='GET')return send(res,200,routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false});
+      // A BACKUP AI the person connects in Settings (core/backup-ai.mjs, discussion #20): never added
+      // by Godspeed itself. Tested like the main one before anything is saved, then kept in Hermes'
+      // fallback chain (when the routines run through Hermes) and as the notebook's second address.
+      const backupHome=routineAI?.home||null;
+      if(route==='/api/backup-ai'&&req.method==='GET')return send(res,200,{hermes:!!backupHome,...backupStatus({home:backupHome,state:store.state})});
+      if(route==='/api/backup-ai'&&req.method==='POST'){
+        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),config={url:!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions',key:typeof input.key==='string'?input.key.trim():input.key,model:typeof input.model==='string'?input.model.trim():input.model};
+        const candidate=modelProvider(config);if(!candidate)throw new Error('Provide a model endpoint, key and model name');
+        const entry=backupEntryFor(config);
+        // A backup is another service than the main AI (the one Hermes runs, and the notebook's own
+        // address), as in /backupai: when one service fails, its other models and keys usually fail
+        // with it, and Hermes counts the same service behind itself as no backup.
+        let main=null;try{main=backupEntryFor(JSON.parse(fs.readFileSync(providerPath,'utf8')));}catch{}
+        const hermesMain=backupHome?routineAIStatus(routineAI):null;
+        if(sameService(entry,main)||sameService(entry,hermesMain))throw new Error(SAME_SERVICE);
+        await candidate({kind:'connection-test',contract:'Reply with Connected.'});
+        return send(res,200,{connected:true,hermes:!!backupHome,...connectBackupAI({home:backupHome,state:store.state,config})});
+      }
+      // The ChatGPT plan sign-in (planSignIn above): its state, start it for the main AI or the
+      // backup, cancel it. The plan cannot be both: Hermes counts a plan behind itself as no backup.
+      if(route==='/api/ai-signin'&&req.method==='GET')return send(res,200,planSignIn?{available:true,...planSignIn.view()}:{available:false,state:'idle'});
+      if(route==='/api/ai-signin/start'&&req.method==='POST'){
+        if(!planSignIn)throw new Error('A ChatGPT plan is signed in where Hermes runs your routines; this notebook has none.');
+        const as=JSON.parse(await body(req)).as;
+        if(as==='backup'&&routineAIStatus(routineAI).provider===PLAN_PROVIDER)throw new Error(SAME_SERVICE);
+        if(as==='main'&&fallbackChain(fs.existsSync(path.join(backupHome,'config.yaml'))?fs.readFileSync(path.join(backupHome,'config.yaml'),'utf8'):'')[0]?.provider===PLAN_PROVIDER)throw new Error(BACKUP_SERVICE);
+        return send(res,200,{available:true,...await planSignIn.start(as)});
+      }
+      if(route==='/api/ai-signin/cancel'&&req.method==='POST')return send(res,200,planSignIn?{available:true,...planSignIn.cancel()}:{available:false,state:'idle'});
+      if(route==='/api/backup-ai/remove'&&req.method==='POST')return send(res,200,{hermes:!!backupHome,...removeBackupAI({home:backupHome,state:store.state})});
+      // VOICE REPLIES (core/voice-replies.mjs, discussion #41): the voice the assistant answers voice
+      // notes with, kept in Hermes' own home. An ElevenLabs voice is kept only after a sample worked.
+      if(route==='/api/'+PHONE_HEALTH_STATUS||route==='/api/'+PHONE_HEALTH_RENEW){
+        // The address carries the phone's credential, so Settings shows or renews it only through the signed-in web door, never on a door that is open or plain http.
+        if(!phoneUploads||!onWebDoor){if(route==='/api/'+PHONE_HEALTH_STATUS)return send(res,200,phoneHealthAnswer({available:false}));return send(res,404,{error:'Unknown operation'});}
+        if(route==='/api/'+PHONE_HEALTH_RENEW&&req.method!=='POST')return send(res,405,{error:'Use POST'});
+        const link=notebookAddress({port:server.address().port}).link;
+        // The token travels only inside an https address: over http a network observer would read the phone's credential.
+        if(!link?.startsWith('https://')){if(route==='/api/'+PHONE_HEALTH_RENEW)return send(res,409,{error:'A new address needs this server\'s https web address'});return send(res,200,phoneHealthAnswer({available:true,address:null}));}
+        const token=route==='/api/'+PHONE_HEALTH_RENEW?renewToken(store.state):ensureToken(store.state);
+        if(!token)return send(res,200,phoneHealthAnswer({available:true,address:null,damaged:true}));
+        return send(res,200,phoneHealthAnswer({available:true,address:link.replace(/\/dashboard$/,'')+'/ingest/'+token}));
+      }
+      if(route==='/api/voice'&&req.method==='GET')return send(res,200,backupHome?voiceStatus({home:backupHome,state:store.state}):{available:false});
+      if(route==='/api/voice'&&req.method==='POST'){
+        if(!backupHome)throw new Error('Voice replies are made where Hermes runs your assistant; this notebook has none.');
+        return send(res,200,await saveVoice({home:backupHome,state:store.state,input:JSON.parse(await body(req,16384))}));
+      }
+      if(route==='/api/routine-ai/check'&&req.method==='POST'){if(!routineAI)throw new Error('This notebook runs no routines through Hermes');return send(res,200,{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})});}
+      if(route==='/api/sync/configure'&&req.method==='POST'){
+        // A computer not yet signed in to GitHub signs in once, then the same check runs again (github-sign-in.mjs).
+        const input=JSON.parse(await body(req));return send(res,200,await connectRecordSync({url:input.url,configure:url=>syncRunner.configure(url),signIn:githubSignIn}));
+      }
+      if(route==='/api/sync/sign-in'&&req.method==='GET')return send(res,200,{signIn:githubSignIn.status()});
+      if(route==='/api/sync/run'&&req.method==='POST'){
+        // A notebook that never connected sync is told so, instead of running git and showing its error.
+        if(!fs.existsSync(path.join(store.state,'sync-config.json')))return send(res,200,{status:{...syncNotConnected}});
+        return send(res,200,{status:await syncRunner.run()});
+      }
+      if(assistantMissing&&req.method==='POST'&&ASSISTANT_ROUTES.includes(route))throw Error(assistantProblem);
+      // "server": the server this computer is paired with, whatever it is called, or this machine
+      // when it is the server (the one that makes pairing codes). Until 9 October 2026 the button
+      // sent the name 'vps', which only the one-click server has.
+      if(route==='/api/owner'&&req.method==='POST'){const input=JSON.parse(await body(req));const owner=input.owner==='this'?device:input.owner==='server'?mediaSync.server()||(device==='vps'?device:null):input.owner;if(owner===null)throw new Error('Pair this computer with your server first, under Pair the server and media, then choose the server here');if(typeof owner!=='string'||!/^[a-z0-9][a-z0-9-]{0,39}$/.test(owner))throw new Error('Choose the machine that runs the routines by its name');await scheduler.transfer(owner);return send(res,200,{owner});}
+      // Settings > Notifications: the morning brief and the weekly review, on or off and when (native-scheduler.mjs).
+      if(route==='/api/notifications'){
+        if(!originalRuntime||assistantMissing)return send(res,200,{available:false});
+        if(req.method==='GET')return send(res,200,{available:true,...scheduler.notifications()});
+        if(req.method==='POST')return send(res,200,{available:true,...await scheduler.setNotifications(JSON.parse(await body(req,4096)))});
+        return send(res,405,{error:'Use GET or POST'});
+      }
+      if(route==='/api/workouts'){
+        if(!originalRuntime||!workouts)return send(res,200,{available:false,connected:false,rows:0,minute:null,last_run:null,problems:[],routine:null});
+        const routine=()=>scheduler.workoutsRoutineStatus();
+        if(req.method==='GET')return send(res,200,await workouts.status({routine:routine()}));
+        if(req.method==='POST'){
+          scheduler.requireOwner('Connect Workouts from Hevy');
+          const input=JSON.parse(await body(req,256));
+          if(typeof input.key!=='string'||input.key.length>128)throw Error('Enter a Hevy API key.');
+          await workouts.connect(input.key);
+          try{await scheduler.followWorkouts({reconnect:true});}
+          catch{const status=await workouts.status({routine:routine()});const retained=status.routine?.state==='scheduled';return send(res,202,{...status,pending:true,message:retained?'The notebook routine is running, but Godspeed could not remove the standalone schedule. Godspeed will retry automatically.':'The notebook routine could not be set up yet. Godspeed will retry automatically; any existing standalone schedule stays in place.'});}
+          return send(res,200,await workouts.status({routine:routine()}));
+        }
+        return send(res,405,{error:'Use GET or POST'});
+      }
+      if(route==='/api/workouts/disconnect'&&req.method==='POST'){
+        if(!originalRuntime||!workouts)throw Error('Workouts from Hevy needs the assistant');
+        await scheduler.disconnectWorkouts();
+        const entry=readNotebookRoutines(store).jobs.find(job=>job.key==='workouts');
+        return send(res,200,await workouts.status({routine:entry?{state:'disconnected'}:null}));
+      }
+      if(route==='/api/routines/switch'&&req.method==='POST'){const input=JSON.parse(await body(req,4096));if(!originalRuntime)throw new Error('Routines need the assistant');await setRoutineSwitch(store,input);if(scheduler.owns()){try{await scheduler.followNoticeSender();await scheduler.followSwitches();await Promise.all([scheduler.followJournal(),scheduler.followConnectionCheck(),scheduler.followMailCount(),scheduler.followWorkouts()]);}catch(error){throw new Error('Your switch is saved, but the assistant could not set the routine up yet ('+String(error?.message||error).slice(0,200)+'). It retries by itself, with longer waits after repeated failures.');}}return send(res,200,{data:routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home})});}
+      if(route==='/api/delivery'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['notebook','telegram'].includes(input.delivery)||input.delivery==='telegram'&&!originalRuntime&&!scheduler.deliver)throw new Error('Configure Telegram before choosing chat delivery');const settings=store.get('settings','installation');if(!settings)throw new Error('Start with a goal first');await store.saveAsync('settings',{id:settings.id,delivery:input.delivery,delivery_chosen_at:new Date().toISOString()});const moved=originalRuntime?await scheduler.followDelivery():[];return send(res,200,{delivery:input.delivery,moved:moved.length});}
+      if(route==='/api/conflicts'&&req.method==='GET')return send(res,200,{data:sync.pendingConflicts().map(name=>{
+        // One pending conflict whose record is gone (a stale-write whose record
+        // was removed) or whose file no longer reads must not throw away the
+        // whole list: it is shown degraded so the rest still load and it can
+        // still be dismissed (SY13, 2026-10-07).
+        const id=name.replace(/\.json$/,'');
+        try{return conflictView(store,id,{assistantPath});}
+        catch(error){let raw={};try{raw=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));}catch{}
+          return {id:raw.id||id,kind:raw.kind,path:raw.path||(raw.type&&raw.record_id?raw.type+'/'+raw.record_id:null),degraded:true,detail:String(error.message)};}
+      })});
+      if(route==='/api/conflicts/resolve'&&req.method==='POST'){
+        const input=JSON.parse(await body(req));resolveSavedConflict(store,input,{assistantPath});
+        return send(res,200,{ok:true});
+      }
+      // That page's routes. Only the files it names, by the patterns in identity-shelf.mjs; every
+      // change through the workspace's writer and lock, kept as a version of its own.
+      if(route==='/api/identity'||route.startsWith('/api/identity/')){
+        if(route==='/api/identity'&&req.method==='GET')return send(res,200,shelf.overview());
+        if(route==='/api/identity/removed'&&req.method==='GET')return send(res,200,{data:await shelf.removedRules()});
+        if(route==='/api/identity/item'&&req.method==='GET')return send(res,200,shelf.read(url.searchParams.get('target')));
+        if(route==='/api/identity/history'&&req.method==='GET')return send(res,200,{data:await shelf.versions(url.searchParams.get('target'))});
+        // Beside the profile pages: what else the assistant can look up, as its own tools count it.
+        if(route==='/api/identity/notebook'&&req.method==='GET')return send(res,200,notebookTotals({store,query}));
+        // The instructions connected AI apps receive (get_user_profile): records, kept as records.
+        if(route==='/api/identity/instructions'&&req.method==='GET')return send(res,200,{data:shelf.instructionList()});
+        if(route==='/api/identity/rules-setting'&&req.method==='GET')return send(res,200,{new_rules:shelf.newRules()});
+        if(route==='/api/identity/instruction-history'&&req.method==='GET')return send(res,200,{data:shelf.instructionVersions(url.searchParams.get('id'))});
+        if(req.method!=='POST')return send(res,405,{error:'Use GET or POST'});
+        const input=JSON.parse(await body(req,256*1024)),options={expected_hash:typeof input.expected_hash==='string'?input.expected_hash:undefined,by:'notebook'};
+        if(route==='/api/identity/save')return send(res,200,await shelf.save(input.target,{text:input.text,fields:input.fields},options));
+        if(route==='/api/identity/undo')return send(res,200,await shelf.undo(input.target,options));
+        if(route==='/api/identity/restore')return send(res,200,await shelf.restore(input.target,String(input.version||''),options));
+        if(route==='/api/identity/rule')return send(res,200,await shelf.addRule(input.fields||{},{by:'notebook'}));
+        if(route==='/api/identity/remove')return send(res,200,await shelf.removeRule(input.target,options));
+        if(route==='/api/identity/rules-setting')return send(res,200,await shelf.setNewRules(input.new_rules));
+        if(route==='/api/identity/mark-who')return send(res,200,await shelf.markWho({by:'notebook'}));
+        if(route==='/api/identity/gather-rules')return send(res,200,await shelf.gatherRules({by:'notebook'}));
+        // "Bring it here": the text the assistant's program read first, its owner's own, moves into
+        // the extra instructions, and from then on that file follows this page.
+        if(route==='/api/identity/bring-soul-here')return send(res,200,await shelf.bringSoulHere({by:'notebook'}));
+        if(route==='/api/identity/instruction')return send(res,200,await shelf.saveInstruction(input.instruction||{},options));
+        if(route==='/api/identity/instruction-restore')return send(res,200,await shelf.restoreInstruction(String(input.id||''),String(input.version||''),options));
+        return send(res,404,{error:'Unknown operation'});
+      }
+      if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...await scheduler.configure({...input,owner:mediaSync.server()||device}),results:setupResults(store,await scheduler.tick({raise:true}))});}
+      if(route==='/api/jobs/run'&&req.method==='POST'){const input=JSON.parse(await body(req));if(originalRuntime)return send(res,202,scheduler.startRun(input.id));return send(res,200,{results:await scheduler.tick()});}
+      if(route==='/api/connections/recheck'&&req.method==='POST'){await jobExecutor(provider,query)({kind:'connection-check',id:'manual-connection-check',manual:true},{store,settings:store.get('settings','installation')||{}});return send(res,200,{connections:query.rows('connector_status').map(({id,ok,status,checked_at})=>({id,ok,status,checked_at}))});}
+      if(route==='/api/jobs/update'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:originalRuntime?await scheduler.control(input):await controlRoutine(store,input,{device})});}
+      if(route==='/api/jobs/add'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:originalRuntime?await scheduler.control(input,{enable:true}):await controlRoutine(store,input,{enable:true,device})});}
+      // A full rebuild reads every file: in the background, so the notebook keeps answering.
+      if(route==='/api/index/rebuild'&&req.method==='POST'){void store.verify().then(()=>index.rebuildBackground()).catch(()=>{});return send(res,202,{ok:true,started:true});}
+      if(route==='/api/backup'&&req.method==='POST')return send(res,200,await backupRunner.run());
+      if(route==='/api/backups'&&req.method==='GET'){
+        const folder=path.join(store.state,'backups'),data=fs.existsSync(folder)?fs.readdirSync(folder).filter(id=>/^\d+$/.test(id)).flatMap(id=>{try{const manifest=JSON.parse(fs.readFileSync(path.join(folder,id,'backup.json'),'utf8'));return Array.isArray(manifest.files)?[{id,at:manifest.at,records:manifest.records}]:[];}catch{return [];}}).sort((a,b)=>b.id.localeCompare(a.id)):[];let nightly={};try{nightly=backupSchedule.status();}catch{}const {failures=0,last_error=null,last_success=null,retry_after=null}=nightly;return send(res,200,{data,nightly:{failures,last_error,last_success,retry_after}});
+      }
+      if(route==='/api/restore-copy'&&req.method==='POST'){
+        const input=JSON.parse(await body(req));if(!/^\d+$/.test(input.backup_id||''))throw Error('Choose one saved backup');
+        const result=await recoveryRunner.run(path.join(store.state,'backups',input.backup_id));return send(res,200,result);
+      }
+      if(route==='/api/import'&&req.method==='POST')return send(res,200,importExport(query,JSON.parse(await body(req,100*1024*1024))));
+      if(route==='/api/export')return send(res,200,exportRecords(store));
+      if (route === '/api/search') {
+        const controller=new AbortController(),abort=()=>{if(!res.writableEnded)controller.abort();};req.once('aborted',abort);res.once('close',abort);
+        try {
+          const types=url.searchParams.get('types')?.split(',').filter(Boolean)||null,passages=!types?.includes('note_chunks');
+          const found=await index.searchHybrid(url.searchParams.get('q') || '',{limit:Number(url.searchParams.get('limit'))||200,types:types?.includes('notes')&&passages?[...types,'note_chunks']:types,wordsOnly:url.searchParams.get('mode')==='words',expandWords:url.searchParams.get('expand')==='1',signal:controller.signal});
+          let data=passages?index.passagesAsNotes(found.rows):found.rows;
+          // Search lists need dates, flags and a preview, never every complete
+          // note body. Keep previews distinct so the editor fetches fresh text.
+          if(url.searchParams.get('format')==='notes')data=data.flatMap(hit=>{
+            if(hit.type!=='notes')return [];const note=store.get('notes',hit.id);if(!note||note.removed_at||note.is_trashed)return [];
+            const {content,...fields}=note;return [{...fields,content_preview:String(content||'').slice(0,800),similarity:hit.similarity??null,match_source:hit.via==='passage'?'media':'note',snippet:hit.snippet}];
+          });
+          if(controller.signal.aborted)return;
+          return send(res,200,{data,mode:found.mode,note:found.note||null,error:null});
+        } finally {req.off('aborted',abort);res.off('close',abort);}
+      }
+      if(route==='/api/embeddings'){
+        if(req.method==='GET'){const config=embeddingConfig(store.state);return send(res,200,{configured:!!config,url:config?.url||null,model:config?.model||null,dimensions:config?.dimensions||null,has_key:!!config?.key,status:index.meaning?.status||null});}
+        if(req.method==='DELETE'){saveEmbeddingConfig(store.state,null);connectMeaning(null);return send(res,200,{configured:false});}
+        if(req.method==='POST'){
+          const input=JSON.parse(await body(req)),config={url:String(input.url||'').trim(),key:String(input.key||embeddingConfig(store.state)?.key||''),model:String(input.model||'').trim(),...(Number(input.dimensions)>0?{dimensions:Number(input.dimensions)}:{})};
+          if(!config.url||!config.model)throw new Error('Give the embeddings address and model');
+          const {vectors}=await embedder(config)(['Godspeed Mission Control connection check']);
+          saveEmbeddingConfig(store.state,config);connectMeaning(config);void meaningRound();
+          return send(res,200,{configured:true,model:config.model,dimensions:vectors[0].length});
+        }
+        return send(res,405,{error:'Use GET, POST or DELETE'});
+      }
+      // A write puts the rows it changed into the search index itself. Reading
+      // every record and every workspace file to rebuild it, which is what a
+      // save used to wait for, cost more than the save; the file watcher still
+      // arms a full refresh for whatever other programs write.
+      if (route === '/api/query' && req.method === 'POST') { const input=JSON.parse(await body(req)),result=await query.executeAsync(input); if(input.table==='notes'&&Array.isArray(result.data)&&(input.operation==='delete'||[].concat(input.values||[]).some(v=>v?.is_trashed===true||v?.removed_at)))await retireShares(store,result.data.map(n=>n.id)); return send(res, 200, result); }
+      if(route==='/api/chat-state'&&req.method==='POST'){
+        const input=JSON.parse(await body(req));
+        return send(res,200,await saveConversationState(store,input,{asyncWriter:true}));
+      }
+      if (route === '/api/rpc' && req.method === 'POST') { const input = JSON.parse(await body(req)); const data = query.rpc(input.rpc, input.args); return send(res, 200, { data, error: null }); }
+      if (route === '/api/structural' && req.method === 'POST') { const input = JSON.parse(await body(req)), data = store.structural(input.type, input.id, input.action, input.options); if (input.type === 'notes' && input.action === 'remove') await retireShares(store, [input.id]); return send(res, 200, { data, error: null }); }
+      if (route === '/api/media/upload' && req.method === 'POST') {
+        // The note editor holds files to the same limit (shared/media-limits.mjs).
+        const tooLarge=`This file is too large. Max is ${MEDIA_UPLOAD_MAX_MB} MB. Keep the file outside the notebook and add a link to it instead.`;
+        let bytes;try{bytes=await body(req, MEDIA_UPLOAD_MAX_BYTES + MEDIA_UPLOAD_REQUEST_EXTRA_BYTES);}catch(error){if(error.message==='Request is too large')return send(res,413,{error:tooLarge});throw error;}
+        const form = await new Request('http://localhost/', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: bytes }).formData();
+        const file = form.get('file'); if (!(file instanceof Blob)) throw new Error('Missing media file');
+        if(file.size>MEDIA_UPLOAD_MAX_BYTES)return send(res,413,{error:tooLarge});
+        const original = String(form.get('path') || file.name || 'media'), data = Buffer.from(await file.arrayBuffer()), digest = hash(data);
+        // A PDF's text read in the browser. Note attachments can be long
+        // (a contract, a manual); a chat attachment is held to 60,000 characters
+        // where it is used (chatAttachments).
+        const extractedText=form.get('extracted_text');if(extractedText!=null&&(typeof extractedText!=='string'||extractedText.length>1000000||file.type!=='application/pdf'))throw new Error('Invalid extracted PDF text');
+        const target = mediaObjectName(digest, original);
+        atomic(path.join(mediaRoot, target), data);
+        const previous=findMedia(media,original);
+        if(previous&&!previous.removed&&previous.mapping.sha256!==digest)throw new Error('This media path already has different content. Choose a new path; both binaries were retained.');
+        const saved={ path: original, file: target, sha256: digest, size: data.length, contentType: file.type,...(extractedText?{extractedText:extractedText.replace(/\r\n?/g,'\n')}:{}) };
+        atomic(path.join(mediaRoot, hash(original) + '.mapping.json'), JSON.stringify(saved));
+        keepMedia(carried,saved,data);
+        return send(res, 200, { data: { path: original, fullPath: original, id: digest }, error: null });
+      }
+      if(route==='/api/media/remove'&&req.method==='POST'){
+        const input=JSON.parse(await body(req)),at=new Date().toISOString();for(const original of input.paths||[]){const file=path.join(mediaRoot,hash(original)+'.mapping.json');if(fs.existsSync(file)){const mapping=JSON.parse(fs.readFileSync(file,'utf8'));mapping.removed_at=at;atomic(file,JSON.stringify(mapping));}removeCarried(carried,original,at);}return send(res,200,{data:[],error:null});
+      }
+      if (route.startsWith('/api/media/file/') && req.method === 'GET') {
+        const original = decodeURIComponent(route.slice('/api/media/file/'.length)), found = findMedia(media, original);
+        if(!found)return send(res,404,{error:'Media not found'});
+        if(found.removed)return send(res,404,{error:'Media removed'});
+        return sendFile(res, found.file, { 'Content-Type': found.mapping.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
+      }
+      if(route==='/api/media/kept-here'&&req.method==='GET')return send(res,200,{data:keptHere(media)});
+      if(route==='/api/media/missing-here'&&req.method==='POST'){const paths=JSON.parse(await body(req))?.paths;if(!Array.isArray(paths)||paths.length>500||paths.some(p=>typeof p!=='string'))throw new Error('Invalid media paths');return send(res,200,{data:missingHere(media,paths)});}
+      if(route==='/api/chat/transcribe'&&req.method==='POST'){
+        if(dictationBusy)return send(res,429,{error:'Another recording is being transcribed. Please try again shortly.'});
+        dictationBusy=true;
+        try{const descriptor=fs.existsSync(assistantPath)?JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,'')):null;return send(res,200,await transcribeRecording(descriptor,store.root,await body(req,8*1024*1024),String(req.headers['content-type']||'')));}finally{dictationBusy=false;}
+      }
+      // With no AI connected (the same test as runtimeConfigured in /api/status), the picker says so instead of naming a "Connected model" (#563).
+      if(route==='/api/chat/options'&&req.method==='GET'){if(!domains.provider||assistantMissing)return send(res,200,{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]});return send(res,200,provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]});}
+      if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}
+      if (route.startsWith('/api/functions/') && req.method === 'POST') {
+        const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));
+        // A chat summary is read-only (Domains.summarizeChat): no message, receipt or retained conversation.
+        const isChat=['note-chat','collection-chat','conversation-chat'].includes(name)&&input.mode!=='summarize',id=isChat?input.request_id:undefined;
+        if(isChat&&id&&(!/^[a-f0-9-]{36}$/.test(id)||chatRequests.has(id)))throw new Error('Invalid chat request');
+        const receiptId=isChat&&id?'chat-request-'+id:null,requestHash=hash({name,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
+        if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,{data:previous.result,error:null});throw Error('This interrupted chat request needs review before replay');}
+        const controller=new AbortController();if(isChat&&id)chatRequests.set(id,controller);
+        const isSearch=name==='search-notes-semantic',abortSearch=()=>{if(!res.writableEnded)controller.abort();};
+        if(isSearch){req.once('aborted',abortSearch);res.once('close',abortSearch);}
+        try{
+          if(isChat){
+            const person=input.contact_id||input.person_id||input.personId;
+            if(person){input.contact_id=person;input.person_id=person;input.conversation_id='notebook:person:'+person;}
+            input.message||=input.messages?.filter(m=>m.role==='user').at(-1)?.content||'';
+            input.conversation_id||='notebook:'+(input.note_id?'note:'+input.note_id:input.collection_id?'collection:'+input.collection_id:'general');
+            await store.withLockAsync(()=>{
+              bindConversationSession(store,input);
+              const sourceId=id?'chat-input-'+id:undefined;
+              if(!sourceId||!store.get('conversation_messages',sourceId))store.saveUnderLock('conversation_messages',{id:sourceId,role:'user',content:input.message,conversation_id:conversationRuntimeId(input),note_id:input.note_id||null,contact_id:input.person_id||null,source_app:'notebook-chat'});
+            },{signal:controller.signal});
+          }
+          if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'attempted',request_hash:requestHash},undefined,{signal:controller.signal});
+          const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,{...input,...(isChat||isSearch?{signal:controller.signal}:{})});
+          if(isChat)await retainCompletedConversation(store,input,data,{asyncWriter:true,signal:controller.signal});
+          if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'verified',result:data},undefined,{signal:controller.signal});
+          return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});
+        }catch(error){
+          if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});
+          throw error;
+        }finally{if(isChat&&id)chatRequests.delete(id);if(isSearch){req.off('aborted',abortSearch);res.off('close',abortSearch);}}
+      }
+      if (route.startsWith('/api/')) return send(res, 404, { error: 'Unknown operation' });
+      const requested = path.resolve(uiRoot, '.' + route); if (requested !== uiRoot && !requested.startsWith(uiRoot + path.sep)) return send(res, 403, { error: 'Invalid path' });
+      const file = fs.existsSync(requested) && fs.statSync(requested).isFile() ? requested : path.join(uiRoot, 'index.html');
+      if (!fs.existsSync(file)) return send(res, 503, { error: 'Build the notebook frontend first' });
+      const mime = staticTypes[path.extname(file).toLowerCase()] || 'application/octet-stream';
+      // Built files under assets/ carry their content hash in their name, so a
+      // browser may keep them; without this it fetched 1.8 MB of script again
+      // on every page load. index.html is always checked, so a new build shows.
+      const cache = file.startsWith(path.join(uiRoot,'assets')+path.sep) ? 'public, max-age=31536000, immutable' : 'no-cache';
+      // Only the notebook itself may frame its pages: another site could show
+      // them in a frame made to look like something else (7 October 2026).
+      return sendFile(res, file, { 'Content-Type': mime, 'Cache-Control': cache, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"frame-ancestors 'self'",'X-Frame-Options':'SAMEORIGIN' });
+    } catch (e) {
+      // A reply already under way cannot carry an error; it is cut off instead
+      // (writing headers twice stopped the server until 6 October 2026).
+      if (res.headersSent) { console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed after the reply started:', e); res.destroy(); return; }
+      const shown = userFacing(e, [store.root, store.state, mediaRoot, uiRoot, os.homedir(), os.tmpdir()]);
+      if (!shown || e instanceof SyntaxError) console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed:', e);
+      send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: shown || 'Something went wrong on the server. The details are in its log.', ...(shown && e.code ? { code: e.code } : {}) });
+    }
+  };
+  const listen = (server, port, host) => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
+  const server = http.createServer(handle(remote, auth));
+  await listen(server, port, host);
+  // The link an assistant gives when asked for the notebook (get_notebook_link), with the port this door really has.
+  domains.notebookAddress = () => notebookAddress({ port: server.address().port });
+  // The food tracker's table (D-321 step 5): a notebook without it (the Windows set-up and the
+  // one-click image do not run install-native-notebook.sh) fetches it once, a minute after it starts,
+  // in the background, checked against its pinned checksum. Never under the test runner, never with
+  // GODSPEED_FOOD_TABLE=off; a failure is one line in the log and nothing else.
+  if (foodTableWanted(store.state)) { const foodTableTimer = setTimeout(() => { void installFoodTable(store.state).catch(error => console.error('Godspeed Mission Control: the food table was not downloaded: ' + error.message)); }, 60000); foodTableTimer.unref?.(); }
+  // Deadlines finished before 2.0.0-beta.15 get their timeline status and scores when the notebook
+  // starts after the update, not when the deadline copy next happens to run (core/due-copy.mjs,
+  // repairTimelineAtStart; 2 November 2026). In the background, two seconds after the door opened,
+  // waiting for the workspace without holding the notebook up; nothing to do costs one read.
+  // GODSPEED_TIMELINE_REPAIR=off switches it off; under the test runner it runs only when a test asks.
+  const timelineRepairWanted = process.env.GODSPEED_TIMELINE_REPAIR !== 'off' && (!process.env.NODE_TEST_CONTEXT || process.env.GODSPEED_TIMELINE_REPAIR === 'on');
+  // Shutting down cancels a repair still waiting for the workspace and waits for one already
+  // writing (it runs to its end under the lock), and a timer that never fired settles as closed.
+  let timelineRepairTimer = null, timelineRepairDone = null;
+  const timelineRepairStop = new AbortController();
+  const timelineRepair = !timelineRepairWanted ? Promise.resolve({ skipped: 'off' }) : new Promise(resolve => {
+    timelineRepairDone = resolve;
+    timelineRepairTimer = setTimeout(() => {
+      timelineRepairTimer = null;
+      resolve(repairTimelineAtStart(store, { signal: timelineRepairStop.signal }).then(report => {
+        if (report?.corrected?.length) console.log('Godspeed Mission Control: ' + report.corrected.length + ' finished deadline(s) now show their status and scores in the timeline.');
+        return report;
+      }).catch(error => {
+        if (timelineRepairStop.signal.aborted) return { skipped: 'closed' };
+        console.error('Godspeed Mission Control: the finished deadlines were not given their timeline scores this time (the next deadline run does it): ' + error.message);
+        return { failed: error.message };
+      }));
+    }, 2000);
+    timelineRepairTimer.unref?.();
+  });
+  const stopTimelineRepair = async () => {
+    if (timelineRepairTimer) { clearTimeout(timelineRepairTimer); timelineRepairTimer = null; timelineRepairDone?.({ skipped: 'closed' }); }
+    timelineRepairStop.abort();
+    await timelineRepair;
+  };
+  // Only the HTTPS proxy on this machine reaches the web door. A door that cannot open
+  // (its port taken) leaves the notebook running for everything on this machine; the
+  // installer's check of the web address then says so.
+  let webServer = null;
+  if (web) {
+    webServer = http.createServer(handle(true, web.auth, true));
+    try { await listen(webServer, web.port, '127.0.0.1'); }
+    catch (error) { console.error('Godspeed Mission Control: the web address\'s door on port ' + web.port + ' could not open: ' + error.message); webServer = null; }
+  }
+  // The watchers say what changed. Now and then the store compares every
+  // file's size and time with what it read, and the index re-reads the
+  // workspace, in case a watcher missed something (it can, under load).
+  // Vectors for new and changed notes, a batch every 20 seconds while there is work.
+  const meaningRound=async()=>{if(menerioImport.mutating||!index.meaning?.ready)return;try{await index.meaning.step({budget:512});}catch{}};
+  const meaningTimer=setInterval(()=>{void meaningRound();},20000);meaningTimer.unref?.();
+  // New and changed notes are processed on the machine that runs the routines.
+  const processing=domains.processing=new NoteProcessing({store,query,domains,device});
+  const processingTimer=setInterval(()=>{if(!menerioImport.mutating)void processing.tick().catch(()=>{});},60000);processingTimer.unref?.();
+  const backupSchedule=new BackupSchedule({store,runner:backupRunner,device}),backupTimer=setInterval(()=>{if(!menerioImport.mutating)void backupSchedule.tick().catch(()=>{});},600000);backupTimer.unref?.();
+  const automaticTimer=setInterval(()=>{if(!menerioImport.mutating)void automaticUpdate.tick().catch(()=>{});},60000);automaticTimer.unref?.();
+  const factTimer=setInterval(()=>{if(!menerioImport.mutating)void factClosing.tick().catch(()=>{});},600000);factTimer.unref?.();
+  // Finished journal tasks become moments (core/journal-moments.mjs).
+  const journalMoments=new JournalMoments({store,query,device}),journalMomentsTimer=setInterval(()=>{if(!menerioImport.mutating)void journalMoments.tick().catch(()=>{});},60000);journalMomentsTimer.unref?.();
+  const interval = setInterval(() => { if (!menerioImport.mutating) void store.verify().then(()=>index.rebuildBackground()).catch(()=>{}); }, 600000);
+  const jobs=setInterval(()=>{if(!menerioImport.mutating&&!assistantMissing)scheduler.tick().catch(()=>{});},30000);
+  const syncTimer=setInterval(()=>{if(!menerioImport.mutating&&fs.existsSync(path.join(store.state,'sync-config.json')))void syncRunner.run();},60000);
+  const mediaTimer=setInterval(()=>{if(!menerioImport.mutating){carry();mediaSync.reconcile();}},60000);
+  const telegram=!originalRuntime&&process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN&&process.env.GODSPEED_CANDIDATE_BOT_OWNER?new Telegram({store,domains,token:process.env.GODSPEED_CANDIDATE_BOT_TOKEN,owner:process.env.GODSPEED_CANDIDATE_BOT_OWNER,loginLink:process.env.GODSPEED_BROWSER_ORIGIN?destination=>{const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return process.env.GODSPEED_BROWSER_ORIGIN+'/login/'+code+'?next='+encodeURIComponent(destination);}:undefined}):null;
+  const telegramTimer=telegram?setInterval(()=>{if(!menerioImport.mutating)telegram.tick().catch(()=>{});},3000):null;
+  scheduler.deliver=telegram?(id,result)=>telegram.deliver(id,result):null;
+  let debounce,indexDebounce;const watchers=new Map(),changedFiles=new Set();
+  // A changed workspace file is read into the index on its own; the store
+  // watches its records itself. An owner's page in the notebook folder is a
+  // file to the index too. Any change schedules a sync round.
+  const changed=root=>(event,name)=>{
+    if(menerioImport.mutating)return;
+    const relative=name==null?null:(root?root+'/':'')+String(name).replaceAll('\\','/');
+    if(relative!==null&&(relative.split('/').some(part=>part.startsWith('.'))||relative.endsWith('.tmp')))return;
+    changedFiles.add(relative===null?'*':relative);
+    // The extra instructions changed by anything: the assistant's own identity file follows them.
+    if(root==='assistant')followPersona();
+    clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{
+      if(menerioImport.mutating)return;
+      const names=[...changedFiles];changedFiles.clear();
+      if(names.includes('*')){void index.rebuildBackground().catch(()=>{});return;}
+      try{store.scan();index.refreshFiles(names);}catch{}
+    },750);
+    if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>{if(!menerioImport.mutating)void syncRunner.run();},5000);}
+  };
+  // Private backups and Git merge workspaces are outside the watched knowledge.
+  const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed(name)));};
+  for(const name of durableRoots)watchRoot(name);
+  // A manual or extra instructions changed by anything (a sync from another machine, a session, an
+  // editor) bring the assistant's own identity file in step with them (assistant-soul.mjs).
+  let soulDebounce;const followPersona=()=>{clearTimeout(soulDebounce);soulDebounce=setTimeout(()=>{try{shelf.followPersona();}catch{}},2000);soulDebounce.unref?.();};
+  const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
+  let localServer = null;
+  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(automaticTimer);clearInterval(factTimer);clearInterval(journalMomentsTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
+  // A container's main door listens on its network interface and always needs sign-in.
+  // Add-ons and tools in that same container may use this opt-in, loopback-only door,
+  // with the exact Host/Origin guards and API contract of a native local installation.
+  if (localPort !== undefined && localPort !== null) {
+    localServer = http.createServer(handle(false, new WebAuth(store.state, { token, remote: false, now: authNow })));
+    try { await listen(localServer, Number(localPort), '127.0.0.1'); }
+    catch (error) { await close(); throw error; }
+  }
+  if(originalRuntime&&!assistantMissing){
+    workouts=new WorkoutsAddon({root:store.root,address:()=>{const address=(localServer||server).address();return address&&typeof address==='object'?'http://127.0.0.1:'+address.port:null;}});
+    scheduler.setWorkouts(workouts);
+  }
+  return { server, store, index, query, domains, scheduler, sync, mediaSync, timelineRepair, address: server.address(), webAddress: webServer?.address() || null, localAddress: localServer?.address() || null, close };
+}
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const root = process.env.GODSPEED_WORKSPACE;
+  if (!root) throw new Error('Set GODSPEED_WORKSPACE to your mission control folder');
+  // A last line of defence. One request's stray rejected promise is written to
+  // the log and the notebook keeps answering everyone else. An exception nothing
+  // caught may have left anything half done, so it is logged and the process
+  // ends for its supervisor (or systemd) to start a clean one. Until 6 October
+  // 2026 a missing media file ended the process with no word in the log.
+  process.on('unhandledRejection', error => console.error('Godspeed Mission Control: unhandledRejection, the server keeps running:', error));
+  process.on('uncaughtException', error => { console.error('Godspeed Mission Control: uncaughtException, the server restarts:', error); process.exit(1); });
+  // The note at the top of the folder (core/notebook-note.mjs): FULL-ALPHA.md becomes NOTEBOOK.md
+  // here too if no init has renamed it yet and it never leaves this computer through Git, and both
+  // names at once are said in this log once.
+  try { (await import('../core/notebook-note.mjs')).settleNotebookNote(root, { say: line => console.error('Godspeed Mission Control: ' + line) }); }
+  catch (error) { console.error('Godspeed Mission Control: the note at the top of your folder was not checked: ' + error.message); }
+  // This machine's own name, never one shared by every PC (device-id.mjs).
+  const {machineDevice,claimLegacyOwner}=await import('../core/device-id.mjs'),device=machineDevice(root);
+  const service = await createService({ root, mediaRoot: process.env.GODSPEED_MEDIA_ROOT, host: process.env.GODSPEED_BIND || '127.0.0.1', port: Number(process.env.GODSPEED_PORT || 47831), webPort: process.env.GODSPEED_WEB_PORT || undefined, localPort: process.env.GODSPEED_LOCAL_PORT || undefined, token: process.env.GODSPEED_ACCESS_TOKEN,device:device.id });
+  // At start, and on any later tick that finds the old shared name as the owner.
+  const claim=service.scheduler.claimLegacy=async()=>{if(await claimLegacyOwner(service.store,device))console.log('This machine ('+device.id+') now runs the routines the old shared name "local" ran');};
+  try{await claim();}catch(error){console.error('The routines of the old shared name "local" could not be taken over: '+error.message);}
+  console.log('Godspeed Mission Control notebook listening on port ' + service.address.port + (service.webAddress ? ', and for its web address on port ' + service.webAddress.port : ''));
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => { await service.close(); process.exit(0); });
+}

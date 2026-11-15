@@ -1,0 +1,32 @@
+name: computer
+# Your computer lends its browser (computer use layer 2): the server half, the home half and the
+# assistant's tools, through the runner's own Chrome on each kind of computer a reader has. The Mac
+# run is the only place the Mac half (its Keychain, its Chrome) is proved, since the kit is built on
+# Windows and Linux.
+on:
+  push:
+    branches: [main]
+    paths: ['computer/**', '.github/workflows/computer-test.yml']
+  pull_request:
+    paths: ['computer/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: the computer tests, with this runner's Chrome
+        shell: bash
+        run: |
+          # GitHub's Linux runners give Chrome no user namespaces, the same as a container.
+          if [ "$RUNNER_OS" = Linux ]; then export GODSPEED_COMPUTER_NO_SANDBOX=1; fi
+          node computer/test/test-computer.js

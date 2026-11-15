@@ -1,0 +1,849 @@
+import { selectAllRows } from "./paged-select.ts";
+import { checkedDatabase } from "./sync-database.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildBlobLookup, importNoteAttachments } from "./obsidian-attachments.ts";
+import { encodeMenerioMetadata, parseFrontmatter } from "./frontmatter.ts";
+import { isGodspeedMirror } from "./mc-source.ts";
+import { isGodspeedFolderPath } from "./mc-ranking.ts";
+import {
+  ensureGithubRepository,
+  githubFetch,
+  githubDeleteFile,
+  githubGetFile,
+  githubGetFileContent,
+  githubPutFile,
+} from "./github-api.ts";
+import {
+  GhCtx,
+  pullPeopleAndGroups,
+  sweepPeopleExport,
+  vaultPrefixes,
+} from "./people-sync-core.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+type DbClient = any;
+
+// ─── Markdown → HTML (kept for legacy compatibility) ──────────────────────
+/** Returns true when content looks like HTML (has block-level tags) */
+function looksLikeHtml(content: string): boolean {
+  return /<(?:p|h[1-6]|ul|ol|li|blockquote|pre|img|table)\b/i.test(content);
+}
+
+function markdownToHtml(md: string): string {
+  if (!md) return "";
+  let html = md;
+
+  const codeBlocks: string[] = [];
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    const idx = codeBlocks.length;
+    const langAttr = lang ? ` class="language-${lang}"` : "";
+    codeBlocks.push(`<pre><code${langAttr}>${encodeEntities(code.trimEnd())}</code></pre>`);
+    return `%%CODEBLOCK_${idx}%%`;
+  });
+
+  const inlineCodes: string[] = [];
+  html = html.replace(/`([^`]+)`/g, (_, code) => {
+    const idx = inlineCodes.length;
+    inlineCodes.push(`<code>${encodeEntities(code)}</code>`);
+    return `%%INLINECODE_${idx}%%`;
+  });
+
+  const blocks = html.split(/\n{2,}/);
+  const processedBlocks: string[] = [];
+
+  for (const block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+
+    if (trimmed.match(/^%%CODEBLOCK_\d+%%$/)) {
+      processedBlocks.push(codeBlocks[parseInt(trimmed.match(/\d+/)![0])]);
+      continue;
+    }
+    if (/^(-{3,}|_{3,}|\*{3,})$/.test(trimmed)) { processedBlocks.push("<hr>"); continue; }
+
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      processedBlocks.push(`<h${headingMatch[1].length}>${inlineMarkdown(headingMatch[2])}</h${headingMatch[1].length}>`);
+      continue;
+    }
+
+    if (trimmed.startsWith(">")) {
+      const inner = trimmed.split("\n").map((l) => l.replace(/^>\s?/, "")).join("\n");
+      processedBlocks.push(`<blockquote>${markdownToHtml(inner)}</blockquote>`);
+      continue;
+    }
+
+    if (/^- \[[ x]\]/m.test(trimmed)) {
+      const items = trimmed.split("\n").filter((l) => l.trim());
+      let listHtml = '<ul data-type="taskList">';
+      for (const item of items) {
+        const m = item.match(/^- \[([ x])\]\s*(.*)/);
+        if (m) {
+          const checked = m[1] === "x" ? "true" : "false";
+          listHtml += `<li data-type="taskItem" data-checked="${checked}"><label><input type="checkbox"${checked === "true" ? " checked" : ""}><span></span></label><div><p>${inlineMarkdown(m[2])}</p></div></li>`;
+        }
+      }
+      processedBlocks.push(listHtml + "</ul>");
+      continue;
+    }
+
+    if (/^[-*+]\s/.test(trimmed)) {
+      const items = trimmed.split("\n").filter((l) => l.trim());
+      let listHtml = "<ul>";
+      for (const item of items) {
+        const m = item.match(/^[-*+]\s+(.*)/);
+        if (m) listHtml += `<li><p>${inlineMarkdown(m[1])}</p></li>`;
+      }
+      processedBlocks.push(listHtml + "</ul>");
+      continue;
+    }
+
+    if (/^\d+\.\s/.test(trimmed)) {
+      const items = trimmed.split("\n").filter((l) => l.trim());
+      let listHtml = "<ol>";
+      for (const item of items) {
+        const m = item.match(/^\d+\.\s+(.*)/);
+        if (m) listHtml += `<li><p>${inlineMarkdown(m[1])}</p></li>`;
+      }
+      processedBlocks.push(listHtml + "</ol>");
+      continue;
+    }
+
+    const lines = trimmed.split("\n");
+    processedBlocks.push(`<p>${lines.map((l) => inlineMarkdown(l)).join("<br>")}</p>`);
+  }
+
+  let result = processedBlocks.join("");
+  for (let i = 0; i < inlineCodes.length; i++) {
+    result = result.replace(`%%INLINECODE_${i}%%`, inlineCodes[i]);
+  }
+  return result;
+}
+
+function inlineMarkdown(text: string): string {
+  let r = text;
+  r = r.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
+  r = r.replace(/!\[\[([^\]]+)\]\]/g, '<img src="$1" alt="$1">');
+  r = r.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  r = r.replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>");
+  r = r.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  r = r.replace(/\*(.+?)\*/g, "<em>$1</em>");
+  r = r.replace(/~~(.+?)~~/g, "<del>$1</del>");
+  r = r.replace(/==(.+?)==/g, "<mark>$1</mark>");
+  return r;
+}
+
+function encodeEntities(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Tags out of parsed frontmatter, as a clean list. `_shared/frontmatter.ts`
+ * reads Obsidian's block-style list (`tags:\n  - work`) as string[]; a bare
+ * `tags:` with nothing under it comes back as "", which must not become a
+ * tag. The inline-only parser this file used to carry read the block style
+ * as "" too, so every vault written with Obsidian's Properties editor lost
+ * its tags and gained one empty one.
+ */
+function frontmatterTags(fm: Record<string, unknown>): string[] {
+  const raw = Array.isArray(fm.tags) ? fm.tags : typeof fm.tags === "string" ? [fm.tags] : [];
+  return [...new Set(raw.map((t) => String(t).trim()).filter(Boolean))];
+}
+
+function filePathToNoteTitle(filePath: string): string {
+  return (filePath.split("/").pop() || filePath).replace(/\.md$/i, "");
+}
+
+function filePathToFolderPath(filePath: string, basePath: string): string {
+  let relative = filePath;
+  if (basePath && relative.startsWith(basePath + "/")) relative = relative.slice(basePath.length + 1);
+  const parts = relative.split("/");
+  parts.pop();
+  return parts.join("/");
+}
+
+/**
+ * The first of `<name>.md`, `<name> 1.md`, `<name> 2.md` ... that no other
+ * sync-log entry claims and that is either absent from GitHub or already
+ * carries this note's id. Same naming and the same test as
+ * github-sync-export's resolveCollisionSafePath, so both writers agree on
+ * where a note lives. Returns the file found there, for its sha.
+ */
+async function collisionSafeNotePath(
+  token: string, owner: string, repo: string, branch: string,
+  desiredPath: string, noteId: string,
+  claimedByAnother: (path: string, noteId: string) => boolean,
+): Promise<{ path: string; file: any }> {
+  for (let i = 0; i < 100; i++) {
+    const candidate = i === 0 ? desiredPath : desiredPath.replace(/\.md$/i, ` ${i}.md`);
+    if (claimedByAnother(candidate, noteId)) continue;
+    const file = await githubGetFile(token, owner, repo, candidate, branch);
+    if (!file) return { path: candidate, file: null };
+    let text = "";
+    try { text = decodeURIComponent(escape(atob(String(file.content || "").replace(/\n/g, "")))); } catch { /* not ours */ }
+    if (text.includes(`id: ${noteId}`) || text.includes(`id: "${noteId}"`)) return { path: candidate, file };
+  }
+  throw new Error("Could not find a free GitHub path for note");
+}
+
+// ─── Main handler ────────────────────────────────────────────────────
+
+export async function pullGithubConnection(client: DbClient, userId: string, ghConn: any, body: any = {}) {
+  if (!userId || ghConn.user_id !== userId) throw new Error("Connection owner mismatch");
+  const serviceClient = checkedDatabase(client);
+    const ghToken = ghConn.github_token;
+    const owner = ghConn.repo_owner;
+    const repo = ghConn.repo_name;
+    const branch = ghConn.branch || "main";
+    const vaultPath = ghConn.vault_path || "/";
+
+    const repoState = await ensureGithubRepository(ghToken, owner, repo, branch);
+
+    // ── Action: resolve-conflict ──
+    if (body.action === "resolve-conflict") {
+      return await resolveConflict(serviceClient, userId, ghToken, owner, repo, branch, vaultPath, body);
+    }
+
+    // ── Action: get-conflicts ──
+    if (body.action === "get-conflicts") {
+      const { data: conflicts } = await serviceClient
+        .from("github_sync_log")
+        .select("*, notes!inner(id, title, content, updated_at)")
+        .eq("user_id", userId)
+        .eq("sync_status", "conflict");
+
+      return new Response(JSON.stringify({ conflicts: conflicts || [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Default action: pull remote changes ──
+    const basePath = vaultPath === "/" ? "" : vaultPath.replace(/^\/|\/$/g, "");
+
+    // 1. Get all current sync log entries. Note rows drive the loops below;
+    // person/group rows are handled by pullPeopleAndGroups, but their paths
+    // still count as "tracked" so they are never imported as notes.
+    const syncEntries = await selectAllRows<any>((from, to) => serviceClient.from("github_sync_log").select("*").eq("user_id", userId).order("id").range(from, to));
+
+    const noteEntries: any[] = [];
+    const syncByNoteId = new Map<string, any>();
+    const trackedPaths = new Set<string>();
+    // Who claims each repository path. The push step below used to write a note
+    // to `<title>.md` whatever was already there, so two notes with the same
+    // title in the same folder shared one file: the second overwrote the first,
+    // and the next pull copied that text into the first note. Paths are now
+    // handed out collision-safe (same " 1", " 2" suffixes as github-sync-export),
+    // and a path two entries already share is never pulled from.
+    const pathOwners = new Map<string, Set<string>>();
+    const claimPath = (path: string, owner: string) => {
+      const owners = pathOwners.get(path) ?? new Set<string>();
+      owners.add(owner);
+      pathOwners.set(path, owners);
+    };
+    const claimedByAnother = (path: string, noteId: string) =>
+      [...(pathOwners.get(path) ?? [])].some((o) => o !== noteId);
+    for (const e of syncEntries || []) {
+      trackedPaths.add(e.github_path);
+      const isNote = !e.entity_type || e.entity_type === "note";
+      claimPath(e.github_path, isNote ? String(e.note_id) : `${e.entity_type}:${e.entity_id}`);
+      if (isNote) {
+        noteEntries.push(e);
+        syncByNoteId.set(e.note_id, e);
+      }
+    }
+
+    // 2. Get the current tree from GitHub
+    const treeRes = await githubFetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
+      { headers: { Authorization: `token ${ghToken}`, Accept: "application/vnd.github.v3+json" } }
+    );
+    if (!treeRes.ok) throw new Error(`Failed to fetch tree: ${treeRes.status} ${await treeRes.text()}`);
+    const treeData = await treeRes.json();
+    if (treeData.truncated) throw new Error("GitHub tree is incomplete; retry with a smaller vault");
+
+    const remoteFiles = (treeData.tree || []).filter((item: any) => {
+      if (item.type !== "blob" || !item.path.endsWith(".md")) return false;
+      if (item.path.includes("/.") || item.path.startsWith(".") || item.path.includes(".obsidian/")) return false;
+      if (basePath && !item.path.startsWith(basePath + "/") && item.path !== basePath) return false;
+      return true;
+    });
+
+    const remoteByPath = new Map<string, any>();
+    for (const f of remoteFiles) remoteByPath.set(f.path, f);
+
+    // People/Groups namespace: these paths belong to the people mirror and are
+    // excluded from the notes loops below.
+    const peoplePrefixes = vaultPrefixes(vaultPath);
+    const isPeopleSpacePath = (p: string) =>
+      p.startsWith(peoplePrefixes.people) || p.startsWith(peoplePrefixes.groups);
+
+    // Phase D: full blob lookup (incl. binaries) for attachment resolution
+    const blobs = buildBlobLookup(treeData.tree || []);
+    const attachmentFolder = (ghConn as any).attachment_folder || "attachments";
+    const attachmentSummary = { resolved: 0, unresolved: [] as string[], errors: [] as string[] };
+
+    const results = { pulled: 0, conflicts: 0, new_imports: 0, deleted_remote: 0, errors: 0, repository_created: repoState.created, details: [] as any[] };
+
+    // 3. Check each tracked file for changes
+    for (const syncEntry of (ghConn.sync_direction === "export" ? [] : noteEntries)) {
+      const path: string = syncEntry.github_path;
+      // No sha: GitHub never got a version of this note (a failed first export
+      // records the path it meant to use). Whatever file sits there belongs to
+      // something else, and "importing" it replaced the note with that file.
+      // The push step retries the note instead.
+      if (!syncEntry.github_sha) continue;
+      // Another entry claims the same path (written before pushes were
+      // collision-safe): the file may hold the other note's text.
+      if (claimedByAnother(path, String(syncEntry.note_id))) {
+        results.details.push({ path, action: "shared_path", noteId: syncEntry.note_id });
+        continue;
+      }
+      const remoteFile = remoteByPath.get(path);
+
+      if (!remoteFile) {
+        // File deleted from GitHub
+        await serviceClient
+          .from("github_sync_log")
+          .update({ sync_status: "remote_deleted" })
+          .eq("id", syncEntry.id);
+        results.deleted_remote++;
+        results.details.push({ path, action: "remote_deleted" });
+        continue;
+      }
+
+      // Compare SHA — if same, no remote changes
+      if (remoteFile.sha === syncEntry.github_sha) continue;
+
+      // Remote changed — check if local also changed
+      const { data: note } = await serviceClient
+        .from("notes")
+        .select("id, title, content, updated_at")
+        .eq("id", syncEntry.note_id)
+        .eq("user_id", userId)
+        .single();
+
+      if (!note) throw new Error("Tracked note is unavailable to this account");
+
+      const localChangedSinceSync = syncEntry.synced_at && new Date(note.updated_at) > new Date(syncEntry.synced_at);
+
+      if (localChangedSinceSync) {
+        // CONFLICT
+        await serviceClient
+          .from("github_sync_log")
+          .update({
+            sync_status: "conflict",
+            github_sha: remoteFile.sha,
+            error_message: "Both local and remote were modified since last sync",
+          })
+          .eq("id", syncEntry.id);
+        // The push step reads this map. Without the new status it still saw
+        // the entry as synced, pushed the local version over the remote edit
+        // it had just flagged, and recorded the note as synced again, so the
+        // conflict disappeared together with the remote text.
+        syncByNoteId.set(note.id, { ...syncEntry, sync_status: "conflict", github_sha: remoteFile.sha });
+        results.conflicts++;
+        results.details.push({ path, action: "conflict", noteId: note.id });
+      } else {
+        // Safe to import remote
+        try {
+          const content = await githubGetFileContent(ghToken, owner, repo, path, branch);
+          if (!content) { results.errors++; continue; }
+
+          const { data: fm, body: mdBody } = parseFrontmatter(content);
+          // Store markdown directly — no HTML conversion
+          const noteContent = mdBody;
+
+          let metadata: Record<string, unknown> = {};
+          if (fm.menerio_metadata && typeof fm.menerio_metadata === "string") {
+            try { metadata = JSON.parse(atob(fm.menerio_metadata as string)); } catch { /* ignore */ }
+          }
+
+          const tags = frontmatterTags(fm);
+
+          const { data: updatedNote } = await serviceClient.from("notes").update({
+            title: (fm.title as string) || note.title,
+            content: noteContent,
+            folder_path: filePathToFolderPath(path, basePath),
+            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+            tags: tags.length > 0 ? tags : undefined,
+          }).eq("id", note.id).eq("user_id", userId).select("updated_at").maybeSingle();
+
+          // The trigger stamped updated_at on that write. Record the sync as of
+          // that exact instant, so the push step below sees "not changed since
+          // sync" and leaves the file alone. Any clock we picked ourselves could
+          // land before the database's, and the note would read as edited.
+          const syncedAt = updatedNote?.updated_at || new Date().toISOString();
+          const pulledEntry = {
+            ...syncEntry,
+            github_sha: remoteFile.sha,
+            sync_status: "synced",
+            synced_at: syncedAt,
+            error_message: null,
+          };
+          await serviceClient.from("github_sync_log").update({
+            github_sha: remoteFile.sha,
+            sync_status: "synced",
+            synced_at: syncedAt,
+            error_message: null,
+          }).eq("id", syncEntry.id);
+          syncByNoteId.set(note.id, pulledEntry);
+
+          results.pulled++;
+          results.details.push({ path, action: "pulled", noteId: note.id });
+
+          // Phase D: import attachments referenced by this note
+          try {
+            const attRes = await importNoteAttachments(
+              serviceClient, userId, note.id, mdBody, path,
+              ghToken, owner, repo, branch, vaultPath, attachmentFolder, blobs,
+            );
+            attachmentSummary.resolved += attRes.resolved;
+            attachmentSummary.unresolved.push(...attRes.unresolved.map((n) => `${path}: ${n}`));
+            attachmentSummary.errors.push(...attRes.errors.map((e) => `${path}: ${e}`));
+          } catch (err) {
+            attachmentSummary.errors.push(`${path}: attachment import — ${String(err)}`);
+          }
+        } catch (err) {
+          results.errors++;
+          results.details.push({ path, action: "error", error: String(err) });
+        }
+      }
+    }
+
+    // 4. Check for new files in remote (not in sync log)
+    for (const [path, remoteFile] of (ghConn.sync_direction === "export" ? new Map() : remoteByPath)) {
+      if (trackedPaths.has(path)) continue;
+      if (isPeopleSpacePath(path)) continue; // handled by pullPeopleAndGroups
+      // Mission Control mirror is not a vault. Before 2026-09-20 the export pushed mirrored godspeed
+      // files to `godspeed/...`; importing one back would create a second note with
+      // source_app "obsidian", which IS mined for facts, out of text a machine wrote.
+      if (isGodspeedFolderPath(filePathToFolderPath(path, basePath))) continue;
+
+      try {
+        const content = await githubGetFileContent(ghToken, owner, repo, path, branch);
+        if (!content) { results.errors++; continue; }
+
+        const { data: fm, body: mdBody } = parseFrontmatter(content);
+        const title = (fm.title as string) || filePathToNoteTitle(path);
+        // Store markdown directly
+        const noteContent = mdBody;
+
+        let metadata: Record<string, unknown> = {};
+        if (fm.menerio_metadata && typeof fm.menerio_metadata === "string") {
+          try { metadata = JSON.parse(atob(fm.menerio_metadata as string)); } catch { /* ignore */ }
+        }
+        metadata.imported_from = "obsidian";
+        metadata.original_path = path;
+
+        const tags = frontmatterTags(fm);
+
+        const { data: inserted, error: insertErr } = await serviceClient.from("notes").insert({
+          user_id: userId,
+          title,
+          content: noteContent,
+          folder_path: filePathToFolderPath(path, basePath),
+          metadata,
+          tags,
+          source_app: "obsidian",
+          entity_type: (fm.type as string) || null,
+        }).select("id, updated_at").single();
+
+        if (insertErr) { results.errors++; continue; }
+
+        // Same reasoning as the pull above: the sync log and the in-memory map
+        // both carry the row's own updated_at, so the push step does not treat
+        // the note it just imported as a local change and write it back to the
+        // repository under its title (which, when the title differs from the
+        // file name, made a second file the next sync imported as a second
+        // note, and so on every run).
+        const importedEntry = {
+          user_id: userId,
+          note_id: inserted.id,
+          entity_type: "note",
+          entity_id: inserted.id,
+          github_path: path,
+          github_sha: remoteFile.sha,
+          sync_status: "synced",
+          sync_direction: "import",
+          synced_at: inserted.updated_at || new Date().toISOString(),
+        };
+        // The log is what marks this path as known. Without it the next sync
+        // imports the same file again as another new note, and every sync after
+        // that too; take the note back out and let the next run retry cleanly.
+        // (serviceClient throws on any database error.)
+        try {
+          await serviceClient.from("github_sync_log").upsert(importedEntry, { onConflict: "user_id,note_id" });
+        } catch (logErr) {
+          console.error("[github-pull] sync log write failed, undoing import of", path, String(logErr));
+          await client.from("notes").delete().eq("id", inserted.id).eq("user_id", userId);
+          results.errors++;
+          continue;
+        }
+        syncByNoteId.set(inserted.id, importedEntry);
+        claimPath(path, String(inserted.id));
+
+        results.new_imports++;
+        results.details.push({ path, action: "new_import", noteId: inserted.id });
+
+        // Phase D: import attachments referenced by this note
+        try {
+          const attRes = await importNoteAttachments(
+            serviceClient, userId, inserted.id, mdBody, path,
+            ghToken, owner, repo, branch, vaultPath, attachmentFolder, blobs,
+          );
+          attachmentSummary.resolved += attRes.resolved;
+          attachmentSummary.unresolved.push(...attRes.unresolved.map((n) => `${path}: ${n}`));
+          attachmentSummary.errors.push(...attRes.errors.map((e) => `${path}: ${e}`));
+        } catch (err) {
+          attachmentSummary.errors.push(`${path}: attachment import — ${String(err)}`);
+        }
+      } catch (err) {
+        results.errors++;
+        results.details.push({ path, action: "error", error: String(err) });
+      }
+    }
+
+    // 4b. People & Groups mirror: pull remote edits, then sweep-export
+    // pending local changes (covers server-side writers too).
+    const gh: GhCtx = { token: ghToken, owner, repo, branch, vaultPath };
+    let peopleResults: Record<string, unknown> | null = null;
+    if (ghConn.sync_people !== false) {
+      try {
+        const entityRemoteByPath = new Map<string, { path: string; sha: string }>();
+        for (const [p, f] of remoteByPath) entityRemoteByPath.set(p, { path: p, sha: f.sha });
+        const pullCounters = ghConn.sync_direction === "export" ? { people_pulled: 0, groups_pulled: 0, people_imported: 0, groups_imported: 0, people_conflicts: 0, groups_conflicts: 0, people_deleted_remote: 0, groups_deleted_remote: 0, errors: 0, details: [] } : await pullPeopleAndGroups(serviceClient, userId, gh, {
+          remoteByPath: entityRemoteByPath,
+          trackedPaths,
+        });
+        const allowExport = ["export", "bidirectional"].includes(ghConn.sync_direction || "export");
+        const sweep = allowExport
+          ? await sweepPeopleExport(serviceClient, userId, gh, {})
+          : { exported_people: 0, exported_groups: 0, retired: 0, errors: 0, details: [] };
+        peopleResults = {
+          people_pulled: pullCounters.people_pulled + pullCounters.groups_pulled,
+          people_imported: pullCounters.people_imported + pullCounters.groups_imported,
+          people_conflicts: pullCounters.people_conflicts + pullCounters.groups_conflicts,
+          people_deleted_remote: pullCounters.people_deleted_remote + pullCounters.groups_deleted_remote,
+          people_pushed: sweep.exported_people + sweep.exported_groups,
+          people_retired: sweep.retired,
+          people_errors: pullCounters.errors + sweep.errors,
+          people_details: [...pullCounters.details, ...sweep.details],
+        };
+        results.errors += pullCounters.errors + sweep.errors;
+      } catch (err) {
+        console.error("people sync phase failed:", err);
+        results.errors++;
+        results.details.push({ action: "people_sync_error", error: String(err) });
+      }
+    }
+
+    // 5. Push pending local changes (notes updated since last sync)
+    // Only the three columns the "does it need a push?" test reads; the body
+    // and the rest are loaded per note that actually needs pushing. This used
+    // to load every note's full content on every run (including scheduled
+    // runs and import-only connections, which push nothing) to push the few
+    // that changed: about 1,700 bodies a run on a large account.
+    const pushesNotes = ["export", "bidirectional"].includes(ghConn.sync_direction);
+    const noteStubs = pushesNotes
+      ? await selectAllRows<{ id: string; updated_at: string; source_app: string | null }>((from, to) => serviceClient.from("notes").select("id, updated_at, source_app").eq("user_id", userId).eq("is_trashed", false).order("id").range(from, to))
+      : [];
+
+    let pushed = 0;
+    for (const stub of noteStubs) {
+      // Menerio does not keep godspeed mirror notes as Markdown files: Mission Control's own git
+      // repository is where those files live. Same rule as github-sync-export.
+      if (isGodspeedMirror(stub.source_app)) continue;
+      const syncEntry = syncByNoteId.get(stub.id);
+      if (syncEntry?.sync_status === "conflict") continue; // Don't push conflicted notes
+
+      // An "error" entry is a failed export. It carried the failure time as
+      // synced_at, so the note never read as changed and was never retried.
+      const needsPush = !syncEntry || syncEntry.sync_status === "error" || (syncEntry.synced_at && new Date(stub.updated_at) > new Date(syncEntry.synced_at));
+      if (!needsPush) continue;
+
+      try {
+        const { data: note, error: noteErr } = await serviceClient
+          .from("notes")
+          .select("id, title, content, metadata, tags, folder_path, created_at, updated_at, is_favorite, is_pinned, entity_type, is_trashed, source_app")
+          .eq("id", stub.id)
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (noteErr) throw noteErr;
+        if (!note || note.is_trashed) continue; // deleted or trashed since the list was read
+        const fileName = (note.title || "Untitled").replace(/[<>:"/\\|?*]/g, "").replace(/\s+/g, " ").trim().slice(0, 200) || "Untitled";
+        const base = vaultPath === "/" ? "" : vaultPath.replace(/^\/|\/$/g, "");
+        const folder = String(note.folder_path || "").replace(/^\/+|\/+$/g, "").replace(/\/+/g, "/");
+        const desiredPath = [base, folder, `${fileName}.md`].filter(Boolean).join("/");
+        const meta = (note.metadata || {}) as Record<string, unknown>;
+
+        // The note's current path is its own only when GitHub has a version of
+        // it there (a sha) and no other entry claims the same path.
+        const ownsCurrentPath = Boolean(syncEntry?.github_sha) && !claimedByAnother(syncEntry.github_path, String(note.id));
+        let filePath = desiredPath;
+        let existing: any = null;
+        if (ownsCurrentPath && syncEntry.github_path === desiredPath) {
+          existing = await githubGetFile(ghToken, owner, repo, filePath, branch);
+        } else {
+          ({ path: filePath, file: existing } = await collisionSafeNotePath(
+            ghToken, owner, repo, branch, desiredPath, String(note.id), claimedByAnother,
+          ));
+          // Rename: delete the old file, but only one that really is this note's.
+          if (ownsCurrentPath && syncEntry.github_path !== filePath) {
+            const oldFile = await githubGetFile(ghToken, owner, repo, syncEntry.github_path, branch);
+            if (oldFile?.sha) {
+              await githubDeleteFile(ghToken, owner, repo, syncEntry.github_path, oldFile.sha, `Rename: ${note.title}`, branch);
+            }
+          }
+        }
+
+        // Build markdown content (reuse export logic)
+        const frontmatterLines = ["---"];
+        frontmatterLines.push(`id: ${note.id}`);
+        frontmatterLines.push(`title: "${String(note.title || "").replace(/"/g, '\\"')}"`);
+        frontmatterLines.push(`created: ${note.created_at}`);
+        frontmatterLines.push(`modified: ${note.updated_at}`);
+        const allTags = [...new Set([...(note.tags || []), ...(Array.isArray(meta.topics) ? meta.topics as string[] : [])])];
+        if (allTags.length > 0) frontmatterLines.push(`tags: [${allTags.map((t: string) => `"${t}"`).join(", ")}]`);
+        if (meta.type || note.entity_type) frontmatterLines.push(`type: ${meta.type || note.entity_type}`);
+        if (Object.keys(meta).length > 0) frontmatterLines.push(`menerio_metadata: ${encodeMenerioMetadata(meta)}`);
+        if (note.is_favorite) frontmatterLines.push("favorite: true");
+        if (note.is_pinned) frontmatterLines.push("pinned: true");
+        frontmatterLines.push("---");
+
+        // Content is now stored as Markdown; only convert if legacy HTML detected
+        const rawContent = String(note.content || "");
+        const mdBody = looksLikeHtml(rawContent) ? htmlToMarkdownServer(rawContent) : rawContent;
+        const fullContent = frontmatterLines.join("\n") + "\n\n" + mdBody;
+
+        const commitMsg = syncEntry ? `Update: ${note.title}` : `Create: ${note.title}`;
+        const result = await githubPutFile(ghToken, owner, repo, filePath, fullContent, commitMsg, branch, existing?.sha);
+
+        await serviceClient.from("github_sync_log").upsert({
+          user_id: userId,
+          note_id: note.id,
+          entity_type: "note",
+          entity_id: note.id,
+          github_path: filePath,
+          github_sha: result.content?.sha || null,
+          last_commit_sha: result.commit?.sha || null,
+          sync_status: "synced",
+          sync_direction: "export",
+          synced_at: new Date().toISOString(),
+          error_message: null,
+        }, { onConflict: "user_id,note_id" });
+        if (syncEntry?.github_path && syncEntry.github_path !== filePath) {
+          pathOwners.get(syncEntry.github_path)?.delete(String(note.id));
+        }
+        claimPath(filePath, String(note.id));
+
+        pushed++;
+      } catch (err) {
+        results.errors++;
+        results.details.push({ noteId: stub.id, action: "push_error", error: String(err) });
+      }
+    }
+
+    results.errors += attachmentSummary.errors.length;
+
+    return new Response(JSON.stringify({
+      success: results.errors === 0,
+      ...results,
+      ...(peopleResults || {}),
+      pushed,
+      attachments: attachmentSummary,
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+}
+
+// ─── Conflict resolution ─────────────────────────────────────────────
+
+async function resolveConflict(
+  supabase: DbClient,
+  userId: string,
+  ghToken: string,
+  owner: string,
+  repo: string,
+  branch: string,
+  vaultPath: string,
+  body: any,
+) {
+  const { note_id, resolution } = body; // resolution: "keep_local" | "keep_remote" | "keep_both"
+
+  const { data: syncEntry } = await supabase
+    .from("github_sync_log")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("note_id", note_id)
+    .single();
+
+  if (!syncEntry) {
+    return new Response(JSON.stringify({ error: "Sync entry not found" }), { status: 404, headers: corsHeaders });
+  }
+
+  const { data: note } = await supabase.from("notes").select("*").eq("id", note_id).eq("user_id", userId).single();
+  if (!note) {
+    return new Response(JSON.stringify({ error: "Note not found" }), { status: 404, headers: corsHeaders });
+  }
+
+  if (resolution === "keep_local") {
+    // Push local to GitHub
+    const meta = (note.metadata || {}) as Record<string, unknown>;
+    const fileName = (note.title || "Untitled").replace(/[<>:"/\\|?*]/g, "").replace(/\s+/g, " ").trim().slice(0, 200) || "Untitled";
+    const base = vaultPath === "/" ? "" : vaultPath.replace(/^\/|\/$/g, "");
+    const filePath = [base, `${fileName}.md`].filter(Boolean).join("/");
+
+    const frontmatterLines = ["---"];
+    frontmatterLines.push(`id: ${note.id}`);
+    frontmatterLines.push(`title: "${String(note.title || "").replace(/"/g, '\\"')}"`);
+    frontmatterLines.push(`created: ${note.created_at}`);
+    frontmatterLines.push(`modified: ${note.updated_at}`);
+    if (Object.keys(meta).length > 0) frontmatterLines.push(`menerio_metadata: ${encodeMenerioMetadata(meta)}`);
+    frontmatterLines.push("---");
+
+    const rawContent = String(note.content || "");
+    const mdBody = looksLikeHtml(rawContent) ? htmlToMarkdownServer(rawContent) : rawContent;
+    const fullContent = frontmatterLines.join("\n") + "\n\n" + mdBody;
+
+    const existing = await githubGetFile(ghToken, owner, repo, syncEntry.github_path, branch);
+    const result = await githubPutFile(ghToken, owner, repo, syncEntry.github_path, fullContent, `Resolve conflict (keep local): ${note.title}`, branch, existing?.sha);
+
+    await supabase.from("github_sync_log").update({
+      github_sha: result.content?.sha || null,
+      last_commit_sha: result.commit?.sha || null,
+      sync_status: "synced",
+      synced_at: new Date().toISOString(),
+      error_message: null,
+    }).eq("id", syncEntry.id);
+  } else if (resolution === "keep_remote") {
+    // Pull remote to Menerio
+    const content = await githubGetFileContent(ghToken, owner, repo, syncEntry.github_path, branch);
+    if (!content) {
+      return new Response(JSON.stringify({ error: "Failed to fetch remote file" }), { status: 500, headers: corsHeaders });
+    }
+
+    const { data: fm, body: mdBody } = parseFrontmatter(content);
+    // Store markdown directly — no HTML conversion
+    const noteContent = mdBody;
+
+    let metadata: Record<string, unknown> = {};
+    if (fm.menerio_metadata && typeof fm.menerio_metadata === "string") {
+      try { metadata = JSON.parse(atob(fm.menerio_metadata as string)); } catch { /* ignore */ }
+    }
+
+    await supabase.from("notes").update({
+      title: (fm.title as string) || note.title,
+      content: noteContent,
+      metadata: Object.keys(metadata).length > 0 ? metadata : note.metadata,
+    }).eq("id", note_id).eq("user_id", userId);
+
+    const remoteFile = await githubGetFile(ghToken, owner, repo, syncEntry.github_path, branch);
+    await supabase.from("github_sync_log").update({
+      github_sha: remoteFile?.sha || syncEntry.github_sha,
+      sync_status: "synced",
+      synced_at: new Date().toISOString(),
+      error_message: null,
+    }).eq("id", syncEntry.id);
+  } else if (resolution === "keep_both") {
+    // Import remote as a new note with suffix
+    const content = await githubGetFileContent(ghToken, owner, repo, syncEntry.github_path, branch);
+    if (!content) {
+      return new Response(JSON.stringify({ error: "Failed to fetch remote file" }), { status: 500, headers: corsHeaders });
+    }
+
+    const { data: fm, body: mdBody } = parseFrontmatter(content);
+    const noteContent = mdBody;
+
+    const newTitle = `${note.title} (conflict copy)`;
+    await supabase.from("notes").insert({
+      user_id: userId,
+      title: newTitle,
+      content: noteContent,
+      metadata: note.metadata,
+      tags: note.tags,
+      source_app: "obsidian",
+    });
+
+    // Mark original as resolved — push local version
+    const meta = (note.metadata || {}) as Record<string, unknown>;
+    const existing = await githubGetFile(ghToken, owner, repo, syncEntry.github_path, branch);
+    const frontmatterLines = ["---", `id: ${note.id}`, `title: "${note.title}"`, "---"];
+    const rawContent2 = String(note.content || "");
+    const mdBody2 = looksLikeHtml(rawContent2) ? htmlToMarkdownServer(rawContent2) : rawContent2;
+    const result = await githubPutFile(ghToken, owner, repo, syncEntry.github_path, frontmatterLines.join("\n") + "\n\n" + mdBody2, `Resolve conflict (keep both): ${note.title}`, branch, existing?.sha);
+
+    await supabase.from("github_sync_log").update({
+      github_sha: result.content?.sha || null,
+      sync_status: "synced",
+      synced_at: new Date().toISOString(),
+      error_message: null,
+    }).eq("id", syncEntry.id);
+  }
+
+  return new Response(JSON.stringify({ success: true, resolution }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// ─── HTML → Markdown (server-side) ───────────────────────────────────
+
+function htmlToMarkdownServer(html: string): string {
+  if (!html || !html.trim()) return "";
+  let md = html;
+  md = md.replace(/<br\s*\/?>/gi, "  \n");
+  md = md.replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, (_, c) => `# ${strip(c)}\n\n`);
+  md = md.replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, (_, c) => `## ${strip(c)}\n\n`);
+  md = md.replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, (_, c) => `### ${strip(c)}\n\n`);
+  md = md.replace(/<h4[^>]*>([\s\S]*?)<\/h4>/gi, (_, c) => `#### ${strip(c)}\n\n`);
+  md = md.replace(/<h5[^>]*>([\s\S]*?)<\/h5>/gi, (_, c) => `##### ${strip(c)}\n\n`);
+  md = md.replace(/<h6[^>]*>([\s\S]*?)<\/h6>/gi, (_, c) => `###### ${strip(c)}\n\n`);
+  md = md.replace(/<hr\s*\/?>/gi, "\n---\n\n");
+  md = md.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (_, c) => {
+    const inner = htmlToMarkdownServer(c).trim();
+    return inner.split("\n").map((l: string) => `> ${l}`).join("\n") + "\n\n";
+  });
+  md = md.replace(/<pre[^>]*><code(?:\s+class="language-(\w+)")?[^>]*>([\s\S]*?)<\/code><\/pre>/gi, (_, lang, code) =>
+    `\`\`\`${lang || ""}\n${decode(code).trimEnd()}\n\`\`\`\n\n`
+  );
+  md = md.replace(/<ul[^>]*data-type="taskList"[^>]*>([\s\S]*?)<\/ul>/gi, (_, items) =>
+    items.replace(/<li[^>]*data-checked="(true|false)"[^>]*>([\s\S]*?)<\/li>/gi, (_m: string, checked: string, text: string) =>
+      `- ${checked === "true" ? "[x]" : "[ ]"} ${strip(text).trim()}\n`
+    ) + "\n"
+  );
+  md = md.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (_, items) =>
+    items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_m: string, text: string) => `- ${strip(text).trim()}\n`) + "\n"
+  );
+  md = md.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (_, items) => {
+    let idx = 0;
+    return items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_m: string, text: string) => {
+      idx++;
+      return `${idx}. ${strip(text).trim()}\n`;
+    }) + "\n";
+  });
+  md = md.replace(/<img[^>]*src="([^"]*)"[^>]*alt="([^"]*)"[^>]*\/?>/gi, (_, src, alt) => `![${alt}](${src})`);
+  md = md.replace(/<img[^>]*src="([^"]*)"[^>]*\/?>/gi, (_, src) => `![](${src})`);
+  md = md.replace(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_, href, text) => `[${strip(text)}](${href})`);
+  md = md.replace(/<(?:strong|b)>([\s\S]*?)<\/(?:strong|b)>/gi, (_, c) => `**${c}**`);
+  md = md.replace(/<(?:em|i)>([\s\S]*?)<\/(?:em|i)>/gi, (_, c) => `*${c}*`);
+  md = md.replace(/<(?:del|s|strike)>([\s\S]*?)<\/(?:del|s|strike)>/gi, (_, c) => `~~${c}~~`);
+  md = md.replace(/<code>([\s\S]*?)<\/code>/gi, (_, c) => `\`${decode(c)}\``);
+  md = md.replace(/<mark[^>]*>([\s\S]*?)<\/mark>/gi, (_, c) => `==${c}==`);
+  md = md.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, (_, c) => `${strip(c)}\n\n`);
+  md = md.replace(/<[^>]+>/g, "");
+  md = decode(md);
+  md = md.replace(/\n{3,}/g, "\n\n");
+  return md.trim() + "\n";
+}
+
+function strip(html: string): string {
+  return html.replace(/<\/?(?:p|div|label|span)[^>]*>/gi, "").trim();
+}
+
+function decode(text: string): string {
+  return text.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ");
+}
+
+// GitHub API helpers live in ../_shared/github-api.ts (imported above).

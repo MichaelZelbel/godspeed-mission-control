@@ -1,0 +1,16 @@
+[Unit]
+Description=mc-phone worker: dials the queued errands, one at a time
+After=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/mc-phone/config.env
+EnvironmentFile=/etc/mc-phone/credentials.env
+ExecStart=/usr/bin/python3 /opt/mc-phone/service.py worker
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

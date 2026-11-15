@@ -1,0 +1,16 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+# Setup from Telegram (usr/local/bin/godspeed-telegram-setup), for a server that was
+# given a bot token and nothing else: GODSPEED_TELEGRAM_TOKEN in compose.yaml's
+# environment, typed into the hosting company's form or into a .env file beside it.
+# Without that variable, or once setup is done, the program returns at once and this
+# service only sleeps. A crash is retried after half a minute by the supervisor.
+export HOME=/opt/data
+PY=/opt/hermes/.venv/bin/python3
+[ -x "$PY" ] || PY=python3
+if /command/s6-setuidgid hermes env PATH="/opt/hermes/.venv/bin:/opt/data/.local/bin:$PATH" \
+     "$PY" /usr/local/bin/godspeed-telegram-setup; then
+  exec sleep infinity
+fi
+sleep 30
+exit 1

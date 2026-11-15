@@ -1,0 +1,79 @@
+name: Mac and Linux installers
+# What the Windows and x64 Linux runs never reach (18 October 2026):
+#   - the Mac's own notebook service, a LaunchAgent, installed for real with the Mac's own
+#     /bin/bash 3.2 (the one `curl ... | bash` runs), restarted after a kill, upgraded, taking over
+#     from a notebook started by hand, and removed by mc-uninstall (notebook/test/native-install-mac.sh);
+#   - the mail program (Himalaya) on the kinds of computer marked untested in
+#     tools/mc-mail-himalaya.json: a Mac with Apple's chip, an Intel Mac and ARM Linux, each
+#     running the real program against the stand-in Gmail (tools/test-mc-mail-imap.js). A green
+#     run here is what lets a kind be marked tested;
+#   - mc-uninstall's own gate, on Linux.
+# GitHub's runners have no terminal, so the questions an installer asks are walked in a real
+# terminal elsewhere (a fresh WSL distro); these runs prove the parts that need a real Mac or ARM.
+on:
+  push:
+    branches: [main, 'release/beta-*', 'beta/install-mac-linux']
+    paths:
+      - .github/workflows/installers-mac-linux.yml
+      - install-godspeed.sh
+      - notebook/scripts/install-native-notebook.sh
+      - notebook/test/native-install-mac.sh
+      - notebook/test/native-installer.test.mjs
+      - 'tools/mc-mail*'
+      - tools/test-mc-mail-imap.js
+      - tools/test-mc-mail-imap-fixture.js
+      - tools/mc-uninstall
+      - tools/test-uninstall.sh
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-mac:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+      - name: The installer's own parts, in the Mac's /bin/bash
+        run: |
+          /bin/bash --version | head -1
+          GODSPEED_TEST_BASH=/bin/bash node notebook/scripts/run-tests.mjs notebook/test/native-installer.test.mjs notebook/test/installer-last-words.test.mjs
+      - name: Install as a LaunchAgent, restart after a kill, upgrade, take over, uninstall
+        run: /bin/bash notebook/test/native-install-mac.sh
+      - name: What the notebook wrote, when something failed
+        if: failure()
+        run: tail -n 200 "$HOME/Library/Logs/Godspeed Mission Control/notebook.log" || true
+  mail-program:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: The real Himalaya against the stand-in Gmail
+        shell: bash
+        run: |
+          node -e 'console.log("kind of computer:", process.platform + "-" + process.arch)'
+          GODSPEED_MAIL_IMAP_UNTESTED=1 node tools/test-mc-mail-imap.js | tee mail-test.log
+          # A skipped run proves nothing: it has to have run every case.
+          grep -Eq '^[0-9]+ passed, 0 failed$' mail-test.log
+  uninstall-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: mc-uninstall's gate
+        run: bash tools/test-uninstall.sh

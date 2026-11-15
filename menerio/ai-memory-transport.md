@@ -1,0 +1,3 @@
+# Copy records between your mission control and Menerio
+
+Use `mcp-connection.md` for the complete setup and checks. Both copies run only when you answered yes to `Copy your mission control's files to Menerio for search?`. `tools/notebook-sync.py` uploads your mission control's Markdown files, except `dev/`, generated index files, files over 300 KB and the records that came from Menerio in the first place. `tools/world-pull.py` brings the people, events and facts Menerio holds into `world/`. Neither operation is a complete backup of all original notes and attachments. Preserve the source markers (`origin: menerio`, `origin: godspeed`) and inspect the dry-run report before applying copies by hand.

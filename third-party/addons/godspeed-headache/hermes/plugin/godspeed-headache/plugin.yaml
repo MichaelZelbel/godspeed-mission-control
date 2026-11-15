@@ -1,0 +1,7 @@
+name: godspeed-headache
+version: "0.1.0"
+description: >-
+  Shows the model the open headache, once per turn, before it reads the message
+  (pre_llm_call). Prints nothing when none is open. Installed by `godspeed-headache setup`.
+author: godspeed-headache
+kind: standalone

@@ -1,0 +1,25 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
+import {discoverRadarSources,radarPrimaryContent,readRadarSource} from '../core/radar-discovery.mjs';
+import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {radar} from '../core/radar.mjs';
+const reply=value=>new Response(typeof value==='string'?value:JSON.stringify(value));
+test('broader discovery rotates public research topics and retains bounded actual queries without accepting foreign URLs',async()=>{
+ const seen=[];const fetcher=async(url,options)=>{seen.push({url,options});return reply({incomplete_results:true,items:[{private:false,full_name:'fictional/agent-memory',html_url:'https://untrusted.invalid/injection'},{private:true,full_name:'private/excluded'},{private:false,full_name:'../../traversal'},{private:false,full_name:'../..'},{private:false,full_name:'fictional/retrieval'},{private:false,full_name:'fictional/over-cap'}]});};
+ const topics=[];for(let cycle=0;cycle<3;cycle++){const found=await discoverRadarSources({cycle,now:Date.parse('2026-10-04T00:00:00Z'),fetcher});topics.push(found.topic);assert.equal(found.sources.length,4);assert.ok(found.sources.every(s=>new URL(s.url).hostname==='api.github.com'));assert.equal(found.checks[0].incomplete_results,true);assert.deepEqual(found.checks[0].repositories,['fictional/agent-memory','fictional/retrieval']);assert.ok(found.checks[0].query.includes('pushed:>=2026-07-06'));}
+ assert.deepEqual(topics,['ai-agents','agent-memory','rag']);assert.equal(seen.length,3);assert.ok(seen.every(r=>!r.options.headers.Authorization));
+});
+test('release evidence retains a real publication date and decoded exact primary text; search failure keeps maintained sources',async()=>{
+ const body='Fictional release: dated source claims remain separate.\nA second line.';
+ const primary=radarPrimaryContent(JSON.stringify([{body,published_at:'2026-10-03T12:00:00Z',html_url:'https://github.com/fictional/project/releases/tag/v1'}]),'github-release');assert.equal(primary.content,body);assert.equal(primary.publication_date,'2026-10-03T12:00:00Z');
+ assert.throws(()=>radarPrimaryContent('[]','github-release'),/no readable/);assert.throws(()=>radarPrimaryContent(JSON.stringify([{body,html_url:'https://foreign.invalid/release'}]),'github-release'),/primary project/);
+ const found=await discoverRadarSources({fetcher:async()=>new Response('',{status:403})});assert.equal(found.sources.length,2);assert.equal(found.checks[0].ok,false);assert.match(found.checks[0].error,/403/);
+ await assert.rejects(readRadarSource('https://fictional.invalid/',{fetcher:async()=>reply('x'.repeat(1024*1024+1))}),/one-megabyte/);
+});
+test('enabled discovery reaches actual fetched maintainer evidence and retains one quiet run rather than inventing a proposal',async()=>{
+ const original=globalThis.fetch,calls=[];globalThis.fetch=async(raw)=>{const url=new URL(raw);calls.push(url.href);if(url.pathname==='/search/repositories')return reply({items:[{private:false,full_name:'fictional/new-project'}]});if(url.pathname.endsWith('/readme'))return reply('Fictional maintainer documentation: source dates are preserved.');return reply([{body:'Fictional current release: explicit source dates.',published_at:'2026-10-03T12:00:00Z',html_url:'https://github.com/fictional/primary/releases/tag/v1'}]);};
+ try{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-radar-discovery-'))),query=new QueryService(store);let judged=0;const result=await radar({id:'fictional-broad',discovery:true},{store,query,provider:async input=>{judged++;assert.equal(input.context.sources.length,3);assert.ok(input.context.sources.some(s=>s.content.includes('maintainer documentation')));return {kind:'quiet',reason:'No concrete authorized local improvement follows from these fictional sources'};}});assert.equal(result.silent,true);assert.equal(judged,1);assert.equal(calls.length,4);assert.equal(store.list('notes').length,0);const run=store.list('watch_runs')[0];assert.ok(run.checks.some(c=>c.stage==='discovery'&&c.query));assert.equal(store.list('watch_observations').length,3);assert.ok(store.list('watch_observations').some(o=>o.raw_content&&o.publication_date));
+ }finally{globalThis.fetch=original;}
+});
+test('an explicit restricted topic list never performs broader network discovery',async()=>{
+ const original=globalThis.fetch;let calls=0;globalThis.fetch=async()=>{calls++;throw Error('Unexpected broader network read');};
+ try{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-radar-restricted-'))),query=new QueryService(store);const result=await radar({id:'fictional-restricted',discovery:true,topic_ids:[]},{store,query,provider:async()=>{throw Error('No primary evidence was selected');}});assert.equal(result.silent,true);assert.equal(calls,0);assert.match(store.list('watch_runs')[0].content,/No configured/);}finally{globalThis.fetch=original;}
+});

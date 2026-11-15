@@ -1,0 +1,47 @@
+#!/bin/bash
+# godspeed-setup: the Docker image's installer, run inside the running container:
+#
+#   docker compose exec godspeed godspeed-setup
+#
+# It is server/install.sh from this repository, baked into the image at build time, in
+# container mode (KB_CONTAINER=1, set by the image): the machine's half is the image's
+# job, so only the assistant's half runs, plus the Telegram stop. Safe to run again at
+# any time; it keeps what is done and asks only for what is missing.
+set -u
+
+# `docker compose exec` arrives as root. Everything this writes must belong to the
+# account the gateway runs as, or the gateway cannot read its own sign-in afterwards.
+if [ "$(id -u)" = 0 ]; then
+  export HOME=/opt/data
+  exec /command/s6-setuidgid hermes "$0" "$@"
+fi
+export HOME=/opt/data
+cd "$HOME" || exit 1
+# shellcheck disable=SC1091
+. /opt/hermes/.venv/bin/activate 2>/dev/null || true
+
+# Web pages: the assistant reads them with Hermes' own browser tools (browser_navigate and the
+# rest), which drive the headless Chrome this image carries (D-283). Left unset, Hermes offers
+# browser_exec instead, which downloads the Browser Use program and about a hundred Python
+# packages, unpinned, the first time it is used. Set before the installer restarts the gateway,
+# so the gateway starts with it; a choice already made in Hermes' settings is kept.
+if [ -z "$(hermes config get browser.backend 2>/dev/null)" ]; then
+  hermes config set browser.backend off >/dev/null 2>&1 || true
+fi
+
+# Your own computer's browser (computer use layer 2, D-285): the assistant's "your computer's
+# browser" tools, beside its own browser. Before any computer is paired, or while it is off, they
+# answer in plain words, so they are wired for everyone; a choice already made is kept.
+if [ "${GODSPEED_COMPUTER:-on}" != off ] && [ -z "$(hermes config get mcp_servers.computer.command 2>/dev/null)" ]; then
+  hermes config set mcp_servers.computer.command node >/dev/null 2>&1 || true
+  hermes config set mcp_servers.computer.args '["/opt/godspeed/kit/computer/mcp.js"]' >/dev/null 2>&1 || true
+fi
+
+bash "${KB_KIT_DIR:-/opt/godspeed/kit}/server/install.sh" "$@"
+rc=$?
+# Recorded so the next start of THIS image does not run the update path again
+# (etc/s6-overlay/s6-rc.d/godspeed-upgrade runs it once per new image).
+if [ "$rc" -eq 0 ] && [ -d "${GODSPEED:-/opt/data/godspeed}/.git" ]; then
+  mkdir -p "$HOME/.godspeed" && cat /opt/godspeed/VERSION > "$HOME/.godspeed/image-version" 2>/dev/null
+fi
+exit "$rc"

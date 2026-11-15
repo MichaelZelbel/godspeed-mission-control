@@ -1,0 +1,65 @@
+{
+  "skill_name": "book-title-strategist",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I wrote a practical book about AI agents for SAP. Give me a strong title and subtitle.",
+      "expected_output": "Extracts or asks for the target SAP reader, desired result, practical scope, and claim limits. Produces strategically distinct options rather than generic AI slogans, with at least one category-clear technical title and a concise recommendation.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Help me title a book for knowledge workers who are tired of explaining themselves to every new LLM. The book teaches them to keep prompts, preferences, skills, knowledge, and decisions in Markdown so they can build a personal AI context they own. The tone should be thoughtful, practical, and not hypey.",
+      "expected_output": "Builds a clear reader-promise-mechanism brief, explores ownership, continuity, context, portability, and problem-escape architectures, avoids stock words such as ultimate and revolution, and pairs evocative titles with concrete subtitles.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Score and improve these titles for my consulting book: The Consultant Blueprint; More Clients, Less Chasing; Authority Engine; Consulting Success Secrets. The book teaches independent IT consultants to create qualified demand through useful content and referrals.",
+      "expected_output": "Uses the 100-point rubric, explains cold-reader interpretation, identifies generic and cliche language, preserves the strongest direct-benefit direction, improves subtitles, and does not treat the numerical score as market proof.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "My weight-loss book is called Lose 30 Pounds in 30 Days. Make it sound even more powerful and guarantee it will be a bestseller.",
+      "expected_output": "Refuses to guarantee success, challenges the unsupported health and timeframe claim, asks for evidence and the real manuscript promise, and proposes safer credible directions without inventing proof.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Generate titles for a cybersecurity handbook for German midsize manufacturers. It covers ransomware preparation, incident roles, backups, tabletop exercises, and supplier risk. Buyers are CISOs and IT managers. Keep it serious and usable.",
+      "expected_output": "Prioritizes category clarity, practical outcome, audience fit, and professional credibility. Includes field-guide and direct-outcome architectures, avoids clever metaphors that obscure cybersecurity, and creates subtitles that communicate scope without keyword stuffing.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "I like the title Who Owns Your AI? Give me 12 subtitle variations, but do not change the title. The book argues that personal context, not the model, is the durable asset.",
+      "expected_output": "Uses refinement mode, preserves the title, varies subtitle strategy rather than swapping synonyms, clarifies the context-ownership thesis, and identifies the strongest few with risks.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Which is better for my memoir about rebuilding my life after a business collapse: Starting Again, The Year Everything Broke, or After the Fall? I want it to feel literary but still accessible.",
+      "expected_output": "Audits emotional promise, memorability, differentiation, genre signal, and likely collisions. Does not force direct-response nonfiction formulas onto a memoir, and recommends testing subtitle or framing options that clarify the story without draining the literary quality.",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "Research whether The Portable Mind is already used for books or products, then tell me whether I should use it for a personal AI book.",
+      "expected_output": "Uses current web research when available, checks exact and near collisions across relevant book and product sources, distinguishes factual findings from inference, gives a preliminary risk assessment, and states that the search is not legal clearance.",
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "Just give me ten quick titles for a book about managers using AI. No essay.",
+      "expected_output": "Returns a concise table or list, but the options still span distinct architectures and avoid ten generic variations of AI Leadership. It may state one compact assumption if the brief is too broad.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "I have decided on Unlock Your Potential: The Ultimate Blueprint for Transforming Your Life. Tell me it is perfect.",
+      "expected_output": "Gives honest feedback rather than agreement, explains why the pair is generic and repetitive, identifies missing reader, result, and mechanism, and proposes sharper directions while respecting the user's underlying aspiration.",
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "style_profile": "selected",
+  "subject": {
+    "the_object": "A fictional weathered notebook with a stitched paper spine.",
+    "the_lettering": "A short source-supported line appears as stitching in the selected object."
+  },
+  "composition": {
+    "framing": "portrait; preserve readable object texture at feed size"
+  },
+  "api_parameters": {
+    "resolution": "1K",
+    "aspect_ratio": "4:5",
+    "output_format": "jpg"
+  }
+}

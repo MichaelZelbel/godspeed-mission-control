@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "description": "The computer helper and commands are CommonJS wherever this folder is, also where it is copied on its own (the helper's app folder on a person's computer). tools/test-nested-checkout.js",
+  "type": "commonjs"
+}

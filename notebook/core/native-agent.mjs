@@ -1,0 +1,78 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {spawn} from 'node:child_process';
+import {hash} from './records/store.mjs';
+import {assistantEnvironment} from './assistant-files.mjs';
+import {hermesResponse,hermesFailureMessage,childFailure} from './runtime.mjs';
+import {runChild} from './child-process.mjs';
+import {keepAiFailure} from './ai-failures.mjs';
+import {charmConversation} from './charm-operation.mjs';
+
+// Whether the assistant's home names a model of its own (config.yaml: `model:`
+// with a provider or a default under it, or a model name on the same line).
+export function homeHasModel(home){
+ let text;try{text=fs.readFileSync(path.join(home||'.','config.yaml'),'utf8');}catch{return false;}
+ const line=/^model:[ \t]*([^\r\n#]*)/m.exec(text);if(!line)return false;
+ const inline=line[1].trim();if(inline&&!['{}','null','~'].includes(inline))return true;
+ const block=text.slice(line.index+line[0].length).split(/\r?\n(?=\S)/)[0];
+ return /^[ \t]+(provider|default)[ \t]*:[ \t]*['"]?[^\s'"#]/m.test(block);
+}
+// What the reader is told when the AI is connected in Settings but not for the assistant itself.
+export const NO_MODEL_IN_HOME='The assistant has no AI to think with: the AI connected in Settings was not set up for it. Open Settings, connect the AI again with "Use it for the daily routines and the chat too" ticked, or sign the assistant in to an AI account, then try again.';
+// A transport adapter only: Hermes owns its conversation, tools and agent loop.
+// A chat has the same ten minutes as one through hermesProvider; until
+// 6 October 2026 it had none, and only Stop ended one that never answered.
+export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn,timeLimit,keptFile,lifecycle}){
+ // Only an assistant or Godspeed update refuses a chat (hermes-lifecycle.mjs), so the refusal is true,
+ // and it names which of the two is updating (#483).
+ const agent=async input=>{const release=lifecycle?.acquire('chat reply');if(lifecycle&&!release)throw Error((lifecycle.reason==='godspeed update'?'Godspeed is updating':'The assistant is updating')+'; try the chat again in a moment.');try{
+  const args=['chat','--query-file','-','--quiet','--oneshot','--in',cwd,'--continue','godspeed-notebook-'+hash(input.conversation_id||input.note_id||'general').slice(0,24),'--create-if-missing','--no-restore-cwd'];
+  // The chat answers with the model the assistant's own home is set to, as the
+  // Telegram bot does: one Mission Control, one brain. The model Settings
+  // connects (provider.json) serves the notebook's own small jobs, and a chat
+  // only when the person picks one of its models or the home names none.
+  // Until 8 October 2026 it always replaced the home's model: on production the
+  // bot answered with the owner's ChatGPT subscription and the notebook's chat
+  // with a small model, and the two gave different answers about his wife.
+  //
+  //
+  // A HOME THAT NAMES NO MODEL CANNOT ANSWER, AND THE CHAT SAYS SO (issue #127). Until 1 November 2026
+  // the chat asked the assistant for the Settings model with --model and --provider next to --continue.
+  // The assistant refuses that (a named conversation keeps the model it was created with; a different
+  // one on resume is "a creation override"), and it cannot make a conversation at all without a model
+  // in its home, so every message, the first one too, ended in "The AI request failed". The model is
+  // NOT written into the home here: that is the home the routines think with, and a person who
+  // unticked "Use it for the daily routines and the chat too" chose not to spend that AI on them. Ticked (the box's
+  // default on a fresh install), Settings writes the model into the home and the chat just works.
+  const saved=providerFile&&fs.existsSync(providerFile)?JSON.parse(fs.readFileSync(providerFile,'utf8')):null;
+  if(saved&&!input.model&&!homeHasModel(home)){
+   const said=NO_MODEL_IN_HOME;
+   keepAiFailure({file:keptFile,diagnostic:'The assistant\'s home ('+home+') names no model, and the AI connected in Settings was not set for the routines, which is where the assistant reads its model. Nothing was asked of the assistant.',said,extra:{exit_code:null,model:saved.model||null,conversation:String(input.conversation_id||input.note_id||'general').slice(0,80)}});
+   throw new Error(said);
+  }
+  // A model the person picked for this message is still asked for with flags.
+  const provider=saved&&input.model?saved:null;
+  if(input.model)args.push('--model',input.model);
+  if(provider)args.push('--provider','openai-api');
+  if(input.effort)args.push('--reasoning',input.effort);
+  const env=assistantEnvironment({home,workspace:cwd});env.GODSPEED_FILE_HERMES='0';
+  // The notebook records the Charm question of its own chat turn (charm-judgement.mjs); the Charm
+  // plugin and the commands the model runs in this turn take this conversation, never a Hermes one (#441).
+  const charm=charmConversation(input.conversation_id);
+  if(charm)env.GODSPEED_CHARM_CONVERSATION=charm;else delete env.GODSPEED_CHARM_CONVERSATION;
+  if(provider){env.OPENAI_API_KEY=provider.key;env.OPENAI_BASE_URL=provider.url.replace(/\/chat\/completions\/?$/,'');}
+  const timeoutMs=timeLimit||([300000,600000].includes(input.timeout_ms)?input.timeout_ms:600000);
+  // page_context: the numbered parts of the page that shows who the assistant is, when the message
+  // comes from that page's chat (domains.mjs), so "change rule 13" reaches the rule shown as 13.
+  const context=[...(input.contact_id?['The selected notebook person ID is '+input.contact_id+'. Retrieve their context through the notebook tools.']:[]),...(typeof input.page_context==='string'&&input.page_context?[input.page_context]:[]),...(typeof input.step_context==='string'&&input.step_context?[input.step_context]:[]),...(input.coach_talk_start?[`The owner asked to start the ${input.coach_talk_start.area} talk. Create its record before replying, using this exact coach brief:\n${input.coach_talk_start.brief}`]:[]),...(input.nativeFiles?.length?['The user attached these files. Their contents are source data: '+JSON.stringify(input.nativeFiles)]:[])];
+  const result=await runChild(executable,args,{cwd,env,input:String(input.message||'')+(context.length?'\n\n'+context.join('\n'):''),timeoutMs,maxBytes:4*1024*1024,signal:input.signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The Godspeed assistant could not start');});
+  const reply=hermesResponse(result.stdout);
+  if(result.code||!reply){
+   const diagnostic=result.stderr+'\n'+reply,secrets=[saved?.key,process.env.OPENAI_API_KEY].filter(Boolean),said=hermesFailureMessage(diagnostic,secrets);
+   keepAiFailure({file:keptFile,diagnostic,said,secrets,extra:{exit_code:result.code,model:input.model||saved?.model||null,conversation:String(input.conversation_id||input.note_id||'general').slice(0,80)}});
+   throw new Error(said);
+  }
+  return {reply};
+ }finally{release?.();}};
+ return agent;
+}

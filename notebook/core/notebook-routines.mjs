@@ -1,0 +1,133 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {CONNECTION_NAMES,ROUTINES_LABEL} from './connection-names.mjs';
+import {atomic} from './records/store.mjs';
+import {loadSettings as journalSettings,saveSettings as saveJournal,DEFAULTS as JOURNAL_DEFAULTS} from '../../third-party/addons/godspeed-journal/lib/settings.mjs';
+
+// THE ROUTINES THE NOTEBOOK MAKES IN HERMES BESIDE THE STARTING ROUTINES (18 October 2026): the ones
+// Settings > Enable routine adds, and the journal's check-ins. Kept in this machine's own state
+// (.godspeed, never synced), since Hermes' jobs live in each machine's own Hermes. Each entry:
+// {id, key, name, what, skill?}. Where their results go follows the delivery the starting routines
+// follow (deliveryFor), so a routine made before Telegram was connected reaches Telegram too.
+const file=store=>path.join(store.state,'notebook-routines.json');
+export function readNotebookRoutines(store){try{const data=JSON.parse(fs.readFileSync(file(store),'utf8'));return Array.isArray(data?.jobs)?data:{jobs:[]};}catch{return {jobs:[]};}}
+export function writeNotebookRoutines(store,data){atomic(file(store),JSON.stringify(data,null,2)+'\n');}
+export function rememberNotebookRoutine(store,job){const data=readNotebookRoutines(store);data.jobs=[...data.jobs.filter(j=>j.id!==job.id),job];writeNotebookRoutines(store,data);return job;}
+
+// WHAT SETTINGS > ENABLE ROUTINE OFFERS WITH THE ORIGINAL ASSISTANT. Until 18 October 2026 it listed
+// the notebook's own kinds of job, and Hermes could run only the few whose name was also a recipe's;
+// the rest were refused with "Choose an installed Godspeed skill". Now each kind is a recipe of the
+// mission control's own, by the name a person knows it by, and only the recipes installed in this
+// mission control are offered. The daily round, the deadline reminders, the weekly check-in and the
+// coach's reminders come with the first goal and are not offered twice.
+export const ENABLE_KINDS=[
+ {kind:'morning-brief',skill:'morning-brief',label:'Morning brief',what:'Writes your morning brief: the one thing that needs you, what changed, your dates and what your watches found.'},
+ {kind:'review',skill:'weekly-review',label:'Weekly review',what:'Files the notes waiting in your inbox, asks about the unclear ones and says how each goal is going.'},
+ {kind:'research-watch',skill:'research-watch',label:'Research watches',what:'Checks the questions you asked it to keep researching, and tells you only what is new.'},
+ {kind:'memory-review',skill:'memory-audit',label:'Memory review',what:'Checks what your mission control remembers about you against dated evidence, and repairs what is wrong.'},
+ {kind:'radar',skill:'mc-radar',label:'AI radar',what:'Looks for one new idea from the sources you chose that would change part of your setup, for your verdict.'},
+ {kind:'subscription-review',skill:'subscription-review',label:'Subscription review',what:'Reviews your AI subscriptions from your receipts: what each cost and what it carried.'},
+ {kind:'lead',skill:'lead',label:'Public contributions',what:'Prepares one contribution you could post or send, from what really happened; you post it yourself.'},
+ {kind:'audit',skill:'audit',label:'Mission control audit',what:'Audits your mission control and names the three changes that would help most.'},
+];
+export const enableKinds=root=>ENABLE_KINDS.filter(k=>fs.existsSync(path.join(root,'skills',k.skill,'SKILL.md'))).map(({kind,label})=>({kind,label}));
+export const enableKind=kind=>ENABLE_KINDS.find(k=>k.kind===kind)||null;
+
+// WHERE THE ROUTINES OF THIS MACHINE DELIVER. Until 18 October 2026 this was decided once, when the
+// first goal made the routines: a server that connected Telegram after its first goal kept every
+// result in the notebook for good, and Settings > Routine delivery only saved a setting. Now:
+// "Keep results here" pressed in Settings keeps them here; otherwise they go to Telegram whenever this
+// machine's Hermes has a bot connected, and stay here while it has none.
+export function deliveryFor(installation,{telegram=false}={}){
+ if(installation?.delivery==='notebook'&&installation?.delivery_chosen_at)return 'local';
+ return telegram?'telegram':'local';
+}
+
+// THE JOURNAL'S CHECK-INS (18 October 2026). The journal can check in on a task you started, give an
+// evening list and a weekly summary, each switched on in its own settings (routines/journal/
+// settings.json, changed in the chat: "check in after four hours"). Only the journal add-on's own
+// setup made the Hermes job that sends them, and no installation runs that setup, so they never
+// came. Now the machine that runs the routines keeps one routine for them while any of the three is
+// switched on: every 15 minutes it runs the journal's own tick, which says something only when one
+// is due, at the times the settings name, outside its quiet hours. All three off pauses it.
+// THE MORNING BRIEF IS THE NOTEBOOK'S OWN BRIEFING (3 November 2026, #160). It was the starter
+// morning-brief recipe, an AI job of Hermes, so the notebook's briefing (core/briefing.mjs: the
+// Charm Challenge line, a sentence that breaks a writing rule cut) never ran on an install. It is a
+// script routine now, like the deadline reminders (routine-scripts/godspeed_routines.py, brief);
+// isBriefJob also knows one made the old way, which NativeScheduler.followBrief turns into this.
+export const BRIEF_JOB='Morning brief';
+export const BRIEF_SCRIPT='godspeed-morning-brief.py';
+export const isBriefJob=j=>!!j&&(j.script===BRIEF_SCRIPT||[j.skill,...(Array.isArray(j.skills)?j.skills:[])].includes('morning-brief'));
+export const JOURNAL_JOB='Journal check-ins';
+export const JOURNAL_SCRIPT='godspeed-journal-checkins.py';
+export const JOURNAL_WHAT='Sends your journal\'s check-ins, its evening list and its weekly summary, the ones you switched on. It looks every 15 minutes whether one is due.';
+export function journalWanted(root){
+ const s=journalSettings(root);
+ return s.capture_enabled!==false&&!!(s.nudge?.enabled||s.evening?.enabled||s.weekly?.enabled);
+}
+// THE DAILY CONNECTION CHECK (4 November 2026, #200; core/connection-check.mjs). A script routine at
+// 05:00 (earlier when an early Morning brief needs it first), before the morning briefing, made once on a machine that made its starting routines (one
+// that kept the reader's own routines never gets Godspeed's beside them). It starts on when this
+// install has Telegram or Gmail connected, a tracker with a mail rule, a phone upload, an active routine, or a server install, and paused when it has none; the Routines list's
+// Pause and Resume is its switch. A second source, "your routines" (core/routine-check.mjs, #239),
+// reads Hermes' jobs list for a routine that did not run or keeps failing.
+export const CONNECTION_JOB='Daily connection check';
+export const CONNECTION_SCRIPT='godspeed-connection-check.py';
+export const CONNECTION_WHAT=`Early every morning, before your morning brief, it checks each connection you set up (${Object.entries(CONNECTION_NAMES).filter(([name])=>name!=='disk').map(([,c])=>c.label).join(', ')}). It tells you only when one needs your sign-in or key, failed two mornings in a row, or your phone has not sent health data for 36 hours. On a server it also looks how full the disk is and tells you once when it passes 85%. It also reads the list of ${ROUTINES_LABEL}, without any call, and tells you once when one on an interval or cron schedule Godspeed creates did not run when it was due, or failed twice in a row. Other Hermes cron schedules do not create a missed-run notice, though their repeated failures still do. It sends nothing else.`;
+// THE MAIL COUNTS (4 November 2026, #215; core/mail-trackers.mjs). A script routine every morning at
+// 04:30 that counts the mails a tracker's mail rule names, from each mail's sender, subject and date
+// and never its text, and adds them to that tracker. It is made when a tracker has a mail rule and
+// paused when none has; the Routines list's Pause and Resume is its switch. It is kept on "local":
+// it never sends a message (followDelivery leaves it alone), and a mail connection that does not
+// answer is the daily connection check's to report.
+export const MAIL_COUNT_JOB='Mail counts';
+export const MAIL_COUNT_SCRIPT='godspeed-mail-count.py';
+export const MAIL_COUNT_WHAT='Once a day, early in the morning, it counts the mails your trackers\' mail rules name, from each mail\'s sender, subject and date only, and adds them to those trackers. It never reads a mail\'s text and sends nothing.';
+export const WORKOUTS_JOB='Workouts from Hevy';
+export const WORKOUTS_SCRIPT='godspeed-workouts.py';
+export const WORKOUTS_WHAT='Every hour, at the minute Hevy chose, it brings your Workouts tracker level with Hevy. It does not use AI or send a second notification.';
+// The routines beside the starting ones that are a switch on a mission control not made from the starter
+// (4 November 2026, #225). The one owner of each one's switch (routine-switches.mjs) and its wrapper script
+// (routineFiles in starting-routines.mjs).
+export const SWITCHABLE_NOTEBOOK_ROUTINES=[
+ {key:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT,script:JOURNAL_SCRIPT},
+ {key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,script:CONNECTION_SCRIPT},
+ {key:'mail-count',name:MAIL_COUNT_JOB,what:MAIL_COUNT_WHAT,script:MAIL_COUNT_SCRIPT},
+ {key:'workouts',name:WORKOUTS_JOB,what:WORKOUTS_WHAT,script:WORKOUTS_SCRIPT},
+];
+// THE NOTICE SENDER OF A MISSION CONTROL NOT MADE FROM THE STARTER (4 November 2026, #225). On a starter-born
+// install the coach's reminders and the journal's check-ins say the notices in .godspeed/notices.json. An
+// adopted mission control runs neither unasked, so it gets this one routine instead: every 15 minutes it says
+// only the notices Godspeed itself queued, and nothing else (NativeScheduler.followNoticeSender).
+export const NOTICES_JOB='Godspeed notices';
+export const NOTICES_SCRIPT='godspeed-notices.py';
+export const NOTICES_WHAT='Every 15 minutes it says what Godspeed itself queued for you, such as a backup that failed or a question waiting for your yes, one at a time. It sends nothing else.';
+// THE NIGHT CHAT TIDY-UP (26 October 2026). The assistant keeps a chat app's chat as one long
+// conversation and summarises its older part once it passes its threshold, and it does that before
+// answering the message that crossed the line: a real message waited 4 minutes 9 seconds while 348
+// messages became 43, and all the person saw was "typing". The assistant has no idle-time
+// summarising of its own. So the machine that runs the routines keeps one routine that does it at
+// night, while nobody is waiting: every install whose Hermes has a chat app connected gets it, at
+// 01:30 on the install's clock, with no AI. It summarises only the conversation the gateway's
+// routing table names for the owner's chat, only while the chat is out of use, and only when the
+// chat is long enough to be worth it (godspeed_routines.py, chat_tidy). It sends nothing to the
+// chat: its output is its log, which is why its results are kept here and never delivered
+// (followDelivery leaves this one alone).
+// The gateway refuses an outside summary of a chat app's chat (Hermes 0.22.5), so the script has the
+// gateway's own /compress run through the godspeed-chat-tidy plugin command and checks in the
+// database that the chat got shorter (assistant-files/godspeed-chat-tidy). Made again for every
+// install with a chat app connected from 2.0.0-beta.19 (native-scheduler.mjs, followChatTidy).
+export const CHAT_TIDY_JOB='Night chat tidy-up';
+export const CHAT_TIDY_SCRIPT='godspeed-chat-tidy.py';
+export const CHAT_TIDY_SCHEDULE='30 1 * * *';
+export const CHAT_TIDY_WHAT='Every night at 01:30, while nobody waits for an answer, it has the assistant summarise the long chat with it, so your first reply of the day is not held up. It sends nothing to the chat.';
+// The journal reads its times on its own clock, which starts as UTC until its setup writes the
+// person's; the installation's zone is the person's, so it becomes the journal's when the journal
+// still has the default one.
+export function journalOnTheClock(root,timezone){
+ if(!timezone)return false;
+ let raw={};try{raw=JSON.parse(fs.readFileSync(path.join(root,'routines','journal','settings.json'),'utf8'))||{};}catch{}
+ const current=raw.timezone||JOURNAL_DEFAULTS.timezone;
+ if(current===timezone||(raw.timezone&&raw.timezone!=='UTC'))return false;
+ saveJournal(root,{...raw,timezone});return true;
+}

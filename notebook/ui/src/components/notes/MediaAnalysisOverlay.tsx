@@ -1,0 +1,321 @@
+import { useEffect, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { useMediaAnalysis, MediaAnalysisEntry } from "@/hooks/useMediaAnalysis";
+import { MediaAnalysisPanel } from "./MediaAnalysisPanel";
+import { Sparkles, Loader2, AlertTriangle } from "lucide-react";
+import { useReanalyzeMedia } from "@/hooks/useMediaAnalysis";
+
+interface MediaAnalysisOverlayProps {
+  noteId: string;
+  editorContainerRef: React.RefObject<HTMLDivElement>;
+}
+
+interface MediaElementInfo {
+  element: HTMLElement;
+  src: string;
+  type: "image" | "pdf";
+  rect: DOMRect;
+}
+
+/**
+ * Extracts the storage path segment from a Supabase storage URL.
+ * Attachments render through signed URLs:
+ *   https://xxx.supabase.co/storage/v1/object/sign/note-attachments/userId/file.png?token=...
+ * (older content may hold .../object/public/note-attachments/...). We need to
+ * match against the storage_path stored in media_analysis, like userId/file.png.
+ * Matching the whole URL captured "?token=..." too, so no signed image ever
+ * matched and the analysis badges and Retry never appeared: read the path only.
+ */
+function extractStoragePath(url: string): string | null {
+  try {
+    let path: string;
+    try {
+      path = new URL(url, window.location.href).pathname;
+    } catch {
+      path = url.split(/[?#]/)[0];
+    }
+    const match = path.match(/\/(?:note-attachments|api\/media\/file)\/(.+)$/);
+    return match ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function findAnalysisForSrc(
+  src: string,
+  entries: MediaAnalysisEntry[]
+): MediaAnalysisEntry[] {
+  const storagePath = extractStoragePath(src);
+  if (!storagePath) return [];
+  return entries.filter(e => {
+    // Match by storage_path directly or check if storage path ends with the entry's path
+    return e.storage_path === storagePath || storagePath.endsWith(e.storage_path) || e.storage_path.endsWith(storagePath);
+  });
+}
+
+export function MediaAnalysisOverlay({ noteId, editorContainerRef }: MediaAnalysisOverlayProps) {
+  const { data: analysisEntries = [] } = useMediaAnalysis(noteId);
+  const [mediaElements, setMediaElements] = useState<MediaElementInfo[]>([]);
+  const [expandedSrc, setExpandedSrc] = useState<string | null>(null);
+  const observerRef = useRef<MutationObserver | null>(null);
+  const scanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scanMedia = useCallback(() => {
+    const container = editorContainerRef.current;
+    if (!container) return;
+
+    const elements: MediaElementInfo[] = [];
+
+    // Scan images
+    container.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
+      if (img.src && !img.closest("[data-media-overlay]")) {
+        elements.push({
+          element: img,
+          src: img.src,
+          type: "image",
+          rect: img.getBoundingClientRect(),
+        });
+      }
+    });
+
+    // Scan PDF iframes
+    container.querySelectorAll<HTMLIFrameElement>("iframe[data-type='pdf']").forEach((iframe) => {
+      if (iframe.src) {
+        elements.push({
+          element: iframe.closest(".embed-pdf-wrapper") as HTMLElement || iframe,
+          src: iframe.src,
+          type: "pdf",
+          rect: (iframe.closest(".embed-pdf-wrapper") || iframe).getBoundingClientRect(),
+        });
+      }
+    });
+
+    // Only update state when the set of media actually changed - otherwise we
+    // create a new array on every observer tick which feeds back into the
+    // MutationObserver and pegs the main thread (breaking editor pointer events).
+    setMediaElements((prev) => {
+      if (prev.length === elements.length) {
+        let identical = true;
+        for (let i = 0; i < prev.length; i++) {
+          if (prev[i].element !== elements[i].element || prev[i].src !== elements[i].src) {
+            identical = false;
+            break;
+          }
+        }
+        if (identical) return prev;
+      }
+      return elements;
+    });
+  }, [editorContainerRef]);
+
+  const scheduleScan = useCallback(() => {
+    if (scanTimerRef.current) return; // coalesce rapid mutations
+    scanTimerRef.current = setTimeout(() => {
+      scanTimerRef.current = null;
+      scanMedia();
+    }, 200);
+  }, [scanMedia]);
+
+  // Observe DOM changes in editor
+  useEffect(() => {
+    const container = editorContainerRef.current;
+    if (!container) return;
+
+    scanMedia();
+
+    observerRef.current = new MutationObserver(scheduleScan);
+
+    // Only watch for structural changes and `src` swaps. Avoid `attributes: true`
+    // so our own style writes (e.g. setting `position: relative` on parents)
+    // don't feed back into the observer.
+    observerRef.current.observe(container, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["src"],
+    });
+
+    // Re-scan on scroll/resize
+    const rescan = () => scheduleScan();
+    window.addEventListener("resize", rescan);
+    container.addEventListener("scroll", rescan, true);
+
+    return () => {
+      observerRef.current?.disconnect();
+      window.removeEventListener("resize", rescan);
+      container.removeEventListener("scroll", rescan, true);
+      if (scanTimerRef.current) {
+        clearTimeout(scanTimerRef.current);
+        scanTimerRef.current = null;
+      }
+    };
+  }, [editorContainerRef, scanMedia, scheduleScan, noteId]);
+
+  // Re-scan when analysis entries change (new entries arrive)
+  useEffect(() => {
+    scanMedia();
+  }, [analysisEntries, scanMedia]);
+
+
+  if (analysisEntries.length === 0 && mediaElements.length === 0) return null;
+
+  return (
+    <>
+      {mediaElements.map((media) => {
+        const matches = findAnalysisForSrc(media.src, analysisEntries);
+        if (matches.length === 0) return null;
+
+        const status = matches[0].analysis_status;
+        const isExpanded = expandedSrc === media.src;
+        const storagePath = extractStoragePath(media.src) || media.src;
+
+        return (
+          <MediaBadge
+            key={media.src}
+            element={media.element}
+            status={status}
+            matches={matches}
+            isExpanded={isExpanded}
+            onToggle={() => setExpandedSrc(isExpanded ? null : media.src)}
+            noteId={noteId}
+            storagePath={storagePath}
+            onClosePanel={() => setExpandedSrc(null)}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+interface MediaBadgeProps {
+  element: HTMLElement;
+  status: string;
+  matches: MediaAnalysisEntry[];
+  isExpanded: boolean;
+  onToggle: () => void;
+  noteId: string;
+  storagePath: string;
+  onClosePanel: () => void;
+}
+
+function MediaBadge({ element, status, matches, isExpanded, onToggle, noteId, storagePath, onClosePanel }: MediaBadgeProps) {
+  const reanalyze = useReanalyzeMedia();
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  useEffect(() => {
+    const update = () => {
+      const parent = element.offsetParent as HTMLElement;
+      if (!parent) return;
+      const next = { top: element.offsetTop, left: element.offsetLeft, width: element.offsetWidth };
+      // Keep the same object when nothing moved. A new object every second
+      // re-rendered every badge in the note once a second, for as long as
+      // the note stayed open.
+      setPos((prev) =>
+        prev && prev.top === next.top && prev.left === next.left && prev.width === next.width ? prev : next,
+      );
+    };
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [element]);
+
+  // Ensure the element's parent has relative positioning for the badge.
+  // Run in an effect (not during render) so the style write doesn't feed back
+  // into the parent MutationObserver and trigger a render loop.
+  useEffect(() => {
+    if (element.parentElement && element.parentElement.style.position !== "relative") {
+      element.parentElement.style.position = "relative";
+    }
+  }, [element]);
+
+  if (!pos) return null;
+
+
+  const isRetrying = reanalyze.isPathPending(storagePath);
+
+  const handleRetry = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    reanalyze.mutate({
+      noteId,
+      storagePath,
+      mediaType: matches[0].media_type === "pdf" || matches[0].media_type === "pdf_page" ? "pdf" : "image",
+      originalFilename: matches[0].original_filename || undefined,
+    });
+  };
+
+  const effectiveStatus = isRetrying ? "processing" : status;
+
+  const badgeContent = () => {
+    switch (effectiveStatus) {
+      case "pending":
+      case "processing":
+        return (
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" /> {isRetrying ? "Retrying…" : "Analyzing…"}
+          </span>
+        );
+      case "failed":
+        return (
+          <button
+            onClick={handleRetry}
+            disabled={isRetrying}
+            className="flex items-center gap-1 text-[10px] text-warning hover:text-warning/80 transition-colors disabled:opacity-50"
+          >
+            <AlertTriangle className="h-3 w-3" /> Retry
+          </button>
+        );
+      case "complete":
+        return (
+          <button
+            onClick={onToggle}
+            className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors"
+          >
+            <Sparkles className="h-3 w-3" /> AI
+          </button>
+        );
+      default:
+        return null;
+    }
+  };
+
+  // Render badge using a wrapper inserted after the element
+  return (
+    <>
+      {/* Badge - positioned absolutely at bottom-right of the media element */}
+      <div
+        data-media-overlay="true"
+        style={{
+          position: "absolute",
+          top: pos.top + element.offsetHeight - 28,
+          left: pos.left + pos.width - 60,
+          zIndex: 10,
+        }}
+      >
+        <div className="bg-background border border-border rounded-md px-1.5 py-0.5 shadow-sm cursor-pointer">
+          {badgeContent()}
+        </div>
+      </div>
+
+      {/* Expanded panel */}
+      {isExpanded && status === "complete" && (
+        <div
+          data-media-overlay="true"
+          style={{
+            position: "absolute",
+            top: pos.top + element.offsetHeight + 4,
+            left: pos.left,
+            width: Math.min(pos.width, 500),
+            zIndex: 10,
+          }}
+        >
+          <MediaAnalysisPanel
+            entries={matches}
+            noteId={noteId}
+            onClose={onClosePanel}
+            storagePath={storagePath}
+          />
+        </div>
+      )}
+    </>
+  );
+}

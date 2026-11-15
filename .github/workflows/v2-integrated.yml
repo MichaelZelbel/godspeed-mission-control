@@ -1,0 +1,127 @@
+name: Integrated Godspeed v2
+# The version 2 image: tested on every change, published only from main.
+#
+# Until 6 October 2026 a manual run from any branch published an image, the registry login
+# came before the tests ran, and nothing was signed or scanned. Now a run from any other
+# branch tests and stops; the checkout keeps no token; the login, the push, a keyless
+# signature (as docker.yml signs the main image) and a scan for known vulnerabilities
+# (reported, not blocking, as in docker.yml) come after every test has passed.
+#
+# Since 9 October 2026 version 2 is developed on main, so main publishes; until then it was
+# codex/godspeed-v2-completeness, which no longer builds an image.
+#
+# Actions are named by tag, not yet by commit hash: the hashes were not looked up when
+# this changed (no network on the machine that wrote it).
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/v2-integrated.yml, 'notebook/**', 'third-party/addons/godspeed-coach/**', 'third-party/addons/godspeed-charm/**', 'docker/full-candidate/**', 'docker/rootfs/**', 'docker/test/**', install-godspeed.sh, install-godspeed-dev.sh]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-linux:
+    # The Linux installer for real on a fresh Ubuntu with systemd and sudo: a first install,
+    # an upgrade that keeps the machine's name, and a restart after the notebook is killed
+    # (notebook/test/native-install-linux.sh). Until 6 October 2026 no run ever did this.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install, upgrade and recover
+        run: bash notebook/test/native-install-linux.sh
+  image:
+    # Ubuntu 24.04, named, not ubuntu-latest: on 1 November 2026 GitHub's ubuntu-latest became
+    # Ubuntu 26.04, for which Playwright 1.56.1 (docker/full-candidate/test.sh) cannot install the
+    # browser's system packages, so every image from b57c899 on failed its browser check and none
+    # was published. The scenarios run on 24.04 too.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+      id-token: write   # the keyless signature
+    env:
+      IMAGE: ghcr.io/michaelzelbel/godspeed-mission-control
+      PUBLISH: ${{ github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+      - name: Forgiving habit progress and Telegram calendars
+        run: |
+          node notebook/scripts/run-tests.mjs notebook/test/habit-buttons.test.mjs notebook/test/habit-trackers.test.mjs notebook/test/habit-progress-image.test.mjs notebook/test/telegram-progress.test.mjs notebook/test/tracker-recipe.test.mjs third-party/addons/godspeed-coach/test/progress.test.mjs third-party/addons/godspeed-coach/test/cli.test.mjs
+          python3 notebook/test/habit-progress-plugin.test.py
+          python3 notebook/test/habit-progress-telegram.test.py
+          python3 notebook/test/habit-progress-telegram-native.test.py
+      - name: Coaching talks prepared the day before
+        run: |
+          node notebook/scripts/run-tests.mjs third-party/addons/godspeed-coach/test/prep.test.mjs notebook/test/starting-routines.test.mjs notebook/test/coach-prep-recipe.test.mjs
+          bash tools/test-coach-prep.sh
+      - name: Charm Challenge
+        run: |
+          node --test "third-party/addons/godspeed-charm/test/*.test.mjs"
+          node notebook/scripts/run-tests.mjs notebook/test/charm-operation.test.mjs notebook/test/charm-brief.test.mjs notebook/test/charm-tracker-list.test.mjs
+      - name: Original folder and integrated core checks
+        run: |
+          node notebook/scripts/run-tests.mjs notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/computer-wiring-on-existing-server.test.mjs notebook/test/windows-command-files.test.mjs notebook/test/final-core-contracts.test.mjs notebook/test/telegram-replies.test.mjs notebook/test/native-runtime.test.mjs notebook/test/addon-model.test.mjs notebook/test/docker-model-proxy.test.mjs notebook/test/backup-ai.test.mjs notebook/test/backup-ai-telegram.test.mjs notebook/test/routine-ai.test.mjs notebook/test/plan-signin.test.mjs
+          python3 notebook/test/addon-model-python.py
+      - name: The chat answers as it is written, the night chat tidy-up's script does only its job, and a voice note gets a voice note back
+        run: node notebook/scripts/run-tests.mjs notebook/test/hermes-for-the-notebook.test.mjs notebook/test/chat-tidy.test.mjs notebook/test/settings-routines.test.mjs notebook/test/voice-replies.test.mjs
+      - name: The Review page gets each thing once, and the shipped suggestion cases get their right answers
+        run: node notebook/scripts/run-tests.mjs notebook/test/suggestion-cases.test.mjs notebook/test/same-thing.test.mjs notebook/test/review-suggestions-mcp.test.mjs notebook/test/review-kind.test.mjs notebook/test/note-processing.test.mjs notebook/test/review-source-withdrawal.test.mjs notebook/test/field-names.test.mjs notebook/test/memory-subject.test.mjs
+      - name: An assistant's hashes and lists arrive as the tools declare them, and a changed record still needs its current hash
+        run: node notebook/scripts/run-tests.mjs notebook/test/mcp-object-arguments.test.mjs notebook/test/tracker-talk.test.mjs notebook/test/trackers-mcp.test.mjs notebook/test/food-mcp.test.mjs notebook/test/cycle-mcp.test.mjs notebook/test/assistant-control-records.test.mjs
+      - name: Clearing chat starts a fresh conversation and keeps earlier messages archived
+        run: node notebook/scripts/run-tests.mjs notebook/test/chat-reset.test.mjs notebook/test/conversation-state.test.mjs notebook/test/scoped-chat-state.test.mjs
+      - name: Installers and setup, without Docker
+        run: |
+          # The installer's own Caddy, checked against its checksum, so the web address test runs
+          # the configuration it writes, add-ons' folder and all, in a real Caddy.
+          caddy=$(bash -c 'set -euo pipefail; GODSPEED_INSTALLER_FUNCTIONS_ONLY=1; . notebook/scripts/install-native-notebook.sh; state="$RUNNER_TEMP/caddy"; install_caddy')
+          export GODSPEED_TEST_CADDY="$caddy"
+          node notebook/scripts/run-tests.mjs notebook/test/native-installer.test.mjs notebook/test/native-start-script.test.mjs notebook/test/setup-code.test.mjs notebook/test/native-web-address.test.mjs notebook/test/server-address.test.mjs notebook/test/web-door.test.mjs notebook/test/docker-local-door.test.mjs
+          bash docker/full-candidate/test-package-update.sh
+          python3 docker/test/test-telegram-setup.py
+      - name: Docker Hub images through Google's mirror (Docker Hub limits GitHub's shared runners; images stay pinned by digest)
+        run: |
+          f=/etc/docker/daemon.json; [ -s "$f" ] || echo '{}' | sudo tee "$f" >/dev/null
+          sudo jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' "$f" > /tmp/daemon.json && sudo mv /tmp/daemon.json "$f"
+          sudo systemctl restart docker && docker info --format '{{json .RegistryConfig.Mirrors}}'
+      - name: Build the integrated version
+        run: docker build --build-arg REVISION="$GITHUB_SHA" -f docker/full-candidate/Dockerfile -t godspeed-v2-test .
+      - name: Fresh installed server and browser check
+        run: bash docker/full-candidate/test.sh godspeed-v2-test
+      - uses: docker/login-action@v3
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish separate version 2 image
+        id: publish
+        if: env.PUBLISH == 'true'
+        run: |
+          docker tag godspeed-v2-test "$IMAGE:v2-sha-$GITHUB_SHA"
+          docker push "$IMAGE:v2-sha-$GITHUB_SHA"
+          digest=$(docker image inspect "$IMAGE:v2-sha-$GITHUB_SHA" --format '{{index .RepoDigests 0}}')
+          echo "ref=$digest" >> "$GITHUB_OUTPUT"
+          printf 'Published tested image: `%s`\n' "$digest" >> "$GITHUB_STEP_SUMMARY"
+      - uses: sigstore/cosign-installer@v4.1.2
+        if: env.PUBLISH == 'true'
+      - name: Sign the published image
+        if: env.PUBLISH == 'true'
+        run: cosign sign --yes "${{ steps.publish.outputs.ref }}"
+      - name: Scan the published image
+        if: env.PUBLISH == 'true'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.publish.outputs.ref }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"

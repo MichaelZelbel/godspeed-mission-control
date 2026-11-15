@@ -1,0 +1,307 @@
+#!/bin/bash
+# Give your assistant a phone number.
+#
+# The server setup put your assistant on a machine that never sleeps, and it can send
+# you a brief every morning. What it cannot do is hear you. This script fixes
+# that. It installs Hermes, an agent that reads the same folder your assistant
+# already uses and answers you on Telegram, so you can hand it a job while you
+# are waiting at a bus stop.
+#
+# YOU PROBABLY DO NOT NEED TO RUN THIS ON ITS OWN. The one-line installer in
+# this folder does everything below as part of it:
+#
+#     curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install.sh | bash
+#
+# This script stays for two cases: you already built the server by hand and only
+# want the Hermes half, or something broke and you want to run just this part
+# again. It is the same steps, in the same order.
+#
+# Run it as the `ai` user made when the server was set up, never as root:
+#
+#     bash install-hermes.sh
+#
+# It is safe to run twice. Nothing here is destructive, and every step says what
+# it is doing before it does it.
+
+set -uo pipefail
+
+GODSPEED="${GODSPEED:-$HOME/godspeed}"
+BRAIN="$GODSPEED/AGENTS.md"
+
+# Hermes reads a profile file up to this many characters and no further.
+CEILING=20000
+SAFE=19000
+
+# --- The shared install code, pinned -----------------------------------------
+# The same primitives the mission control installer uses, fetched from an immutable
+# tag. They carry the behaviour this script must not re-learn the hard way:
+# terminal.cwd is the only lever that moves the agent, a failed one-shot still
+# exits 0, and `hermes config set` replaces a list.
+LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/v2.18/lib.sh"
+# The Docker image carries its own copy at the same pin (KB_BOOTSTRAP_DIR), so an image
+# runs exactly the code it was built and tested with.
+if [ -n "${KB_BOOTSTRAP_DIR:-}" ] && [ -s "$KB_BOOTSTRAP_DIR/lib.sh" ]; then
+  LIB="$(cat "$KB_BOOTSTRAP_DIR/lib.sh")"
+elif ! LIB="$(curl -fsSL "$LIB_URL")" || [ -z "$LIB" ]; then
+  printf '\n   STOPPED: could not download the shared install code from\n   %s\n   Check the machine has internet, then run this again.\n\n' "$LIB_URL" >&2
+  exit 1
+fi
+eval "$LIB"
+unset LIB
+
+# This script's own voice wins over the library's, so these are defined AFTER
+# the library loads and the kb_* functions pick them up when they speak.
+say()  { printf '\n== %s\n' "$1"; }
+ok()   { printf '   ok: %s\n' "$1"; }
+warn() { printf '   ATTENTION: %s\n' "$1"; }
+die()  { printf '\n   STOPPED: %s\n\n' "$1" >&2; exit 1; }
+
+# --------------------------------------------------------------------------
+say "Checking where you are running this"
+
+[ "$(id -u)" -eq 0 ] && die "You are root. The server setup gave your assistant its own
+   account for a reason: the account you log in with can destroy the machine, and
+   your assistant does not need that. Log in as that user and run this again."
+
+[ -d "$GODSPEED" ] || die "No folder at $GODSPEED. That folder is your assistant's memory,
+   the one the server setup put on this machine. Set GODSPEED=/path/to/it and run this again."
+
+ok "running as $(whoami), folder found at $GODSPEED"
+
+# --------------------------------------------------------------------------
+# THE CEILING NOBODY TELLS YOU ABOUT.
+#
+# Hermes puts your AGENTS.md into every single conversation. It reads at least
+# 20,000 characters of it (more with a large-context model; the number moves with
+# the model), and past its limit it keeps the beginning and the end and drops the
+# MIDDLE. Older builds did that silently; 0.20.6 leaves a note in the gap and a
+# warning. Either way your assistant runs with a hole in its own instructions
+# that nobody chose. 20,000 is the floor every build honours, so that is the wall.
+#
+# This is checked first, before anything is installed, because it is the single
+# most expensive thing on this page to learn the hard way.
+say "Checking your instructions still fit"
+
+if [ -f "$BRAIN" ]; then
+  N=$(wc -m < "$BRAIN" | tr -d ' ')
+  if [ "$N" -ge "$CEILING" ]; then
+    die "AGENTS.md is $N characters, over the 20,000 that every Hermes build reads.
+   Past its limit Hermes keeps the beginning and the end of the file and drops the
+   middle, so your assistant would run with a hole in its instructions. Move
+   reference material into its own file, leave a pointer to it, and get this under
+   $SAFE characters."
+  elif [ "$N" -ge "$SAFE" ]; then
+    warn "AGENTS.md is $N characters. It still fits, but it is only $((CEILING - N))
+   from the point where Hermes starts dropping the middle of it without telling
+   anyone. Move something out before you add anything."
+  else
+    ok "AGENTS.md is $N characters, $((SAFE - N)) below the line"
+  fi
+else
+  warn "no AGENTS.md in $GODSPEED yet. Hermes will still run; it just will not know
+   anything about you until you write one."
+fi
+
+# --------------------------------------------------------------------------
+# WHAT THE MACHINE NEEDS BEFORE HERMES WILL GO ON.
+#
+# Hermes brings almost everything with it: it downloads its own Python and its
+# own package tool. Two things it cannot bring are curl and git, because they
+# have to be installed by the administrator of the machine.
+#
+# And here is the part that catches people. The server setup gave your assistant its
+# own account ON PURPOSE, with no power to install software. That is the whole
+# point of that account. So when the Hermes installer notices git is missing and
+# tries `sudo apt install git`, it is refused, exactly as it should be. Nothing
+# is broken. It just means the one apt command belongs to you, in your own
+# admin account, before you run this.
+say "Checking what the machine already has"
+
+# On a normal Ubuntu server all three of these are already there, so this check
+# usually just passes and you never think about it again. It exists because when
+# one of them IS missing the failure is unreadable: the Hermes installer gets
+# most of the way in and then prints "tar (child): xz: Cannot exec", which tells
+# you nothing about what to do. One clear sentence now beats that later.
+MISSING=""
+for tool in curl git xz; do
+  command -v "$tool" >/dev/null 2>&1 || MISSING="$MISSING $tool"
+done
+# xz lives in a package with a different name, which is its own small trap.
+PACKAGES="$(printf '%s' "$MISSING" | sed 's/\bxz\b/xz-utils/')"
+
+if [ -n "$MISSING" ]; then
+  die "this machine is missing:$MISSING
+
+   Your assistant's account is not allowed to install software, which is correct
+   and is why the server setup made it that way. Log out, log back in as the admin
+   account you were given with the machine, and run this one line:
+
+       sudo apt update && sudo apt install -y$PACKAGES
+
+   Then log back in as $(whoami) and run this script again."
+fi
+ok "curl, git and xz are all here"
+
+# --------------------------------------------------------------------------
+say "Installing Hermes"
+
+if command -v hermes >/dev/null 2>&1; then
+  ok "already installed: $(hermes --version 2>&1 | head -1)"
+else
+  curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash \
+    || die "the installer did not finish. Read what it printed above; it is
+   usually a missing build tool, and it names the one it wants."
+fi
+
+# Find it by its real path. On a fresh machine Hermes installs into
+# ~/.local/bin, which your own shell adds to PATH but cron and systemd do NOT.
+# A script that just says `hermes` works when you test it by hand and fails
+# every time at three in the morning. So the full path is resolved once, here,
+# and written into the service below.
+HERMES="$(command -v hermes 2>/dev/null || echo "$HOME/.local/bin/hermes")"
+[ -x "$HERMES" ] || die "Hermes is installed but I cannot find the program.
+   Look for it with:  ls -l ~/.local/bin/hermes"
+ok "found at $HERMES"
+
+# --------------------------------------------------------------------------
+say "Pointing Hermes at your folder"
+
+# terminal.cwd is the ONLY setting the agent's tools obey for their working
+# folder, measured on this kit's own test server. This step used to set
+# `workspace`, which is not a recognised Hermes key: the command succeeded,
+# Hermes warned, the warning went to /dev/null, and the reader was told it
+# worked while Hermes ignored it entirely. kb_point_hermes_at_godspeed sets the
+# real key and then PROVES the folder is readable with a file read once a
+# provider is connected; before the sign-in it says plainly it could not
+# check yet.
+KB_HERMES_BIN="$HERMES"
+export KB_HERMES_BIN
+kb_point_hermes_at_godspeed "$GODSPEED" \
+  || warn "read what it said just above. Do not rely on scheduled jobs finding
+   your files until this is sorted."
+
+# --------------------------------------------------------------------------
+say "Making it start again after a reboot"
+
+# Hermes generates its own service unit, and it is better than the one this
+# script used to write by hand, measured on the test server: it carries
+# HERMES_HOME, PATH and its self-update coordination flag, it pins
+# WorkingDirectory to its own home because a movable folder crash-loops the
+# unit before Python even loads, and it detects and reports lingering itself.
+# The mission control is reached through terminal.cwd, set above, never through the unit.
+# ONE GATEWAY PER MACHINE. The one-line installer's root phase installs the
+# gateway as a SYSTEM service, and a user service beside it is the dual-unit
+# trap: newer Hermes warns "Both user and system gateway services are installed"
+# and `hermes gateway status` reports the user unit, so a stopped user unit hides a
+# running system one. When the system unit is there, this step leaves it alone.
+#
+# IN THE DOCKER IMAGE there is no systemd at all: the image's own supervisor (s6) runs the
+# gateway and restarts it, and `docker compose` brings the container back after a reboot.
+if [ -n "${KB_CONTAINER:-}" ]; then
+  ok "the container's supervisor keeps the gateway running and Docker starts it with the machine; no service to install"
+elif [ -f /etc/systemd/system/hermes-gateway.service ]; then
+  ok "a system service is already in charge of the gateway (installed as root); not adding a user service beside it"
+elif "$HERMES" gateway install --start-on-login --no-start-now; then
+  ok "service installed and enabled; it starts with the machine from now on"
+else
+  warn "could not install the service. Run it by hand and read what it says:
+   $HERMES gateway install --start-on-login"
+fi
+
+# --------------------------------------------------------------------------
+# The one-line installer asks first and hands the answer over in KB_MORNING_BRIEF;
+# run by hand, this script keeps its old behaviour and schedules the job.
+if [ "${KB_MORNING_BRIEF:-yes}" = "no" ]; then
+  say "The morning brief"
+  ok "morning brief: not set up, as you asked. When you want one, run the install line again and answer yes."
+else
+say "Scheduling the morning brief"
+
+# This replaces the old brief.sh and its crontab line. The job runs inside
+# your folder, because --workdir is the one thing that injects AGENTS.md into
+# a scheduled run; Hermes delivers the reply to Telegram itself, chunking
+# included; and a morning that fails lands in `hermes cron incidents` instead
+# of looking like a quiet one. The job is created now and starts firing the
+# moment the gateway below is on; a slot the gateway was down for runs once, late.
+# THE CHECKS RUN IN THE JOB, NOT ONLY IN THE RECIPE (2026-09-24). A recipe a reader wrote
+# before mc-judge-brief existed never calls it, so the job itself runs both: mc-check-brief
+# refuses a path, a repeat of an earlier brief and a text to send without quotes; mc-judge-brief
+# asks your assistant, in a clean session, whether a stranger would understand and like every
+# line you are handed to post, and cuts what fails. The author's own brief repeated old news and
+# offered lines that would have backfired until exactly these two ran on every morning.
+BRIEF_PROMPT="Run the recipe in skills/morning-brief/SKILL.md; on an older godspeed it lives at .claude/skills/morning-brief/SKILL.md. It writes today's brief into brief/. Then run mc-check-brief on that file and fix whatever it refuses, and run mc-judge-brief on it: it removes every line to post that fails its judge, and nothing it removed goes back in. When it is done, commit and push this folder, then reply with the brief's full text exactly as the file now holds it. If the recipe is missing or the brief cannot be written, say exactly that instead of staying quiet: a broken morning must never look like a quiet one."
+
+# ONE LINE ABOUT THE WORLD (2026-10-02), only when the reader said yes. It is added AFTER both
+# checks, by a program, so no recipe, check or judge ever rewords it: Observed State's author
+# allowed the line on the condition that it counts and names and is never weighed into a score.
+# mc-check-brief would also refuse its link as "already sent" from the second morning on, which
+# is the other reason it comes last. Unset (a re-run with no terminal, the image's upgrade)
+# keeps what the brief job has now.
+if [ -z "${KB_OBSERVED_STATE:-}" ]; then
+  KB_OBSERVED_STATE=no
+  for d in "${HERMES_HOME:-}" "$HOME/.hermes"; do
+    [ -n "$d" ] && [ -f "$d/cron/jobs.json" ] && grep -q "mc-observed-state" "$d/cron/jobs.json" 2>/dev/null && { KB_OBSERVED_STATE=yes; break; }
+  done
+fi
+if [ "$KB_OBSERVED_STATE" = "yes" ]; then
+  BRIEF_PROMPT="$BRIEF_PROMPT Last, after both checks and before you commit, run mc-observed-state --append on today's brief file: it adds one line about the world at the very end, written by the program. Never reword, shorten, move or remove that line, and never add a score, rating or ranking to it; copy it into your reply exactly as the file holds it, link included."
+fi
+kb_cron_job "$GODSPEED" "morning-brief" "0 6 * * *" "$BRIEF_PROMPT" "telegram" || true
+# An existing job keeps whatever prompt it was created with, so it is brought up to date here.
+BRIEF_JOB="$("$HERMES" cron list 2>/dev/null | awk '/^[[:space:]]*[0-9a-f]{8,}([[:space:]]|$)/ {id=$1} /Name:[[:space:]]*morning-brief[[:space:]]*$/ {print id; exit}')"
+if [ -n "$BRIEF_JOB" ] && "$HERMES" cron edit "$BRIEF_JOB" --prompt "$BRIEF_PROMPT" >/dev/null 2>&1; then
+  ok "morning brief: it runs its two checks before it reaches you"
+fi
+if [ "$KB_OBSERVED_STATE" = "yes" ]; then
+  ok "morning brief: it ends with one line about the world from Observed State (observedstate.com)"
+fi
+
+# YOUR ASSISTANT KNOWS WHAT IT SENT YOU (2026-09-24). Without this, the brief arrives on Telegram
+# but never enters the conversation you reply into, and "what did item 3 mean?" meets an
+# assistant that has not seen item 3. The author's own bot could not answer exactly that. With it,
+# Hermes writes each delivered brief into your chat, and opens one if none is open.
+if "$HERMES" config set cron.mirror_delivery true >/dev/null 2>&1; then
+  ok "chat: the morning brief lands in your conversation too, so you can ask about it"
+else
+  warn "chat: could not switch on cron.mirror_delivery. Run: $HERMES config set cron.mirror_delivery true"
+fi
+fi
+
+# --------------------------------------------------------------------------
+# The one-line installer prints its own closing block, with the system-service
+# restart the by-hand path does not need. Called from there, this script stops here.
+[ -n "${KB_CALLED_FROM_INSTALLER:-}" ] && exit 0
+
+say "What is left, and only you can do it"
+
+cat <<NEXT
+   Two things need answers that are yours, so this script does not guess them.
+
+   1. Sign Hermes in to your ChatGPT subscription with a code (hermes login is
+      deprecated and must not be used), or pick another AI with: $HERMES model
+
+        $HERMES auth add openai-codex --type oauth --no-browser
+
+   2. Connect Telegram, so it can hear you:
+
+        $HERMES gateway setup
+
+      Pick Telegram from the list. It offers two roads: scan a QR code with
+      Telegram on your phone, or make the bot yourself with the account called
+      BotFather (/newbot, two questions, paste the long token it hands you).
+      Then send your new bot any message so it is allowed to answer you.
+
+   When both are done, switch it on and ask IT how it is doing:
+
+        $HERMES gateway start
+        $HERMES gateway status
+
+      Read the status from Hermes itself, not from systemctl: a cleanly
+      stopped gateway shows as "failed" to systemd, so systemctl cannot tell
+      an operator's stop from a crash.
+
+   Then message your bot "what can you do for me?" from your phone. If it
+   answers, your assistant has a phone number, and from the next morning the
+   brief arrives on it by itself.
+
+NEXT

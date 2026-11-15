@@ -1,0 +1,23 @@
+# Keep secrets and machine junk out of your folder's history.
+.env
+.env.local
+.DS_Store
+node_modules/
+__pycache__/
+*.log
+
+# Dev projects: each is its own GitHub repo, excluded from the mission control repo.
+# The folder + README stay tracked so the convention persists; contents don't.
+dev/*
+!dev/README.md
+
+# The prompt harvest's lock: one harvest at a time on one machine. It holds a process id and
+# exists only while a harvest runs; the archive commit must never carry it, or every
+# computer's next archive commit collides on it.
+prompts/archive/.harvest.lock
+
+# What the notebook keeps on this computer only: keys, the search databases, media and backups
+# (.godspeed), the assistant's own undo archive, and the notebook's review copies.
+/.godspeed/
+/assistant-state/history/
+/conflicts/

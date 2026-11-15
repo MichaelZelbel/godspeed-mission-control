@@ -1,0 +1,1046 @@
+{
+ "about": "Notes with known right answers for what processing may put in the Review queue. Every name, number and address is made up. test/suggestion-cases.test.mjs runs each case with the model answers recorded here; scripts/suggestion-cases.mjs runs them with a live model and records new answers. expect: known = suggestions that repeat something the notebook already holds, repeats = suggestions that repeat another queued one, then counts of facts about the owner, timeline entries and new people; a number is exact, {max} or {min} a bound.",
+ "owner": {
+  "name": "Sam Rivera",
+  "aliases": [
+   "Sam Rivera",
+   "Sam"
+  ]
+ },
+ "cases": [
+  {
+   "id": "contact-details-on-file-in-another-format",
+   "says": "A phone number and an email the notebook already has, written another way, are not suggested again.",
+   "kind": "same thing",
+   "filler_facts": 90,
+   "facts": [
+    {
+     "label": "Phone",
+     "attribute": "phone",
+     "value": "+44 7700 900123"
+    },
+    {
+     "label": "Email",
+     "attribute": "email",
+     "value": "sam.rivera@example.org"
+    }
+   ],
+   "versions": [
+    {
+     "title": "New mail signature",
+     "folder": "Admin",
+     "content": "Draft signature for the new mail program:\n\nSam Rivera\nMobile: 07700 900 123\nMail: Sam.Rivera@Example.org\n\nUse it for everything I send from now on."
+    }
+   ],
+   "expect": {
+    "known": 0,
+    "repeats": 0
+   },
+   "answers": {
+    "earlier": [
+     {
+      "metadata": {
+       "type": "task",
+       "topics": [
+        "email signature",
+        "communication"
+       ],
+       "sentiment": "neutral",
+       "summary": "Drafted a new email signature for the new mail program, including mobile and email details, and decided to use it for all future outgoing mail.",
+       "people": [],
+       "action_items": [
+        "Use the new mail signature for everything I send from now on."
+       ],
+       "dates_mentioned": []
+      },
+      "tags": [
+       "email",
+       "signature",
+       "admin",
+       "communication"
+      ],
+      "suggestions": [
+       {
+        "type": "add_claim",
+        "title": "Add Mobile Phone Number",
+        "payload": {
+         "label": "Mobile Phone",
+         "value": "07700 900 123",
+         "attribute": "phone",
+         "category_slug": "contact",
+         "subject": "self"
+        },
+        "evidence_quote": "Mobile: 07700 900 123"
+       },
+       {
+        "type": "add_claim",
+        "title": "Add Full Name",
+        "payload": {
+         "label": "Full Name",
+         "value": "Sam Rivera",
+         "attribute": "full-name",
+         "category_slug": "identity",
+         "subject": "self"
+        },
+        "evidence_quote": "Sam Rivera"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "same-note-saved-three-times",
+   "says": "A note saved three times with small additions brings each thing once; only the new words of an edit bring something new.",
+   "kind": "same thing",
+   "versions": [
+    {
+     "title": "Jordan Lee",
+     "folder": "People",
+     "content": "Met Jordan Lee at the climbing gym on Tuesday. Jordan works as a nurse at Riverside Clinic and lives in Northfield."
+    },
+    {
+     "title": "Jordan Lee",
+     "folder": "People",
+     "content": "Met Jordan Lee at the climbing gym on Tuesday. Jordan works as a nurse at Riverside Clinic and lives in Northfield.\nJordan's birthday is on 4 May."
+    },
+    {
+     "title": "Jordan Lee",
+     "folder": "People",
+     "content": "Met Jordan Lee at the climbing gym on Tuesday. Jordan works as a nurse at Riverside Clinic and lives in Northfield.\nJordan's birthday is on 4 May.\nJordan has a dog called Pepper."
+    }
+   ],
+   "expect": {
+    "known": 0,
+    "repeats": 0
+   },
+   "answers": {
+    "earlier": [
+     {
+      "metadata": {
+       "type": "person_note",
+       "topics": [
+        "new contact",
+        "climbing",
+        "nursing",
+        "northfield"
+       ],
+       "sentiment": "neutral",
+       "summary": "Met Jordan Lee at a climbing gym. Jordan works as a nurse at Riverside Clinic and lives in Northfield.",
+       "people": [
+        "Jordan Lee"
+       ],
+       "action_items": [],
+       "dates_mentioned": [
+        "2026-10-20"
+       ]
+      },
+      "tags": [
+       "jordan lee",
+       "new contact",
+       "climbing",
+       "nurse",
+       "northfield"
+      ],
+      "suggestions": [
+       {
+        "type": "add_contact",
+        "title": "Add new contact Jordan Lee",
+        "payload": {
+         "name": "Jordan Lee",
+         "notes": "Met at the climbing gym. Works as a nurse at Riverside Clinic and lives in Northfield."
+        },
+        "evidence_quote": "Met Jordan Lee at the climbing gym on Tuesday."
+       },
+       {
+        "type": "add_moment",
+        "title": "Met Jordan Lee at climbing gym",
+        "payload": {
+         "title": "Met Jordan Lee at climbing gym",
+         "description": "Met Jordan Lee at the climbing gym.",
+         "happened_at": "2026-10-20",
+         "status": "past_fact",
+         "impact_level": 1,
+         "participants": []
+        },
+        "evidence_quote": "Met Jordan Lee at the climbing gym on Tuesday."
+       },
+       {
+        "type": "add_claim",
+        "title": "Jordan Lee works as a nurse",
+        "payload": {
+         "label": "Jordan Lee works as a nurse",
+         "value": "nurse",
+         "attribute": "job-title",
+         "category_slug": "employment",
+         "subject": "Jordan Lee"
+        },
+        "evidence_quote": "Jordan works as a nurse at Riverside Clinic"
+       },
+       {
+        "type": "add_claim",
+        "title": "Jordan Lee works at Riverside Clinic",
+        "payload": {
+         "label": "Jordan Lee works at Riverside Clinic",
+         "value": "Riverside Clinic",
+         "attribute": "employer",
+         "category_slug": "employment",
+         "subject": "Jordan Lee"
+        },
+        "evidence_quote": "Jordan works as a nurse at Riverside Clinic"
+       },
+       {
+        "type": "add_claim",
+        "title": "Jordan Lee lives in Northfield",
+        "payload": {
+         "label": "Jordan Lee lives in Northfield",
+         "value": "Northfield",
+         "attribute": "lives-in",
+         "category_slug": "location",
+         "subject": "Jordan Lee"
+        },
+        "evidence_quote": "lives in Northfield"
+       }
+      ]
+     },
+     {
+      "metadata": {
+       "type": "person_note",
+       "topics": [
+        "new contact",
+        "climbing",
+        "nurse",
+        "northfield"
+       ],
+       "sentiment": "neutral",
+       "summary": "Met Jordan Lee at a climbing gym. Jordan works as a nurse at Riverside Clinic and lives in Northfield. Jordan's birthday is on May 4th.",
+       "people": [
+        "Jordan Lee"
+       ],
+       "action_items": [],
+       "dates_mentioned": [
+        "2026-10-20",
+        "2027-05-04"
+       ]
+      },
+      "tags": [
+       "jordan lee",
+       "new contact",
+       "climbing",
+       "nurse",
+       "northfield"
+      ],
+      "suggestions": [
+       {
+        "type": "add_contact",
+        "title": "Add new contact: Jordan Lee",
+        "payload": {
+         "name": "Jordan Lee",
+         "notes": "Met at climbing gym, nurse at Riverside Clinic, lives in Northfield, birthday on 4 May."
+        },
+        "evidence_quote": "Met Jordan Lee at the climbing gym on Tuesday."
+       },
+       {
+        "type": "add_moment",
+        "title": "Met Jordan Lee at climbing gym",
+        "payload": {
+         "title": "Met Jordan Lee at climbing gym",
+         "description": "Met Jordan Lee at the climbing gym.",
+         "happened_at": "2026-10-20",
+         "status": "past_fact",
+         "impact_level": 2,
+         "participants": [
+          "Jordan Lee"
+         ]
+        },
+        "evidence_quote": "Met Jordan Lee at the climbing gym on Tuesday."
+       }
+      ]
+     },
+     {
+      "metadata": {
+       "type": "person_note",
+       "topics": [
+        "new contact",
+        "climbing",
+        "nursing",
+        "Northfield",
+        "birthday",
+        "pets"
+       ],
+       "sentiment": "neutral",
+       "summary": "This note details information about a new contact named Jordan Lee, including their profession as a nurse at Riverside Clinic, residence in Northfield, birthday on May 4th, and pet dog named Pepper. The author met Jordan at a climbing gym on a Tuesday.",
+       "people": [
+        "Jordan Lee"
+       ],
+       "action_items": [],
+       "dates_mentioned": [
+        "Tuesday",
+        "May 4"
+       ]
+      },
+      "tags": [
+       "jordan lee",
+       "new contact",
+       "climbing",
+       "nurse",
+       "northfield"
+      ],
+      "suggestions": [
+       {
+        "type": "add_contact",
+        "title": "Add new contact: Jordan Lee",
+        "payload": {
+         "name": "Jordan Lee",
+         "notes": "Met at the climbing gym. Works as a nurse at Riverside Clinic and lives in Northfield. Birthday is on 4 May. Has a dog called Pepper."
+        },
+        "evidence_quote": "Met Jordan Lee at the climbing gym on Tuesday. Jordan works as a nurse at Riverside Clinic and lives in Northfield.\nJordan's birthday is on 4 May.\nJordan has a dog called Pepper."
+       },
+       {
+        "type": "add_moment",
+        "title": "Met Jordan Lee at climbing gym",
+        "payload": {
+         "title": "Met Jordan Lee at climbing gym",
+         "description": "Met Jordan Lee at the climbing gym.",
+         "happened_at": "2026-10-20",
+         "status": "past_fact",
+         "impact_level": 2,
+         "participants": [
+          "Jordan Lee"
+         ]
+        },
+        "evidence_quote": "Met Jordan Lee at the climbing gym on Tuesday."
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "hotel-booking-confirmation",
+   "says": "A hotel booking confirmation gives no facts about the owner: booking numbers, the hotel and its phone number are details of the booking.",
+   "kind": "meaning",
+   "versions": [
+    {
+     "title": "Booking confirmation Harbour View Hotel",
+     "folder": "Travel",
+     "content": "Your booking is confirmed.\n\nGuest: Sam Rivera\nHotel: Harbour View Hotel, 12 Quay Street, Port Ellis\nCheck-in: 12 November 2026, check-out: 14 November 2026 (2 nights)\nBooking number: 4815162342\nConfirmation code: HVH-77821\nHotel phone: +44 20 7946 0018\nTotal paid: GBP 238.00"
+    }
+   ],
+   "expect": {
+    "facts_about_owner": 0,
+    "known": 0,
+    "repeats": 0
+   },
+   "answers": {
+    "earlier": [
+     {
+      "metadata": {
+       "type": "reference",
+       "topics": [
+        "travel",
+        "hotel booking",
+        "confirmation"
+       ],
+       "sentiment": "neutral",
+       "summary": "This note is a confirmation of a hotel booking for Sam Rivera at the Harbour View Hotel from November 12-14, 2026, including booking details, contact information, and total paid.",
+       "people": [
+        "Sam Rivera"
+       ],
+       "action_items": [],
+       "dates_mentioned": [
+        "2026-11-12",
+        "2026-11-14"
+       ]
+      },
+      "tags": [
+       "travel",
+       "hotel",
+       "booking",
+       "confirmation",
+       "port ellis"
+      ],
+      "suggestions": [
+       {
+        "type": "add_moment",
+        "title": "Hotel stay at Harbour View Hotel",
+        "payload": {
+         "description": "2-night stay at Harbour View Hotel, 12 Quay Street, Port Ellis. Booking number: 4815162342, Confirmation code: HVH-77821. Total paid: GBP 238.00.",
+         "happened_at": "2026-11-12",
+         "status": "future_plan",
+         "impact_level": 2,
+         "participants": [
+          "Sam Rivera"
+         ]
+        },
+        "evidence_quote": "Hotel: Harbour View Hotel, 12 Quay Street, Port Ellis\nCheck-in: 12 November 2026, check-out: 14 November 2026 (2 nights)\nBooking number: 4815162342\nConfirmation code: HVH-77821\nTotal paid: GBP 238.00"
+       },
+       {
+        "type": "add_contact",
+        "title": "Add contact: Sam Rivera",
+        "payload": {
+         "name": "Sam Rivera",
+         "notes": "Guest for Harbour View Hotel booking."
+        },
+        "evidence_quote": "Guest: Sam Rivera"
+       }
+      ]
+     }
+    ],
+    "current": [
+     {
+      "metadata": {
+       "type": "reference",
+       "topics": [
+        "travel",
+        "booking",
+        "hotel"
+       ],
+       "sentiment": "neutral",
+       "summary": "This is a booking confirmation for a stay at the Harbour View Hotel for Sam Rivera from November 12-14, 2026.",
+       "people": [
+        "Sam Rivera"
+       ],
+       "action_items": [],
+       "dates_mentioned": [
+        "2026-11-12",
+        "2026-11-14"
+       ]
+      },
+      "tags": [
+       "travel",
+       "hotel",
+       "booking",
+       "harbour view"
+      ],
+      "suggestions": [
+       {
+        "type": "add_moment",
+        "title": "Stay at Harbour View Hotel",
+        "payload": {
+         "title": "Stay at Harbour View Hotel",
+         "description": "Sam Rivera's booking at Harbour View Hotel in Port Ellis.",
+         "happened_at": "2026-11-12",
+         "status": "future_plan",
+         "impact_level": 2,
+         "participants": [
+          "Sam Rivera"
+         ]
+        },
+        "evidence_quote": "Check-in: 12 November 2026, check-out: 14 November 2026 (2 nights)"
+       },
+       {
+        "type": "add_contact",
+        "title": "Add new contact: Sam Rivera",
+        "payload": {
+         "name": "Sam Rivera",
+         "notes": "Guest name on Harbour View Hotel booking."
+        },
+        "evidence_quote": "Guest: Sam Rivera"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "invoice-from-a-tradesman",
+   "says": "An invoice gives no facts about the owner: its number, amount and what it says about tax are details of one bill.",
+   "kind": "meaning",
+   "versions": [
+    {
+     "title": "Invoice chimney sweeping 2026",
+     "folder": "Documents",
+     "content": "Invoice 2026-118\nFrom: Ben Carter, Chimney and Flue Services, 4 Mill Row, Northfield\nTo: Sam Rivera\n\nSweeping and inspection of one chimney on 2 June 2026.\nLabour: GBP 62.00, materials: GBP 9.50, total: GBP 71.50.\nThe labour part may be claimed as a household service on your tax return.\nPlease pay within 14 days to account 12345678."
+    }
+   ],
+   "expect": {
+    "facts_about_owner": 0,
+    "known": 0,
+    "repeats": 0
+   },
+   "answers": {
+    "earlier": [
+     {
+      "metadata": {
+       "type": "reference",
+       "topics": [
+        "invoice",
+        "chimney sweeping",
+        "household services",
+        "tax return"
+       ],
+       "sentiment": "neutral",
+       "summary": "An invoice from Ben Carter of Chimney and Flue Services to Sam Rivera for sweeping and inspection of one chimney on June 2, 2026, totaling GBP 71.50. The labor portion is eligible for household service tax claims, and payment is due within 14 days to account 12345678.",
+       "people": [
+        "Ben Carter",
+        "Sam Rivera"
+       ],
+       "action_items": [
+        {
+         "description": "Pay invoice 2026-118 (GBP 71.50) to account 12345678",
+         "due_date": "2026-06-16"
+        },
+        {
+         "description": "Claim labour part of chimney sweeping as a household service on tax return",
+         "due_date": null
+        }
+       ],
+       "dates_mentioned": [
+        "2026-06-02",
+        "2026-06-16"
+       ]
+      },
+      "tags": [
+       "invoice",
+       "chimney",
+       "services",
+       "payment",
+       "tax"
+      ],
+      "suggestions": [
+       {
+        "type": "add_contact",
+        "title": "Add contact: Ben Carter",
+        "payload": {
+         "name": "Ben Carter",
+         "notes": "Chimney and Flue Services, 4 Mill Row, Northfield"
+        },
+        "evidence_quote": "From: Ben Carter, Chimney and Flue Services, 4 Mill Row, Northfield"
+       },
+       {
+        "type": "add_contact",
+        "title": "Add contact: Sam Rivera",
+        "payload": {
+         "name": "Sam Rivera",
+         "notes": null
+        },
+        "evidence_quote": "To: Sam Rivera"
+       },
+       {
+        "type": "add_moment",
+        "title": "Chimney sweeping and inspection",
+        "payload": {
+         "title": "Chimney sweeping and inspection",
+         "description": "Sweeping and inspection of one chimney by Ben Carter of Chimney and Flue Services. Total cost GBP 71.50.",
+         "happened_at": "2026-06-02",
+         "status": "past_fact",
+         "impact_level": 1,
+         "participants": [
+          "Sam Rivera",
+          "Ben Carter"
+         ]
+        },
+        "evidence_quote": "Sweeping and inspection of one chimney on 2 June 2026."
+       }
+      ]
+     }
+    ],
+    "current": [
+     {
+      "metadata": {
+       "type": "reference",
+       "topics": [
+        "invoice",
+        "chimney sweeping",
+        "household service",
+        "tax return"
+       ],
+       "sentiment": "neutral",
+       "summary": "This is an invoice for chimney sweeping and inspection services performed on June 2, 2026, by Ben Carter of Chimney and Flue Services for Sam Rivera. The total cost is GBP 71.50, with GBP 62.00 for labour and GBP 9.50 for materials. The labour portion may be claimed as a household service on a tax return, and payment is due within 14 days to account 12345678.",
+       "people": [
+        "Ben Carter",
+        "Sam Rivera"
+       ],
+       "action_items": [
+        "Pay invoice 2026-118 within 14 days to account 12345678",
+        "Consider claiming the labour part of the invoice as a household service on your tax return."
+       ],
+       "dates_mentioned": [
+        "2026-06-02"
+       ]
+      },
+      "tags": [
+       "invoice",
+       "chimney",
+       "sweeping",
+       "tax",
+       "payment"
+      ],
+      "suggestions": [
+       {
+        "type": "add_moment",
+        "title": "Chimney sweeping and inspection",
+        "payload": {
+         "title": "Chimney sweeping and inspection",
+         "description": "Sweeping and inspection of one chimney by Ben Carter, Chimney and Flue Services, for Sam Rivera. Total cost GBP 71.50.",
+         "happened_at": "2026-06-02",
+         "status": "past_fact",
+         "impact_level": 1,
+         "participants": [
+          "Sam Rivera",
+          "Ben Carter"
+         ]
+        },
+        "evidence_quote": "Sweeping and inspection of one chimney on 2 June 2026."
+       },
+       {
+        "type": "add_contact",
+        "title": "Add contact for Ben Carter",
+        "payload": {
+         "name": "Ben Carter",
+         "notes": "Chimney and Flue Services, 4 Mill Row, Northfield"
+        },
+        "evidence_quote": "From: Ben Carter, Chimney and Flue Services, 4 Mill Row, Northfield"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "journal-entry-with-a-life-event",
+   "says": "A journal entry gives its real events on the timeline (signing a lease, the day of the move) and none for the chores around them.",
+   "kind": "meaning",
+   "versions": [
+    {
+     "title": "Journal 14 September 2026",
+     "folder": "Journal",
+     "content": "Monday, 14 September 2026.\nToday we signed the lease for the flat on Mill Lane. We move in on 1 October, and I can finally walk to work.\nOtherwise a normal day: laundry, answered emails, cooked pasta."
+    }
+   ],
+   "expect": {
+    "moments": {
+     "min": 1,
+     "max": 2
+    },
+    "known": 0,
+    "repeats": 0
+   },
+   "answers": {
+    "earlier": [
+     {
+      "metadata": {
+       "type": "journal",
+       "topics": [
+        "housing",
+        "daily life",
+        "moving"
+       ],
+       "sentiment": "positive",
+       "summary": "The user signed a lease for a flat on Mill Lane and will move in on October 1st, allowing them to walk to work. The rest of the day was routine.",
+       "people": [],
+       "action_items": [],
+       "dates_mentioned": [
+        "2026-09-14",
+        "2026-10-01"
+       ]
+      },
+      "tags": [
+       "lease",
+       "moving",
+       "flat",
+       "daily routine",
+       "work"
+      ],
+      "suggestions": [
+       {
+        "type": "add_moment",
+        "title": "Signed lease for flat on Mill Lane",
+        "payload": {
+         "description": "Signed the lease for the flat on Mill Lane. This will allow a walk to work.",
+         "happened_at": "2026-09-14",
+         "status": "past_fact",
+         "impact_level": 3,
+         "participants": []
+        },
+        "evidence_quote": "Today we signed the lease for the flat on Mill Lane."
+       },
+       {
+        "type": "add_moment",
+        "title": "Move into flat on Mill Lane",
+        "payload": {
+         "description": "Move into the flat on Mill Lane. This will allow a walk to work.",
+         "happened_at": "2026-10-01",
+         "status": "future_plan",
+         "impact_level": 3,
+         "participants": []
+        },
+        "evidence_quote": "We move in on 1 October, and I can finally walk to work."
+       },
+       {
+        "type": "add_claim",
+        "title": "New address: Mill Lane",
+        "payload": {
+         "label": "Mill Lane",
+         "value": "Mill Lane",
+         "attribute": "address (one at a time): street and number someone lives at now",
+         "category_slug": "address",
+         "subject": "self"
+        },
+        "evidence_quote": "signed the lease for the flat on Mill Lane"
+       },
+       {
+        "type": "add_moment",
+        "title": "Daily chores",
+        "payload": {
+         "description": "Completed laundry.",
+         "happened_at": "2026-09-14",
+         "status": "past_fact",
+         "impact_level": 1,
+         "participants": []
+        },
+        "evidence_quote": "laundry"
+       },
+       {
+        "type": "add_moment",
+        "title": "Daily correspondence",
+        "payload": {
+         "description": "Answered emails.",
+         "happened_at": "2026-09-14",
+         "status": "past_fact",
+         "impact_level": 1,
+         "participants": []
+        },
+        "evidence_quote": "answered emails"
+       },
+       {
+        "type": "add_moment",
+        "title": "Cooked pasta",
+        "payload": {
+         "description": "Cooked pasta for a meal.",
+         "happened_at": "2026-09-14",
+         "status": "past_fact",
+         "impact_level": 1,
+         "participants": []
+        },
+        "evidence_quote": "cooked pasta"
+       }
+      ]
+     }
+    ],
+    "current": [
+     {
+      "metadata": {
+       "type": "observation",
+       "topics": [
+        "new home",
+        "daily life"
+       ],
+       "sentiment": "positive",
+       "summary": "On September 14, 2026, the lease for a flat on Mill Lane was signed, with a move-in date of October 1st. The new flat will allow for a walk to work. The rest of the day involved routine activities like laundry, emails, and cooking.",
+       "people": [],
+       "action_items": [],
+       "dates_mentioned": [
+        "2026-09-14",
+        "2026-10-01"
+       ]
+      },
+      "tags": [
+       "moving",
+       "new home",
+       "daily life",
+       "apartment"
+      ],
+      "suggestions": [
+       {
+        "type": "add_moment",
+        "title": "Signed lease for new flat",
+        "payload": {
+         "title": "Signed lease for new flat",
+         "description": "Signed the lease for the flat on Mill Lane.",
+         "happened_at": "2026-09-14",
+         "status": "past_fact",
+         "impact_level": 3,
+         "participants": []
+        },
+        "evidence_quote": "Today we signed the lease for the flat on Mill Lane."
+       },
+       {
+        "type": "add_moment",
+        "title": "Move into new flat on Mill Lane",
+        "payload": {
+         "title": "Move into new flat on Mill Lane",
+         "description": "Moving into the new flat on Mill Lane, which will allow me to walk to work.",
+         "happened_at": "2026-10-01",
+         "status": "future_plan",
+         "impact_level": 3,
+         "participants": []
+        },
+        "evidence_quote": "We move in on 1 October, and I can finally walk to work."
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "a-new-person",
+   "says": "A note that introduces someone new suggests that person once.",
+   "kind": "same thing",
+   "versions": [
+    {
+     "title": "Coffee with Priya",
+     "folder": "People",
+     "content": "Had coffee with Priya Natarajan, the new product designer on my team. She grew up in Leeds and plays the cello in an orchestra."
+    }
+   ],
+   "expect": {
+    "people": 1,
+    "known": 0,
+    "repeats": 0
+   },
+   "answers": {
+    "earlier": [
+     {
+      "metadata": {
+       "type": "meeting_note",
+       "topics": [
+        "new team member",
+        "coffee meeting",
+        "personal background",
+        "hobbies"
+       ],
+       "sentiment": "neutral",
+       "summary": "Met Priya Natarajan, the new product designer on the team, for coffee. Learned she grew up in Leeds and plays the cello in an orchestra.",
+       "people": [
+        "Priya Natarajan"
+       ],
+       "action_items": [],
+       "dates_mentioned": []
+      },
+      "tags": [
+       "coffee",
+       "priya natarajan",
+       "new team member",
+       "product designer",
+       "cello"
+      ],
+      "suggestions": [
+       {
+        "type": "add_contact",
+        "title": "Add new contact: Priya Natarajan",
+        "payload": {
+         "name": "Priya Natarajan",
+         "notes": "new product designer on my team"
+        },
+        "evidence_quote": "Had coffee with Priya Natarajan, the new product designer on my team."
+       },
+       {
+        "type": "add_moment",
+        "title": "Had coffee with Priya Natarajan",
+        "payload": {
+         "title": "Had coffee with Priya Natarajan",
+         "description": "Coffee with Priya Natarajan, the new product designer on my team.",
+         "happened_at": "2026-10-23",
+         "status": "past_fact",
+         "impact_level": 1,
+         "participants": [
+          "Priya Natarajan"
+         ]
+        },
+        "evidence_quote": "Had coffee with Priya Natarajan, the new product designer on my team."
+       },
+       {
+        "type": "add_claim",
+        "title": "Priya Natarajan's job title",
+        "payload": {
+         "label": "Priya Natarajan's job title is product designer",
+         "value": "product designer",
+         "attribute": "job-title",
+         "category_slug": "work",
+         "subject": "Priya Natarajan"
+        },
+        "evidence_quote": "She grew up in Leeds and plays the cello in an orchestra."
+       },
+       {
+        "type": "add_claim",
+        "title": "Priya Natarajan grew up in Leeds",
+        "payload": {
+         "label": "Priya Natarajan grew up in Leeds",
+         "value": "Leeds",
+         "attribute": "grew-up-in",
+         "category_slug": "personal",
+         "subject": "Priya Natarajan"
+        },
+        "evidence_quote": "She grew up in Leeds and plays the cello in an orchestra."
+       },
+       {
+        "type": "add_claim",
+        "title": "Priya Natarajan's hobby: plays the cello",
+        "payload": {
+         "label": "Priya Natarajan plays the cello",
+         "value": "plays the cello",
+         "attribute": "hobbies",
+         "category_slug": "personal",
+         "subject": "Priya Natarajan"
+        },
+        "evidence_quote": "She grew up in Leeds and plays the cello in an orchestra."
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "known-person-under-a-nickname",
+   "says": "A person the notebook knows, named by their nickname and surname, is not suggested as a new person.",
+   "kind": "same thing",
+   "people": [
+    {
+     "name": "Robert Smith",
+     "aliases": [
+      "Bob"
+     ]
+    }
+   ],
+   "versions": [
+    {
+     "title": "Lunch",
+     "folder": "Journal",
+     "content": "Lunch with Bob Smith today. Bob Smith is training for the Northfield marathon next spring."
+    }
+   ],
+   "expect": {
+    "people": 0,
+    "known": 0,
+    "repeats": 0
+   },
+   "answers": {
+    "earlier": [
+     {
+      "metadata": {
+       "type": "meeting_note",
+       "topics": [
+        "lunch",
+        "marathon training"
+       ],
+       "sentiment": "neutral",
+       "summary": "Had lunch with Bob Smith, who is training for the Northfield marathon next spring.",
+       "people": [
+        "Bob Smith"
+       ],
+       "action_items": [],
+       "dates_mentioned": [
+        "2026-10-23",
+        "spring 2027"
+       ]
+      },
+      "tags": [
+       "lunch",
+       "marathon",
+       "training",
+       "robert smith"
+      ],
+      "suggestions": [
+       {
+        "type": "add_moment",
+        "title": "Lunch with Bob Smith",
+        "payload": {
+         "title": "Lunch with Bob Smith",
+         "description": "Had lunch with Bob Smith.",
+         "happened_at": "2026-10-23",
+         "status": "past_fact",
+         "impact_level": 1,
+         "participants": [
+          "robert-smith-a7de5dd9"
+         ]
+        },
+        "evidence_quote": "Lunch with Bob Smith today."
+       },
+       {
+        "type": "add_claim",
+        "title": "Robert Smith is training for the Northfield marathon",
+        "payload": {
+         "label": "is training for",
+         "value": "Northfield marathon",
+         "attribute": "event-training-for",
+         "category_slug": "personal-goal",
+         "subject": "robert-smith-a7de5dd9"
+        },
+        "evidence_quote": "Bob Smith is training for the Northfield marathon next spring."
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "moment-already-on-the-timeline",
+   "says": "An event the timeline already has, told again in another note, is not suggested again.",
+   "kind": "same thing",
+   "moments": [
+    {
+     "title": "Moved to Northfield",
+     "happened_at": "2026-03-01"
+    }
+   ],
+   "versions": [
+    {
+     "title": "Looking back at spring",
+     "folder": "Journal",
+     "content": "Looking back: on 1 March 2026 we moved to Northfield, into the house with the red door. It was the best decision of the year."
+    }
+   ],
+   "expect": {
+    "known": 0,
+    "repeats": 0
+   },
+   "answers": {
+    "earlier": [
+     {
+      "metadata": {
+       "type": "observation",
+       "topics": [
+        "moving",
+        "new home",
+        "decision"
+       ],
+       "sentiment": "positive",
+       "summary": "The user moved to Northfield on March 1, 2026, which they consider the best decision of the year.",
+       "people": [],
+       "action_items": [],
+       "dates_mentioned": [
+        "2026-03-01"
+       ]
+      },
+      "tags": [
+       "moving",
+       "northfield",
+       "house",
+       "life change",
+       "reflection"
+      ],
+      "suggestions": [
+       {
+        "type": "add_claim",
+        "title": "Claim: Lives in Northfield",
+        "payload": {
+         "label": "lives in Northfield",
+         "value": "Northfield",
+         "attribute": "lives-in",
+         "category_slug": "contact-info",
+         "subject": "self"
+        },
+        "evidence_quote": "on 1 March 2026 we moved to Northfield"
+       },
+       {
+        "type": "add_moment",
+        "title": "Moved to Northfield",
+        "payload": {
+         "title": "Moved to Northfield",
+         "description": "Moved into a house with a red door in Northfield, considered the best decision of the year.",
+         "happened_at": "2026-03-01",
+         "status": "past_fact",
+         "impact_level": 3,
+         "participants": []
+        },
+        "evidence_quote": "on 1 March 2026 we moved to Northfield, into the house with the red door. It was the best decision of the year."
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}
