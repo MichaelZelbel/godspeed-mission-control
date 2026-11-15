@@ -6,10 +6,12 @@ import path from 'node:path';
 import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
+import {NOTEBOOK_CHAT_FUNCTIONS} from '../core/notebook-chat.mjs';
 import {createService} from '../server/main.mjs';
 import {Telegram} from '../core/telegram.mjs';
 
 const CHAT_SURFACES=['conversation-chat','note-chat','collection-chat'];
+assert.deepEqual(new Set(CHAT_SURFACES),new Set(NOTEBOOK_CHAT_FUNCTIONS),'saved brief cases must cover every notebook chat surface');
 
 const saved='Saved filtered briefing.\n\nNext: exact allowed next step.\n\nCharm Challenge: exact line.';
 const savedWithoutChallenge='Saved filtered briefing.\n\nNext: exact allowed next step.';

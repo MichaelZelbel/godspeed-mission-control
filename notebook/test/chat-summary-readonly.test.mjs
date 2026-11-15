@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {NOTEBOOK_CHAT_FUNCTIONS} from '../core/notebook-chat.mjs';
 import {createService} from '../server/main.mjs';
 
 const CHAT_SURFACES=['conversation-chat','note-chat','collection-chat'];
+assert.deepEqual(new Set(CHAT_SURFACES),new Set(NOTEBOOK_CHAT_FUNCTIONS),'read-only summary cases must cover every notebook chat surface');
 
 // The note, collection and assistant chat screens fold older turns into a
 // rolling summary by sending {mode:'summarize', messages} to their chat
