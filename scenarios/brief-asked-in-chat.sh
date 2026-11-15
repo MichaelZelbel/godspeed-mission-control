@@ -18,8 +18,9 @@
 # WHERE IT ASKS. A new conversation of the chat panel (scenario-lib.sh, chat_panel_new_conversation),
 # the owner's own chat in the notebook, and in the same conversation once more.
 #
-#   GODSPEED_SCENARIO_AI_KEY    the model that writes the brief and answers the owner (without it:
-#                               FAIL), with GODSPEED_SCENARIO_AI_URL and GODSPEED_SCENARIO_AI_MODEL.
+#   GODSPEED_SCENARIO_AI_KEY    the model that writes the brief, with GODSPEED_SCENARIO_AI_URL and
+#                               GODSPEED_SCENARIO_AI_MODEL. Without it, the builder's copy uses a
+#                               loopback stand-in so this public route remains executable.
 #
 #   bash scenarios/brief-asked-in-chat.sh candidate/2.0.0-beta.16
 #   bash scenarios/brief-asked-in-chat.sh --check <folder>
@@ -120,11 +121,26 @@ read_the_notebook() { # <job file> <note file> <repairs file> <count file>
 }
 
 act() {
-  need_the_ai_key "the morning brief and the owner's own chat"
   fresh_evidence
   install_paths
-  install_the_stage_line "$EVIDENCE/.install.log"
   need_node
+  local fixture_pid= fixture_port=
+  if [ -z "${GODSPEED_SCENARIO_AI_KEY:-}" ]; then
+    fixture_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()') ||
+      fail "no free port could be found for the stand-in AI"
+    "$NODE" "$HERE/brief-ai-fixture.mjs" "$fixture_port" 2>"$EVIDENCE/stand-in-ai.log" &
+    fixture_pid=$!
+    trap "kill $fixture_pid 2>/dev/null; wait $fixture_pid 2>/dev/null" EXIT
+    AI_URL="http://127.0.0.1:$fixture_port/v1"
+    AI_MODEL=stand-in
+    GODSPEED_SCENARIO_AI_KEY=stand-in
+    export GODSPEED_SCENARIO_AI_KEY
+    printf 'stand-in AI at %s\n' "$AI_URL" >"$EVIDENCE/ai.txt"
+  else
+    need_the_ai_key "the morning brief and the owner's own chat"
+    printf 'the connected AI (%s)\n' "$AI_MODEL" >"$EVIDENCE/ai.txt"
+  fi
+  install_the_stage_line "$EVIDENCE/.install.log"
   wait_for 180 "the notebook to answer after the install" notebook_answers ||
     fail "the notebook does not answer after the install, so there is no chat to ask"
   read_version "$ROOT"

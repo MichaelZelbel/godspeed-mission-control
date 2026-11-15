@@ -1,0 +1,12 @@
+[
+ {"name":"connect bounded AI","path":"/api/provider","body":{"url":"{{ai_url}}","key":"stand-in","model":"stand-in","routines":false},"expect":{"json":{"connected":true}}},
+ {"name":"set up grounded H-06 goal fact","path":"/api/setup","body":{"goal":"the saved H-06 goal","timezone":"UTC","delivery":"notebook"},"expect":{"body_includes":"configured"}},
+ {"name":"save verifier voice rule","path":"/api/identity/rule","body":{"fields":{"title":"Verifier voice rule","line":"BANNED-WORD: BANNED-H06","group":"never","story":"Verifier-owned voice refusal."}},"expect":{"body_includes":"BANNED-H06","json":{"saved":true}}},
+ {"name":"start Charm Challenge","path":"/api/functions/personal-operation","body":{"type":"charm","action":"start"},"expect":{"body_includes":"Charm Challenge started","json":{"data.ok":true,"data.state.running":true,"data.state.day":1}}},
+ {"name":"save refused source fact for checking","path":"/api/query","body":{"table":"notes","operation":"insert","values":{"id":"source-h06","title":"H-06 source fact","content":"BANNED-H06 sentence refused by the verifier voice rule."}}},
+ {"name":"turn on the real morning briefing","path":"/api/jobs/add","body":{"kind":"morning-brief","interval_ms":86400000},"capture":{"brief_job":"data.id"}},
+ {"name":"run voice filtering and Challenge through the routine","path":"/api/jobs/run","body":{"id":"{{brief_job}}"},"expect":{"body_includes":"results"}},
+ {"name":"observe the routine-produced Challenge note","path":"/api/query","body":{"table":"notes","filters":[["eq","source_app","morning-brief"]]},"capture":{"brief":"data.0.content"},"expect":{"body_includes":"Next: Work on the saved H-06 goal today.","json_excludes":{"data.0.content":"BANNED-H06 sentence refused"}}},
+ {"name":"conversation preserves produced Challenge","path":"/api/functions/conversation-chat","body":{"conversation_id":"notebook:verifier-h06","request_id":"00000000-0000-4000-8000-000000000006","message":"today's brief"},"expect":{"body_includes":"Charm Challenge","body_excludes":"BANNED-H06 sentence refused","json":{"data.reply":"{{brief}}"}}},
+ {"name":"browser preserves produced Challenge","path":"/api/browser-chat","body":{"request_id":"00000000-0000-4000-8000-000000000106","message":"mein Morgenbriefing"},"expect":{"body_includes":"Charm Challenge","body_excludes":"BANNED-H06 sentence refused","json":{"reply":"{{brief}}"}}}
+]

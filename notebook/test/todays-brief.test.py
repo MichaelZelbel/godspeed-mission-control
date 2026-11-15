@@ -51,7 +51,7 @@ class TodaysBrief(unittest.TestCase):
 
     def test_the_asks_in_english_and_german(self):
         for text in ("today's brief", "Today's brief?", "today’s brief", "my brief", "the brief again",
-                     "Show me today's brief", "morning brief please", "brief"):
+                     "Show me today's brief", "morning brief please", "brief", "😀" * 59 + "brief"):
             self.assertTrue(brief.asks_for_brief(text), text)
         for text in ("Heutiges Briefing", "zeig mir das Briefing von heute", "mein Morgenbriefing", "Morgenbriefing bitte"):
             self.assertTrue(brief.asks_for_brief(text), text)
