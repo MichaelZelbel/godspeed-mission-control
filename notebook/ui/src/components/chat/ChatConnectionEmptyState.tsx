@@ -17,7 +17,7 @@ async function chatOptions(){
 
 /** The shared pre-composer state for floating, note, collection, and pop-out chat. */
 export function ChatConnectionEmptyState({ready}:{ready:React.ReactNode}){
-  const options=useQuery({queryKey:['chat-options'],queryFn:chatOptions,refetchInterval:30000});
+  const options=useQuery({queryKey:['chat-options'],queryFn:chatOptions,refetchInterval:5000});
   const state=chatAIState(options.data);
   if(state==='ready')return <>{ready}</>;
   if(state==='checking')return <div className="text-center text-muted-foreground text-sm py-8" role="status">Checking AI connection…</div>;

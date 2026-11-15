@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {cleanup,fireEvent,render,screen} from '@testing-library/react';
+import {act,cleanup,fireEvent,render,screen} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import '@testing-library/jest-dom/vitest';
 import {GlobalAIChatFAB} from './GlobalAIChatFAB';
 import {NoteChatPanel} from '@/components/notes/NoteChatPanel';
 import {CollectionChatPanel} from '@/components/collections/CollectionChatPanel';
+import {ChatConnectionEmptyState} from './ChatConnectionEmptyState';
 
 vi.mock('sonner',()=>({toast:{error:vi.fn(),warning:vi.fn()}}));
 vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:{id:'owner'},session:{user:{id:'owner'}}})}));
@@ -27,7 +28,23 @@ const surfaces=[
 ] as const;
 
 beforeEach(()=>{localStorage.clear();});
-afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+afterEach(()=>{cleanup();vi.unstubAllGlobals();vi.useRealTimers();});
+
+it('refreshes an open chat when AI availability changes',async()=>{
+  vi.useFakeTimers();
+  let options={connected:false,usable:false};
+  vi.stubGlobal('fetch',vi.fn(async()=>response(options)));
+  wrap(<ChatConnectionEmptyState ready={<div>Ready to chat</div>}/>);
+  await vi.waitFor(()=>expect(screen.getByText('No AI connected')).toBeInTheDocument());
+
+  options={connected:true,usable:true};
+  await act(()=>vi.advanceTimersByTimeAsync(5000));
+  expect(screen.getByText('Ready to chat')).toBeInTheDocument();
+
+  options={connected:true,usable:false};
+  await act(()=>vi.advanceTimersByTimeAsync(5000));
+  expect(screen.getByText('Your AI could not be used')).toBeInTheDocument();
+});
 
 for(const [name,show] of surfaces){
   it(`${name} shows setup guidance with no AI`,async()=>{
