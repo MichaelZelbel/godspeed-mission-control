@@ -36,6 +36,30 @@ describe("the saved main AI in Settings", () => {
     "backup-ai": () => [200, { ...none, hermes: false }] as [number, unknown],
   };
 
+  it("explains that an installation without an assistant program has no routines choice", async () => {
+    serve(supportingRoutes);
+    settings();
+    expect(await screen.findByText("This installation runs no daily routines and no assistant chat because no assistant program is installed.")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /daily routines and the chat/ })).toBeNull();
+  });
+
+  it("keeps the routines and chat choice and saves it when assistant routines are available", async () => {
+    const calls = serve({
+      "routine-ai": () => [200, { available: true, provider: "openrouter", model: "x/y", source: "settings", key: true, check: { at: new Date().toISOString(), ok: true } }],
+      "backup-ai": () => [200, none],
+      provider: body => [200, body ? { connected: true, provider: { configured: true, url: body.url, model: body.model, key: true }, routines: { available: true, check: { at: new Date().toISOString(), ok: true } } } : { configured: false, key: false }],
+    });
+    settings();
+    const choice = await screen.findByRole("checkbox", { name: /Use it for the daily routines and the chat too/ });
+    expect(choice).toBeChecked();
+    fireEvent.click(choice);
+    fireEvent.change(screen.getByLabelText(/Model, written/), { target: { value: "fictional/model" } });
+    fireEvent.change(screen.getByLabelText("Key"), { target: { value: "fictional-key" } });
+    fireEvent.click(screen.getByRole("button", { name: "Test and connect" }));
+    await screen.findByText("Connected. The notebook uses it.");
+    expect(calls.find(c => c.route === "provider" && c.body)?.body).toMatchObject({ routines: false });
+  });
+
   it("reopens an Another service connection without exposing its saved key", async () => {
     const saved = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true };
     const calls = serve({ ...supportingRoutes, provider: body => [200, body ? { connected: true, provider: saved, routines: { available: false } } : saved] });
