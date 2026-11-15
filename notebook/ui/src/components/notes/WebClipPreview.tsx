@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, ExternalLink, Globe } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { keptElsewhereMessage, useMediaPresence } from "@/lib/media-presence";
 
 interface WebClipMetadata {
   url?: string | null;
@@ -32,9 +33,11 @@ export function WebClipPreview({ webClip, defaultOpen = false }: Props) {
   const blobUrlRef = useRef<string | null>(null);
 
   const storagePath = webClip.snapshot_storage_path;
+  const { data: presence, isError: presenceFailed } = useMediaPresence(storagePath ? [storagePath] : []);
+  const keptElsewhere = !!storagePath && presence?.[storagePath] === "kept_elsewhere";
 
   useEffect(() => {
-    if (!open || !storagePath || html) return;
+    if (!open || !storagePath || html || (!presenceFailed && presence?.[storagePath] !== "present")) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -96,7 +99,7 @@ export function WebClipPreview({ webClip, defaultOpen = false }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [open, storagePath, html]);
+  }, [open, storagePath, html, presence, presenceFailed]);
 
   // Revoke blob URL on unmount to free memory.
   useEffect(() => {
@@ -146,12 +149,17 @@ export function WebClipPreview({ webClip, defaultOpen = false }: Props) {
 
       {open && (
         <div className="px-4 pb-4">
-          {loading && (
+          {keptElsewhere && (
+            <div role="status" className="h-[120px] flex items-center justify-center text-xs text-muted-foreground bg-background rounded-lg border border-border px-4 text-center">
+              {keptElsewhereMessage}
+            </div>
+          )}
+          {!keptElsewhere && loading && (
             <div className="h-[700px] flex items-center justify-center text-xs text-muted-foreground bg-background rounded-lg border border-border">
               Loading snapshot…
             </div>
           )}
-          {error && (
+          {!keptElsewhere && error && (
             <div className="h-[120px] flex items-center justify-center text-xs text-destructive bg-background rounded-lg border border-border">
               {error}
             </div>

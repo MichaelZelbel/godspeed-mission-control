@@ -4,8 +4,9 @@
 // 13 November 2026 lost 43 files whose notes had travelled. The media root
 // stays as it is; the notebook also keeps a copy of each item of 50 MB or less
 // in notebook/_media/, which sync commits like a page: the file, named by its
-// content hash, and its mapping. Every read looks there first, then in the
-// media root.
+// content hash, and its mapping. Larger items keep only their mapping there,
+// so another computer can explain where their bytes remain. Every read looks
+// there first, then in the media root.
 import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -80,13 +81,12 @@ export function findMedia({mediaRoot,carried},original){
   return {mapping:own||root,file,removed};
 }
 // Keeps a copy of an item in the notebook. Returns the number of files written.
-// Content too large to carry stays on this computer. When an older version at
-// the same path was carried, its mapping is rewritten for the new content
-// without the file: the older copy is then not served in its place, and a
-// computer that still holds the older content does not carry it back, because
-// the hashes differ.
+// Content too large to carry stays on this computer, but its small mapping
+// travels so another computer can explain where the file is. When an older
+// version at the same path was carried, the mapping is rewritten without the
+// file, so the older copy is not served in its place.
 export function keepMedia(carried,mapping,data){
-  if(data.length>CARRY_LIMIT)return readCarried(carried,mapping.path)?writeMapping(carried,mapping):0;
+  if(data.length>CARRY_LIMIT)return writeMapping(carried,mapping);
   const file=carriedFile(carried,mapping);let written=0;
   if(!fs.existsSync(file)){writeWhole(file,data);written++;}
   return written+writeMapping(carried,mapping);
@@ -107,8 +107,8 @@ export function carryMedia({mediaRoot,carried}){
     const root=readJson(path.join(mediaRoot,name));if(!root||typeof root.path!=='string'||!SHA.test(String(root.sha256)))continue;
     const own=readCarried(carried,root.path);
     if(root.removed_at){if(own&&!own.removed_at&&own.sha256===root.sha256)copied+=writeMapping(carried,{...own,removed_at:root.removed_at});continue;}
-    if(own&&(own.removed_at||own.sha256!==root.sha256||fs.existsSync(carriedFile(carried,own))))continue;
-    let file;try{file=path.join(mediaRoot,mediaFileName(root.file));if(fs.statSync(file).size>CARRY_LIMIT)continue;}catch{continue;}
+    if(own&&(own.removed_at||own.sha256!==root.sha256||fs.existsSync(carriedFile(carried,own))||(own.size>CARRY_LIMIT&&own.sha256===root.sha256)))continue;
+    let file;try{file=path.join(mediaRoot,mediaFileName(root.file));fs.statSync(file);}catch{continue;}
     const data=fs.readFileSync(file);if(hash(data)!==root.sha256)continue;
     copied+=keepMedia(carried,own||root,data);
   }
@@ -123,8 +123,27 @@ export function keptHere({mediaRoot,carried}){
     return !own?.removed_at&&!(own&&fs.existsSync(carriedFile(carried,own)));
   }).map(m=>({path:m.path,size:m.size}));
 }
+// The carried mappings whose bytes are intentionally on another computer.
+// Media Library uses this list to show files that have no local analysis row.
+export function keptElsewhere({mediaRoot,carried}){
+  let names=[];try{names=fs.readdirSync(carried).filter(n=>n.endsWith('.mapping.json'));}catch{}
+  return names.map(name=>readJson(path.join(carried,name))).filter(m=>{
+    if(!m||typeof m.path!=='string'||m.removed_at||!(m.size>CARRY_LIMIT)||!SHA.test(String(m.sha256)))return false;
+    const found=findMedia({mediaRoot,carried},m.path);
+    return found&&!found.removed&&!fs.existsSync(found.file);
+  }).map(m=>({path:m.path,size:m.size,contentType:m.contentType||'application/octet-stream'}));
+}
 // The paths whose file this computer cannot serve: kept on another computer,
 // or not here yet. A removed item is not counted.
 export function missingHere(media,paths){
   return [...new Set(paths)].filter(original=>{const found=findMedia(media,original);return !found||(!found.removed&&!fs.existsSync(found.file));});
+}
+export function mediaPresence(media,paths){
+  return Object.fromEntries([...new Set(paths)].map(original=>{
+    const found=findMedia(media,original);
+    if(!found)return [original,'unavailable'];
+    if(found.removed)return [original,'removed'];
+    if(fs.existsSync(found.file))return [original,'present'];
+    return [original,found.mapping.size>CARRY_LIMIT?'kept_elsewhere':'unavailable'];
+  }));
 }

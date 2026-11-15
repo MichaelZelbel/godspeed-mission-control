@@ -656,7 +656,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                   >
                     {msg.role === "assistant" ? (
                       <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <Suspense fallback={<div><p className="whitespace-pre-wrap">{msg.content}</p>{msg.attachments?.map(file=><a key={file.path} className="block text-xs underline mt-2" href={"/api/media/file/"+encodeURIComponent(file.path)} target="_blank" rel="noreferrer">{file.name}</a>)}</div>}>
+                        <Suspense fallback={<p className="whitespace-pre-wrap">{msg.content}</p>}>
                           <ChatMarkdown>{msg.content}</ChatMarkdown>
                         </Suspense>
                       </div>
