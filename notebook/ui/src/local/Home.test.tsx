@@ -131,9 +131,15 @@ describe("the Godspeed card", () => {
     expect((await screen.findByText("Ready to chat")).className).toContain("text-lg");
   });
   it("does not call a provider that refused its key ready", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : { error: "Model choices are unavailable" }), { status: String(url) === "/api/chat/options" ? 500 : 200, headers: { "Content-Type": "application/json" } })));
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url) === "/api/chat/options" ? { connected: true, usable: false, availability: "refused" } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
-    expect(await screen.findByText("AI unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("AI key or sign-in refused")).toBeInTheDocument();
     expect(screen.queryByText("Ready to chat")).toBeNull();
+  });
+  it("distinguishes an unreachable configured AI from refused credentials", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url) === "/api/chat/options" ? { connected: true, usable: false, availability: "unreachable" } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("AI connection unavailable")).toBeInTheDocument();
+    expect(screen.queryByText(/refused/i)).toBeNull();
   });
 });

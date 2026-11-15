@@ -169,7 +169,7 @@ const RETRY_STATUS=new Set([429,502,503,504]);
 export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = [2000,5000] } = {}) {
   if(!url || !key || !model)return null;
   const parsed=new URL(url);if(parsed.protocol!=='https:' && !['127.0.0.1','localhost'].includes(parsed.hostname))throw new Error('Model provider requires HTTPS');
-  let refused=false;
+  let healthFailure='unreachable';
   const run=async input=>{
     const timeoutMs=providerTimeBudget(input),{attachments=[],signal,timeout_ms:ignoredBudget,max_tokens:answerBudget,...textInput}=input;
     const parts=[{type:'text',text:JSON.stringify(textInput)},...attachments.map(a=>a.mime==='application/pdf'?{type:'file',file:{filename:a.name,file_data:'data:'+a.mime+';base64,'+a.data}}:{type:'image_url',image_url:{url:'data:'+a.mime+';base64,'+a.data}})];
@@ -177,21 +177,22 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
     let response;
     for(let attempt=0;;attempt++){
       try{response=await fetch(url,{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:request,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs)});}
-      catch(error){if(error.name==='TimeoutError')throw Error(providerTimeoutMessage(timeoutMs));if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
+      catch(error){healthFailure='unreachable';if(error.name==='TimeoutError')throw Error(providerTimeoutMessage(timeoutMs));if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
       if(response.ok||!RETRY_STATUS.has(response.status)||attempt>=retryWaits.length||signal?.aborted)break;
       await response.arrayBuffer().catch(()=>{});
       await new Promise((resolve,reject)=>{const timer=setTimeout(resolve,retryWaits[attempt]);signal?.addEventListener('abort',()=>{clearTimeout(timer);reject(signal.reason);},{once:true});});
     }
-    if(!response.ok){if([401,403].includes(response.status))refused=true;let reason='';try{const body=await response.json();reason=String(body?.error?.message||body?.message||'').replace(/\s+/g,' ').slice(0,200);}catch{}throw new Error('Model provider failed with HTTP '+response.status+(reason?': '+reason:''));}
+    if(!response.ok){healthFailure=[401,403].includes(response.status)?'refused':'unreachable';let reason='';try{const body=await response.json();reason=String(body?.error?.message||body?.message||'').replace(/\s+/g,' ').slice(0,200);}catch{}throw new Error('Model provider failed with HTTP '+response.status+(reason?': '+reason:''));}
     const result=await response.json(), text=result.choices?.[0]?.message?.content;if(typeof text!=='string')throw new Error('Model provider returned no text');
-    refused=false;
+    healthFailure='unreachable';
     return text;
   };
   // Keep the configured identity available to the picker. Checking uses the same
   // request path as chat, so a refused key or unreachable address cannot look ready.
   return Object.assign(run,{
     options:async()=>({current:model,models:[{id:model,efforts:[]}]}),
-    check:async()=>{await run({kind:'connection-check',contract:'Reply with OK.',max_tokens:8,timeout_ms:15000});}
+    check:async()=>{await run({kind:'connection-check',contract:'Reply with OK.',max_tokens:8,timeout_ms:15000});},
+    health:()=>healthFailure
   });
 }
 export function commandProvider({ command, args = [], cwd, timeoutMs = 120000 } = {}) {

@@ -68,9 +68,11 @@ test('a passing 502, 503, 504 or 429 from the provider is tried again, and other
   calls=0;answers.push([401,{error:{message:'Invalid key'}}]);
   assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]});
   await assert.rejects(provider({kind:'connection-test'}),/HTTP 401: Invalid key/);assert.equal(calls,1,'a wrong key is said at once');
+  assert.equal(provider.health(),'refused');
   assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]},'a refused key does not erase the configured model identity');
   answers.push([200,{choices:[{message:{content:'Connected again.'}}]}]);
   assert.equal(await provider({kind:'connection-test'}),'Connected again.');
+  assert.equal(provider.health(),'unreachable');
   assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]});
  }finally{await new Promise(r=>server.close(r));}
 });

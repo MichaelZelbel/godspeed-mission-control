@@ -42,9 +42,9 @@ it('refreshes an open chat in the background when AI availability changes',async
   await act(()=>vi.advanceTimersByTimeAsync(5000));
   expect(screen.getByText('Ready to chat')).toBeInTheDocument();
 
-  options={connected:true,usable:false};
+  options={connected:true,usable:false,availability:'unreachable'} as typeof options;
   await act(()=>vi.advanceTimersByTimeAsync(5000));
-  expect(screen.getByText('Your AI could not be used')).toBeInTheDocument();
+  expect(screen.getByText('Your AI could not be reached')).toBeInTheDocument();
 });
 
 for(const [name,show] of surfaces){
@@ -52,12 +52,16 @@ for(const [name,show] of surfaces){
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}):response({data:[]})));
     show();expect(await screen.findByText('No AI connected')).toBeInTheDocument();expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
   });
-  it(`${name} replaces ready wording when configured AI is unusable`,async()=>{
-    vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:true,usable:false,current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}):response({data:[]})));
-    show();expect(await screen.findByText('Your AI could not be used')).toBeInTheDocument();expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toBeInTheDocument();
+  it(`${name} explains when the configured AI refuses its key or sign-in`,async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:true,usable:false,availability:'refused',current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}):response({data:[]})));
+    show();expect(await screen.findByText('Your AI key or sign-in was refused')).toBeInTheDocument();expect(screen.queryByText('Your AI could not be reached')).not.toBeInTheDocument();expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toBeInTheDocument();
+  });
+  it(`${name} keeps unreachable AI separate from refused credentials`,async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:true,usable:false,availability:'unreachable',current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}):response({data:[]})));
+    show();expect(await screen.findByText('Your AI could not be reached')).toBeInTheDocument();expect(screen.queryByText(/refused/i)).not.toBeInTheDocument();
   });
   it(`${name} retains its ready empty state with usable AI`,async()=>{
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}):response({data:[]})));
-    show();expect(await screen.findByTestId('composer')).toBeInTheDocument();expect(screen.queryByText('Your AI could not be used')).not.toBeInTheDocument();expect(screen.queryByText('No AI connected')).not.toBeInTheDocument();
+    show();expect(await screen.findByTestId('composer')).toBeInTheDocument();expect(screen.queryByText('Your AI could not be reached')).not.toBeInTheDocument();expect(screen.queryByText('No AI connected')).not.toBeInTheDocument();
   });
 }

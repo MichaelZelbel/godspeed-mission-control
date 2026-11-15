@@ -41,6 +41,18 @@ it('a connected AI keeps its model and effort choices',async()=>{
 });
 
 it.each([
+ ['refused','AI key or sign-in refused'],
+ ['unreachable','AI connection unavailable'],
+] as const)('an unusable AI marked %s does not present its model or effort as active',async(availability,label)=>{
+ answer({connected:true,usable:false,availability,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]});
+ show();
+ const model=screen.getByRole('combobox',{name:'Model'}),effort=screen.getByRole('combobox',{name:'Reasoning effort'});
+ await waitFor(()=>expect(model).toHaveDisplayValue(label));
+ expect(model).toBeDisabled();expect(effort).toBeDisabled();expect(effort).toHaveDisplayValue('Unavailable');
+ expect(screen.queryByRole('option',{name:'fictional-model'})).not.toBeInTheDocument();
+});
+
+it.each([
  ['collection chat at 1280 px','No AI connected',{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
  ['collection chat at 1280 px','claude-sonnet-4-5-20250929',{connected:true,current:'claude-sonnet-4-5-20250929',models:[{id:'claude-sonnet-4-5-20250929',efforts:[]}]}],
  ['collection chat at 1280 px','Model choices unavailable',null],

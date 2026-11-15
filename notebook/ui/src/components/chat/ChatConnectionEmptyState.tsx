@@ -1,12 +1,14 @@
 import {useQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
-type ChatOptions={connected?:boolean;usable?:boolean};
-export type ChatAIState='checking'|'none'|'unusable'|'ready';
+export type ChatAvailability='none'|'ready'|'refused'|'unreachable';
+type ChatOptions={connected?:boolean;usable?:boolean;availability?:ChatAvailability};
+export type ChatAIState='checking'|ChatAvailability;
 
 export function chatAIState(options?:ChatOptions):ChatAIState{
   if(!options)return 'checking';
   if(options.connected===false)return 'none';
-  return options.usable===false?'unusable':'ready';
+  if(options.usable!==false)return 'ready';
+  return options.availability==='refused'?'refused':'unreachable';
 }
 
 async function chatOptions(){
@@ -22,8 +24,8 @@ export function ChatConnectionEmptyState({ready}:{ready:React.ReactNode}){
   if(state==='ready')return <>{ready}</>;
   if(state==='checking')return <div className="text-center text-muted-foreground text-sm py-8" role="status">Checking AI connection…</div>;
   return <div className="text-center text-muted-foreground text-sm py-8 space-y-2" data-chat-ai-state={state}>
-    <p className="font-semibold text-foreground">{state==='none'?'No AI connected':'Your AI could not be used'}</p>
-    <p>{state==='none'?'Connect an AI before you type.':'Check its sign-in, key, or connection before you type.'}</p>
+    <p className="font-semibold text-foreground">{state==='none'?'No AI connected':state==='refused'?'Your AI key or sign-in was refused':'Your AI could not be reached'}</p>
+    <p>{state==='none'?'Connect an AI before you type.':state==='refused'?'Check its key or sign-in before you type.':'Check its connection before you type.'}</p>
     <Link className="underline text-primary" to="/dashboard/settings#connect-ai">Open Settings, Your AI</Link>
   </div>;
 }
