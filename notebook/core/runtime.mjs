@@ -14,6 +14,7 @@ import {currentHealth,healthSafeReply,latestPerDayMetric} from './health-inputs.
 // A chat may take ten minutes; Stop ends it sooner. Until 6 October 2026 it was
 // cut off after two, which long answers over many notes regularly needed.
 export function providerTimeBudget(input){
+  if(input.kind==='connection-check'&&input.timeout_ms===15000)return 15000;
   if(input.kind==='draft-event'&&input.timeout_ms===20000)return 20000;
   if(input.timeout_ms!==undefined&&![600000,300000].includes(input.timeout_ms))throw Error('Choose the supported chat or scheduled AI time budget');
   return input.timeout_ms||600000;
@@ -186,8 +187,12 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
     refused=false;
     return text;
   };
-  run.options=async()=>{if(refused)throw new Error('Model choices are unavailable because the AI account refused its key.');return {current:model,models:[{id:model,efforts:[]}]};};
-  return run;
+  // Keep the configured identity available to the picker. Checking uses the same
+  // request path as chat, so a refused key or unreachable address cannot look ready.
+  return Object.assign(run,{
+    options:async()=>({current:model,models:[{id:model,efforts:[]}]}),
+    check:async()=>{await run({kind:'connection-check',contract:'Reply with OK.',max_tokens:8,timeout_ms:15000});}
+  });
 }
 export function commandProvider({ command, args = [], cwd, timeoutMs = 120000 } = {}) {
   if(!command)return null;

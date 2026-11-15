@@ -49,6 +49,7 @@ import {
 const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 
 import ChatComposer, {type ChatFile} from "./ChatComposer";
+import {ChatConnectionEmptyState} from "./ChatConnectionEmptyState";
 import { useChatEntryInView } from "./chat-entry";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { personLabel } from "@/components/timeline/people";
@@ -630,13 +631,13 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
               )}
             >
               {state.messages.length === 0 && (
-                <div className={cn("text-center text-muted-foreground text-sm",embedded&&isMobile?"py-2 space-y-2":"py-12 space-y-3")}>
+                <ChatConnectionEmptyState ready={<div className={cn("text-center text-muted-foreground text-sm",embedded&&isMobile?"py-2 space-y-2":"py-12 space-y-3")}>
                   {!(embedded&&isMobile)&&<Bot className="h-8 w-8 mx-auto opacity-40" />}
                   <h2 className={cn("font-semibold text-foreground",embedded&&isMobile?"text-base":"text-xl")}>{embedded&&isMobile?(pageChat?'Ask about this page':'Ask about this note'):'What would you like to work on?'}</h2><p>{emptyText}</p>
                   {!(embedded&&isMobile)&&<p className="text-[10px]">
                     Attach a document or image, or ask about a note. Your conversations are saved here.
                   </p>}
-                </div>
+                </div>}/>
               )}
 
               {state.messages.map((msg, i) => (
