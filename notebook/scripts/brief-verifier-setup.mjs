@@ -8,6 +8,16 @@ const logFile=process.argv[4];
 if(!planFile||!logFile||!['127.0.0.1','localhost','::1'].includes(base.hostname))throw Error(usage);
 const steps=JSON.parse(fs.readFileSync(planFile,'utf8'));
 if(!Array.isArray(steps)||!steps.length)throw Error('the setup plan must be a non-empty JSON array');
+const saved={};
+const at=(value,field)=>String(field||'').split('.').filter(Boolean).reduce((current,key)=>current?.[key],value);
+const fill=value=>{
+ if(Array.isArray(value))return value.map(fill);
+ if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,fill(item)]));
+ if(typeof value!=='string')return value;
+ const exact=value.match(/^\{\{([^}]+)\}\}$/);
+ if(exact){const found=at(saved,exact[1]);if(found===undefined)throw Error(`setup value ${exact[1]} was not captured`);return found;}
+ return value.replace(/\{\{([^}]+)\}\}/g,(_,field)=>{const found=at(saved,field);if(found===undefined)throw Error(`setup value ${field} was not captured`);return String(found);});
+};
 
 for(const [index,step] of steps.entries()){
  if(!step||typeof step!=='object'||typeof step.path!=='string'||!step.path.startsWith('/api/'))throw Error(`setup step ${index+1} must name an /api/ path`);
@@ -15,9 +25,14 @@ for(const [index,step] of steps.entries()){
  const response=await fetch(new URL(step.path,base),{
   method,
   headers:{'content-type':'application/json'},
-  ...(method==='GET'||method==='HEAD'?{}:{body:JSON.stringify(step.body??{})}),
+  ...(method==='GET'||method==='HEAD'?{}:{body:JSON.stringify(fill(step.body??{}))}),
  });
  const text=await response.text();
  fs.appendFileSync(logFile,JSON.stringify({step:index+1,name:step.name||'',method,path:step.path,status:response.status,body:text})+'\n');
- if(!response.ok)throw Error(`setup step ${index+1} returned HTTP ${response.status}`);
+ const expected=step.expect?.status==null?null:Number(step.expect.status);
+ if(expected==null?!response.ok:response.status!==expected)throw Error(`setup step ${index+1} returned HTTP ${response.status}${expected==null?'':`, expected ${expected}`}`);
+ if(step.expect?.body_includes&&!text.includes(String(step.expect.body_includes)))throw Error(`setup step ${index+1} response did not include the expected text`);
+ let parsed=null;if(step.capture||step.expect?.json){try{parsed=JSON.parse(text);}catch{throw Error(`setup step ${index+1} returned no JSON to inspect`);}}
+ for(const [name,field] of Object.entries(step.capture||{})){const value=at(parsed,field);if(value===undefined)throw Error(`setup step ${index+1} could not capture ${field}`);saved[name]=value;}
+ for(const [field,want] of Object.entries(step.expect?.json||{}))if(JSON.stringify(at(parsed,field))!==JSON.stringify(fill(want)))throw Error(`setup step ${index+1} response did not match ${field}`);
 }

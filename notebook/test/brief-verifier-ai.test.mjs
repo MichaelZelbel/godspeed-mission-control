@@ -13,8 +13,11 @@ let child,folder,port;
 before(async()=>{
  folder=await mkdtemp(path.join(tmpdir(),'brief-verifier-ai-'));
  fs.writeFileSync(path.join(folder,'plan.json'),JSON.stringify({
-  'morning-brief':['first prepared draft','second prepared draft'],
-  'brief-verification':{passed:false,reason:'prepared refusal',rejection_scope:'source',rejected_source_ids:['lead-1']},
+  responses:[
+   {name:'first draft',match:{kind:'morning-brief',phase:'write'},reply:'first prepared draft'},
+   {name:'rewritten draft',match:{kind:'morning-brief',phase:'one-rewrite'},reply:'second prepared draft',times:2},
+   {name:'source refusal',match:{kind:'brief-verification',check:'source-facts'},reply:{passed:false,reason:'prepared refusal',rejection_scope:'source',rejected_source_ids:['lead-1']}},
+  ],
  }));
  const listener=await new Promise((resolve,reject)=>{
   const net=import('node:net');
@@ -26,22 +29,24 @@ before(async()=>{
 });
 after(()=>child?.kill());
 
-const ask=async kind=>{
- const response=await fetch(`http://127.0.0.1:${port}/v1/chat/completions`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:JSON.stringify({kind})}]})});
+const ask=async input=>{
+ const response=await fetch(`http://127.0.0.1:${port}/v1/chat/completions`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:JSON.stringify(input)}]})});
  assert.equal(response.status,200);
  return (await response.json()).choices[0].message.content;
 };
 
-test('serves verifier-owned drafts in order and repeats the final reply',async()=>{
- assert.equal(await ask('morning-brief'),'first prepared draft');
- assert.equal(await ask('morning-brief'),'second prepared draft');
- assert.equal(await ask('morning-brief'),'second prepared draft');
+test('matches verifier-owned replies to phases and limits how often each may be used',async()=>{
+ assert.equal(await ask({kind:'morning-brief',phase:'write'}),'first prepared draft');
+ assert.equal(await ask({kind:'morning-brief',phase:'one-rewrite'}),'second prepared draft');
+ assert.equal(await ask({kind:'morning-brief',phase:'one-rewrite'}),'second prepared draft');
+ const response=await fetch(`http://127.0.0.1:${port}/v1/chat/completions`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:JSON.stringify({kind:'morning-brief',phase:'one-rewrite'})}]})});
+ assert.equal(response.status,500);
 });
 
 test('serves structured verification replies and records request kinds',async()=>{
- assert.deepEqual(JSON.parse(await ask('brief-verification')),{
+ assert.deepEqual(JSON.parse(await ask({kind:'brief-verification',check:'source-facts'})),{
   passed:false,reason:'prepared refusal',rejection_scope:'source',rejected_source_ids:['lead-1'],
  });
  const records=fs.readFileSync(path.join(folder,'requests.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
- assert.deepEqual(records.map(record=>record.kind),['morning-brief','morning-brief','morning-brief','brief-verification']);
+ assert.deepEqual(records.filter(record=>record.matched).map(record=>record.matched),['first draft','rewritten draft','rewritten draft','source refusal']);
 });

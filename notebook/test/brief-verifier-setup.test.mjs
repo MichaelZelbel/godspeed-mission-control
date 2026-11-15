@@ -15,20 +15,24 @@ test('runs verifier-owned setup only through loopback public API routes',async()
  const server=http.createServer((request,response)=>{
   let body='';request.setEncoding('utf8');request.on('data',chunk=>body+=chunk);request.on('end',()=>{
    seen.push({url:request.url,body:JSON.parse(body)});
-   response.writeHead(200,{'content-type':'application/json'});response.end('{"ok":true}');
+   response.writeHead(200,{'content-type':'application/json'});response.end(seen.length===1?'{"data":{"id":"prepared-1"}}':'{"ok":true}');
   });
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const folder=await mkdtemp(path.join(tmpdir(),'brief-verifier-setup-'));
  const plan=path.join(folder,'plan.json'),log=path.join(folder,'results.jsonl');
- fs.writeFileSync(plan,JSON.stringify([{name:'prepared note',path:'/api/query',body:{table:'notes'}}]));
+ fs.writeFileSync(plan,JSON.stringify([
+  {name:'prepared note',path:'/api/query',body:{table:'notes'},capture:{note_id:'data.id'},expect:{status:200,json:{'data.id':'prepared-1'}}},
+  {name:'use prepared note',path:'/api/query',body:{id:'{{note_id}}',label:'note {{note_id}}'},expect:{body_includes:'"ok":true'}},
+ ]));
  const child=spawn(process.execPath,[verifierScript,`http://127.0.0.1:${server.address().port}`,plan,log],{stdio:['ignore','ignore','pipe']});
  let stderr='';child.stderr.setEncoding('utf8');child.stderr.on('data',chunk=>stderr+=chunk);
  const status=await new Promise((resolve,reject)=>{child.once('exit',resolve);child.once('error',reject);});
  await new Promise(resolve=>server.close(resolve));
  assert.equal(status,0,stderr);
- assert.deepEqual(seen,[{url:'/api/query',body:{table:'notes'}}]);
- assert.deepEqual(JSON.parse(fs.readFileSync(log,'utf8')),{step:1,name:'prepared note',method:'POST',path:'/api/query',status:200,body:'{"ok":true}'});
+ assert.deepEqual(seen,[{url:'/api/query',body:{table:'notes'}},{url:'/api/query',body:{id:'prepared-1',label:'note prepared-1'}}]);
+ const records=fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse);
+ assert.equal(records.length,2);
 });
 
 test('rejects non-loopback setup targets',()=>{
