@@ -22,7 +22,8 @@ async function optionsFrom(t,provider){
  const {createService}=await import('../server/main.mjs');const service=await createService({root:path.join(root,'workspace'),port:0,provider});
  t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
  const base='http://127.0.0.1:'+service.address.port,status=await (await fetch(base+'/api/status')).json();
- return {status,options:await loadChatOptions({fetcher:(url,init)=>fetch(base+url,init)})};
+ const readOptions=()=>loadChatOptions({fetcher:(url,init)=>fetch(base+url,init)});
+ return {status,options:await readOptions(),readOptions};
 }
 test('with no AI connected the model choices say so rather than naming a connected model',async t=>{
  const {status,options}=await optionsFrom(t);
@@ -37,6 +38,17 @@ test('a configured AI that refuses its check keeps its model identity but is unu
  const provider=Object.assign(async()=>{throw Error('Model provider failed with HTTP 401: secret provider detail');},{options:async()=>({current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}),check:async()=>{throw Error('Model provider failed with HTTP 401: secret provider detail');}});
  const {options}=await optionsFrom(t,provider);
  assert.equal(options.connected,true);assert.equal(options.usable,false);assert.equal(options.current,'fictional-model');assert.doesNotMatch(JSON.stringify(options),/401|secret provider detail/);
+});
+test('AI usability is rechecked every five seconds in both directions',async t=>{
+ let now=100000,usable=true;
+ t.mock.method(Date,'now',()=>now);
+ const provider=Object.assign(async()=>({reply:'ok'}),{check:async()=>{if(!usable)throw Error('Fictional provider refusal');}});
+ const {options,readOptions}=await optionsFrom(t,provider);
+ assert.equal(options.usable,true);
+ usable=false;now+=5000;
+ assert.equal((await readOptions()).usable,false);
+ usable=true;now+=5000;
+ assert.equal((await readOptions()).usable,true);
 });
 test('a refused chat returns plain guidance instead of provider diagnostics',async t=>{
  const provider=async()=>{throw Error('Model provider failed with HTTP 401: secret provider detail');};
