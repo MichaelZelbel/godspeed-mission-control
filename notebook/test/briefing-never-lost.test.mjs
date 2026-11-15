@@ -121,7 +121,7 @@ for(const [name,reason] of [['missing health sentence','No health sentence'],['n
  const result=await run(provider,query,store,'brief-failed-'+name.replaceAll(' ','-'));
  const note=store.get('notes',result.record_id);
  assert.equal(writes,2);assert.equal(result.fallback,true);assert.match(note.content,/Prepare a fictional guide/);
- assert.match(note.content,/Ask Godspeed to work on/);assert.match(note.content,/no fresh health observations/i);
+ assert.match(note.content,/Next: Ask Godspeed to work on Prepare a fictional guide/);assert.match(note.content,/no fresh health observations/i);
  assert.doesNotMatch(note.content,/Private|100 copies/);
  const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');
  assert.match(receipt.rejected_draft,/100 copies/);assert.ok(receipt.reasons.includes(reason));

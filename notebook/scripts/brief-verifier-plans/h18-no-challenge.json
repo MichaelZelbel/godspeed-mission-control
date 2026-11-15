@@ -1,0 +1,12 @@
+[
+ {"name":"connect bounded AI","path":"/api/provider","body":{"url":"{{ai_url}}","key":"stand-in","model":"stand-in","routines":false},"expect":{"json":{"connected":true}}},
+ {"name":"set up grounded H-18 goal fact","path":"/api/setup","body":{"goal":"the saved H-18 goal","timezone":"UTC","delivery":"notebook"},"expect":{"body_includes":"configured"}},
+ {"name":"chat first before creation","path":"/api/functions/conversation-chat","body":{"conversation_id":"notebook:verifier-h18","request_id":"00000000-0000-4000-8000-000000000018","message":"today's brief"},"expect":{"body_excludes":"Charm Challenge","json":{"data.reply":"No saved briefing exists, so this is the first ordinary chat answer."}}},
+ {"name":"repeat chat before creation","path":"/api/functions/conversation-chat","body":{"conversation_id":"notebook:verifier-h18","request_id":"00000000-0000-4000-8000-000000000118","message":"my brief again"},"expect":{"body_excludes":"Charm Challenge","json":{"data.reply":"No saved briefing exists, so this is the repeated ordinary chat answer."}}},
+ {"name":"prove chat-first requests created no briefing","path":"/api/query","body":{"table":"notes","filters":[["eq","source_app","morning-brief"]]},"expect":{"json":{"data":[]}}},
+ {"name":"turn on the later real morning briefing","path":"/api/jobs/add","body":{"kind":"morning-brief","interval_ms":86400000},"capture":{"brief_job":"data.id"}},
+ {"name":"run the later routine","path":"/api/jobs/run","body":{"id":"{{brief_job}}"},"expect":{"body_includes":"results"}},
+ {"name":"observe later routine creation without Challenge","path":"/api/query","body":{"table":"notes","filters":[["eq","source_app","morning-brief"]]},"capture":{"brief":"data.0.content"},"expect":{"body_includes":"Next: Ask Godspeed to work on the saved H-18 goal","body_excludes":"Charm Challenge"}},
+ {"name":"conversation reuses later routine result","path":"/api/functions/conversation-chat","body":{"conversation_id":"notebook:verifier-h18","request_id":"00000000-0000-4000-8000-000000000218","message":"today's brief"},"expect":{"body_excludes":"Charm Challenge","json":{"data.reply":"{{brief}}"}}},
+ {"name":"browser reuses later routine result","path":"/api/browser-chat","body":{"request_id":"00000000-0000-4000-8000-000000000318","message":"my brief again"},"expect":{"body_excludes":"Charm Challenge","json":{"reply":"{{brief}}"}}}
+]
