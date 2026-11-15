@@ -39,7 +39,7 @@ async function open(status: string) {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     const u = String(url);
     if (u.endsWith("/api/media/kept-here")) return new Response(JSON.stringify({ data: [{ path: BIG }] }));
-    if (u.endsWith("/api/media/missing-here")) return new Response(JSON.stringify({ data: [OTHER] }));
+    if (u.endsWith("/api/media/presence")) return new Response(JSON.stringify({ data: { [BIG]: "present", [OTHER]: "kept_elsewhere" } }));
     return new Response(JSON.stringify({ data: {} }));
   }));
   const { default: MediaLibrary } = await import("./MediaLibrary");

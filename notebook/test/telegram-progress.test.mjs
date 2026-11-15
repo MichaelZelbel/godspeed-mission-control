@@ -24,7 +24,7 @@ test('habit reply sends exactly one photo with caption to the authenticated owne
  assert.equal(f.store.get('command_receipts','telegram-101').state,'verified');
 });
 test('a rendering failure and an explicit unsupported-photo rejection each fall back to one text answer',async t=>{
- for(const options of [{renderProgress:async()=>{throw Error('Unavailable');}},{photo:async()=>({ok:false,json:async()=>({ok:false,error_code:400})})}]){
+ for(const options of [{renderProgress:async()=>{throw Error('Unavailable');}},{photo:async()=>({ok:false,json:async()=>({ok:false,error_code:400})})},{photo:async()=>new Response('not json',{status:400})}]){
   const f=fixture(t,options);await f.telegram.tick();await f.telegram.tick();assert.equal(f.calls.filter(c=>c.method==='sendMessage').length,1);assert.equal(f.store.get('command_receipts','telegram-101').state,'verified');
  }
 });
