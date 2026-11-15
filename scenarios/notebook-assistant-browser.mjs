@@ -16,6 +16,7 @@ const chrome=process.env.CHROME_PATH||['/usr/bin/google-chrome','/usr/bin/chromi
 if(!chrome)throw Error('Chromium is not installed at a documented executable name; set CHROME_PATH');
 const profile=path.join(evidence,'.chromium-profile'),port=48764;
 let browser,fixture,ws,browserOut,browserErr;
+let routeError;
 const fixtureRows=[];
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 const waitForBrowserExit=async timeout=>{
@@ -36,7 +37,7 @@ const cdp=(method,params={})=>new Promise((ok,no)=>{const id=++seq;pending.set(i
 const js=async expression=>(await cdp('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true})).result.value;
 const go=async url=>{await cdp('Page.navigate',{url});await pause(1200);};
 const action=async(name,fn)=>{globalThis.phase=name;try{await fn();actions.push({name,ok:true});}catch(e){actions.push({name,ok:false,error:e.message});throw e;}};
-const formValue=label=>js(`(()=>{const l=[...document.querySelectorAll('label')].find(x=>x.textContent.includes(${JSON.stringify(label)}));const e=l&&l.querySelector('input,select');return e&&e.value})()`);
+const formValue=label=>js(`(()=>{const l=[...document.querySelectorAll('label')].find(x=>x.textContent.includes(${JSON.stringify(label)}));const e=l&&(l.htmlFor?document.getElementById(l.htmlFor):l.parentElement?.querySelector('input,select'));return e&&e.value})()`);
 const observeProvider=async name=>write(name,{service:(await formValue('Your AI service'))==='other'?'Another service':'',url:await formValue('Its address'),model:await formValue('Model, written'),key:(await js(`document.body.innerText.includes('leave it empty to keep the saved one')`))===true});
 try{
   browserOut=fs.openSync(path.join(evidence,'browser.stdout.log'),'a');
@@ -58,9 +59,10 @@ try{
   // The exact visible interaction sequence is implemented in the page so the retained action list
   // cannot be produced by direct API writes. input/change/click are the same DOM events a person causes.
   const click=async text=>{const ok=await js(`(()=>{const e=[...document.querySelectorAll('button,a')].find(x=>x.textContent.trim()===${JSON.stringify(text)});if(!e)return false;e.click();return true})()`);if(!ok)throw Error('visible action not found: '+text);await pause(700);};
-  const fill=async(label,value)=>{const ok=await js(`(()=>{const l=[...document.querySelectorAll('label')].find(x=>x.textContent.includes(${JSON.stringify(label)}));const e=l&&l.querySelector('input,select,textarea');if(!e)return false;const d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e),'value');d.set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);if(!ok)throw Error('visible control not found: '+label);};
+  const openMoment=async title=>{const ok=await js(`(()=>{const title=[...document.querySelectorAll('button p')].find(x=>x.textContent.trim()===${JSON.stringify(title)});const button=title?.closest('button');if(!button)return false;button.click();return true})()`);if(!ok)throw Error('visible Timeline moment not found: '+title);await pause(700);};
+  const fill=async(label,value)=>{const ok=await js(`(()=>{const l=[...document.querySelectorAll('label')].find(x=>x.textContent.includes(${JSON.stringify(label)}));const e=l&&(l.htmlFor?document.getElementById(l.htmlFor):l.parentElement?.querySelector('input,select,textarea'));if(!e)return false;const d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e),'value');d.set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);if(!ok)throw Error('visible control not found: '+label);};
   const screenshot=async name=>{const x=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(evidence,'screenshots',name+'.png'),Buffer.from(x.data,'base64'));};
-  const moment=async(name,title,edit)=>{globalThis.momentOperation=edit?'edit':'save';await action(name,async()=>{if(edit){await click(title);await click('Edit Moment');await fill('Title',title+' edited');await click('Save Changes');}else{await click('Add Moment');await fill('Title',title);await click('Create Moment');}await pause(800);});};
+  const moment=async(name,title,edit)=>{globalThis.momentOperation=edit?'edit':'save';await action(name,async()=>{if(edit){await openMoment(title);await click('Edit Moment');await fill('Title',title+' edited');await click('Save Changes');}else{await click('Add Moment');await fill('Title',title);await click('Create Moment');}await pause(800);});};
   await go(base+'/dashboard/timeline');globalThis.phase='without-ai';
   await moment('moment-saved-without-ai','No AI fixture moment',false);
   await moment('moment-edited-without-ai','No AI fixture moment',true);
@@ -75,6 +77,9 @@ try{
   await moment('moment-saved-with-ai','AI fixture moment',false);
   await moment('moment-edited-with-ai','AI fixture moment',true);await screenshot('moments');
   write('moments.json',{'without-ai':{saved:true,edited:true},'with-ai':{saved:true,edited:true}});
+} catch(error) {
+  routeError=error;
+  write('failure.json',{phase:globalThis.phase||'',message:error instanceof Error?error.message:String(error)});
 } finally {
   write('actions.json',actions);write('browser-console.json',consoleRows);write('browser-network.json',network);write('fixture-requests.jsonl',fixtureRows.map(x=>JSON.stringify(x)).join('\n')+'\n');
   if(fixture?.listening)await new Promise(r=>fixture.close(r));
@@ -83,4 +88,8 @@ try{
   if(browserOut!==undefined)fs.closeSync(browserOut);
   if(browserErr!==undefined)fs.closeSync(browserErr);
   fs.rmSync(profile,{recursive:true,force:true});write('cleanup.txt','browser=stopped\nfixture=stopped\n');
+}
+if(routeError){
+  console.error(`FAIL notebook-assistant-browser: ${routeError instanceof Error?routeError.message:String(routeError)}`);
+  process.exitCode=1;
 }

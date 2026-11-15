@@ -30,6 +30,11 @@ test('a fixture bind failure stops the browser it started',async()=>{
     assert.throws(()=>process.kill(browserPid,0),error=>error?.code==='ESRCH');
     assert.equal(fs.existsSync(path.join(evidence,'cleanup.txt')),true,stderr);
     assert.equal(fs.readFileSync(path.join(evidence,'cleanup.txt'),'utf8'),'browser=stopped\nfixture=stopped\n');
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(evidence,'failure.json'),'utf8')),{
+      phase:'',message:'listen EADDRINUSE: address already in use 127.0.0.1:48763'
+    });
+    assert.match(stderr,/^FAIL notebook-assistant-browser: listen EADDRINUSE:/);
+    assert.doesNotMatch(stderr,/notebook-assistant-browser\.mjs:\d+|\n\s+at /);
   } finally {
     await new Promise(resolve=>occupied.close(resolve));
     fs.rmSync(folder,{recursive:true,force:true});
