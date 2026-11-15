@@ -15,6 +15,10 @@ test('the short suggestion budget is accepted only for drafting and aborts nativ
  const original=globalThis.fetch;globalThis.fetch=async(url,options)=>{observed=options.signal;return await new Promise((resolve,reject)=>{options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true});});};
  try{const controller=new AbortController(),call=modelProvider({url:'http://localhost/fixture',key:'fictional',model:'fictional'})({kind:'draft-event',timeout_ms:20000,signal:controller.signal});controller.abort();await assert.rejects(call);assert.equal(observed.aborted,true);}finally{globalThis.fetch=original;}
 });
+test('the short health-check budget is accepted only for connection checks',()=>{
+ assert.equal(providerTimeBudget({kind:'connection-check',timeout_ms:15000}),15000);
+ assert.throws(()=>providerTimeBudget({kind:'conversation-chat',timeout_ms:15000}),/supported/);
+});
 test('the configured model remains visible through the provider wrapper used by the server',async()=>{
  const provider=withBackup(modelProvider({url:'http://localhost/fixture',key:'fictional',model:'configured-super-readable-model'}),()=>null);
  assert.deepEqual(await provider.options(),{current:'configured-super-readable-model',models:[{id:'configured-super-readable-model',efforts:[]}]});
@@ -64,7 +68,7 @@ test('a passing 502, 503, 504 or 429 from the provider is tried again, and other
   calls=0;answers.push([401,{error:{message:'Invalid key'}}]);
   assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]});
   await assert.rejects(provider({kind:'connection-test'}),/HTTP 401: Invalid key/);assert.equal(calls,1,'a wrong key is said at once');
-  await assert.rejects(provider.options(),/refused its key/);
+  assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]},'a refused key does not erase the configured model identity');
   answers.push([200,{choices:[{message:{content:'Connected again.'}}]}]);
   assert.equal(await provider({kind:'connection-test'}),'Connected again.');
   assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]});
