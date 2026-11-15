@@ -288,7 +288,7 @@ export class Domains {
       input={...input,conversation_id:conversationRuntimeId(input)};
       if(!input.message)input={...input,message:input.messages?.filter(m=>m.role==='user').at(-1)?.content||''};
     }
-    if(name==='conversation-chat'&&asksForTodaysBrief(input.message)){
+    if(['conversation-chat','note-chat','collection-chat'].includes(name)&&asksForTodaysBrief(input.message)){
       const saved=savedBriefToday(this.store).note;
       if(saved){
         const reply=String(saved.content||'');
