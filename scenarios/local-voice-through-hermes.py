@@ -1,4 +1,4 @@
-import argparse, importlib, inspect, json, sys
+import argparse, importlib, importlib.util, inspect, json, sys
 
 def fail(words): raise SystemExit("FAIL local-voice: " + words)
 ap=argparse.ArgumentParser();ap.add_argument("--audio",required=True);ap.add_argument("--transcript",required=True);ap.add_argument("--call",required=True);ap.add_argument("--source");a=ap.parse_args()
