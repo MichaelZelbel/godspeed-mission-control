@@ -31,6 +31,17 @@ const fetchWithin=async(url,options={},what='request')=>{
   catch(error){if(error?.name==='AbortError')throw Error(`${what} did not finish within ${deadline/1000} seconds`);throw error;}
   finally{clearTimeout(timer);}
 };
+const fetchJsonWithin=async(url,options={},what='request')=>{
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),deadline);
+  try{
+    const response=await fetch(url,{...options,signal:controller.signal});
+    return {response,body:await response.json()};
+  } catch(error) {
+    if(error?.name==='AbortError')throw Error(`${what} did not finish within ${deadline/1000} seconds`);
+    throw error;
+  } finally {clearTimeout(timer);}
+};
 const waitForBrowserExit=async timeout=>{
   if(browser.exitCode!==null||browser.signalCode!==null)return true;
   return Promise.race([new Promise(r=>browser.once('exit',()=>r(true))),pause(timeout).then(()=>false)]);
@@ -38,6 +49,7 @@ const waitForBrowserExit=async timeout=>{
 const command=(program,args)=>new Promise((ok,no)=>{let out='';const p=spawn(program,args);p.stdout.on('data',x=>out+=x);p.once('error',no);p.once('exit',code=>code===0?ok(out.trim()):no(Error(`${program} ${args.join(' ')} failed`)));});
 const stopBrowser=async()=>{
   if(!browser)return true;
+  if(!Number.isInteger(browser.pid))return true;
   const exists=()=>{try{process.kill(-browser.pid,0);return true;}catch(error){if(error?.code==='ESRCH')return false;throw error;}};
   const signal=kind=>{try{process.kill(-browser.pid,kind);}catch(error){if(error?.code!=='ESRCH')throw error;}};
   const goneWithin=async timeout=>{for(let elapsed=0;elapsed<timeout;elapsed+=50){if(!exists())return true;await pause(50);}return !exists();};
@@ -57,7 +69,8 @@ const observeProvider=async name=>write(name,{service:(await formValue('Your AI 
 const snapshots=[];
 const stateFrom=(text,model)=>/no ai connected/i.test(text+' '+model)?'none':/could not be used|could not be reached|unreachable/i.test(text)?'unreachable':/refused|check Settings, Your AI/i.test(text)?'refused':'connected';
 const pageSocket=async url=>{
-  const target=await fetchWithin(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(url)}`,{method:'PUT'},'Chromium observation-tab request').then(r=>{if(!r.ok)throw Error('Chromium could not open an observation tab');return r.json();});
+  const {response,body:target}=await fetchJsonWithin(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(url)}`,{method:'PUT'},'Chromium observation-tab request');
+  if(!response.ok)throw Error('Chromium could not open an observation tab');
   const socket=new WebSocket(target.webSocketDebuggerUrl);
   try{await within(new Promise((ok,no)=>{socket.onopen=ok;socket.onerror=no}),'Chromium observation-tab connection');}
   catch(error){socket.close();throw error;}
@@ -105,7 +118,7 @@ try{
   fixture=http.createServer((request,response)=>{let body='';request.on('data',x=>body+=x);request.on('end',()=>{const operation=globalThis.momentOperation||'connect',at=globalThis.phase||'';fixtureRows.push({phase:at.includes('without-ai')?'without-ai':at.includes('with-ai')?'with-ai':at,operation:request.url?.includes('chat/completions')?'extract-moment-profile':'provider-check',action:operation});if(globalThis.providerMode==='unreachable'){request.socket.destroy();return;}const refused=globalThis.providerMode==='refused',content=/suggestions/i.test(body)?'{"suggestions":[]}':'Stand-in answer from the maintained notebook journey.';response.writeHead(refused?401:200,{'content-type':'application/json'});response.end(JSON.stringify(refused?{error:{message:'scenario key refused'}}:{id:'fixture',object:'chat.completion',created:1,model:'standin-model-1',choices:[{index:0,message:{role:'assistant',content},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}));});});
   await new Promise((ok,no)=>fixture.once('error',no).listen(48763,'127.0.0.1',ok));
   if(process.env.BROWSER_TEST_SERVICE_CONTROL)await command(process.env.BROWSER_TEST_SERVICE_CONTROL,[]);
-  for(let n=0;n<100;n++){if(browser.exitCode!==null||browser.signalCode!==null)throw Error('Chromium exited before exposing its debugging page');try{const tabs=await fetchWithin(`http://127.0.0.1:${port}/json`,{},'Chromium debugging-page request').then(r=>r.json());if(tabs[0]?.webSocketDebuggerUrl){ws=new WebSocket(tabs[0].webSocketDebuggerUrl);break;}}catch(error){if(/did not finish/.test(error.message))throw error;}await pause(100);}
+  for(let n=0;n<100;n++){if(browser.exitCode!==null||browser.signalCode!==null)throw Error('Chromium exited before exposing its debugging page');try{const {body:tabs}=await fetchJsonWithin(`http://127.0.0.1:${port}/json`,{},'Chromium debugging-page request');if(tabs[0]?.webSocketDebuggerUrl){ws=new WebSocket(tabs[0].webSocketDebuggerUrl);break;}}catch(error){if(/did not finish/.test(error.message))throw error;}await pause(100);}
   if(!ws)throw Error('Chromium did not expose its debugging page');
   try{await within(new Promise((ok,no)=>{ws.onopen=ok;ws.onerror=no}),'Chromium debugging connection');}
   catch(error){ws.close();throw error;}
