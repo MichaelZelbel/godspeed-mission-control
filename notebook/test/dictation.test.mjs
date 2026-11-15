@@ -8,8 +8,9 @@ import {PassThrough} from 'node:stream';
 import {createService} from '../server/main.mjs';
 import {transcribeRecording} from '../core/dictation.mjs';
 
-test('installed dictation bootstraps Hermes before loading its transcription tools',()=>{
+test('installed dictation adds Hermes source before bootstrapping its transcription tools',()=>{
   const script=fs.readFileSync(new URL('../assistant-files/dictate.py',import.meta.url),'utf8');
+  assert.ok(script.indexOf('sys.path.insert(0, sys.argv[1])')<script.indexOf("import hermes_bootstrap"));
   assert.ok(script.indexOf("import hermes_bootstrap")<script.indexOf('from tools.transcription_tools import'));
 });
 
@@ -30,11 +31,13 @@ test('dictation follows a native wrapper descriptor to its source venv',async t=
   };
   assert.deepEqual(await transcribeRecording({verified:true,executable,sourceRoot:source,home:path.join(root,'home')},root,Buffer.from('audio'),'audio/webm',{spawnProcess}),{ok:true,text:'recorded'});
   assert.equal(started.command,python);assert.equal(started.options.cwd,source);
+  assert.equal(started.args[1],source);
+  assert.equal(path.basename(started.args[2]),'recording.webm');
 });
 test('dictation keeps an MP3 recording as MP3 for Hermes',async()=>{
   let filename;
   const spawnProcess=(command,args)=>{
-    filename=args.at(-1);const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();
+    filename=args[2];const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();
     setImmediate(()=>{child.stdout.end('{"ok":true,"text":"Guten Morgen"}\n');child.emit('close',0);});return child;
   };
   assert.deepEqual(await transcribeRecording({verified:true,executable:'/tmp/hermes',home:'/tmp/hermes-home'},'/tmp',Buffer.from('mp3'),'audio/mpeg',{spawnProcess}),{ok:true,text:'Guten Morgen'});
