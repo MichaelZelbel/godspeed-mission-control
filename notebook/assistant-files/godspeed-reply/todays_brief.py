@@ -11,6 +11,7 @@ the one decision every Telegram reply uses (language.py, #505): "Briefing" alone
 person's recent messages decide.
 """
 import importlib.util
+import json
 import os
 import re
 import subprocess
@@ -22,22 +23,10 @@ _spec.loader.exec_module(_language)
 
 READ_SECONDS = 20
 
-# The whole message, without punctuation, case or a polite frame around it.
-ASKS = {
-    "en": ("today's brief", "todays brief", "today brief", "today's briefing", "todays briefing",
-           "today's morning brief", "todays morning brief", "today's morning briefing",
-           "my brief", "my briefing", "the brief", "the brief again", "my brief again",
-           "morning brief", "my morning brief", "the morning brief", "morning briefing",
-           "my morning briefing", "brief", "briefing"),
-    "de": ("heutiges briefing", "das heutige briefing", "briefing von heute", "das briefing von heute",
-           "mein briefing", "das briefing", "morgenbriefing", "mein morgenbriefing", "das morgenbriefing",
-           "heutiges morgenbriefing", "das heutige morgenbriefing", "tagesbriefing", "mein tagesbriefing"),
-}
-FRAMES = {
-    "en": (r"^(?:please\s+)?(?:show|send|give|get)\s+me\s+", r"^(?:what(?:'s| is)|where(?:'s| is))\s+",
-           r"^(?:can|could)\s+(?:i|you)\s+(?:see|have|get|send me|show me)\s+", r"\s+please$"),
-    "de": (r"^(?:bitte\s+)?(?:zeig|schick|gib)\s+mir\s+", r"^(?:was ist|wo ist)\s+", r"\s+bitte$"),
-}
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "brief-requests.json"), encoding="utf-8") as _source:
+    _requests = json.load(_source)
+ASKS = _requests["asks"]
+FRAMES = _requests["frames"]
 NONE_TODAY = {"en": "No morning briefing is saved for today.",
               "de": "Für heute ist kein Morgenbriefing gespeichert."}
 

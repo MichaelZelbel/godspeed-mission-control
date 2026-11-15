@@ -3,6 +3,7 @@ import {momentDraft} from './moment-draft.mjs';
 import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
 import {startCharmJudgement} from './charm-judgement.mjs';
 import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
+import {asksForTodaysBrief,savedBriefToday} from './briefing.mjs';
 
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
 import {draftEvent} from './draft-event.mjs';
@@ -286,6 +287,14 @@ export class Domains {
       if(input.conversation_session===undefined)bindConversationSession(this.store,input);
       input={...input,conversation_id:conversationRuntimeId(input)};
       if(!input.message)input={...input,message:input.messages?.filter(m=>m.role==='user').at(-1)?.content||''};
+    }
+    if(name==='conversation-chat'&&asksForTodaysBrief(input.message)){
+      const saved=savedBriefToday(this.store).note;
+      if(saved){
+        const reply=String(saved.content||'');
+        await this.store.saveAsync('conversation_messages',{role:'assistant',content:reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'morning-brief'},undefined,{signal:input.signal});
+        return {reply};
+      }
     }
     if(name==='conversation-chat'&&chatOf(input.conversation_id)&&!String(input.message||'').startsWith('/')){
       const step=await this.waitingStepTurn(input);

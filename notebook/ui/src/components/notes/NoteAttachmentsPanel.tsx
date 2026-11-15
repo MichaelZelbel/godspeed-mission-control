@@ -16,9 +16,11 @@ import {
   CheckCircle2,
   ChevronDown,
   Paperclip,
+  CloudOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MediaDetailDialog, MediaDetailItem } from "@/components/media/MediaDetailDialog";
+import { keptElsewhereMessage, useMediaPresence } from "@/lib/media-presence";
 
 interface Props {
   noteId: string;
@@ -41,6 +43,8 @@ export function NoteAttachmentsPanel({ noteId }: Props) {
     () => [...new Set(entries.map((entry) => entry.storage_path))].sort().join("\u0000"),
     [entries],
   );
+  const attachmentPaths = useMemo(() => thumbPathKey ? thumbPathKey.split("\u0000") : [], [thumbPathKey]);
+  const { data: presence, isError: presenceFailed } = useMediaPresence(attachmentPaths);
 
   // Group PDF pages by original file
   const groups: GroupedAttachment[] = useMemo(() => {
@@ -74,7 +78,7 @@ export function NoteAttachmentsPanel({ noteId }: Props) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const paths = thumbPathKey ? thumbPathKey.split("\u0000") : [];
+      const paths = attachmentPaths.filter(path => presenceFailed || presence?.[path] === "present");
       const out: Record<string, string> = {};
       await Promise.all(
         paths.map(async (path) => {
@@ -89,7 +93,7 @@ export function NoteAttachmentsPanel({ noteId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [thumbPathKey]);
+  }, [attachmentPaths, presence, presenceFailed]);
 
   if (groups.length === 0) return null;
 
@@ -106,6 +110,7 @@ export function NoteAttachmentsPanel({ noteId }: Props) {
               key={g.entries[0].id}
               group={g}
               thumb={thumbs[g.entries[0].storage_path]}
+              keptElsewhere={presence?.[g.entries[0].storage_path] === "kept_elsewhere"}
               noteId={noteId}
               isPending={reanalyze.isPathPending(g.storage_path)}
               onRetry={() =>
@@ -128,7 +133,7 @@ export function NoteAttachmentsPanel({ noteId }: Props) {
         </div>
       </div>
 
-      <MediaDetailDialog item={openItem} onClose={() => setOpenItem(null)} />
+      <MediaDetailDialog item={openItem} presenceChecked={presenceFailed || (!!openItem && presence?.[openItem.storage_path] !== undefined)} missingHere={!!openItem && presence?.[openItem.storage_path] === "kept_elsewhere"} onClose={() => setOpenItem(null)} />
     </>
   );
 }
@@ -136,13 +141,14 @@ export function NoteAttachmentsPanel({ noteId }: Props) {
 interface RowProps {
   group: GroupedAttachment;
   thumb?: string;
+  keptElsewhere: boolean;
   noteId: string;
   isPending: boolean;
   onRetry: () => void;
   onOpen: () => void;
 }
 
-function AttachmentRow({ group, thumb, isPending, onRetry, onOpen }: RowProps) {
+function AttachmentRow({ group, thumb, keptElsewhere, isPending, onRetry, onOpen }: RowProps) {
   const [open, setOpen] = useState(false);
   const isPdf = group.media_type === "pdf" || group.media_type === "pdf_page";
   const combinedText = group.entries
@@ -162,7 +168,9 @@ function AttachmentRow({ group, thumb, isPending, onRetry, onOpen }: RowProps) {
           className="h-10 w-10 shrink-0 rounded bg-muted flex items-center justify-center overflow-hidden hover:opacity-80"
           title="Open preview"
         >
-          {isPdf ? (
+          {keptElsewhere ? (
+            <CloudOff className="h-4 w-4 text-muted-foreground" />
+          ) : isPdf ? (
             <FileText className="h-4 w-4 text-muted-foreground" />
           ) : thumb ? (
             <img src={thumb} alt="" className="w-full h-full object-cover" />
@@ -180,6 +188,7 @@ function AttachmentRow({ group, thumb, isPending, onRetry, onOpen }: RowProps) {
             {group.entries.length > 1 && <span>{group.entries.length} pages</span>}
             <StatusInline status={isPending ? "processing" : group.status} />
           </div>
+          {keptElsewhere && <p className="text-[10px] text-muted-foreground mt-1">{keptElsewhereMessage}</p>}
         </button>
 
         {/* Actions */}

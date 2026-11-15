@@ -63,7 +63,7 @@ import {showCard as showContextCard,readContext,markContext} from '../core/conte
 import {visibleRows} from '../core/visibility.mjs';
 import {NoteProcessing} from '../core/processing.mjs';
 import {mediaObjectName,mediaFileName} from '../core/media-names.mjs';
-import {carriedRoot,carryMedia,findMedia,keepMedia,keptHere,missingHere,removeCarried} from '../core/media-store.mjs';
+import {CARRY_LIMIT,carriedRoot,carryMedia,findMedia,keepMedia,keptHere,keptElsewhere,mediaPresence,missingHere,removeCarried} from '../core/media-store.mjs';
 import {retireShares} from '../core/shares.mjs';
 import {installFoodTable,foodTableWanted} from '../core/food-table.mjs';
 import {repairTimelineAtStart} from '../core/due-copy.mjs';
@@ -73,7 +73,7 @@ import {recordRunningNotebook} from '../core/running-notebook.mjs';
 import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/hermes-update.mjs';
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
-import {MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
+import {MEDIA_PRESENCE_BATCH_SIZE,MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
 
 // A backup AI is another service than the main AI, in Settings and in /backupai alike: when one
 // service fails, its other models and keys usually fail with it, and Hermes counts the same service
@@ -253,8 +253,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // A file is opened before the reply starts, so a missing one is a 404, and a
   // read that fails halfway ends that one reply. Until 6 October 2026 either
   // stopped the whole server (an 'error' nobody listened for).
-  async function sendFile(res, file, headers) {
-    let handle; try { handle = await fs.promises.open(file, 'r'); } catch { return send(res, 404, { error: 'This file is missing.' }); }
+  async function sendFile(res, file, headers, missing) {
+    let handle; try { handle = await fs.promises.open(file, 'r'); } catch { return missing ? missing() : send(res, 404, { error: 'This file is missing.' }); }
     let size; try { size = (await handle.stat()).size; } catch (error) { await handle.close().catch(() => {}); throw error; }
     res.writeHead(200, { ...headers, 'Content-Length': size });
     pipeline(handle.createReadStream(), res, error => { if (error) res.destroy(); });
@@ -678,10 +678,13 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const original = decodeURIComponent(route.slice('/api/media/file/'.length)), found = findMedia(media, original);
         if(!found)return send(res,404,{error:'Media not found'});
         if(found.removed)return send(res,404,{error:'Media removed'});
-        return sendFile(res, found.file, { 'Content-Type': found.mapping.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
+        const keptElsewhere=()=>{res.writeHead(404,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>File kept on another computer</title><body style="font-family:system-ui,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1rem;line-height:1.5"><h1 style="font-size:1.3rem">This file is kept on the computer where it was added.</h1><p>Open it on that computer, or make the file smaller than 50 MB so it can travel to this one.</p></body></html>');};
+        return sendFile(res, found.file, { 'Content-Type': found.mapping.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }, found.mapping.size>CARRY_LIMIT ? keptElsewhere : null);
       }
       if(route==='/api/media/kept-here'&&req.method==='GET')return send(res,200,{data:keptHere(media)});
-      if(route==='/api/media/missing-here'&&req.method==='POST'){const paths=JSON.parse(await body(req))?.paths;if(!Array.isArray(paths)||paths.length>500||paths.some(p=>typeof p!=='string'))throw new Error('Invalid media paths');return send(res,200,{data:missingHere(media,paths)});}
+      if(route==='/api/media/kept-elsewhere'&&req.method==='GET')return send(res,200,{data:keptElsewhere(media)});
+      if(route==='/api/media/missing-here'&&req.method==='POST'){const paths=JSON.parse(await body(req))?.paths;if(!Array.isArray(paths)||paths.length>MEDIA_PRESENCE_BATCH_SIZE||paths.some(p=>typeof p!=='string'))throw new Error('Invalid media paths');return send(res,200,{data:missingHere(media,paths)});}
+      if(route==='/api/media/presence'&&req.method==='POST'){const paths=JSON.parse(await body(req))?.paths;if(!Array.isArray(paths)||paths.length>MEDIA_PRESENCE_BATCH_SIZE||paths.some(p=>typeof p!=='string'))throw new Error('Invalid media paths');return send(res,200,{data:mediaPresence(media,paths)});}
       if(route==='/api/chat/transcribe'&&req.method==='POST'){
         if(dictationBusy)return send(res,429,{error:'Another recording is being transcribed. Please try again shortly.'});
         dictationBusy=true;
@@ -691,7 +694,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/chat/options'&&req.method==='GET'){
         if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]});
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
-        if(provider?.check&&Date.now()-chatAICheckedAt>30000){chatAICheckedAt=Date.now();try{await provider.check();chatAIUsable=true;}catch(error){chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}}
+        if(provider?.check&&Date.now()-chatAICheckedAt>=5000){chatAICheckedAt=Date.now();try{await provider.check();chatAIUsable=true;}catch(error){chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}}
         return send(res,200,{connected:true,usable:chatAIUsable,...options});
       }
       if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}
