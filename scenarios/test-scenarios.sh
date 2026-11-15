@@ -5986,6 +5986,15 @@ const fs=require('fs'),p=require('path'),d=process.argv[2],w=(n,x)=>fs.writeFile
 const names=['provider-saved','provider-after-navigation','provider-after-reload','notebook-restarted','provider-after-restart','moment-saved-without-ai','moment-edited-without-ai','moment-saved-with-ai','moment-edited-with-ai'];w('actions.json',names.map(name=>({name,ok:true})));
 for(const n of ['provider-navigation.json','provider-reload.json','provider-restart.json'])w(n,{service:'Another service',url:'http://127.0.0.1:48763/v1',model:'fixture-model',key:true});
 w('moments.json',{'without-ai':{saved:true,edited:true},'with-ai':{saved:true,edited:true}});
+const refusal='No AI is connected yet. Connect your AI service in Settings, Your AI, then ask Godspeed again.',snapshots=[],surfaces=['dashboard','global-chat','full-chat','note-chat','collection-chat','popout-chat'];
+const add=(phase,surface,width,state,extra={})=>snapshots.push({phase,surface,width,state,text:state==='none'?'No AI is connected yet':state==='refused'?'The connected AI key was refused; check Settings':state==='unreachable'?'The connected AI could not be reached; check Settings':'AI connected',model:state==='connected'?'standin-model-1':'No AI connected',effort:'Auto',clipped:false,sendEnabled:true,...extra});
+for(const width of [1280,375])for(const surface of surfaces)add('none',surface,width,'none');
+for(const surface of ['global-chat','note-chat','collection-chat','popout-chat'])add('none-sent',surface,1280,'none',{reply:refusal});
+snapshots.push({phase:'none-sent',surface:'http-chat',width:1280,state:'none',reply:refusal,httpAgreement:true});
+for(const phase of ['connected','refused','recovered','unreachable'])for(const surface of surfaces){const state=phase==='recovered'?'connected':phase;add(phase,surface,1280,state,{withoutReload:true,requestObserved:state==='connected',reply:state==='connected'?'stand-in answer':'Plain contained provider failure'});}
+for(const state of ['connected','refused'])for(const width of [1280,375])for(const surface of ['dashboard','global-chat','note-chat','popout-chat'])add(state+'-layout',surface,width,state);
+snapshots.push({phase:'none-http',surface:'http-status',width:1280,state:'none',httpAgreement:true},{phase:'connected-http',surface:'http-status',width:1280,state:'connected',httpAgreement:true});
+w('ai-state-evidence.json',{noAIProviderRequests:0,snapshots});
 w('fixture-requests.jsonl','{"phase":"with-ai","operation":"extract-moment-profile","action":"save"}\n{"phase":"with-ai","operation":"extract-moment-profile","action":"edit"}\n');
 w('browser-console.json',[]);w('browser-network.json',[]);w('restart.txt','old_pid=101 new_pid=202 healthy=yes\n');w('cleanup.txt','browser=stopped\nfixture=stopped\n');
 NODE
@@ -6019,6 +6028,16 @@ copy "$N/good" "$N/malformed-failure"; printf '{"phase":3,"message":"bad"}\n' >"
 refuses 'malformed retained route failure evidence' notebook-assistant-journeys "$N/malformed-failure" 'malformed'
 copy "$N/good" "$N/route-failure"; printf '{"phase":"connected","message":"browser closed"}\n' >"$N/route-failure/failure.json"
 refuses 'a contained route failure instead of a product verdict' notebook-assistant-journeys "$N/route-failure" 'stopped during connected'
+copy "$N/good" "$N/missing-ai-snapshot"; node -e 'let x=require(process.argv[1]);x.snapshots=x.snapshots.filter(v=>!(v.phase==="none"&&v.surface==="note-chat"&&v.width===375));require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/missing-ai-snapshot/ai-state-evidence.json"
+refuses 'a missing chat and width observation' notebook-assistant-journeys "$N/missing-ai-snapshot" 'incomplete or contradicts'
+copy "$N/good" "$N/stale-old-tab"; node -e 'let x=require(process.argv[1]);let v=x.snapshots.find(v=>v.phase==="connected"&&v.surface==="global-chat");v.state="none";require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/stale-old-tab/ai-state-evidence.json"
+refuses 'an old tab that stayed stale after connection' notebook-assistant-journeys "$N/stale-old-tab" 'incomplete or contradicts'
+copy "$N/good" "$N/missing-reply"; node -e 'let x=require(process.argv[1]);delete x.snapshots.find(v=>v.phase==="refused"&&v.surface==="note-chat").reply;require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/missing-reply/ai-state-evidence.json"
+refuses 'a state edge without request and reply evidence' notebook-assistant-journeys "$N/missing-reply" 'incomplete or contradicts'
+copy "$N/good" "$N/clipped-state"; node -e 'let x=require(process.argv[1]);x.snapshots.find(v=>v.phase==="refused-layout"&&v.width===375).clipped=true;require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/clipped-state/ai-state-evidence.json"
+refuses 'a clipped phone-width state label' notebook-assistant-journeys "$N/clipped-state" 'incomplete or contradicts'
+copy "$N/good" "$N/http-disagrees"; node -e 'let x=require(process.argv[1]);x.snapshots.find(v=>v.surface==="http-status"&&v.state==="connected").httpAgreement=false;require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/http-disagrees/ai-state-evidence.json"
+refuses 'direct HTTP and page state disagreement' notebook-assistant-journeys "$N/http-disagrees" 'incomplete or contradicts'
 
 # ================================================================ the night's report
 # report-night.mjs opens, comments on and closes the issues of a failed night; its own tests stand a
