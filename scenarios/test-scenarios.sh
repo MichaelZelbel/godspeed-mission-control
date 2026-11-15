@@ -3074,18 +3074,19 @@ GP=$TMP/github-privacy
 mkdir -p "$GP"
 cat >"$GP/403.mjs" <<'STUB'
 import fs from 'node:fs';
-globalThis.fetch = async url => { fs.appendFileSync(process.env.GP_ASKED, url + '\n');
+globalThis.fetch = async (url, options) => { fs.appendFileSync(process.env.GP_ASKED, `${url}|${new Headers(options?.headers).get('authorization')}\n`);
   return new Response('{"message":"API rate limit exceeded"}', { status: 403, headers: { 'x-ratelimit-limit': '60', 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1763120000' } }); };
 STUB
 cat >"$GP/right.mjs" <<'STUB'
-globalThis.fetch = async url => new Response('{}', { status: String(url).endsWith('/octocat/Hello-World') ? 200 : 404 });
+import fs from 'node:fs';
+globalThis.fetch = async (url, options) => { fs.appendFileSync(process.env.GP_ASKED, `${url}|${new Headers(options?.headers).get('authorization')}\n`); return new Response('{}', { status: String(url).endsWith('/octocat/Hello-World') ? 200 : 404 }); };
 STUB
 cat >"$GP/public-as-private.mjs" <<'STUB'
 import fs from 'node:fs';
-globalThis.fetch = async url => { fs.appendFileSync(process.env.GP_ASKED, url + '\n'); return new Response('{}', { status: 404 }); };
+globalThis.fetch = async (url, options) => { fs.appendFileSync(process.env.GP_ASKED, `${url}|${new Headers(options?.headers).get('authorization')}\n`); return new Response('{}', { status: 404 }); };
 STUB
 gp() { # <stub> <out>: the check against the product in this checkout, GitHub answered by the stub
-  GP_ASKED="$GP/asked-$1" GODSPEED_PRIVACY_WAITS='0 0' NODE_OPTIONS="--import=file://$GP/$1.mjs" \
+  GP_ASKED="$GP/asked-$1" GODSPEED_SCENARIO_GITHUB_TOKEN='scenario-test-token' GODSPEED_PRIVACY_WAITS='0 0' NODE_OPTIONS="--import=file://$GP/$1.mjs" \
     node "$ROOT/scenarios/github-privacy-live.mjs" "$ROOT/notebook/core/sync/git.mjs" >"$2" 2>/dev/null
 }
 if gp 403 "$GP/403.out"; then
@@ -3102,27 +3103,36 @@ elif grep -q '^FAIL .*let a public repository through as private' "$GP/pp.out" &
 else
   bad "github-privacy-live did not fail at once on a public repository taken as private ($(cat "$GP/pp.out"))"
 fi
-if gp right "$GP/right.out" && grep -q '^PASS .*public repository (200).*nobody has (404)' "$GP/right.out"; then
+if gp right "$GP/right.out" && grep -q '^PASS .*public repository (200).*nobody has (404)' "$GP/right.out" &&
+  [ "$(grep -c '|Bearer scenario-test-token$' "$GP/asked-right")" = 2 ]; then
   ok "github-privacy-live passes when GitHub answers 200 for the public repository and 404 for the missing one"
 else
   bad "github-privacy-live did not pass on GitHub's right answers ($(cat "$GP/right.out"))"
+fi
+if GP_ASKED="$GP/asked-missing" GODSPEED_PRIVACY_WAITS='0 0' NODE_OPTIONS="--import=file://$GP/right.mjs" \
+  node "$ROOT/scenarios/github-privacy-live.mjs" "$ROOT/notebook/core/sync/git.mjs" >"$GP/missing.out" 2>/dev/null; then
+  bad "github-privacy-live passed without its scenario credential ($(cat "$GP/missing.out"))"
+elif grep -q '^FAIL GODSPEED_SCENARIO_GITHUB_TOKEN is not set' "$GP/missing.out" && [ ! -e "$GP/asked-missing" ]; then
+  ok "github-privacy-live fails before asking GitHub when its scenario credential is missing"
+else
+  bad "github-privacy-live did not fail before asking GitHub when its scenario credential was missing ($(cat "$GP/missing.out"))"
 fi
 # live_github_privacy keeps the stand-in's answer out of the live check: the Node it starts gets an
 # empty NODE_OPTIONS, and the check's FAIL line is the scenario's FAIL line.
 cat >"$GP/fake-node" <<'FAKE'
 #!/usr/bin/env bash
-printf '%s\n' "${NODE_OPTIONS-unset}" >"$GP_SEEN"
+printf '%s|%s\n' "${NODE_OPTIONS-unset}" "${GODSPEED_SCENARIO_GITHUB_TOKEN-unset}" >"$GP_SEEN"
 echo "FAIL the live GitHub privacy check, asked about a public repository: GitHub answered 403"
 exit 1
 FAKE
 chmod +x "$GP/fake-node"
-GP_LINE=$(GP_SEEN="$GP/seen" SCENARIO=gp-test GODSPEED_SCENARIO_WORK="$GP/work" bash -c '
+GP_LINE=$(GP_SEEN="$GP/seen" SCENARIO=gp-test GODSPEED_SCENARIO_WORK="$GP/work" GODSPEED_SCENARIO_GITHUB_TOKEN='scenario-wrapper-token' bash -c '
   . "$1/scenarios/scenario-lib.sh"; stand_in_answers_privacy; NODE=$2/fake-node
   mkdir -p "$2/root/.godspeed/integrated-runtime"; echo v >"$2/root/.godspeed/integrated-runtime/version"
   live_github_privacy "$2/root" "$2/live.txt"' _ "$ROOT" "$GP" 2>/dev/null)
-if [ "$(cat "$GP/seen" 2>/dev/null)" = '' ] && [ -f "$GP/seen" ] &&
+if [ "$(cat "$GP/seen" 2>/dev/null)" = '|scenario-wrapper-token' ] && [ -f "$GP/seen" ] &&
   [ "$GP_LINE" = "FAIL gp-test: the live GitHub privacy check, asked about a public repository: GitHub answered 403" ]; then
-  ok "live_github_privacy runs the check without the stand-in's answer and fails the scenario with its line"
+  ok "live_github_privacy keeps its credential, runs without the stand-in's answer, and fails the scenario with its line"
 else
   bad "live_github_privacy let the stand-in's answer in or lost the check's FAIL line (NODE_OPTIONS: $(cat "$GP/seen" 2>/dev/null); said: $GP_LINE)"
 fi
