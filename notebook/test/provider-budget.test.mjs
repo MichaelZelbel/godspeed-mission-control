@@ -97,7 +97,8 @@ test('the Hermes health check stops at its 15-second process deadline',async t=>
  const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-health-timeout-'));let call=0;
  const provider=hermesProvider({home,cwd:home,spawnProcess:()=>{const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();if(call++===0)child.stdin.on('data',()=>queueMicrotask(()=>{child.stderr.end('AuthenticationError: token expired\n');child.stdout.end();child.emit('close',1);}));return child;}});
  await assert.rejects(provider.check(),/needs sign-in/);assert.equal(provider.health(),'refused');
- const check=provider.check();t.mock.timers.tick(14999);assert.equal(provider.health(),'unreachable');t.mock.timers.tick(1);
+ const check=provider.check();let rejected=false;check.catch(()=>{rejected=true;});t.mock.timers.tick(14999);assert.equal(provider.health(),'unreachable');t.mock.timers.tick(1);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(rejected,true,'the health check rejects at its 15-second deadline');
  await assert.rejects(check,/ten minutes/);
 });
 
