@@ -92,3 +92,38 @@ export function mergeSuggestion(form, filled, draft, people = []) {
 
   return { form: next, changed, newPeople };
 }
+
+const sameName = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+
+/**
+ * The name the People picker offers to add as a new person for what was
+ * typed into its search, or null when it should offer nothing: the search is
+ * empty, or the name is already someone in People or already waiting to be
+ * added (both compared without case, so "anna" picks the existing "Anna").
+ *
+ * query:    the text in the search box
+ * people:   the known contacts [{ id, name }]
+ * newNames: the names already chosen as new people
+ */
+export function newPersonOffer(query, people = [], newNames = []) {
+  const name = String(query ?? '').trim().replace(/\s+/g, ' ');
+  if (!name) return null;
+  if (people.some((p) => sameName(p.name, name))) return null;
+  if (newNames.some((n) => sameName(n, name))) return null;
+  return name;
+}
+
+/**
+ * The new people a save creates: the ones ticked from a suggestion and the
+ * ones typed into the picker, each name once (without case), in that order.
+ * Saving still looks each one up in People first, so a name that exists
+ * there under another case links that person instead of making a second one.
+ */
+export function newPeopleToCreate(suggested = [], typed = []) {
+  const out = [];
+  for (const raw of [...suggested, ...typed]) {
+    const name = String(raw ?? '').trim();
+    if (name && !out.some((n) => sameName(n, name))) out.push(name);
+  }
+  return out;
+}
