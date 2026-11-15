@@ -107,25 +107,31 @@ owner updates the guide (the factory cannot reach the website repository).
 2. Ask it whether it is healthy.
 3. It answers healthy, with the version in `notebook/package.json`.
 
-## Open questions: decisions nobody has made yet
+## Decision authority
 
-These are undecided, not forbidden. **The factory may propose an answer to any of them**, build
-against it, and record what it assumed; the merge is then held for a human.
+Within this mission and its hard invariants, the factory manager decides ordinary product wording,
+setup, scope and usability choices. It records its rationale in the issue or pull request and
+continues delivery; an ordinary decision is not a reason to hold the merge for a human.
 
-- **Q1** None recorded yet.
+A human decision is required only for:
 
-**Except these, which do stop the factory:**
+- an irreversible or outward action
+- who may act as the person, including sign-in, credentials, keys, tokens and access to connected
+  services such as the Telegram bot
+- migrating, renaming or deleting data in the person's folder
+- a release
+- changes to the website user guide or the book
+- a genuine personal preference that product evidence cannot resolve
 
-- anything about who may act as the person (sign-in, keys, tokens, the Telegram bot's access)
-- anything that migrates, renames or deletes data in the person's folder
+Routine message, briefing and reply wording, and ordinary product usability, are factory decisions,
+not permanently human decisions.
 
 ## Decisions
 
+- 2026-11-14 **Who decides ordinary product choices?** Michael instructed the factory to decide
+  ordinary product wording, setup and scope choices itself, record its rationale and continue
+  delivery. Human gates remain only for irreversible or outward actions, credential or access
+  decisions, data migration, rename or deletion, releases, guide or book changes, and genuine
+  personal preferences.
 - 2026-11-10 **Which models run the factory?** Claude only (Sonnet for small and medium steps, Opus
   for large ones), every step including review and the merge decision.
-
-## What the factory does NOT own: permanently human
-
-- whether a message, briefing or reply sounds right to the person and is worth their time
-- whether a page in the notebook looks right and is understandable without being told
-- the user guide on the website, the book, and the release itself

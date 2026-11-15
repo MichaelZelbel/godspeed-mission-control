@@ -30,7 +30,7 @@ export function detectMediaType(file: File): MediaType {
 
 export function validateFile(file: File): string | null {
   if (file.size > MAX_FILE_SIZE) {
-    return `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max is ${MEDIA_UPLOAD_MAX_MB} MB.`;
+    return `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max is ${MEDIA_UPLOAD_MAX_MB} MB. Keep the file outside the notebook and add a link to it instead.`;
   }
   if (detectMediaType(file) === "unknown") {
     return `Unsupported file type: ${file.type || "unknown"}`;
