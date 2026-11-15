@@ -16,10 +16,13 @@ const chrome=process.env.CHROME_PATH||['/usr/bin/google-chrome','/usr/bin/chromi
 if(!chrome)throw Error('Chromium is not installed at a documented executable name; set CHROME_PATH');
 const profile=path.join(evidence,'.chromium-profile'),port=48764;
 let browser,fixture,ws,browserOut,browserErr;
+let browserExited;
+const browserGone=new Promise(resolve=>{browserExited=resolve;});
 const observationPages=[];
 let routeError;
 const fixtureRows=[];
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
+const within=(promise,what)=>Promise.race([promise,pause(15000).then(()=>{throw Error(`${what} did not finish within 15 seconds`);})]);
 const waitForBrowserExit=async timeout=>{
   if(browser.exitCode!==null||browser.signalCode!==null)return true;
   return Promise.race([new Promise(r=>browser.once('exit',()=>r(true))),pause(timeout).then(()=>false)]);
@@ -34,7 +37,7 @@ const stopBrowser=async()=>{
   }
 };
 let seq=0;const pending=new Map();
-const cdp=(method,params={})=>new Promise((ok,no)=>{const id=++seq;pending.set(id,[ok,no]);ws.send(JSON.stringify({id,method,params}));});
+const cdp=(method,params={})=>within(Promise.race([new Promise((ok,no)=>{const id=++seq;pending.set(id,[ok,no]);ws.send(JSON.stringify({id,method,params}));}),browserGone.then(()=>{throw Error('Chromium exited during browser observation');})]),`Chromium ${method}`);
 const js=async expression=>(await cdp('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true})).result.value;
 const go=async url=>{await cdp('Page.navigate',{url});await pause(1200);};
 const action=async(name,fn)=>{globalThis.phase=name;try{await fn();actions.push({name,ok:true});}catch(e){actions.push({name,ok:false,error:e.message});throw e;}};
@@ -46,7 +49,8 @@ const pageSocket=async url=>{
   const target=await fetch(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(url)}`,{method:'PUT'}).then(r=>{if(!r.ok)throw Error('Chromium could not open an observation tab');return r.json();});
   const socket=new WebSocket(target.webSocketDebuggerUrl);await new Promise((ok,no)=>{socket.onopen=ok;socket.onerror=no});
   let number=0;const waiting=new Map();socket.onmessage=event=>{const message=JSON.parse(event.data);if(message.id&&waiting.has(message.id)){const [ok,no]=waiting.get(message.id);waiting.delete(message.id);message.error?no(Error(message.error.message)):ok(message.result);}};
-  const call=(method,params={})=>new Promise((ok,no)=>{const id=++number;waiting.set(id,[ok,no]);socket.send(JSON.stringify({id,method,params}));});
+  socket.onclose=()=>{for(const [,no] of waiting.values())no(Error('Chromium closed an observation tab'));waiting.clear();};
+  const call=(method,params={})=>within(Promise.race([new Promise((ok,no)=>{const id=++number;waiting.set(id,[ok,no]);socket.send(JSON.stringify({id,method,params}));}),browserGone.then(()=>{throw Error('Chromium exited during browser observation');})]),`observation tab ${method}`);
   const evaluate=async expression=>{const answer=await call('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(answer.exceptionDetails)throw Error(answer.exceptionDetails.exception?.description||answer.exceptionDetails.text);return answer.result.value;};
   await call('Page.enable');await call('Runtime.enable');
   for(let n=0;n<80;n++){if(await evaluate('document.readyState').catch(()=>null)==='complete')break;await pause(100);}
@@ -57,7 +61,7 @@ const setViewport=async(page,width)=>{await page.call('Emulation.setDeviceMetric
 const prepareSurface=async(page,surface)=>{
   await page.evaluate(`(()=>{const surface=${JSON.stringify(surface)};if(surface==='note-chat'&&!location.pathname.match(/^\\/dashboard\\/notes\\/[^/]+$/)){document.querySelector('a[href^="/dashboard/notes/"]')?.click();return 'navigating';}if(surface==='collection-chat'&&location.pathname==='/collections'){document.querySelector('a[href^="/collections/"]:not([href="/collections/templates"])')?.click();return 'navigating';}return 'ready'})()`);
   await pause(600);
-  const result=await page.evaluate(`(()=>{const exact=t=>[...document.querySelectorAll('button,a')].find(e=>e.textContent.trim()===t||e.getAttribute('aria-label')===t);if(${JSON.stringify(surface)}==='global-chat'||${JSON.stringify(surface)}==='popout-chat'){const b=document.querySelector('[aria-label="Chat with Godspeed"]');if(b)b.click();}if(${JSON.stringify(surface)}==='note-chat'){window.dispatchEvent(new Event('godspeed:toggle-note-chat'));}if(${JSON.stringify(surface)}==='collection-chat'){const b=exact('Chat')||exact('Ask Godspeed');if(b)b.click();}return true})()`);
+  const result=await page.evaluate(`(()=>{const exact=t=>[...document.querySelectorAll('button,a')].find(e=>e.textContent.trim()===t||e.getAttribute('aria-label')===t);if(${JSON.stringify(surface)}==='global-chat'||${JSON.stringify(surface)}==='popout-chat'){const b=document.querySelector('[aria-label="Chat with Godspeed"]');if(b)b.click();}if(${JSON.stringify(surface)}==='note-chat'){window.dispatchEvent(new Event('godspeed:toggle-note-chat'));}if(${JSON.stringify(surface)}==='collection-chat'){const b=exact('AI Chat');if(b)b.click();}return true})()`);
   await pause(500);return result;
 };
 const observeSurface=async(page,phase,surface,width,extra={})=>{
@@ -77,7 +81,8 @@ const saveProvider=async(url,key)=>{await go(base+'/dashboard/settings#connect-a
 try{
   browserOut=fs.openSync(path.join(evidence,'browser.stdout.log'),'a');
   browserErr=fs.openSync(path.join(evidence,'browser.stderr.log'),'a');
-  browser=spawn(chrome,[`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'--headless=new','--no-first-run','--disable-gpu','about:blank'],{stdio:['ignore',browserOut,browserErr]});
+  browser=spawn(chrome,[`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'--headless=new','--no-sandbox','--no-first-run','--disable-gpu','about:blank'],{stdio:['ignore',browserOut,browserErr]});
+  browser.once('exit',browserExited);
   await new Promise((ok,no)=>{browser.once('spawn',ok);browser.once('error',no);});
   write('browser.pid',String(browser.pid)+'\n');
   if(process.env.BROWSER_TEST_READY_FILE){
@@ -90,6 +95,7 @@ try{
   if(!ws)throw Error('Chromium did not expose its debugging page');
   await new Promise((ok,no)=>{ws.onopen=ok;ws.onerror=no});
   ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id&&pending.has(m.id)){const [ok,no]=pending.get(m.id);pending.delete(m.id);m.error?no(Error(m.error.message)):ok(m.result);}else if(m.method==='Runtime.consoleAPICalled')consoleRows.push({phase:globalThis.phase||'',text:(m.params.args||[]).map(x=>x.value||x.description).join(' ')});else if(m.method==='Network.requestWillBeSent')network.push({url:m.params.request.url,method:m.params.request.method});};
+  ws.onclose=()=>{for(const [,no] of pending.values())no(Error('Chromium closed its debugging connection'));pending.clear();};
   await cdp('Page.enable');await cdp('Runtime.enable');await cdp('Network.enable');
   // The exact visible interaction sequence is implemented in the page so the retained action list
   // cannot be produced by direct API writes. input/change/click are the same DOM events a person causes.
@@ -101,6 +107,7 @@ try{
   await go(base+'/dashboard/timeline');globalThis.phase='without-ai';
   await moment('moment-saved-without-ai','No AI fixture moment',false);
   await moment('moment-edited-without-ai','No AI fixture moment',true);
+  await action('collection-ready',async()=>{await go(base+'/collections');const exists=await js(`!!document.querySelector('a[href^="/collections/"]:not([href="/collections/templates"])')`);if(!exists){await click('or create a blank collection');await fill('Name','Scenario observations');await click('Create');await pause(900);await go(base+'/collections');}if(!await js(`!!document.querySelector('a[href^="/collections/"]:not([href="/collections/templates"])')`))throw Error('the visible collection setup made no collection card');});
   const routes={dashboard:'/dashboard', 'global-chat':'/dashboard', 'full-chat':'/dashboard/chat', 'note-chat':'/dashboard/notes', 'collection-chat':'/collections', 'popout-chat':'/dashboard'};
   for(const [surface,route] of Object.entries(routes)){const page=await pageSocket(base+route);observationPages.push({surface,page});}
   globalThis.phase='none';
@@ -114,8 +121,11 @@ try{
   await action('provider-saved',async()=>{await fill('Your AI service','other');await pause(100);await fill('Its address','http://127.0.0.1:48763/v1');await fill('Model, written','fixture-model');await fill('Key','scenario-secret-never-retain');await click('Test and connect');await pause(1200);});
   await action('provider-after-navigation',async()=>{await go(base+'/dashboard/timeline');await go(base+'/dashboard/settings#connect-ai');await observeProvider('provider-navigation.json');});
   await action('provider-after-reload',async()=>{await cdp('Page.reload');await pause(1200);await observeProvider('provider-reload.json');});
-  const systemctl=(...args)=>new Promise((ok,no)=>{let out='';const p=spawn('systemctl',['--user',...args]);p.stdout.on('data',x=>out+=x);p.once('exit',code=>code===0?ok(out.trim()):no(Error('the user notebook service command failed')));});
-  await action('notebook-restarted',async()=>{const oldPid=await systemctl('show','--property=MainPID','--value','godspeed-integrated-notebook.service');await systemctl('restart','godspeed-integrated-notebook.service');let healthy=false;for(let n=0;n<80;n++){try{if((await fetch(base+'/health')).ok){healthy=true;break;}}catch{}await pause(250);}const newPid=await systemctl('show','--property=MainPID','--value','godspeed-integrated-notebook.service');if(!healthy||!+oldPid||!+newPid||oldPid===newPid)throw Error('the notebook did not return under a new service process');write('restart.txt',`old_pid=${oldPid} new_pid=${newPid} healthy=yes\n`);});
+  const command=(program,args)=>new Promise((ok,no)=>{let out='';const p=spawn(program,args);p.stdout.on('data',x=>out+=x);p.once('exit',code=>code===0?ok(out.trim()):no(Error(`${program} ${args.join(' ')} failed`)));});
+  const service='godspeed-integrated-notebook.service';
+  const userService=await command('systemctl',['--user','cat',service]).then(()=>true,()=>false);
+  const systemctl=(...args)=>command(userService?'systemctl':'sudo',userService?['--user',...args]:['systemctl',...args]);
+  await action('notebook-restarted',async()=>{const oldPid=await systemctl('show','--property=MainPID','--value',service);await systemctl('restart',service);let healthy=false;for(let n=0;n<80;n++){try{if((await fetch(base+'/health')).ok){healthy=true;break;}}catch{}await pause(250);}const newPid=await systemctl('show','--property=MainPID','--value',service);if(!healthy||!+oldPid||!+newPid||oldPid===newPid)throw Error('the notebook did not return under a new service process');write('restart.txt',`old_pid=${oldPid} new_pid=${newPid} healthy=yes\n`);});
   await action('provider-after-restart',async()=>{await go(base+'/dashboard/settings#connect-ai');await observeProvider('provider-restart.json');await screenshot('provider-after-restart');});
   await go(base+'/dashboard/timeline');globalThis.phase='with-ai';
   await moment('moment-saved-with-ai','AI fixture moment',false);
