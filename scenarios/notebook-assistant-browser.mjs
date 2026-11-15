@@ -44,6 +44,10 @@ try{
   browser=spawn(chrome,[`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'--headless=new','--no-first-run','--disable-gpu','about:blank'],{stdio:['ignore',browserOut,browserErr]});
   await new Promise((ok,no)=>{browser.once('spawn',ok);browser.once('error',no);});
   write('browser.pid',String(browser.pid)+'\n');
+  if(process.env.BROWSER_TEST_READY_FILE){
+    for(let n=0;n<100&&!fs.existsSync(process.env.BROWSER_TEST_READY_FILE);n++)await pause(10);
+    if(!fs.existsSync(process.env.BROWSER_TEST_READY_FILE))throw Error('the test browser did not become ready');
+  }
   fixture=http.createServer((request,response)=>{let body='';request.on('data',x=>body+=x);request.on('end',()=>{const operation=globalThis.momentOperation||'connect',at=globalThis.phase||'';fixtureRows.push({phase:at.includes('without-ai')?'without-ai':at.includes('with-ai')?'with-ai':at,operation:request.url?.includes('chat/completions')?'extract-moment-profile':'provider-check',action:operation});response.writeHead(200,{'content-type':'application/json'});response.end(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model:'fixture-model',choices:[{index:0,message:{role:'assistant',content:'{"suggestions":[]}'},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}));});});
   await new Promise((ok,no)=>fixture.once('error',no).listen(48763,'127.0.0.1',ok));
   for(let n=0;n<100;n++){try{const tabs=await fetch(`http://127.0.0.1:${port}/json`).then(r=>r.json());if(tabs[0]?.webSocketDebuggerUrl){ws=new WebSocket(tabs[0].webSocketDebuggerUrl);break;}}catch{}await pause(100);}

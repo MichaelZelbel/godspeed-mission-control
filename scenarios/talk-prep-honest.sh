@@ -101,6 +101,14 @@ run_installed_preparation() {
   printf '%s\n' "${produced#"$ROOT"/}" >"$EVIDENCE/routine-preparation-source.txt"
 }
 
+if [ "${TALK_PREP_RUN_NOW_TEST_ONLY:-}" = 1 ]; then
+  install_paths
+  need_node
+  mkdir -p "$EVIDENCE"
+  run_installed_preparation
+  exit 0
+fi
+
 # ---------------------------------------------------------------------------------- the fixtures
 # A run record the way Claude Code keeps one: a JSON line per message, the prompt naming the run's
 # marker, and for each page a WebFetch call and its successful result, all inside the run's time.

@@ -3480,6 +3480,12 @@ talk_good() { # <folder>
 section talk-prep-honest
 T=$TMP/talk
 
+if node --test "$ROOT/scenarios/test-talk-prep-run-now.mjs" >"$TMP/talk-prep-run-now.log" 2>&1; then
+  ok 'the public Run now caller attributes only fresh preparation output'
+else
+  bad "the public Run now caller regression failed: $(tr '\n' ' ' <"$TMP/talk-prep-run-now.log" | cut -c1-400)"
+fi
+
 mkdir -p "$T/freshness/coach/health/prep"
 printf 'old\n' >"$T/freshness/coach/health/prep/old.md"
 touch -d '2026-11-01 09:00:00 UTC' "$T/freshness/coach/health/prep/old.md"
