@@ -13,7 +13,7 @@ test('the scenario fixture gives every adopted goal its public card ID',()=>{
   for(const id of ['lower-ldl','sleep-better','visible-abs']){
     assert.match(scenario,new RegExp(`printf 'ID: ${id}\\\\nGOAL: ${id}\\\\n`));
   }
-  assert.match(scenario,/write_installed_fixture_area\n  run_installed_preparation\n[\s\S]*write_area\n  add_research_domains/);
+  assert.match(scenario,/write_area\n  TALK_PREP_SUPPORTED_FIXTURE=1\n  run_installed_preparation\n[\s\S]*write_area\n  add_research_domains/);
 });
 
 const runRoute=async(createFresh,{busyOnce=false,failed=false}={})=>{
