@@ -1,6 +1,6 @@
 # Try another assistant
 
-Chapter 37, optional. Start with `three-questions.md`. Ask the assistant to verify the current OpenCode installation and configure your chosen provider.
+Chapter 38, optional. Start with `three-questions.md`. Ask the assistant to verify the current OpenCode installation and configure your chosen provider.
 
 `opencode.json` is the example settings file from the book's test. It sets conservative permissions: OpenCode asks before it edits a file, runs a command or fetches a web page. It also names the model that test used, `openrouter/moonshotai/kimi-k3`. Choose a currently available model during setup and use its name instead; `openrouter-notes.md` says what to check first.
 

@@ -25,7 +25,7 @@ the outside.
   as "what did I type".
 
 Together they are the program that fills the optional `prompts/archive/` drawer
-(Chapters 2 and 38).
+(Chapter 2).
 
 The third one is the only one here you type yourself.
 
@@ -431,7 +431,7 @@ machine.
 ## The honest limit
 
 They can only harvest from an AI tool that keeps your conversations as files on
-your own computer, which means a terminal tool: Chapters 37 and 40. Claude Desktop
+your own computer, which means a terminal tool: Chapters 38 and 41. Claude Desktop
 keeps no such store. If that is your only tool, this finds
 nothing, `prompts/archive/` stays empty, and nothing is broken. Use
 `prompts/library/` next door and save the prompts you care about as you go.

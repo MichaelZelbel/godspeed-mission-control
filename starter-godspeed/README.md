@@ -23,7 +23,7 @@ What is here. Thirteen names, and they are the whole system:
   short list of your rules. Hermes reads it by name at the start of every
   conversation, so nothing needs installing. Chapter 20 is where you write
   your own rules into it. (The one-line `CLAUDE.md` beside it is a signpost
-  for a developer tool; Chapter 40 explains it, and Hermes never reads it.)
+  for a developer tool; Chapter 41 explains it, and Hermes never reads it.)
 - `profile/`: who you are, your people, your projects, your voice. The
   Part II files. You write these.
 - `rules/`: one file per rule, holding the whole story of why you gave it.
@@ -65,7 +65,7 @@ What is here. Thirteen names, and they are the whole system:
   what makes it safe to keep. Two drawers, each with its own README:
   `prompts/library/` holds the prompts you keep and paste into other
   tools, and `prompts/archive/` is the optional log of your conversations,
-  empty unless you switched collection on. Chapters 16 and 38.
+  empty unless you switched collection on. Chapters 16 and 39.
 - `goals/`: what you want, one card each, and who gets attention today. An
   outcome, a strategy or project meant to produce one, or a protected
   commitment. A new idea is filed **provisional** and is never worked on until
