@@ -10,6 +10,7 @@ import { Store, atomic, hash } from '../core/records/store.mjs';
 import { FileSync, useFolderRepository } from '../core/sync/git.mjs';
 import { MediaSync } from '../core/sync/media.mjs';
 import { SyncRunner } from '../core/sync/runner.mjs';
+import { installSkillTree } from '../core/packaged-skills.mjs';
 const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}).trim();
 const tryGit=(cwd,...args)=>{try{return git(cwd,...args);}catch(error){return 'failed: '+String(error.stderr||error.message);}};
 const read=(...parts)=>fs.readFileSync(path.join(...parts),'utf8');
@@ -118,15 +119,55 @@ test('knowledge: a page deleted by hand leaves as a tombstone and the other mach
   assert.ok(a.store.list('notes').some(n=>n.title==='Written on the laptop'));
 });
 test('knowledge: a removal without a tombstone from an older machine becomes a review item, and choosing it removes the record',()=>{
-  const {machine}=knowledge(),a=machine('desktop'),doomed=a.store.save('notes',{title:'Old page',content:'bye\n'});
+  const {origin,machine}=knowledge(),a=machine('desktop'),doomed=a.store.save('notes',{title:'Old page',content:'bye\n'});
   synced(a);const b=machine('laptop');synced(b);
   git(a.dir,'rm','-q','notebook/Old page.md');git(a.dir,'commit','-qm','Removed by an older version');git(a.dir,'push','-q','origin','main');
-  const first=b.sync.reconcile();assert.equal(first.state,'conflict',JSON.stringify(first));
+  const first=b.sync.reconcile();assert.equal(first.state,'conflict',JSON.stringify(first));assert.equal(first.error,undefined,JSON.stringify(first));
   const [review]=reviews(b);assert.equal(review.path,'notebook/Old page.md');assert.equal(review.remote,null);assert.match(review.local,/bye/);
+  // While the review waits, the page stays here and is not sent back, and other notes travel (#570).
+  a.store.save('notes',{title:'Desktop meanwhile',content:'a\n'});b.store.save('notes',{title:'Laptop meanwhile',content:'b\n'});
+  for(const m of [a,b,a,b]){const status=m.sync.reconcile();assert.equal(status.error,undefined,JSON.stringify(status));}
+  assert.ok(exists(b.dir,'notebook','Old page.md'));
+  assert.doesNotMatch(git(origin,'ls-tree','-r','--name-only','main','notebook'),/Old page/);
+  assert.ok(a.store.list('notes').some(n=>n.title==='Laptop meanwhile'));assert.ok(b.store.list('notes').some(n=>n.title==='Desktop meanwhile'));
+  assert.equal(reviews(b).length,1);
   b.sync.resolve(review.id,'remote');
   synced(b,a,b);
   for(const m of [a,b])assert.ok(m.store.list('notes',{removed:true}).find(n=>n.id===doomed.id).removed_at,m.dir);
   assert.deepEqual(b.sync.pendingConflicts(),[]);
+});
+
+// Only a review a merge saved holds its file back (#570). An edit saved here
+// from an older version, and a packaged skill's new version, hold nothing:
+// the file keeps syncing both ways while the review waits.
+test('knowledge: an edit saved here from an older version waits for review while its record keeps syncing',()=>{
+  const {machine}=knowledge(),a=machine('desktop'),note=a.store.save('notes',{title:'Shared page',content:'v1\n'});
+  synced(a);const b=machine('laptop');synced(b);
+  const old=b.store.get('notes',note.id);edit(b.store,'notes',note.id,{content:'v2 here\n'});
+  assert.throws(()=>b.store.save('notes',{...old,content:'v1 stale\n'},old._hash),/changed/);
+  const [review]=reviews(b);assert.equal(review.kind,'stale-write');
+  assert.equal(b.sync.reconcile().error,undefined);synced(a);
+  assert.equal(a.store.get('notes',note.id).content,'v2 here\n','The version on disk here was sent');
+  edit(a.store,'notes',note.id,{title:'Shared page renamed'});synced(a);
+  assert.equal(b.sync.reconcile().error,undefined);
+  assert.equal(b.store.get('notes',note.id).title,'Shared page renamed','The other computer\'s edit arrived');
+  assert.equal(b.store.get('notes',note.id).content,'v2 here\n');
+  assert.deepEqual(reviews(b).map(r=>r.id),[review.id]);
+});
+test('knowledge: a packaged skill\'s new version waiting for review leaves the skill syncing and its review as it was',()=>{
+  const {machine}=knowledge(),a=machine('desktop'),source=tmp('packaged-skill');
+  atomic(path.join(source,'SKILL.md'),'Packaged v1\n');installSkillTree(a.store,source,path.join(a.dir,'skills','tidy'));synced(a);
+  const b=machine('laptop');synced(b);
+  atomic(path.join(a.dir,'skills','tidy','SKILL.md'),'Edited by the owner\n');
+  atomic(path.join(source,'SKILL.md'),'Packaged v2\n');installSkillTree(a.store,source,path.join(a.dir,'skills','tidy'));
+  const [review]=reviews(a);assert.equal(review.kind,'git');assert.equal(review.remote,'Packaged v2\n');
+  assert.equal(a.sync.reconcile().error,undefined);
+  assert.equal(b.sync.reconcile().error,undefined);
+  assert.equal(read(b.dir,'skills','tidy','SKILL.md'),'Edited by the owner\n','The owner\'s edit was sent');
+  atomic(path.join(b.dir,'skills','tidy','SKILL.md'),'Edited on the laptop\n');synced(b);
+  assert.equal(a.sync.reconcile().error,undefined);
+  assert.equal(read(a.dir,'skills','tidy','SKILL.md'),'Edited on the laptop\n','The laptop\'s edit arrived');
+  const [after]=reviews(a);assert.equal(after.remote,'Packaged v2\n');assert.equal(after.local,'Edited by the owner\n');
 });
 
 // 5. A second device set up from Settings (a plain folder, git init) could

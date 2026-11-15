@@ -113,8 +113,9 @@ export default function PeopleMultiSelect({ people, value, onChange, newNames = 
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          className="p-0 w-[--radix-popover-trigger-width] min-w-[260px]"
+          className="z-[60] p-0 w-[--radix-popover-trigger-width] min-w-[260px] max-w-[calc(100vw-2rem)]"
           align="start"
+          collisionPadding={16}
         >
           <Command>
             <CommandInput

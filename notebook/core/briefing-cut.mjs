@@ -56,13 +56,13 @@ export function cutRefused(draft,voice,protectedLines){
 }
 
 // The items of a draft (#387): blocks between blank lines, and inside a block one item per
-// numbered line with the lines that follow it. [{start,end}] line indices, end exclusive.
-const NUMBERED_LINE=/^\s*\d+[.)]\s+\S/,ITEM_MARKER=/^\s*\d+[.)]/;
+// numbered or bulleted line with the lines that follow it. [{start,end}] line indices, end exclusive.
+const NUMBERED_LINE=/^\s*\d+[.)]\s+\S/,LISTED_LINE=/^\s*(?:\d+[.)]|[-+*])\s+\S/,ITEM_MARKER=/^\s*(?:\d+[.)]|[-+*])/;
 export function draftItems(text){
  const lines=text.split(/\r?\n/),items=[];let open=null;
  for(const [i,line] of lines.entries()){
   if(!line.trim()){open=null;continue;}
-  if(!open||NUMBERED_LINE.test(line)){open={start:i,end:i+1};items.push(open);}else open.end=i+1;
+  if(!open||LISTED_LINE.test(line)){open={start:i,end:i+1};items.push(open);}else open.end=i+1;
  }
  return items;
 }

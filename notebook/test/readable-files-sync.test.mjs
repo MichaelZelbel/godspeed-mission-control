@@ -86,9 +86,19 @@ for(const mode of ['folder','knowledge']){
     assert.match(review.local,/Draft from the laptop/);assert.match(review.remote,/Draft from the server/);
     assert.deepEqual(notebookFiles(a.dir),['Draft from the laptop.md'],'This machine keeps its version, once');
     assert.equal(a.store.list('notes').length,1);
+    // While the review waits, both names stay where they are, and other notes travel (#570).
+    const meanwhile=mode==='knowledge'?['From the laptop meanwhile.md','From the server meanwhile.md']:[];
+    if(mode==='knowledge'){
+      assert.equal(settled.error,undefined,JSON.stringify(settled));
+      a.store.save('notes',{title:'From the laptop meanwhile',content:'a\n'});b.store.save('notes',{title:'From the server meanwhile',content:'b\n'});
+      for(const m of [a,b,a,b]){const status=m.sync.reconcile();assert.equal(status.error,undefined,JSON.stringify(status));}
+      assert.deepEqual(notebookFiles(a.dir),['Draft from the laptop.md',...meanwhile]);
+      assert.deepEqual(notebookFiles(b.dir),['Draft from the server.md',...meanwhile]);
+      assert.equal(a.sync.pendingConflicts().length,1);
+    }
     a.sync.resolve(reviews[0].replace(/\.json$/,''),'remote');
     round(a,b);
-    for(const m of [a,b]){assert.deepEqual(notebookFiles(m.dir),['Draft from the server.md']);assert.equal(m.store.get('notes',note.id).title,'Draft from the server');}
+    for(const m of [a,b]){assert.deepEqual(notebookFiles(m.dir),['Draft from the server.md',...meanwhile]);assert.equal(m.store.get('notes',note.id).title,'Draft from the server');}
     if(mode==='folder')assert.equal(settled.state,'synced','In the folder mode a review does not hold sync back');
   });
 

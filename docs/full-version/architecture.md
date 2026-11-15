@@ -16,7 +16,7 @@ A single workspace lock protects writers. A transaction directory records staged
 
 Structural changes retain tombstones and aliases. Stable UUID references disambiguate readable aliases. Merge rewrites known typed references and preserves provenance. Unresolved or ambiguous references stop sync. World events remain append-only. Replacing a current claim closes its validity and creates a successor rather than erasing the old fact.
 
-Git sync stages only declared record roots and never databases or credentials; media only as the hash-named copies in `notebook/_media/`. Separate file changes merge; same-record conflicts preserve base/local/remote snapshots in files outside ordinary record parsing. Conflicts stop publication until explicitly resolved. No force push. A rejection is fetched and retried with the same graph validation.
+Git sync stages only declared record roots and never databases or credentials; media only as the hash-named copies in `notebook/_media/`. Separate file changes merge; same-record conflicts preserve base/local/remote snapshots in files outside ordinary record parsing. A saved conflict holds back only its own file until it is explicitly resolved: this computer keeps its version, the shared history takes the other computers' version of that file, and every other file keeps syncing. No force push. A rejection is fetched and retried with the same graph validation.
 
 The scheduler owner is explicit. Pairing sets the VPS owner; an unreachable VPS never transfers ownership. Jobs record attempted and verified outcomes and fail closed for outward actions without permission. Provider credentials are optional local configuration, never synced.
 

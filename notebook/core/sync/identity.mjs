@@ -184,7 +184,9 @@ export function identityPlan({ git, mergeText, find = () => undefined, base, loc
     return [base, base.replace(/ (?:[2-9]|[1-9]\d+)$/, '')].some(b => nameKey(b) === nameKey(name));
   };
   const finals = new Map(), reviews = [], planned = new Set();
-  const review = (file, e, kept) => reviews.push({ id: hash(file + '\0' + remoteCommit).slice(0, 24), path: file, kind: 'git', kept, base: e.base?.text ?? null, local: e.local?.text ?? null, remote: e.remote?.text ?? null, remote_commit: remoteCommit, at: new Date().toISOString() });
+  // remote_path: where the other side has the record, when that is another
+  // file (renamed there too). Sync holds both files back while the review waits.
+  const review = (file, e, kept) => reviews.push({ id: hash(file + '\0' + remoteCommit).slice(0, 24), path: file, ...(e.remote?.file && e.remote.file !== file ? { remote_path: e.remote.file } : {}), kind: 'git', kept, base: e.base?.text ?? null, local: e.local?.text ?? null, remote: e.remote?.text ?? null, remote_commit: remoteCommit, at: new Date().toISOString() });
   for (const e of place.values()) {
     const ls = status(e, 'local'), rs = status(e, 'remote');
     if (ls === 'unchanged' || ls === 'absent' && rs !== 'absent') { finals.set(e.uid, e.remote && { file: e.remote.file, text: e.remote.text, from: 'remote' }); continue; }
@@ -255,10 +257,15 @@ export function identityPlan({ git, mergeText, find = () => undefined, base, loc
     if (!documents.length && records.length > 1 && records.every(o => { const r = recordOf(o); return r && !isReadable(r); })) {
       const keep = (preferRemote ? records.find(o => !o.local) : records.find(o => o.local)) || records[0], kept = keep.local ? 'local' : 'remote', kept_ = recordOf(keep);
       for (const o of records) if (o !== keep) {
-        const other = recordOf(o), side = kept === 'local' ? 'remote' : 'local', as = { text: encode({ ...other, uid: kept_.uid }) };
+        const other = recordOf(o);
         planned.add(o.uid); planned.add(keep.uid); finals.set(o.uid, null);
         if (sameChoices(kept_, other) || untouched(other)) continue;
-        review(keep.file, { base: null, [kept]: place.get(keep.uid)[kept] || { text: encode(kept_) }, [side]: as }, kept);
+        // The review is of the other record's choices under this machine's
+        // record, also when the merge keeps the other one: sync holds the file
+        // back (sync/git.mjs heldPaths), so this machine's record is the one
+        // that stays here until the person decides.
+        const mine = o.local ? o : keep, theirs = mine === o ? keep : o, mine_ = recordOf(mine), side = mine.local ? 'local' : kept, otherSide = side === 'local' ? 'remote' : 'local';
+        review(mine.file, { base: null, [side]: place.get(mine.uid)[side] || { text: encode(mine_) }, [otherSide]: { text: encode({ ...recordOf(theirs), uid: mine_.uid }) } }, side);
       }
       continue;
     }

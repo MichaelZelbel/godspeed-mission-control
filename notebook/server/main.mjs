@@ -81,6 +81,13 @@ import {MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BY
 const SAME_SERVICE='That is the service your main AI uses already. A backup steps in when the main AI fails, so it has to be another service.';
 const BACKUP_SERVICE='That is the service your backup AI uses. Remove the backup first, or choose another service for your main AI.';
 export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
+const providerView=config=>({configured:true,url:baseAddress(config.url),model:config.model,key:!!config.key});
+const readSavedProvider=file=>{
+  let text;try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code==='ENOENT')return null;throw error;}
+  const config=JSON.parse(text);
+  if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error('The saved AI connection is not valid. Connect it again after checking the server log.');
+  return config;
+};
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
@@ -131,6 +138,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const connectMeaning=config=>{index.meaning?.close();index.meaning=new MeaningIndex(index,{config});};
   connectMeaning(embeddingConfig(store.state));
   const githubSignIn=new GitHubSignIn();
+  const syncNotConnected={state:'not_connected',error:'Sync is not connected, so nothing was synced. Your files are safe on this computer.',detail:'To connect it, open Settings, then Sync and schedule ownership, and press Connect record sync.'};
   const syncRunner=new SyncRunner(root,{onResult:result=>{sync.last=result;atomic(path.join(store.state,'sync-status.json'),JSON.stringify(result));}});
   const providerPath=path.join(store.state,'provider.json');
   // The backup AI the person connected in Settings (core/backup-ai.mjs): the notebook's own calls
@@ -420,8 +428,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // The AI the person connects in Settings serves the notebook and, unless they untick it,
       // the routines and the chat too: it is written into Hermes' own home (core/routine-ai.mjs),
       // and one short request through Hermes shows whether the routines can reach it.
+      if(route==='/api/provider'&&req.method==='GET'){
+        const saved=readSavedProvider(providerPath);return send(res,200,saved?providerView(saved):{configured:false,key:false});
+      }
       if(route==='/api/provider'&&req.method==='POST'){
-        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),config={url:!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions',key:typeof input.key==='string'?input.key.trim():input.key,model:typeof input.model==='string'?input.model.trim():input.model};
+        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),saved=readSavedProvider(providerPath),submittedKey=typeof input.key==='string'?input.key.trim():input.key;
+        const normalizedAddress=!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions';
+        const retainedKey=!submittedKey&&saved&&baseAddress(normalizedAddress)===baseAddress(saved.url)?saved.key:submittedKey;
+        const config={url:normalizedAddress,key:retainedKey,model:typeof input.model==='string'?input.model.trim():input.model};
         const chosen=modelProvider(config);if(!chosen)throw new Error('Provide a model endpoint, key and model name');
         const routines=routineAI&&input.routines!==false;
         if(routines)hermesSettingsFor(config);
@@ -433,9 +447,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         await chosen({kind:'connection-test',contract:'Reply with Connected.'});
         const kept=guarded(chosen);
         atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);provider=kept;domains.provider=kept;scheduler.executor=jobExecutor(kept,query);
-        if(!routines)return send(res,200,{connected:true,routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
+        if(!routines)return send(res,200,{connected:true,provider:providerView(config),routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
         connectRoutineAI({...routineAI,config});
-        return send(res,200,{connected:true,routines:{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})}});
+        return send(res,200,{connected:true,provider:providerView(config),routines:{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})}});
       }
       // The Goals page: each goal's weekly number and readings, bets and verdicts, today's decision, the
       // work and its checks, what went out, the research brief, and the routines' AI (core/goal-overview.mjs).
@@ -495,7 +509,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const input=JSON.parse(await body(req));return send(res,200,await connectRecordSync({url:input.url,configure:url=>syncRunner.configure(url),signIn:githubSignIn}));
       }
       if(route==='/api/sync/sign-in'&&req.method==='GET')return send(res,200,{signIn:githubSignIn.status()});
-      if(route==='/api/sync/run'&&req.method==='POST')return send(res,200,{status:await syncRunner.run()});
+      if(route==='/api/sync/run'&&req.method==='POST'){
+        // A notebook that never connected sync is told so, instead of running git and showing its error.
+        if(!fs.existsSync(path.join(store.state,'sync-config.json')))return send(res,200,{status:{...syncNotConnected}});
+        return send(res,200,{status:await syncRunner.run()});
+      }
       if(assistantMissing&&req.method==='POST'&&ASSISTANT_ROUTES.includes(route))throw Error(assistantProblem);
       // "server": the server this computer is paired with, whatever it is called, or this machine
       // when it is the server (the one that makes pairing codes). Until 9 October 2026 the button
@@ -633,7 +651,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if (route === '/api/structural' && req.method === 'POST') { const input = JSON.parse(await body(req)), data = store.structural(input.type, input.id, input.action, input.options); if (input.type === 'notes' && input.action === 'remove') await retireShares(store, [input.id]); return send(res, 200, { data, error: null }); }
       if (route === '/api/media/upload' && req.method === 'POST') {
         // The note editor holds files to the same limit (shared/media-limits.mjs).
-        const tooLarge=`This file is too large. Max is ${MEDIA_UPLOAD_MAX_MB} MB.`;
+        const tooLarge=`This file is too large. Max is ${MEDIA_UPLOAD_MAX_MB} MB. Keep the file outside the notebook and add a link to it instead.`;
         let bytes;try{bytes=await body(req, MEDIA_UPLOAD_MAX_BYTES + MEDIA_UPLOAD_REQUEST_EXTRA_BYTES);}catch(error){if(error.message==='Request is too large')return send(res,413,{error:tooLarge});throw error;}
         const form = await new Request('http://localhost/', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: bytes }).formData();
         const file = form.get('file'); if (!(file instanceof Blob)) throw new Error('Missing media file');

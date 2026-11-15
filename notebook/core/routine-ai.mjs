@@ -5,6 +5,7 @@ import {setConfigValue,readConfigValue,deleteConfigValue} from './hermes-config.
 import {hermesProvider} from './runtime.mjs';
 import {hermesHelper,runHermesHelper} from './addon-model.mjs';
 import {fallbackChain,noteMainAnswered,noteMainFailed} from './backup-ai.mjs';
+import {providerService} from './provider-service.mjs';
 
 // THE AI THE ROUTINES THINK WITH (18 October 2026). Every installer ends with "connect your own AI
 // account in Settings", and until this change that form powered only the notebook's own small jobs
@@ -29,13 +30,13 @@ export function baseAddress(url){return String(url||'').trim().replace(/\/chat\/
 // OPENROUTER_API_KEY; OpenAI's API is "openai-api" with OPENAI_API_KEY; any other
 // OpenAI-compatible address is "custom", whose key Hermes reads from model.api_key.
 export function hermesSettingsFor({url,key,model}){
- const base=baseAddress(url);let host;
- try{host=new URL(base).hostname.toLowerCase();}catch{throw Error('Give the address of an AI service, starting with https://');}
+ const base=baseAddress(url);
+ try{new URL(base);}catch{throw Error('Give the address of an AI service, starting with https://');}
  if(!key||/[\s"'\\]/.test(key))throw Error('The key has a space or a quotation mark in it. Copy it again from your AI account.');
  if(!model||!String(model).trim())throw Error('Name the model the routines should use');
  model=String(model).trim();
- if(host==='openrouter.ai'||host.endsWith('.openrouter.ai'))return {provider:'openrouter',base_url:'https://openrouter.ai/api/v1',model,env:{OPENROUTER_API_KEY:key}};
- if(host==='api.openai.com')return {provider:'openai-api',base_url:'https://api.openai.com/v1',model,env:{OPENAI_API_KEY:key}};
+ if(providerService(base)==='openrouter')return {provider:'openrouter',base_url:'https://openrouter.ai/api/v1',model,env:{OPENROUTER_API_KEY:key}};
+ if(providerService(base)==='openai')return {provider:'openai-api',base_url:'https://api.openai.com/v1',model,env:{OPENAI_API_KEY:key}};
  return {provider:'custom',base_url:base,model,api_key:key};
 }
 

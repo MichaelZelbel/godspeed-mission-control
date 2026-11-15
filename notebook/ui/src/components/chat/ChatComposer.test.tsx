@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {cleanup,render,screen,waitFor} from '@testing-library/react';
+import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import '@testing-library/jest-dom/vitest';
 import ChatComposer from './ChatComposer';
 
@@ -36,4 +38,34 @@ it('a connected AI keeps its model and effort choices',async()=>{
  await waitFor(()=>expect(props.onModel).toHaveBeenCalledWith('fictional-model'));
  expect(screen.getByRole('option',{name:'fictional-model'})).toBeInTheDocument();expect(screen.getByRole('option',{name:'other-model'})).toBeInTheDocument();
  expect(screen.getByRole('combobox',{name:'Model'})).toBeEnabled();
+});
+
+it.each([
+ ['collection chat at 1280 px','No AI connected',{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
+ ['collection chat at 1280 px','claude-sonnet-4-5-20250929',{connected:true,current:'claude-sonnet-4-5-20250929',models:[{id:'claude-sonnet-4-5-20250929',efforts:[]}]}],
+ ['collection chat at 1280 px','Model choices unavailable',null],
+ ['floating chat at 375 px','No AI connected',{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
+ ['floating chat at 375 px','claude-sonnet-4-5-20250929',{connected:true,current:'claude-sonnet-4-5-20250929',models:[{id:'claude-sonnet-4-5-20250929',efforts:[]}]}],
+ ['floating chat at 375 px','Model choices unavailable',null],
+] as const)('%s leaves the complete current Model label readable in the narrow composer',async(_surface,label,state)=>{
+ if(state)answer(state);else vi.stubGlobal('fetch',vi.fn(async()=>{throw new Error('offline');}));
+ const {container}=render(<div style={{width:_surface.includes('375')?351:480}}><ChatComposer {...{value:'',onChange(){},onSend(){},onStop(){},busy:false,files:[],onFiles(){},model:state?.current||'',effort:'',onModel(){},onEffort(){},reply:'',onError(){}}}/></div>);
+ const model=screen.getByRole('combobox',{name:'Model'});
+ await waitFor(()=>expect(model).toHaveDisplayValue(label));
+ const css=readFileSync(join(process.cwd(),'src/index.css'),'utf8');
+ expect(css).toMatch(/@container \(max-width: 32rem\)[\s\S]*?\[data-chat-toolbar\][\s\S]*?display: grid;[\s\S]*?grid-template-columns: 2\.75rem minmax\(0, 1fr\) auto;/);
+ expect(css).toMatch(/@container \(max-width: 32rem\)[\s\S]*?\[data-chat-model\][\s\S]*?grid-column: 1 \/ -1;[\s\S]*?max-width: none;[\s\S]*?width: 100%;/);
+ expect(container.querySelector('[data-chat-toolbar]')).toContainElement(model);
+});
+
+it('keeps model selection and Enter submission behavior with the responsive toolbar',async()=>{
+ answer({current:'fictional-model',models:[{id:'fictional-model',efforts:[]},{id:'other-model',efforts:[]}]});
+ const onModel=vi.fn(),onSend=vi.fn();
+ render(<div style={{width:351}}><ChatComposer {...{value:'Ready',onChange(){},onSend,onStop(){},busy:false,files:[],onFiles(){},model:'fictional-model',effort:'',onModel,onEffort(){},reply:'',onError(){}}}/></div>);
+ const model=screen.getByRole('combobox',{name:'Model'});
+ await waitFor(()=>expect(model).toBeEnabled());
+ fireEvent.change(model,{target:{value:'other-model'}});
+ expect(onModel).toHaveBeenLastCalledWith('other-model');
+ fireEvent.keyDown(screen.getByRole('textbox',{name:'Message'}),{key:'Enter',shiftKey:false});
+ expect(onSend).toHaveBeenCalledOnce();
 });

@@ -1,1 +1,1 @@
-{"workflow": "archon-loop", "parallel": 8, "inputs": {"runtime": "harness/RUNTIME.md", "merge": "auto"}}
+{"workflow": "archon-loop", "parallel": 8, "inputs": {"runtime": "harness/RUNTIME.md", "merge": "auto", "holdout": "/home/godspeed-forge/holdouts/godspeed-mission-control/HOLDOUT.md"}}
