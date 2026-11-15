@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// The night's report: one issue per failing scenario, closed again the first night it passes.
+// The night's report: one issue per failure that actually ran, closed again the first night it passes.
 //
 // Run by the scenarios workflow after a scheduled run (process.md section 5: a nightly job failing
-// for a week without telling anyone is a fault). For every scenario in RESULTS:
-//   - not "success" (failure, skipped, cancelled, nothing at all): it failed, a scenario that could
-//     not run counts as failed. No open issue "Nightly scenario failed: <name>": open one, labelled
+// for a week without telling anyone is a fault). A failed shared stage gets one issue for that
+// prerequisite; its skipped scenarios get none. For every scenario when the stage succeeded:
+//   - failure: no open issue "Nightly scenario failed: <name>": open one, labelled
 //     bug, scenario-failure, and archon-triage. One is open already: add the night to it as a comment.
 //   - success, with such an issue open: say so in a comment with the run link, and close it.
 // One run never opens more than one issue per scenario. Node built-ins only; GitHub's REST API with
@@ -22,6 +22,7 @@ import { pathToFileURL } from 'node:url';
 const LABEL = 'scenario-failure';
 const LAST_LINES = 25;
 const titleOf = (name) => `Nightly scenario failed: ${name}`;
+const STAGE_TITLE = 'Nightly shared stage failed: stage';
 
 // job id -> display name, from the workflow file's own text.
 export function jobNames(text) {
@@ -117,7 +118,7 @@ export async function reportNight(env = process.env, log = console.log) {
 
   // What the failed jobs said: the run's jobs by display name, their logs on demand.
   let jobs = null;
-  const jobLog = async (scenario) => {
+  const jobLog = async (jobName) => {
     try {
       if (!jobs) {
         let names = {};
@@ -125,7 +126,7 @@ export async function reportNight(env = process.env, log = console.log) {
         const list = await (await call('GET', `/actions/runs/${runId}/jobs?filter=latest&per_page=100`)).json();
         jobs = { names, list: list.jobs || [] };
       }
-      const display = jobs.names[scenario] || scenario;
+      const display = jobs.names[jobName] || jobName;
       const job = jobs.list.find((j) => j.name === display);
       if (!job) return null;
       if (job.conclusion === 'skipped') return { skipped: true };
@@ -135,8 +136,23 @@ export async function reportNight(env = process.env, log = console.log) {
     }
   };
 
-  // A failed stage ran no scenario, so a verdict's missing record is not the cause the issue should quote.
+  // A failed stage ran no scenario. Report that shared prerequisite once, not once per skipped job.
   const stageEnded = env.STAGE && env.STAGE !== 'success' ? env.STAGE : '';
+  if (stageEnded) {
+    const number = open.get(STAGE_TITLE);
+    const got = await jobLog('stage');
+    const lines = got?.text || `The stage job ended ${stageEnded}; its log could not be read.`;
+    const body = `Night of ${night}: the shared stage job ended ${stageEnded}, so no scenario ran.\n\nRun: ${runLink}\n\nThe last lines:\n\n\`\`\`\n${lines}\n\`\`\`\n`;
+    if (number) {
+      await call('POST', `/issues/${number}/comments`, { body });
+      log(`commented stage: still failing, night added to #${number}`);
+    } else {
+      const res = await (await call('POST', '/issues', { title: STAGE_TITLE, labels: ['bug', LABEL, 'archon-triage'], body })).json();
+      log(`opened stage: issue #${res.number}`);
+    }
+    return { failures: ['stage'] };
+  }
+
   const failures = [];
   for (const [name, result] of scenarios) {
     const title = titleOf(name);
@@ -151,12 +167,11 @@ export async function reportNight(env = process.env, log = console.log) {
     const exactVerdict = verdicts.get(name);
     const why = result === 'failure' ? 'failed' : `could not run (its job ended ${result || 'with no result'})`;
     let lines;
-    if (exactVerdict && stageEnded) lines = `It did not run: the stage job ended ${stageEnded}.`;
-    else if (exactVerdict) lines = exactVerdict;
+    if (exactVerdict) lines = exactVerdict;
     else {
       const got = await jobLog(name);
       if (got && got.text) lines = got.text;
-      else if (got && got.skipped) lines = `The job did not run${stageEnded ? `: the stage job ended ${stageEnded}` : ''}.`;
+      else if (got && got.skipped) lines = `The job did not run.`;
       else lines = `The job's log could not be read; the run link has it.`;
     }
     const body = `Night of ${night}: ${name} ${why}.\n\nRun: ${runLink}\n\nThe last lines:\n\n\`\`\`\n${lines}\n\`\`\`\n`;

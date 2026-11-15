@@ -90,6 +90,7 @@ async function night(results, state = {}, extra = {}) {
 }
 
 const T = (name) => `Nightly scenario failed: ${name}`;
+const ST = 'Nightly shared stage failed: stage';
 
 test('a failed scenario with no issue opens one', async () => {
   const r = await night('voice=failure', {
@@ -161,11 +162,24 @@ test('a passed scenario with no open issue does nothing', async () => {
   assert.equal(r.created.length + r.comments.length + r.patches.length, 0);
 });
 
-test('a scenario that did not run counts as failed', async () => {
-  const r = await night('voice=skipped docker-server=cancelled linux-update=', { jobs: [{ id: 6, name: 'a stranger\'s Docker server', conclusion: 'skipped' }] }, { STAGE: 'failure' });
+test('a failed shared stage opens one shared incident and no skipped-scenario incidents', async () => {
+  const r = await night('voice=skipped docker-server=cancelled linux-update=', {
+    jobs: [{ id: 6, name: 'the stage file', conclusion: 'failure' }],
+    logs: { 'the stage file': 'No exact image v2-sha-deadbeef was published' },
+  }, { STAGE: 'failure' });
   assert.equal(r.code, 0, r.stderr);
-  assert.deepEqual(r.created.map((c) => c.body.title).sort(), [T('docker-server'), T('linux-update'), T('voice')]);
-  assert.match(r.created.find((c) => c.body.title === T('docker-server')).body.body, /did not run/);
+  assert.deepEqual(r.created.map((c) => c.body.title), [ST]);
+  assert.match(r.created[0].body.body, /shared stage job ended failure, so no scenario ran/);
+  assert.match(r.created[0].body.body, /No exact image v2-sha-deadbeef was published/);
+});
+
+test('a repeated shared stage failure updates its one incident', async () => {
+  const r = await night('voice=skipped docker-server=skipped', {
+    openIssues: [{ number: 12, title: ST }],
+  }, { STAGE: 'failure' });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.created.length, 0);
+  assert.deepEqual(r.comments.map((c) => c.path), ['/issues/12/comments']);
 });
 
 test('two failures open two issues', async () => {
@@ -286,11 +300,9 @@ test('the draft collects the verdicts once and the night reports from that same 
     'a failed stage must still hand the night every scenario, failed');
   const told = await night('', {}, { SCENARIO_VERDICTS: failed.handed.stdout, STAGE: 'failure' });
   assert.equal(told.code, 0, told.stderr);
-  assert.equal(told.created.length, rows.length);
-  for (const { body } of told.created) {
-    assert.match(body.body, /It did not run: the stage job ended failure\./, 'a failed stage must be the cause each issue names');
-    assert.doesNotMatch(body.body, /result record/);
-  }
+  assert.deepEqual(told.created.map(({ body }) => body.title), [ST]);
+  assert.match(told.created[0].body.body, /shared stage job ended failure, so no scenario ran/);
+  assert.doesNotMatch(told.created[0].body.body, /result record/);
   const ran = run('success');
   assert.equal(ran.handed.status, 0, ran.handed.stderr);
   assert.match(ran.handed.stdout, /^PASS voice: heard$/m);

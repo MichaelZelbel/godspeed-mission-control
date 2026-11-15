@@ -216,7 +216,9 @@ it (`assistant_keeps_a_conversation`).
   with the assistant's own Python.
 - `test-scenarios.sh` — their gate: `bash scenarios/test-scenarios.sh` from the root of a checkout.
 - `report-night.mjs` — the report after the nightly run of main (02:30 UTC; Linux and Docker jobs only):
-  for each scenario that failed or could not run it opens one issue `Nightly scenario failed: <name>`
+  when the shared stage fails it opens or updates one `Nightly shared stage failed: stage` issue and
+  opens no issues for the scenario jobs that were skipped because of it;
+  for each scenario that ran and failed it opens one issue `Nightly scenario failed: <name>`
   (labels `bug`, `scenario-failure` (made if missing), and `archon-triage`), or adds the night to the
   one already open;
   for each that passed with an issue open it comments the run link and closes it. Its tests are
