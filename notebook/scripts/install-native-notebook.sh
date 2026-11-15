@@ -31,6 +31,23 @@ node_platform() {
   printf '%s-%s' "$os" "$arch"
 }
 
+local_stt_platform() {
+  local os arch
+  os=$(uname -s); arch=$(uname -m)
+  case "$os:$arch" in
+    Linux:x86_64|Linux:amd64|Linux:aarch64|Linux:arm64|Darwin:arm64|Darwin:aarch64|MINGW*:x86_64|MSYS*:x86_64) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+install_local_stt() {
+  if ! local_stt_platform; then
+    echo "Local voice-note transcription is not supported by Hermes on $(uname -s) $(uname -m)." >&2
+    return 2
+  fi
+  "$1" pm install --extra stt-whisper
+}
+
 sha256_of() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
   else shasum -a 256 "$1" | cut -d' ' -f1; fi
@@ -677,7 +694,12 @@ fi
 if [ ! -f "$root/.godspeed/sync-config.json" ] && git -C "$root" remote get-url origin >/dev/null 2>&1; then
   "$node" "$version/notebook/bin/godspeed.mjs" sync folder || echo 'The notebook was not joined to the repository; it works on this machine alone until it is.' >&2
 fi
-"$node" "$version/notebook/scripts/wire-assistant.mjs" "$HERMES_HOME"
+local_stt=available
+install_local_stt "$assistant" || {
+  result=$?
+  if [ "$result" -eq 2 ]; then local_stt=unavailable; else exit "$result"; fi
+}
+GODSPEED_LOCAL_STT="$local_stt" "$node" "$version/notebook/scripts/wire-assistant.mjs" "$HERMES_HOME"
 # Which Hermes the notebook and its add-ons use (.godspeed/assistant.json): the one found above,
 # checked the way an add-on's connection is. The one used until now stays when the one found does not
 # load for this account and it does; when none loads, this says so and the installation goes on.

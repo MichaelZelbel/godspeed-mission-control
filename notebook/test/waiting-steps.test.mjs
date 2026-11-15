@@ -414,7 +414,7 @@ test('two equal-text records certify one delivery each, in order, and a delivery
  assert.deepEqual(heard(store,{chat:'telegram',words:'yes'}).steps.map(s=>s.id).sort(),[a.id,b.id,c.id].sort(),'a two-question message makes both answerable, so a bare yes asks which');
 });
 
-test('a direct reply is stamped with the words actually sent, so a progress photo or a cut reply cannot certify an unseen question',async t=>{
+test('a failed progress photo does not stamp its text parts, while a sent photo stamps its caption',async t=>{
  const {store}=fixture(t),sent=[];
  let long,short,uid=1;const domains={invoke:async()=>{
   if(uid===1){long=open(store,'Long one.');return {reply:'x'.repeat(4000)+' '+long.words,habit:{progress:{version:1}}};}
@@ -425,7 +425,7 @@ test('a direct reply is stamped with the words actually sent, so a progress phot
   return {ok:true,json:async()=>({ok:true,result:{message_id:9}})};};
  const telegram=new Telegram({store,domains,token:'synthetic-bot',owner:'123',transport,renderProgress:async()=>Buffer.from('png')});
  await telegram.tick();
- assert.equal(sent.at(-1)[0],'sendMessage');assert.ok(!sent.at(-1)[1].includes('Long one.'));assert.equal(store.get('approvals',long.id).sent_at,undefined);
+ assert.equal(sent.at(-1)[0],'sendMessage');assert.ok(sent.some(([,text])=>text.includes('Long one.')));assert.equal(store.get('approvals',long.id).sent_at,undefined);
  uid=2;
  await telegram.tick();
  assert.equal(sent.at(-1)[0],'sendPhoto');assert.equal(sent.at(-1)[1],'Nice. '+short.words);assert.ok(store.get('approvals',short.id).sent_at);

@@ -1,0 +1,10 @@
+{
+  "asks": {
+    "en": ["today's brief", "todays brief", "today brief", "today's briefing", "todays briefing", "today's morning brief", "todays morning brief", "today's morning briefing", "my brief", "my briefing", "the brief", "the brief again", "my brief again", "morning brief", "my morning brief", "the morning brief", "morning briefing", "my morning briefing", "brief", "briefing"],
+    "de": ["heutiges briefing", "das heutige briefing", "briefing von heute", "das briefing von heute", "mein briefing", "das briefing", "morgenbriefing", "mein morgenbriefing", "das morgenbriefing", "heutiges morgenbriefing", "das heutige morgenbriefing", "tagesbriefing", "mein tagesbriefing"]
+  },
+  "frames": {
+    "en": ["^(?:please\\s+)?(?:show|send|give|get)\\s+me\\s+", "^(?:what(?:'s| is)|where(?:'s| is))\\s+", "^(?:can|could)\\s+(?:i|you)\\s+(?:see|have|get|send me|show me)\\s+", "\\s+please$"],
+    "de": ["^(?:bitte\\s+)?(?:zeig|schick|gib)\\s+mir\\s+", "^(?:was ist|wo ist)\\s+", "\\s+bitte$"]
+  }
+}
