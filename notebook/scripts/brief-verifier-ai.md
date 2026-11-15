@@ -28,6 +28,7 @@ node notebook/scripts/brief-verifier-ai.mjs 43123 /path/to/response-plan.json /p
 
 Connect Settings to `http://127.0.0.1:43123/v1` with any non-empty key and model name. The server
 binds only to loopback. A missing planned reply returns HTTP 500 instead of silently inventing one.
+Complete bounded inputs for H-04, H-05, H-06, and H-18 are in `brief-verifier-plans/`.
 
 When a verifier also needs prepared notebook state, it can keep its private public-API setup in a
 JSON array and execute it against a running loopback notebook:
@@ -51,8 +52,10 @@ JSON array and execute it against a running loopback notebook:
 node notebook/scripts/brief-verifier-setup.mjs http://127.0.0.1:3000 /path/to/setup-plan.json /path/to/setup-results.jsonl
 ```
 
-Only loopback notebook addresses and public `/api/` routes are accepted. Every response is written
-to the result log. A step may set `expect.status`, `expect.body_includes`, or `expect.json` (a map of
+Only loopback notebook addresses and public `/api/` routes are accepted. Every request body and
+response is written to the result log. `{{today}}` is the current UTC day and `{{ai_url}}` comes
+from `BRIEF_VERIFIER_AI_URL`. A step may set `expect.status`, `expect.body_includes`,
+`expect.body_excludes`, or `expect.json` (a map of
 dotted response paths to exact values). It may also set `capture` to a map of names to dotted JSON
 paths. Later request bodies and expectations can use captured values as `{{name}}`. The setup stops
 on the first mismatch, so a verifier can retain proof that the voice rule, refusal, Challenge start,

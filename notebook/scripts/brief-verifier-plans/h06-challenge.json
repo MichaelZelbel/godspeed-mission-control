@@ -1,0 +1,9 @@
+[
+ {"name":"connect bounded AI","path":"/api/provider","body":{"url":"{{ai_url}}","key":"stand-in","model":"stand-in","routines":false},"expect":{"json":{"connected":true}}},
+ {"name":"save verifier voice rule","path":"/api/identity/rule","body":{"fields":{"title":"Verifier voice rule","line":"Never use BANNED-H06.","group":"never","story":"Verifier-owned voice refusal."}},"expect":{"body_includes":"BANNED-H06","json":{"saved":true}}},
+ {"name":"start Charm Challenge","path":"/api/functions/personal-operation","body":{"type":"charm","action":"start"},"expect":{"body_includes":"Charm Challenge started","json":{"data.ok":true,"data.state.running":true,"data.state.day":1}}},
+ {"name":"retain refused voice source","path":"/api/query","body":{"table":"notes","operation":"insert","values":{"title":"Voice-rule refusal","content":"BANNED-H06 sentence refused by the verifier voice rule.","source_app":"verifier"}}},
+ {"name":"save allowed Challenge briefing","path":"/api/query","body":{"table":"notes","operation":"insert","values":{"title":"Your morning briefing","content":"H-06 checked briefing.\n\nNext: exact H-06 step.\n\nCharm Challenge: day 1 of 21, 21 days to go.","source_app":"morning-brief","brief_day":"{{today}}"}},"expect":{"body_excludes":"BANNED-H06"}},
+ {"name":"conversation preserves Challenge","path":"/api/functions/conversation-chat","body":{"conversation_id":"notebook:verifier-h06","request_id":"00000000-0000-4000-8000-000000000006","message":"today's brief"},"expect":{"body_excludes":"BANNED-H06","json":{"data.reply":"H-06 checked briefing.\n\nNext: exact H-06 step.\n\nCharm Challenge: day 1 of 21, 21 days to go."}}},
+ {"name":"browser preserves Challenge","path":"/api/browser-chat","body":{"request_id":"00000000-0000-4000-8000-000000000106","message":"mein Morgenbriefing"},"expect":{"body_excludes":"BANNED-H06","json":{"reply":"H-06 checked briefing.\n\nNext: exact H-06 step.\n\nCharm Challenge: day 1 of 21, 21 days to go."}}}
+]

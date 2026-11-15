@@ -23,16 +23,17 @@ test('runs verifier-owned setup only through loopback public API routes',async()
  const plan=path.join(folder,'plan.json'),log=path.join(folder,'results.jsonl');
  fs.writeFileSync(plan,JSON.stringify([
   {name:'prepared note',path:'/api/query',body:{table:'notes'},capture:{note_id:'data.id'},expect:{status:200,json:{'data.id':'prepared-1'}}},
-  {name:'use prepared note',path:'/api/query',body:{id:'{{note_id}}',label:'note {{note_id}}'},expect:{body_includes:'"ok":true'}},
+  {name:'use prepared note',path:'/api/query',body:{id:'{{note_id}}',label:'note {{note_id}}',day:'{{today}}'},expect:{body_includes:'"ok":true',body_excludes:'not present'}},
  ]));
  const child=spawn(process.execPath,[verifierScript,`http://127.0.0.1:${server.address().port}`,plan,log],{stdio:['ignore','ignore','pipe']});
  let stderr='';child.stderr.setEncoding('utf8');child.stderr.on('data',chunk=>stderr+=chunk);
  const status=await new Promise((resolve,reject)=>{child.once('exit',resolve);child.once('error',reject);});
  await new Promise(resolve=>server.close(resolve));
  assert.equal(status,0,stderr);
- assert.deepEqual(seen,[{url:'/api/query',body:{table:'notes'}},{url:'/api/query',body:{id:'prepared-1',label:'note prepared-1'}}]);
+ assert.deepEqual(seen,[{url:'/api/query',body:{table:'notes'}},{url:'/api/query',body:{id:'prepared-1',label:'note prepared-1',day:new Date().toISOString().slice(0,10)}}]);
  const records=fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse);
  assert.equal(records.length,2);
+ assert.deepEqual(records[1].request,seen[1].body);
 });
 
 test('rejects non-loopback setup targets',()=>{

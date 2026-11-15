@@ -1,0 +1,7 @@
+[
+ {"name":"connect bounded AI","path":"/api/provider","body":{"url":"{{ai_url}}","key":"stand-in","model":"stand-in","routines":false},"expect":{"json":{"connected":true}}},
+ {"name":"chat before save","path":"/api/functions/conversation-chat","body":{"conversation_id":"notebook:verifier-h04","request_id":"00000000-0000-4000-8000-000000000004","message":"today's brief"},"expect":{"json":{"data.reply":"No saved briefing exists, so this is the ordinary chat answer."}}},
+ {"name":"chat made no briefing","path":"/api/query","body":{"table":"notes","filters":[["eq","source_app","morning-brief"]]},"expect":{"json":{"data":[]}}},
+ {"name":"save later routine briefing","path":"/api/query","body":{"table":"notes","operation":"insert","values":{"title":"Your morning briefing","content":"H-04 saved briefing.\n\nNext: use the saved H-04 step.","source_app":"morning-brief","brief_day":"{{today}}"}}},
+ {"name":"chat reuses later briefing","path":"/api/functions/conversation-chat","body":{"conversation_id":"notebook:verifier-h04","request_id":"00000000-0000-4000-8000-000000000104","message":"today's brief"},"expect":{"json":{"data.reply":"H-04 saved briefing.\n\nNext: use the saved H-04 step."}}}
+]

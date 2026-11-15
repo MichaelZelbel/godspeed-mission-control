@@ -1,0 +1,7 @@
+{"responses":[
+ {"name":"connection H-04","match":{"kind":"connection-test"},"reply":"Connected."},
+ {"name":"ordinary chat H-04","match":{"kind":"conversation-chat"},"reply":{"reply":"No saved briefing exists, so this is the ordinary chat answer.","language":"en"}},
+ {"name":"connection H-05","match":{"kind":"connection-test"},"reply":"Connected."},
+ {"name":"connection H-06","match":{"kind":"connection-test"},"reply":"Connected."},
+ {"name":"connection H-18","match":{"kind":"connection-test"},"reply":"Connected."}
+]}
