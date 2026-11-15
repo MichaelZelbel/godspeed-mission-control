@@ -13,7 +13,9 @@
 // Environment: RESULTS ("name=result name=result ..."), STAGE (the stage job's result, optional),
 // CANDIDATE_ONLY (names of jobs that do not run at night, left out), or instead SCENARIO_VERDICTS (the
 // collector's "PASS|FAIL <name>: ..." lines, which give both each scenario's result and the exact
-// line its issue quotes; set but holding none is an error), GITHUB_TOKEN, GITHUB_REPOSITORY,
+// line its issue quotes; set but holding none is an error). When neither status input is supplied,
+// the scheduled workflow's exact invocation discovers conclusions from the run's jobs. Also needs
+// GITHUB_TOKEN, GITHUB_REPOSITORY,
 // GITHUB_RUN_ID, GITHUB_SERVER_URL, GITHUB_API_URL, NIGHT (default: today, UTC),
 // WORKFLOW_FILE (default .github/workflows/scenarios.yml, where the jobs' display names are read).
 import { readFileSync } from 'node:fs';
@@ -81,7 +83,7 @@ export async function reportNight(env = process.env, log = console.log) {
   const runLink = `${env.GITHUB_SERVER_URL || 'https://github.com'}/${repo}/actions/runs/${runId}`;
   const verdicts = verdictLines(env.SCENARIO_VERDICTS);
   if (env.SCENARIO_VERDICTS !== undefined && !verdicts.size) throw new Error('SCENARIO_VERDICTS holds no scenario verdict');
-  const scenarios = env.SCENARIO_VERDICTS === undefined
+  let scenarios = env.SCENARIO_VERDICTS === undefined
     ? parseResults(env.RESULTS, env.CANDIDATE_ONLY)
     : new Map([...verdicts].map(([name, line]) => [name, line.startsWith('PASS ') ? 'success' : 'failure']));
 
@@ -118,14 +120,18 @@ export async function reportNight(env = process.env, log = console.log) {
 
   // What the failed jobs said: the run's jobs by display name, their logs on demand.
   let jobs = null;
+  const runJobs = async () => {
+    if (!jobs) {
+      let names = {};
+      try { names = jobNames(readFileSync(env.WORKFLOW_FILE || '.github/workflows/scenarios.yml', 'utf8')); } catch {}
+      const list = await (await call('GET', `/actions/runs/${runId}/jobs?filter=latest&per_page=100`)).json();
+      jobs = { names, list: list.jobs || [] };
+    }
+    return jobs;
+  };
   const jobLog = async (jobName) => {
     try {
-      if (!jobs) {
-        let names = {};
-        try { names = jobNames(readFileSync(env.WORKFLOW_FILE || '.github/workflows/scenarios.yml', 'utf8')); } catch {}
-        const list = await (await call('GET', `/actions/runs/${runId}/jobs?filter=latest&per_page=100`)).json();
-        jobs = { names, list: list.jobs || [] };
-      }
+      await runJobs();
       const display = jobs.names[jobName] || jobName;
       const job = jobs.list.find((j) => j.name === display);
       if (!job) return null;
@@ -137,7 +143,18 @@ export async function reportNight(env = process.env, log = console.log) {
   };
 
   // A failed stage ran no scenario. Report that shared prerequisite once, not once per skipped job.
-  const stageEnded = env.STAGE && env.STAGE !== 'success' ? env.STAGE : '';
+  let stageResult = env.STAGE;
+  if (!stageResult && !scenarios.size) {
+    const observed = await runJobs();
+    stageResult = observed.list.find((job) => job.name === (observed.names.stage || 'stage'))?.conclusion || '';
+    const excluded = new Set(['stage', 'verdict', 'pr-image', ...String(env.CANDIDATE_ONLY || '').split(/\s+/).filter(Boolean)]);
+    const idsByName = new Map(Object.entries(observed.names).map(([id, name]) => [name, id]));
+    scenarios = new Map(observed.list.flatMap((job) => {
+      const id = idsByName.get(job.name);
+      return id && !excluded.has(id) ? [[id, job.conclusion || '']] : [];
+    }));
+  }
+  const stageEnded = stageResult && stageResult !== 'success' ? stageResult : '';
   if (stageEnded) {
     const number = open.get(STAGE_TITLE);
     const got = await jobLog('stage');

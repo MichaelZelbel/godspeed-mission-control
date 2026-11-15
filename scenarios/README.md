@@ -223,6 +223,8 @@ it (`assistant_keeps_a_conversation`).
   one already open;
   for each that passed with an issue open it comments the run link and closes it. Its tests are
   `test-report-night.mjs` (`node --test`, against a stand-in for GitHub), run by `test-scenarios.sh`.
+  The live invocation can recover stage and scenario conclusions from the run's jobs when no
+  verdict or result input reaches it.
 
 ## Which stage a run proves
 

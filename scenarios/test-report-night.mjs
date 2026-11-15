@@ -89,6 +89,8 @@ async function night(results, state = {}, extra = {}) {
   return { ...out, calls, created: where('POST', /^\/issues$/), comments: where('POST', /comments$/), patches: where('PATCH', /^\/issues\//), labelsMade: where('POST', /^\/labels$/) };
 }
 
+const exactLiveInvocation = (state) => night(undefined, state, { RESULTS: undefined, STAGE: undefined });
+
 const T = (name) => `Nightly scenario failed: ${name}`;
 const ST = 'Nightly shared stage failed: stage';
 
@@ -173,6 +175,19 @@ test('a failed shared stage opens one shared incident and no skipped-scenario in
   assert.match(r.created[0].body.body, /No exact image v2-sha-deadbeef was published/);
 });
 
+test('the exact live invocation discovers a failed shared stage and opens one incident', async () => {
+  const r = await exactLiveInvocation({
+    jobs: [
+      { id: 6, name: 'the stage file', conclusion: 'failure' },
+      { id: 7, name: "a stranger's Linux install", conclusion: 'skipped' },
+    ],
+    logs: { 'the stage file': 'No exact image v2-sha-deadbeef was published' },
+  });
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(r.created.map(({ body }) => body.title), [ST]);
+  assert.match(r.created[0].body.body, /No exact image v2-sha-deadbeef was published/);
+});
+
 test('a repeated shared stage failure updates its one incident', async () => {
   const r = await night('voice=skipped docker-server=skipped', {
     openIssues: [{ number: 12, title: ST }],
@@ -186,6 +201,22 @@ test('two failures open two issues', async () => {
   const r = await night('voice=failure docker-server=failure linux-install=success');
   assert.equal(r.created.length, 2);
   assert.deepEqual(r.created.map((c) => c.body.title).sort(), [T('docker-server'), T('voice')]);
+});
+
+test('the exact live invocation discovers two genuine scenario failures and opens two incidents', async () => {
+  const r = await exactLiveInvocation({
+    jobs: [
+      { id: 6, name: 'the stage file', conclusion: 'success' },
+      { id: 7, name: "a stranger's Linux install", conclusion: 'failure' },
+      { id: 8, name: "a stranger's Docker server", conclusion: 'failure' },
+    ],
+    logs: {
+      "a stranger's Linux install": 'FAIL linux-install: install broke',
+      "a stranger's Docker server": 'FAIL docker-server: server broke',
+    },
+  });
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(r.created.map(({ body }) => body.title).sort(), [T('docker-server'), T('linux-install')]);
 });
 
 test('a scenario named twice opens one issue', async () => {
