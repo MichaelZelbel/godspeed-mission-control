@@ -6,6 +6,9 @@ import {spawn,spawnSync} from 'node:child_process';
 import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+
+const verifierScript=fileURLToPath(new URL('../scripts/brief-verifier-setup.mjs',import.meta.url));
 
 test('runs verifier-owned setup only through loopback public API routes',async()=>{
  const seen=[];
@@ -19,7 +22,7 @@ test('runs verifier-owned setup only through loopback public API routes',async()
  const folder=await mkdtemp(path.join(tmpdir(),'brief-verifier-setup-'));
  const plan=path.join(folder,'plan.json'),log=path.join(folder,'results.jsonl');
  fs.writeFileSync(plan,JSON.stringify([{name:'prepared note',path:'/api/query',body:{table:'notes'}}]));
- const child=spawn(process.execPath,['notebook/scripts/brief-verifier-setup.mjs',`http://127.0.0.1:${server.address().port}`,plan,log],{stdio:['ignore','ignore','pipe']});
+ const child=spawn(process.execPath,[verifierScript,`http://127.0.0.1:${server.address().port}`,plan,log],{stdio:['ignore','ignore','pipe']});
  let stderr='';child.stderr.setEncoding('utf8');child.stderr.on('data',chunk=>stderr+=chunk);
  const status=await new Promise((resolve,reject)=>{child.once('exit',resolve);child.once('error',reject);});
  await new Promise(resolve=>server.close(resolve));
@@ -29,7 +32,7 @@ test('runs verifier-owned setup only through loopback public API routes',async()
 });
 
 test('rejects non-loopback setup targets',()=>{
- const child=spawnSync(process.execPath,['notebook/scripts/brief-verifier-setup.mjs','https://example.com','plan.json','result.jsonl'],{encoding:'utf8'});
+ const child=spawnSync(process.execPath,[verifierScript,'https://example.com','plan.json','result.jsonl'],{encoding:'utf8'});
  assert.notEqual(child.status,0);
  assert.match(child.stderr,/usage:/);
 });

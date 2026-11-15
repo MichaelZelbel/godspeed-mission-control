@@ -5,6 +5,9 @@ import {spawn} from 'node:child_process';
 import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+
+const verifierScript=fileURLToPath(new URL('../scripts/brief-verifier-ai.mjs',import.meta.url));
 
 let child,folder,port;
 before(async()=>{
@@ -18,7 +21,7 @@ before(async()=>{
   net.then(({createServer})=>{const server=createServer();server.listen(0,'127.0.0.1',()=>{const address=server.address();server.close(()=>resolve(address.port));});server.on('error',reject);});
  });
  port=listener;
- child=spawn(process.execPath,['notebook/scripts/brief-verifier-ai.mjs',String(port),path.join(folder,'plan.json'),path.join(folder,'requests.jsonl')],{stdio:['ignore','ignore','pipe']});
+ child=spawn(process.execPath,[verifierScript,String(port),path.join(folder,'plan.json'),path.join(folder,'requests.jsonl')],{stdio:['ignore','ignore','pipe']});
  await new Promise((resolve,reject)=>{child.stderr.once('data',resolve);child.once('error',reject);child.once('exit',code=>reject(Error(`stand-in exited ${code}`)));});
 });
 after(()=>child?.kill());
