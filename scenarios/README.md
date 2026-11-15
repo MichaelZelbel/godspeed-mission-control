@@ -29,6 +29,11 @@ scenario machine with `bash scenarios/notebook-assistant-journeys.sh <stage ref>
 Chrome or Chromium at a standard Linux executable location; browser runners may provide
 `CHROME_PATH`, `CHROME_BIN`, or `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` when it is elsewhere. Its
 fixture is loopback-only and the command retains the browser evidence described in the table below.
+The installed notebook must
+be a native Linux systemd service, with either a usable user systemd session or permission to run
+`sudo systemctl restart godspeed-integrated-notebook.service`. Evidence is kept under
+`${GODSPEED_SCENARIO_WORK:-${RUNNER_TEMP:-/tmp}}/notebook-assistant-journeys`; set
+`GODSPEED_SCENARIO_WORK=<kept folder>` to retain it somewhere durable.
 
 `workouts-from-hevy`, `day-becomes-facts`, `hermes-update-rollback` and `first-day` are jobs of that workflow, and the verdict requires all four unless the run was started with `-f only=<job names>`, in which case it judges only the jobs named there. Their fixtures are loopback-only and contain only made-up people, workouts and messages.
 
@@ -51,8 +56,8 @@ fixture is loopback-only and the command retains the browser evidence described 
 | `windows-old-names-move.ps1` | an install from 2.0.0-beta.10 (PowerShell, a Windows runner, a candidate only) moves to the folder names without "Full Alpha" on the next update, with everything in them, and nothing a person sees still names it; with a folder held open the old install keeps working and the setup says it will try again, and the next update moves it. Run `pwsh -NoProfile -File scenarios/windows-old-names-move.ps1 <stage ref> [held]`; its checking part, `--check <folder>`, runs under pwsh anywhere |
 | `telegram-language.sh` | through the installed assistant's own outgoing hook and Telegram send path, a reply written in the other language than the message it answers is sent in the message's language (three English journal messages with a German draft, English, German, English in one chat, a cron delivery left alone); the builder's copy runs it with `GODSPEED_SCENARIO_PRODUCT` and a Hermes it can run |
 | `brief-asked-in-chat.sh` | with the Charm Challenge running and the Morning brief routine run, "today's brief" asked in the notebook's chat is answered with the saved briefing's Charm line word for word, a seeded sentence that breaks a writing rule is absent from the briefing and the answer and its repair item is listed, and asking again saves no second briefing note |
+| `notebook-assistant-journeys.sh` | through installed Chromium and the production notebook UI, Settings saves Another service across navigation, reload and restart; Timeline saves and edits with and without AI; and every dashboard/chat/pop-out reports no-AI, connected, refused, recovered and unreachable states consistently at desktop and phone widths, including old tabs and direct HTTP agreement. It retains redacted state, request/reply, clipping, restart and screenshot evidence and stops only its own browser and loopback fixture |
 | `talk-prep-honest.sh` | a fixture person with one health area serving three goals and naming research domains: the installed Coaching talk preparation job is run through the public Run now route and must create a fresh preparation; a preparation whose review leaves a goal uncovered is refused by the real seal and the installed gate, and the talk opens with the one sentence naming what is missing and no line claiming a research duration; a preparation covering all three goals, routes recorded in full, with a passing review sealed by the real seal opens the talk from its own opening |
-| `notebook-assistant-journeys.sh` | through installed Chromium and the production notebook UI, Settings saves Another service and shows the same address, model and retained-key state after navigation, reload and a notebook restart; Timeline saves and edits one moment with no AI without requesting extraction, then saves and edits another with a loopback AI and requests extraction both times. It retains redacted browser, request, restart and screenshot evidence and stops only its own browser and loopback fixture |
 | `phone-health-days.sh` | on the Docker server install, made-up Health Auto Export uploads (overlapping windows, a day re-sent, a workout sent twice, a run and a slow "run") leave exact day records, a second paired notebook shows the same days after a sync, and a wrong token answers 404 and stores nothing |
 | `incomplete-day.sh` | a day whose last point is 19:55 is briefed as stopping at 19:55, with no short-day wording and its protein count unknown; after a protein number is given by hand the next briefing counts it |
 | `phone-goes-quiet.sh` | 37 hours past the last upload the connection check sends one message and files one deadline, a second run sends nothing, an upload closes the deadline |
@@ -129,7 +134,7 @@ Named by the job, never in a file here (for the scenarios above that await their
 | `voice` | `ELEVENLABS_TEST_KEY_STT` | a test key ElevenLabs lets transcribe |
 | `voice` | `ELEVENLABS_TEST_KEY_NO_STT` | a test key it refuses that permission |
 | `charm-challenge` | `GODSPEED_SCENARIO_AI_KEY` | the owner's own chat has to be answered by a model, because that is where a vent is noticed; the same two say which |
-| `brief-asked-in-chat` | `GODSPEED_SCENARIO_AI_KEY` | the Morning brief is written by a model and the chat that is asked for it is answered by one; the same two say which |
+| `brief-asked-in-chat` | optional in the builder's copy | the Morning brief is written by the configured model when a key is supplied; without one, a local stand-in makes the public saved-brief route executable |
 | `talk-prep-honest` | `GODSPEED_SCENARIO_AI_KEY` | the talk the owner asks for in the chat is opened by a model; the same two say which. Coverage is never judged by it: the preparations, the run records and the reviews are fixtures sealed by the coach's own commands |
 | `telegram-language` | `GODSPEED_SCENARIO_AI_KEY` | optional in the builder's copy: when a key is supplied the seven texts of `telegram-language-cases.json` are translated by that model, and then `GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` are required as well (missing either fails); without a key the builder's copy uses its local stand-in on 127.0.0.1 |
 | `incomplete-day` | `GODSPEED_SCENARIO_AI_KEY` | a model writes the briefings the scenario reads; it judges only what a briefing says of a day, never the numbers |
@@ -223,11 +228,15 @@ it (`assistant_keeps_a_conversation`).
   with the assistant's own Python.
 - `test-scenarios.sh` — their gate: `bash scenarios/test-scenarios.sh` from the root of a checkout.
 - `report-night.mjs` — the report after the nightly run of main (02:30 UTC; Linux and Docker jobs only):
-  for each scenario that failed or could not run it opens one issue `Nightly scenario failed: <name>`
+  when the shared stage fails it opens or updates one `Nightly shared stage failed: stage` issue and
+  opens no issues for the scenario jobs that were skipped because of it;
+  for each scenario that ran and failed it opens one issue `Nightly scenario failed: <name>`
   (labels `bug`, `scenario-failure` (made if missing), and `archon-triage`), or adds the night to the
   one already open;
   for each that passed with an issue open it comments the run link and closes it. Its tests are
   `test-report-night.mjs` (`node --test`, against a stand-in for GitHub), run by `test-scenarios.sh`.
+  The live invocation can recover stage and scenario conclusions from the run's jobs when no
+  verdict or result input reaches it.
 
 ## Which stage a run proves
 

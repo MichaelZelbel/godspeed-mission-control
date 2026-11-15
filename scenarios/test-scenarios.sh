@@ -3669,45 +3669,6 @@ copy "$T/good" "$T/no-domains"
 sed -i '/^RESEARCH DOMAIN/d' "$T/no-domains/area.md"
 refuses 'an area with no research domain' talk-prep-honest "$T/no-domains" 'names no RESEARCH DOMAIN'
 
-# ======================================================= notebook-assistant-journeys
-assistant_journeys_good() {
-  local folder=$1
-  rm -rf "$folder"; mkdir -p "$folder/screenshots"
-  node - "$folder" <<'NODE'
-const fs=require('fs'),p=require('path'),d=process.argv[2],w=(n,x)=>fs.writeFileSync(p.join(d,n),typeof x==='string'?x:JSON.stringify(x)+'\n');
-const names=['provider-saved','provider-after-navigation','provider-after-reload','notebook-restarted','provider-after-restart','moment-saved-without-ai','moment-edited-without-ai','moment-saved-with-ai','moment-edited-with-ai'];w('actions.json',names.map(name=>({name,ok:true})));
-for(const n of ['provider-navigation.json','provider-reload.json','provider-restart.json'])w(n,{service:'Another service',url:'http://127.0.0.1:48763/v1',model:'fixture-model',key:true});
-w('moments.json',{'without-ai':{saved:true,edited:true},'with-ai':{saved:true,edited:true}});
-w('fixture-requests.jsonl','{"phase":"with-ai","operation":"extract-moment-profile","action":"save"}\n{"phase":"with-ai","operation":"extract-moment-profile","action":"edit"}\n');
-w('browser-console.json',[]);w('browser-network.json',[]);w('restart.txt','old_pid=101 new_pid=202 healthy=yes\n');w('cleanup.txt','browser=stopped\nfixture=stopped\n');
-NODE
-}
-section notebook-assistant-journeys
-N=$TMP/notebook-assistant
-assistant_journeys_good "$N/good"
-passes 'custom AI persistence and both moment enrichment states through the installed browser route' notebook-assistant-journeys "$N/good" 'owned browser and fixture stopped'
-for transition in navigation reload restart; do
-  copy "$N/good" "$N/wrong-$transition"
-  printf '{"service":"OpenAI","url":"http://127.0.0.1:48763/v1","model":"fixture-model","key":true}\n' >"$N/wrong-$transition/provider-$transition.json"
-  refuses "a provider lost after $transition" notebook-assistant-journeys "$N/wrong-$transition" 'incomplete or contradicts'
-done
-copy "$N/good" "$N/missing-key"; node -e 'let x=require(process.argv[1]);x.key=false;require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/missing-key/provider-restart.json"
-refuses 'a saved provider whose key appears missing' notebook-assistant-journeys "$N/missing-key" 'incomplete or contradicts'
-copy "$N/good" "$N/no-ai-called"; printf '{"phase":"without-ai","operation":"extract-moment-profile","action":"save"}\n' >>"$N/no-ai-called/fixture-requests.jsonl"
-refuses 'an extraction request while no AI was connected' notebook-assistant-journeys "$N/no-ai-called" 'incomplete or contradicts'
-copy "$N/good" "$N/no-ai-error"; printf '[{"phase":"without-ai","text":"extract-moment-profile failed"}]\n' >"$N/no-ai-error/browser-console.json"
-refuses 'an extraction error while no AI was connected' notebook-assistant-journeys "$N/no-ai-error" 'incomplete or contradicts'
-for action in save edit; do
-  copy "$N/good" "$N/no-ai-$action"; grep -v '"action":"'$action'"' "$N/no-ai-$action/fixture-requests.jsonl" >"$N/no-ai-$action/requests"; mv "$N/no-ai-$action/requests" "$N/no-ai-$action/fixture-requests.jsonl"
-  refuses "no extraction after the AI-backed $action" notebook-assistant-journeys "$N/no-ai-$action" 'incomplete or contradicts'
-done
-copy "$N/good" "$N/action-failed"; sed -i '0,/"ok":true/s//"ok":false/' "$N/action-failed/actions.json"
-refuses 'evidence without every successful visible action' notebook-assistant-journeys "$N/action-failed" 'incomplete or contradicts'
-copy "$N/good" "$N/secret"; printf 'scenario-secret-never-retain\n' >"$N/secret/leak.txt"
-refuses 'a submitted secret in retained evidence' notebook-assistant-journeys "$N/secret" 'leaked into retained evidence'
-copy "$N/good" "$N/no-cleanup"; printf 'browser=stopped\n' >"$N/no-cleanup/cleanup.txt"
-refuses 'a fixture with no cleanup record' notebook-assistant-journeys "$N/no-cleanup" 'incomplete or contradicts'
-
 # ===================================================== the owner on Telegram (2.0.0-beta.17)
 # no-question-he-cannot-judge, plain-yes, what-was-that and connection-check judge what an install sent
 # to a fixture Telegram (run.json) and what the notebook held afterwards. Every case is a folder of
@@ -5606,6 +5567,7 @@ refuses 'a hold mc-holds never wrote' held-by-a-claim "$HB/no-hold" 'wrote no cl
 PIC=1111111111111111111111111111111111111111111111111111111111111111
 PDFSHA=2222222222222222222222222222222222222222222222222222222222222222
 BIG=3333333333333333333333333333333333333333333333333333333333333333
+BIGPDF=4444444444444444444444444444444444444444444444444444444444444444
 media_travels_good() { # <folder>
   local folder=$1
   rm -rf "$folder"
@@ -5615,14 +5577,17 @@ media_travels_good() { # <folder>
   printf '%s\n' "$NEW_COMMIT" >"$folder/b-version"
   printf '%s\n' "$PIC" >"$folder/picture-sha"
   printf '%s\n' "$PDFSHA" >"$folder/pdf-sha"
-  printf '%s\n' "$BIG" >"$folder/large-sha"
+  printf '%s\n' "$BIG" >"$folder/large-picture-sha"
+  printf '%s\n' "$BIGPDF" >"$folder/large-pdf-sha"
   : >"$folder/a-carried-before-update.txt"
-  printf '%s.mapping.json\n%s.pdf\n%s.png\n' x "$PDFSHA" "$PIC" >"$folder/a-carried-after-update.txt"
-  printf '{"data":[{"path":"user/44444444-4444-4444-8444-444444444444.mp4","size":53477376}]}\n' >"$folder/a-kept-here.json"
+  printf '%s.mapping.json\n%s.mapping.json\n%s.pdf\n%s.png\n' x y "$PDFSHA" "$PIC" >"$folder/a-carried-after-update.txt"
+  printf '{"data":[{"path":"user/44444444-4444-4444-8444-444444444444.png","size":78643268},{"path":"user/55555555-5555-4555-8555-555555555555.pdf","size":78643232}]}\n' >"$folder/a-kept-here.json"
   cp "$folder/a-carried-after-update.txt" "$folder/b-carried.txt"
   printf '200\n' >"$folder/b-picture.status"; printf '%s\n' "$PIC" >"$folder/b-picture.sha"
   printf '200\n' >"$folder/b-pdf.status"; printf '%s\n' "$PDFSHA" >"$folder/b-pdf.sha"
-  printf '404\n' >"$folder/b-large.status"
+  printf '404\n' >"$folder/b-large-picture.status"
+  printf '404\n' >"$folder/b-large-pdf.status"
+  printf '{"data":{"user/44444444-4444-4444-8444-444444444444.png":"kept_elsewhere","user/55555555-5555-4555-8555-555555555555.pdf":"kept_elsewhere"}}\n' >"$folder/b-large-presence.json"
   printf '200\n' >"$folder/b-remove.status"
   printf '404\n' >"$folder/a-picture-after-removal.status"
   printf 'x.png\n' | sed "s/x/$PIC/" >"$folder/a-media-root-after-removal.txt"
@@ -5638,7 +5603,7 @@ copy "$M/good" "$M/had-carried"; printf '%s.png\n' "$PIC" >"$M/had-carried/a-car
 refuses "a first computer that carried media before the update" media-travels "$M/had-carried" "had nothing to carry"
 copy "$M/good" "$M/not-carried"; printf '%s.pdf\n' "$PDFSHA" >"$M/not-carried/a-carried-after-update.txt"
 refuses "a first start that did not carry the picture" media-travels "$M/not-carried" "did not carry the picture"
-copy "$M/good" "$M/big-carried"; printf '%s.png\n%s.pdf\n%s.mp4\n' "$PIC" "$PDFSHA" "$BIG" >"$M/big-carried/a-carried-after-update.txt"
+copy "$M/good" "$M/big-carried"; printf '%s.png\n%s.pdf\n%s.png\n' "$PIC" "$PDFSHA" "$BIG" >"$M/big-carried/a-carried-after-update.txt"
 refuses "a file over 50 MB that was carried" media-travels "$M/big-carried" "GitHub refuses a file that large"
 copy "$M/good" "$M/not-kept"; printf '{"data":[]}\n' >"$M/not-kept/a-kept-here.json"
 refuses "a large file the library does not mark" media-travels "$M/not-kept" "kept on this computer only"
@@ -5646,8 +5611,12 @@ copy "$M/good" "$M/b-missing"; printf '404\n' >"$M/b-missing/b-picture.status"
 refuses "a second computer that cannot serve the picture" media-travels "$M/b-missing" "for the picture"
 copy "$M/good" "$M/b-other-bytes"; printf '%s\n' "$BIG" >"$M/b-other-bytes/b-pdf.sha"
 refuses "a second computer that serves other bytes for the PDF" media-travels "$M/b-other-bytes" "different bytes for the PDF"
-copy "$M/good" "$M/b-large"; printf '200\n' >"$M/b-large/b-large.status"
+copy "$M/good" "$M/b-large"; printf '200\n' >"$M/b-large/b-large-picture.status"
 refuses "a second computer that serves the large file" media-travels "$M/b-large" "serves the file over 50 MB"
+copy "$M/good" "$M/b-large-presence-missing"; printf '{"data":{"user/44444444-4444-4444-8444-444444444444.png":"kept_elsewhere"}}\n' >"$M/b-large-presence-missing/b-large-presence.json"
+refuses "a second computer with no classification for the large PDF" media-travels "$M/b-large-presence-missing" "did not classify both large files"
+copy "$M/good" "$M/b-large-presence-wrong"; printf '{"data":{"user/44444444-4444-4444-8444-444444444444.png":"kept_elsewhere","user/55555555-5555-4555-8555-555555555555.pdf":"unavailable"}}\n' >"$M/b-large-presence-wrong/b-large-presence.json"
+refuses "a second computer with the wrong classification for the large PDF" media-travels "$M/b-large-presence-wrong" "did not classify both large files"
 copy "$M/good" "$M/removal-lost"; printf '200\n' >"$M/removal-lost/a-picture-after-removal.status"
 refuses "a removal that never reached the first computer" media-travels "$M/removal-lost" "not 404"
 copy "$M/good" "$M/bytes-deleted"; : >"$M/bytes-deleted/a-media-root-after-removal.txt"
@@ -5655,7 +5624,7 @@ refuses "a removal that deleted the first computer's own bytes" media-travels "$
 
 # ============================================================ every one of them, the same shape
 section 'every script'
-BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
+BASH_SCENARIOS=(settings-on-install night-tidy voice local-voice update-keeps-everything
   reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once media-travels
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge
   no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language
@@ -6064,6 +6033,68 @@ if [ "$HEVY_FAILURE_CODE" = 1 ] && \
 else
   bad "a failed Hevy override write did not stop before the server recreate (exit $HEVY_FAILURE_CODE: $HEVY_FAILURE_OUTPUT)"
 fi
+
+# ======================================================= notebook-assistant-journeys
+assistant_journeys_good() {
+  local folder=$1
+  rm -rf "$folder"; mkdir -p "$folder/screenshots"
+  node - "$folder" <<'NODE'
+const fs=require('fs'),p=require('path'),d=process.argv[2],w=(n,x)=>fs.writeFileSync(p.join(d,n),typeof x==='string'?x:JSON.stringify(x)+'\n');
+const names=['provider-saved','provider-after-navigation','provider-after-reload','notebook-restarted','provider-after-restart','moment-saved-without-ai','moment-edited-without-ai','moment-saved-with-ai','moment-edited-with-ai'];w('actions.json',names.map(name=>({name,ok:true})));
+for(const n of ['provider-navigation.json','provider-reload.json','provider-restart.json'])w(n,{service:'Another service',url:'http://127.0.0.1:48763/v1',model:'fixture-model',key:true});
+w('moments.json',{'without-ai':{saved:true,edited:true},'with-ai':{saved:true,edited:true}});
+const refusal='No AI is connected yet. Connect your AI service in Settings, Your AI, then ask Godspeed again.',snapshots=[],surfaces=['dashboard','global-chat','full-chat','note-chat','collection-chat','popout-chat'];
+const add=(phase,surface,width,state,extra={})=>snapshots.push({phase,surface,width,state,text:state==='none'?'No AI is connected yet':state==='refused'?'The connected AI key was refused; check Settings':state==='unreachable'?'The connected AI could not be reached; check Settings':'AI connected',model:state==='connected'?'standin-model-1':'No AI connected',effort:'Auto',clipped:false,sendEnabled:true,...extra});
+for(const width of [1280,375])for(const surface of surfaces)add('none',surface,width,'none');
+for(const surface of ['global-chat','note-chat','collection-chat','popout-chat'])add('none-sent',surface,1280,'none',{reply:refusal});
+snapshots.push({phase:'none-sent',surface:'http-chat',width:1280,state:'none',reply:refusal,httpAgreement:true});
+for(const phase of ['connected','refused','recovered','unreachable'])for(const surface of surfaces){const state=phase==='recovered'?'connected':phase;add(phase,surface,1280,state,surface==='dashboard'?{withoutReload:true}:{withoutReload:true,requestObserved:state==='connected',reply:state==='connected'?'stand-in answer':'Plain contained provider failure'});}
+for(const state of ['connected','refused'])for(const width of [1280,375])for(const surface of ['dashboard','global-chat','note-chat','popout-chat'])add(state+'-layout',surface,width,state);
+snapshots.push({phase:'none-http',surface:'http-status',width:1280,state:'none',httpAgreement:true},{phase:'connected-http',surface:'http-status',width:1280,state:'connected',httpAgreement:true});
+w('ai-state-evidence.json',{noAIProviderRequests:0,snapshots});
+w('fixture-requests.jsonl','{"phase":"with-ai","operation":"extract-moment-profile","action":"save"}\n{"phase":"with-ai","operation":"extract-moment-profile","action":"edit"}\n');
+w('browser-console.json',[]);w('browser-network.json',[]);w('restart.txt','old_pid=101 new_pid=202 healthy=yes\n');w('cleanup.txt','browser=stopped\nfixture=stopped\n');
+NODE
+}
+section notebook-assistant-journeys
+N=$TMP/notebook-assistant
+assistant_journeys_good "$N/good"
+passes 'custom AI persistence and both moment enrichment states through the installed browser route' notebook-assistant-journeys "$N/good" 'owned browser and fixture stopped'
+for transition in navigation reload restart; do
+  copy "$N/good" "$N/wrong-$transition"
+  printf '{"service":"OpenAI","url":"http://127.0.0.1:48763/v1","model":"fixture-model","key":true}\n' >"$N/wrong-$transition/provider-$transition.json"
+  refuses "a provider lost after $transition" notebook-assistant-journeys "$N/wrong-$transition" 'incomplete or contradicts'
+done
+copy "$N/good" "$N/missing-key"; node -e 'let x=require(process.argv[1]);x.key=false;require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/missing-key/provider-restart.json"
+refuses 'a saved provider whose key appears missing' notebook-assistant-journeys "$N/missing-key" 'incomplete or contradicts'
+copy "$N/good" "$N/no-ai-called"; printf '{"phase":"without-ai","operation":"extract-moment-profile","action":"save"}\n' >>"$N/no-ai-called/fixture-requests.jsonl"
+refuses 'an extraction request while no AI was connected' notebook-assistant-journeys "$N/no-ai-called" 'incomplete or contradicts'
+copy "$N/good" "$N/no-ai-error"; printf '[{"phase":"without-ai","text":"extract-moment-profile failed"}]\n' >"$N/no-ai-error/browser-console.json"
+refuses 'an extraction error while no AI was connected' notebook-assistant-journeys "$N/no-ai-error" 'incomplete or contradicts'
+for action in save edit; do
+  copy "$N/good" "$N/no-ai-$action"; grep -v '"action":"'$action'"' "$N/no-ai-$action/fixture-requests.jsonl" >"$N/no-ai-$action/requests"; mv "$N/no-ai-$action/requests" "$N/no-ai-$action/fixture-requests.jsonl"
+  refuses "no extraction after the AI-backed $action" notebook-assistant-journeys "$N/no-ai-$action" 'incomplete or contradicts'
+done
+copy "$N/good" "$N/action-failed"; sed -i '0,/"ok":true/s//"ok":false/' "$N/action-failed/actions.json"
+refuses 'evidence without every successful visible action' notebook-assistant-journeys "$N/action-failed" 'incomplete or contradicts'
+copy "$N/good" "$N/secret"; printf 'scenario-secret-never-retain\n' >"$N/secret/leak.txt"
+refuses 'a submitted secret in retained evidence' notebook-assistant-journeys "$N/secret" 'leaked into retained evidence'
+copy "$N/good" "$N/no-cleanup"; printf 'browser=stopped\n' >"$N/no-cleanup/cleanup.txt"
+refuses 'a fixture with no cleanup record' notebook-assistant-journeys "$N/no-cleanup" 'incomplete or contradicts'
+copy "$N/good" "$N/malformed-failure"; printf '{"phase":3,"message":"bad"}\n' >"$N/malformed-failure/failure.json"
+refuses 'malformed retained route failure evidence' notebook-assistant-journeys "$N/malformed-failure" 'malformed'
+copy "$N/good" "$N/route-failure"; printf '{"phase":"connected","message":"browser closed"}\n' >"$N/route-failure/failure.json"
+refuses 'a contained route failure instead of a product verdict' notebook-assistant-journeys "$N/route-failure" 'stopped during connected'
+copy "$N/good" "$N/missing-ai-snapshot"; node -e 'let x=require(process.argv[1]);x.snapshots=x.snapshots.filter(v=>!(v.phase==="none"&&v.surface==="note-chat"&&v.width===375));require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/missing-ai-snapshot/ai-state-evidence.json"
+refuses 'a missing chat and width observation' notebook-assistant-journeys "$N/missing-ai-snapshot" 'incomplete or contradicts'
+copy "$N/good" "$N/stale-old-tab"; node -e 'let x=require(process.argv[1]);let v=x.snapshots.find(v=>v.phase==="connected"&&v.surface==="global-chat");v.state="none";require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/stale-old-tab/ai-state-evidence.json"
+refuses 'an old tab that stayed stale after connection' notebook-assistant-journeys "$N/stale-old-tab" 'incomplete or contradicts'
+copy "$N/good" "$N/missing-reply"; node -e 'let x=require(process.argv[1]);delete x.snapshots.find(v=>v.phase==="refused"&&v.surface==="note-chat").reply;require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/missing-reply/ai-state-evidence.json"
+refuses 'a state edge without request and reply evidence' notebook-assistant-journeys "$N/missing-reply" 'incomplete or contradicts'
+copy "$N/good" "$N/clipped-state"; node -e 'let x=require(process.argv[1]);x.snapshots.find(v=>v.phase==="refused-layout"&&v.width===375).clipped=true;require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/clipped-state/ai-state-evidence.json"
+refuses 'a clipped phone-width state label' notebook-assistant-journeys "$N/clipped-state" 'incomplete or contradicts'
+copy "$N/good" "$N/http-disagrees"; node -e 'let x=require(process.argv[1]);x.snapshots.find(v=>v.surface==="http-status"&&v.state==="connected").httpAgreement=false;require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/http-disagrees/ai-state-evidence.json"
+refuses 'direct HTTP and page state disagreement' notebook-assistant-journeys "$N/http-disagrees" 'incomplete or contradicts'
 
 # ================================================================ the night's report
 # report-night.mjs opens, comments on and closes the issues of a failed night; its own tests stand a

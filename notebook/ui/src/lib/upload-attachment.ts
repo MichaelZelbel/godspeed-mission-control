@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { keptElsewhereMessage, loadMediaPresence } from "@/lib/media-presence";
 import { MEDIA_UPLOAD_MAX_BYTES, MEDIA_UPLOAD_MAX_MB } from "../../../shared/media-limits.mjs";
 
 // The server's own limit for /api/media/upload, so the editor refuses exactly what it would.
@@ -229,9 +230,12 @@ export async function resolveAttachmentImagesInHtml(
 
   if (error || !data || data.length === 0) return html;
 
-  // Sign URLs in parallel
+  const presence = await loadMediaPresence(data.map(row => row.storage_path));
+  const keptElsewhere = new Set(data.filter(row => presence[row.storage_path] === "kept_elsewhere").map(row => row.filename));
+
+  // Sign only files this computer can serve.
   const signedEntries = await Promise.all(
-    data.map(async (row) => {
+    data.filter(row => presence[row.storage_path] === "present").map(async (row) => {
       const { data: signed } = await supabase.storage
         .from("note-attachments")
         .createSignedUrl(row.storage_path, 60 * 60 * 24 * 6);
@@ -239,6 +243,14 @@ export async function resolveAttachmentImagesInHtml(
     }),
   );
   const urlByName = new Map(signedEntries.filter(([, u]) => !!u) as [string, string][]);
+
+  const localOnly = (name: string) => keptElsewhere.has(decodeHtmlEntities(name));
+  html = html.replace(
+    /<(?:img|iframe)\b[^>]*data-attachment-name="([^"]+)"[^>]*>(?:<\/iframe>)?/gi,
+    (full, name: string) => localOnly(name)
+      ? `<a href="#" data-attachment-name="${name}" class="attachment-link">${keptElsewhereMessage}</a>`
+      : full,
+  );
 
   // Replace src="" on <img data-attachment-name="X"> and href="#" on <a>
   let out = html.replace(

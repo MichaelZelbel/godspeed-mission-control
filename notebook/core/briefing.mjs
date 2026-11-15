@@ -63,6 +63,21 @@ export function savedBriefToday(store,now=new Date()){
  return note?{note,hidden:false}:{note:null,hidden:true};
 }
 
+const briefRequests=JSON.parse(fs.readFileSync(new URL('../assistant-files/godspeed-reply/brief-requests.json',import.meta.url),'utf8'));
+const BRIEF_REQUESTS=Object.fromEntries(Object.entries(briefRequests.asks).map(([language,asks])=>[language,new Set(asks)]));
+const BRIEF_REQUEST_FRAMES=Object.fromEntries(Object.entries(briefRequests.frames).map(([language,frames])=>[language,frames.map(frame=>new RegExp(frame))]));
+
+export function asksForTodaysBrief(text){
+ if(typeof text!=='string'||[...text].length>80)return false;
+ const plain=text.toLowerCase().replaceAll('’',"'").replace(/[^\p{L}\p{N}_\s']/gu,' ').replace(/\s+/g,' ').trim();
+ for(const language of Object.keys(BRIEF_REQUESTS)){
+  const candidates=new Set([plain]);
+  for(const frame of BRIEF_REQUEST_FRAMES[language])for(const candidate of [...candidates])candidates.add(candidate.replace(frame,'').trim());
+  if([...candidates].some(candidate=>BRIEF_REQUESTS[language].has(candidate)))return true;
+ }
+ return false;
+}
+
 export async function briefing(job,{store,query,provider,now=new Date(),notices}){
  if(job.rehearsal){
   const copy=path.join(store.state,'brief-rehearsals',randomUUID());fs.mkdirSync(copy,{recursive:true,mode:0o700});
@@ -204,6 +219,7 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
   const add=line=>{if(!line)return false;const candidate=[...parts,line].join('\n\n');if(codeGate(candidate).some(error=>!error.startsWith('Include ')))return false;parts.push(line);return true;};
   const addFirst=(rows,line)=>rows.some(row=>add(line(row)));
   const text=(value,max=500)=>typeof value==='string'&&value.trim()&&value.length<=max&&!/[\r\n\u0000-\u001f]/.test(value)?value.trim():null;
+  add('Your full morning briefing for '+today+' could not be written today, because the checks refused what was drafted. A repair item has been opened for it.');
   const contribution=context.contribution;
   if(contribution&&([contribution.id,contribution.note_id,...contribution.source_ids].some(id=>id!=null&&rejectedIds.has(String(id)))))context.contribution=null;
   const required=[context.done_line,context.cycle_heads_up,context.charm_line].filter(Boolean);
@@ -225,8 +241,8 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
   const healthAdded=addFirst(context.health.filter(row=>!excluded(row)&&settled(row)).sort((a,b)=>String(observedAt(b)).localeCompare(String(observedAt(a)))),row=>{const metric=text(row.metric,60),value=row.value;return metric&&(typeof value==='number'||typeof value==='string'&&text(value,30))?'A recorded health observation is '+metric+': '+value+'.':null;})||unknownAdded;
   if(!healthAdded&&!context.health.some(row=>!excluded(row)))add('There are no fresh health observations to report.');
   const action=context.contribution
-   ?add('Review this checked draft before deciding. It has not been sent.')||add('Review this unsent draft.')
-   :done&&add('Next: review the work Godspeed verified and say what it should do with it.')||add(goal?'Ask Godspeed to work on '+text(goal.title)+' and show you one concrete result today.':anyGoal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal to work on today, then ask it for the first concrete step.')||add(anyGoal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal.')||add(anyGoal?'Work on one goal step today.':'Name one goal today.')||add(anyGoal?'Do one goal step.':'Name one goal.');
+   ?add('Next: Review this checked draft before deciding. It has not been sent.')||add('Next: Review this unsent draft.')
+   :done&&add('Next: review the work Godspeed verified and say what it should do with it.')||add(goal?'Next: Ask Godspeed to work on '+text(goal.title)+' and show you one concrete result today.':anyGoal?'Next: Ask Godspeed to complete one goal step.':'Next: Tell Godspeed one goal to work on today, then ask it for the first concrete step.')||add(anyGoal?'Next: Ask Godspeed to complete one goal step.':'Next: Tell Godspeed one goal.')||add(anyGoal?'Next: Work on one goal step today.':'Next: Name one goal today.')||add(anyGoal?'Next: Do one goal step.':'Next: Name one goal.');
   for(const line of required)add(line);
   if(context.contribution){add(context.contribution.content);add(context.contribution.link);}
   const result=parts.join('\n\n');
@@ -239,8 +255,17 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
  const honestNote=unidentified=>{
   if(unidentified)context.contribution=null;
   const c=context.contribution,own=[context.done_line,context.cycle_heads_up,context.charm_line,...(c?[c.content,c.link]:[])].filter(Boolean);
+  // A malformed review cannot safely tell us which drafted claims to retain. A current goal and a
+  // live deadline still support an imperative, not a claim: open the dated obligation and choose
+  // its first step. This leaves every refused sentence out while the person still gets somewhere
+  // concrete to begin (#656).
+  const clean=value=>typeof value==='string'&&value.trim()&&value.length<=500&&!/[\r\n\u0000-\u001f]/.test(value)?value.trim():null;
+  const goal=context.goals.find(row=>clean(row.title));
+  const due=context.deadlines.filter(row=>deadlineLive(row,now.getTime())&&row.due_at&&Number.isFinite(Date.parse(row.due_at))&&Date.parse(row.due_at)>=now.getTime()&&clean(row.title)).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at))[0];
+  const next=goal&&due?'Next: open '+clean(due.title)+' and choose the first step to finish before '+(due.native_file?String(due.due_at).slice(0,10):dayOf(new Date(due.due_at),due.timezone||zone))+'.':null;
   for(const opening of ['Your full morning briefing for '+today+' could not be written today, because the checks refused what was drafted. A repair item has been opened for it.','The full note for '+today+' could not be written. A repair item is open.']){
-   const text=[opening,...own].join('\n\n');
+   const action=next&&!codeGate([opening,next].join('\n\n')).length&&!ruleRefusals(next,voice).length?next:null;
+   const text=[opening,...own,...(action?[action]:[])].join('\n\n');
    if(!codeGate(text).length&&!ruleRefusals(text,voice).length)return text;
   }
   return null;

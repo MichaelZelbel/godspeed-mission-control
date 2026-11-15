@@ -13,7 +13,7 @@ export type VoiceStatus={available:boolean;
   voice?:{service:'edge'|'elevenlabs'|'hermes';voice_id?:string|null;model?:string;provider?:string;stability?:number|null;similarity_boost?:number|null;style?:number|null};
   elevenlabs?:{voice_id?:string;model:string;stability:number;similarity_boost:number;style:number};
   key?:boolean;chats?:{voice_only:number;all:number;off:number};auto_tts?:boolean|null;
-  transcribe?:{service:'elevenlabs'|'local'|'hermes';model?:string|null;provider?:string;words?:string|null};
+  transcribe?:{service:'elevenlabs'|'local'|'hermes'|'unavailable';model?:string|null;provider?:string;words?:string|null};
   failing?:{since:string;error:string|null;at:string|null}|null;sample?:string};
 async function call(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 const when=(at:string)=>{const d=new Date(at);return isNaN(d.getTime())?at:d.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});};

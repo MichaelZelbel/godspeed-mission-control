@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { SEOHead } from "@/components/SEOHead";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
@@ -36,6 +36,7 @@ import { useReanalyzeMedia } from "@/hooks/useMediaAnalysis";
 import { MediaDetailDialog, MediaDetailItem } from "@/components/media/MediaDetailDialog";
 import { PdfThumbnail } from "@/components/media/PdfThumbnail";
 import { dbErrorMessage, functionErrorMessage } from "@/lib/function-error";
+import { useMediaPresence } from "@/lib/media-presence";
 
 interface MediaItem {
   id: string;
@@ -51,6 +52,12 @@ interface MediaItem {
   analysis_status: string;
   created_at: string | null;
   updated_at: string | null;
+}
+
+interface RemoteOnlyMedia {
+  path: string;
+  size: number;
+  contentType: string;
 }
 
 interface DocumentGroup {
@@ -399,7 +406,38 @@ export default function MediaLibrary() {
     },
     enabled: !!user,
   });
-  const mediaItems = useMemo(() => mediaData ?? [], [mediaData]);
+  const { data: remoteOnlyItems = [] } = useQuery({
+    queryKey: ["media-kept-elsewhere", user?.id],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+      const resp = await fetch(`${SUPABASE_URL}/api/media/kept-elsewhere`, { headers: { Authorization: `Bearer ${session.access_token}` } });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const result: { data: RemoteOnlyMedia[] } = await resp.json();
+      if (result.data.length === 0) return [] as MediaItem[];
+      const paths = result.data.map((item) => item.path);
+      const attachments = await selectInChunks<{ note_id: string | null; storage_path: string; filename: string | null; file_type: string | null; mime_type: string | null; created_at: string | null }>(paths, (slice) =>
+        supabase.from("note_attachments").select("note_id, storage_path, filename, file_type, mime_type, created_at").in("storage_path", slice),
+      );
+      const byPath = new Map(attachments.map((item) => [item.storage_path, item]));
+      return result.data.map((item): MediaItem => {
+        const attachment = byPath.get(item.path);
+        const mime = attachment?.mime_type || attachment?.file_type || item.contentType;
+        return {
+          id: `kept-elsewhere:${item.path}`, note_id: attachment?.note_id || "", storage_path: item.path,
+          media_type: mime === "application/pdf" ? "pdf" : "image", page_number: null,
+          original_filename: attachment?.filename || item.path.replace(/^.*[\\/]/, ""), description: null,
+          extracted_text: null, topics: [], raw_analysis: null, analysis_status: "complete",
+          created_at: attachment?.created_at || null, updated_at: null,
+        };
+      });
+    },
+    enabled: !!user,
+  });
+  const mediaItems = useMemo(() => {
+    const localPaths = new Set((mediaData ?? []).map((item) => item.storage_path));
+    return [...(mediaData ?? []), ...remoteOnlyItems.filter((item) => !localPaths.has(item.storage_path))];
+  }, [mediaData, remoteOnlyItems]);
 
   // While anything is being analyzed, poll only those rows' status (a few
   // bytes each). A row still in progress that changed is read in full and
@@ -556,31 +594,9 @@ export default function MediaLibrary() {
   // arrives later turns its card back into an ordinary one.
   // A path's preview waits until it has been checked here: a thumbnail that
   // loaded first would ask for a file that is not on this computer.
-  const { data: presence, isError: presenceFailed } = useQuery({
-    queryKey: ["media-missing-here", user?.id, storagePaths],
-    queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not authenticated");
-      const results = await Promise.all(
-        chunk(storagePaths).map(async (slice) => {
-          const resp = await fetch(`${SUPABASE_URL}/api/media/missing-here`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ paths: slice }),
-          });
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-          const result: { data: string[] } = await resp.json();
-          return result.data;
-        })
-      );
-      return { checked: new Set(storagePaths), missing: new Set(results.flat()) };
-    },
-    enabled: !!user && storagePaths.length > 0,
-    placeholderData: keepPreviousData,
-    refetchInterval: (query) => (query.state.data?.missing.size ? 60_000 : false),
-  });
-  const missingHere = presence?.missing ?? new Set<string>();
-  const checkedHere = (storagePath: string) => presenceFailed || !!presence?.checked.has(storagePath);
+  const { data: presence, isError: presenceFailed } = useMediaPresence(user ? storagePaths : []);
+  const missingHere = new Set(Object.entries(presence || {}).filter(([, value]) => value === "kept_elsewhere").map(([storagePath]) => storagePath));
+  const checkedHere = (storagePath: string) => presenceFailed || presence?.[storagePath] !== undefined;
 
   // Fetch note titles for all unique note IDs
   const noteIds = useMemo(() => [...new Set(mediaItems.map(m => m.note_id))], [mediaItems]);
@@ -927,6 +943,11 @@ export default function MediaLibrary() {
                         )}
                       </p>
                     )}
+                    {notHere && (
+                      <p className="text-[10px] leading-tight text-muted-foreground">
+                        Open it on the computer where it was added, or make it smaller than 50 MB so it can travel.
+                      </p>
+                    )}
                     {group.description && (
                       <p className="text-[10px] text-muted-foreground line-clamp-2">{group.description}</p>
                     )}
@@ -954,6 +975,7 @@ export default function MediaLibrary() {
       <MediaDetailDialog
         item={selectedOpenItem}
         noteTitle={selectedOpenItem ? noteTitles[selectedOpenItem.note_id] : undefined}
+        presenceChecked={!!selectedOpenItem && checkedHere(selectedOpenItem.storage_path)}
         missingHere={!!selectedOpenItem && missingHere.has(selectedOpenItem.storage_path)}
         onClose={() => setOpenItem(null)}
       />

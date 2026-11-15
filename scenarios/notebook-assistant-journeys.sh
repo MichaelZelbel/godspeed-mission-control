@@ -29,7 +29,17 @@ act() {
 check() { # <evidence folder>
   local folder=$1 secret
   [ -d "$folder" ] || fail "there is nothing at $folder, so the installed browser route kept no evidence"
-  for file in actions.json provider-navigation.json provider-reload.json provider-restart.json moments.json fixture-requests.jsonl browser-console.json browser-network.json restart.txt cleanup.txt; do
+  if [ -e "$folder/failure.json" ]; then
+    need_node
+    "$NODE" - "$folder/failure.json" <<'NODE' || fail "the retained browser failure is malformed"
+const fs=require('fs');
+const value=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+if(!value||typeof value.phase!=='string'||typeof value.message!=='string'||!value.message.trim())throw Error('invalid failure');
+if(/\n\s*at\s|\.mjs:\d+/.test(value.message))throw Error('failure contains a stack or source location');
+NODE
+    fail "the installed browser route stopped during $("$NODE" -p "require(process.argv[1]).phase || 'startup'" "$folder/failure.json")"
+  fi
+  for file in actions.json provider-navigation.json provider-reload.json provider-restart.json moments.json ai-state-evidence.json fixture-requests.jsonl browser-console.json browser-network.json restart.txt cleanup.txt; do
     kept "$folder" "$file" "the installed browser route's $file"
   done
   need_node
@@ -43,6 +53,19 @@ const requests=fs.readFileSync(p.join(root,'fixture-requests.jsonl'),'utf8').tri
 if(requests.some(x=>x.phase==='without-ai'&&x.operation==='extract-moment-profile'))throw Error('moment extraction was requested while no AI was connected');
 for(const operation of ['save','edit'])if(!requests.some(x=>x.phase==='with-ai'&&x.operation==='extract-moment-profile'&&x.action===operation))throw Error('no AI-backed extraction request for '+operation);
 const consoleRows=read('browser-console.json');if(consoleRows.some(x=>x.phase==='without-ai'&&/extract-moment-profile/i.test(String(x.text||''))))throw Error('the no-AI path reported an extraction error');
+const observations=read('ai-state-evidence.json'),rows=observations.snapshots;
+if(!Array.isArray(rows))throw Error('AI state snapshots are missing');
+const surfaces=['dashboard','global-chat','full-chat','note-chat','collection-chat','popout-chat'];
+const one=(phase,surface,width)=>rows.find(x=>x.phase===phase&&x.surface===surface&&x.width===width);
+const whole=x=>x&&typeof x.text==='string'&&x.text.trim()&&typeof x.model==='string'&&x.model.trim()&&typeof x.effort==='string'&&x.effort.trim()&&x.clipped===false&&typeof x.sendEnabled==='boolean';
+for(const width of [1280,375])for(const surface of surfaces){const x=one('none',surface,width);if(!whole(x)||x.state!=='none'||!/no ai (is )?connected/i.test(x.text)||/standin-model-1|connecting/i.test(x.text+' '+x.model))throw Error(`missing truthful no-AI ${surface} snapshot at ${width}`);}
+const refusal='No AI is connected yet. Connect your AI service in Settings, Your AI, then ask Godspeed again.';
+for(const surface of ['global-chat','note-chat','collection-chat','popout-chat']){const x=one('none-sent',surface,1280);if(!whole(x)||x.reply!==refusal||x.sendEnabled!==true)throw Error('missing exact no-AI refusal and reusable composer for '+surface);}
+const direct=one('none-sent','http-chat',1280);if(!direct||direct.reply!==refusal||direct.httpAgreement!==true)throw Error('the direct no-AI chat route does not agree with the pages');
+if(observations.noAIProviderRequests!==0)throw Error('the stand-in AI was called before it was connected');
+for(const phase of ['connected','refused','recovered','unreachable'])for(const surface of surfaces){const x=one(phase,surface,1280);if(!whole(x))throw Error(`missing ${phase} ${surface} snapshot`);if(x.state!==(phase==='recovered'?'connected':phase))throw Error(`${phase} ${surface} reports ${x.state}`);if(x.withoutReload!==true)throw Error(`${phase} ${surface} was not observed in its old tab`);if(surface==='dashboard')continue;if(phase==='connected'||phase==='recovered'){if(x.model!=='standin-model-1'||x.requestObserved!==true||typeof x.reply!=='string'||!x.reply.trim())throw Error(`${phase} ${surface} lacks its successful request/reply`);}else if(x.requestObserved!==false||typeof x.reply!=='string'||!x.reply.trim())throw Error(`${phase} ${surface} lacks its contained failed reply`);}
+for(const phase of ['connected','refused'])for(const width of [1280,375])for(const surface of ['dashboard','global-chat','note-chat','popout-chat']){const x=one(phase+'-layout',surface,width);if(!whole(x)||x.state!==phase)throw Error(`missing unclipped ${phase} ${surface} snapshot at ${width}`);}
+for(const phase of ['none','connected']){const x=one(phase+'-http','http-status',1280);if(!x||x.httpAgreement!==true||x.state!==phase)throw Error(`direct status and page disagree in ${phase}`);}
 if(!/old_pid=\d+\s+new_pid=\d+\s+healthy=yes/.test(fs.readFileSync(p.join(root,'restart.txt'),'utf8')))throw Error('the notebook restart was not retained');
 if(!/browser=stopped/.test(fs.readFileSync(p.join(root,'cleanup.txt'),'utf8'))||!/fixture=stopped/.test(fs.readFileSync(p.join(root,'cleanup.txt'),'utf8')))throw Error('owned processes were not stopped');
 NODE

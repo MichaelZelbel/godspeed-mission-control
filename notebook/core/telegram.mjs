@@ -3,30 +3,41 @@ import path from 'node:path';
 import {atomic,hash} from './records/store.mjs';
 import {habitProgressPng,habitProgressText} from './habit-progress-image.mjs';
 import {stampReply,saveReached} from './waiting-steps.mjs';
+const isDefiniteRejection=(response,data)=>
+  (response.status>=400&&response.status<500)||(data?.ok===false&&Number(data.error_code)>=400&&Number(data.error_code)<500);
 export class Telegram {
   constructor({store,domains,token,owner,origin='https://api.telegram.org',transport=fetch,loginLink,renderProgress=habitProgressPng}){this.store=store;this.domains=domains;this.token=token;this.owner=String(owner);this.origin=origin;this.transport=transport;this.loginLink=loginLink;this.renderProgress=renderProgress;this.file=path.join(store.state,'telegram-offset.json');this.running=false;}
   async replyWithProgress(reply,result,locale='en'){
     const habits=[result?.habit,...(result?.operation_results||[]).map(value=>value?.habit)].filter(h=>h?.progress?.version===1);
     const habit=habits.at(-1);let bytes;
     if(habit)try{bytes=await this.renderProgress(habit,{locale});}catch{}
-    const text=String(reply).slice(0,4000);
-    if(!bytes)return {...await this.call('sendMessage',{chat_id:this.owner,text}),dispatched:text};
+    const text=String(reply),parts=[];for(let start=0;start<text.length;start+=4000)parts.push(text.slice(start,start+4000));if(!parts.length)parts.push('');
+    const sendText=async()=>{let sent,sentParts=0;for(const part of parts)try{sent=await this.call('sendMessage',{chat_id:this.owner,text:part});sentParts++;}catch(error){if(sentParts&&error.code==='TELEGRAM_REJECTED')error.code='TELEGRAM_PARTIAL_REJECTION';throw error;}return sent;};
+    if(!bytes)return {...await sendText(),dispatched:text};
     // One picture is the reply, with its text as the caption. Long answers keep their text reply.
-    let message;if(text.length>1024)message=await this.call('sendMessage',{chat_id:this.owner,text});
+    let message;if(text.length>1024)message=await sendText();
     const form=new FormData();form.set('chat_id',this.owner);form.set('caption',text.length<=1024?text:habitProgressText(habit,{locale}).split('\n').slice(0,4).join('\n'));
     form.set('photo',new Blob([bytes],{type:'image/png'}),'habit-progress.png');
     // An ambiguous network failure is not followed by a second send. A definite API rejection
     // means no photo was delivered, so the already-saved answer can safely fall back to text.
     const response=await this.transport(this.origin+'/bot'+this.token+'/sendPhoto',{method:'POST',body:form,signal:AbortSignal.timeout(35000)});
-    const data=await response.json();
+    let data;try{data=await response.json();}catch(error){if(isDefiniteRejection(response))return message?{...message,dispatched:text}:{...await this.call('sendMessage',{chat_id:this.owner,text}),dispatched:text};throw error;}
     if(response.ok&&data.ok)return {...data.result,dispatched:text};
-    if(data.ok===false&&Number(data.error_code)>=400&&Number(data.error_code)<500)return message?{...message,dispatched:text}:{...await this.call('sendMessage',{chat_id:this.owner,text}),dispatched:text};
+    if(isDefiniteRejection(response,data))return message?{...message,dispatched:text}:{...await this.call('sendMessage',{chat_id:this.owner,text}),dispatched:text};
     throw Error('Telegram picture delivery is uncertain');
   }
   // A message carrying a link goes without a preview: Telegram's servers fetch
   // a previewed link first, and a one-time sign-in link was used up by them
   // before the owner could tap it (until 6 October 2026).
-  async call(method,input){if(method==='sendMessage'&&/https?:\/\//i.test(String(input.text||'')))input={...input,link_preview_options:{is_disabled:true}};const response=await this.transport(this.origin+'/bot'+this.token+'/'+method,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input),signal:AbortSignal.timeout(35000)});const data=await response.json();if(!response.ok||!data.ok)throw new Error('Candidate Telegram request failed');return data.result;}
+  async call(method,input){
+    if(method==='sendMessage'&&/https?:\/\//i.test(String(input.text||'')))input={...input,link_preview_options:{is_disabled:true}};
+    const response=await this.transport(this.origin+'/bot'+this.token+'/'+method,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input),signal:AbortSignal.timeout(35000)});
+    let data;try{data=await response.json();}catch(error){if(isDefiniteRejection(response))throw Object.assign(new Error('Candidate Telegram request was rejected'),{code:'TELEGRAM_REJECTED'});throw error;}
+    if(response.ok&&data.ok)return data.result;
+    const error=new Error('Candidate Telegram request failed');
+    if(isDefiniteRejection(response,data))error.code='TELEGRAM_REJECTED';
+    throw error;
+  }
   async failureNotice(id,text){
     const receiptId=id+'-failure-notice';
     if(this.store.get('command_receipts',receiptId))return;
@@ -69,7 +80,7 @@ export class Telegram {
           await this.store.saveAsync('command_receipts',{id,state:'verified',message_id:delivered.message_id,result:reply});
           if(!answered)await saveReached(this.store,{role:'assistant',content:reply,source_app:'telegram',message_id:delivered.message_id,conversation_id:'telegram-owner'});
           if(unregistered)throw Error('A question was sent but could not be registered');
-        }catch{await this.store.saveAsync('command_receipts',{id,state:'needs_review',error:'Telegram request did not finish. It will not be replayed automatically.'});if(!sendAttempted)await this.failureNotice(id,'I could not finish your message. I have not repeated any actions. Please try again.');else if(unregistered)await this.failureNotice(id,'I asked you a question but could not register it, so a plain yes or no will not answer it. Please ask me again.');}
+        }catch(error){await this.store.saveAsync('command_receipts',{id,state:'needs_review',error:'Telegram request did not finish. It will not be replayed automatically.'});if(!sendAttempted)await this.failureNotice(id,'I could not finish your message. I have not repeated any actions. Please try again.');else if(error.code==='TELEGRAM_PARTIAL_REJECTION')await this.failureNotice(id,'Your reply was only partly delivered. Please send your message again.');else if(unregistered)await this.failureNotice(id,'I asked you a question but could not register it, so a plain yes or no will not answer it. Please ask me again.');}
         atomic(this.file,JSON.stringify({offset:update.update_id+1}));
       }
     }finally{this.running=false;}
