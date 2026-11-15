@@ -35,7 +35,8 @@ for(const [index,step] of steps.entries()){
  if(expected==null?!response.ok:response.status!==expected)throw Error(`setup step ${index+1} returned HTTP ${response.status}${expected==null?'':`, expected ${expected}`}`);
  if(step.expect?.body_includes&&!text.includes(String(step.expect.body_includes)))throw Error(`setup step ${index+1} response did not include the expected text`);
  if(step.expect?.body_excludes&&text.includes(String(step.expect.body_excludes)))throw Error(`setup step ${index+1} response included excluded text`);
- let parsed=null;if(step.capture||step.expect?.json){try{parsed=JSON.parse(text);}catch{throw Error(`setup step ${index+1} returned no JSON to inspect`);}}
+ let parsed=null;if(step.capture||step.expect?.json||step.expect?.json_excludes){try{parsed=JSON.parse(text);}catch{throw Error(`setup step ${index+1} returned no JSON to inspect`);}}
  for(const [name,field] of Object.entries(step.capture||{})){const value=at(parsed,field);if(value===undefined)throw Error(`setup step ${index+1} could not capture ${field}`);saved[name]=value;}
  for(const [field,want] of Object.entries(step.expect?.json||{}))if(JSON.stringify(at(parsed,field))!==JSON.stringify(fill(want)))throw Error(`setup step ${index+1} response did not match ${field}`);
+ for(const [field,excluded] of Object.entries(step.expect?.json_excludes||{}))if(String(at(parsed,field)??'').includes(String(fill(excluded))))throw Error(`setup step ${index+1} response field ${field} included excluded text`);
 }

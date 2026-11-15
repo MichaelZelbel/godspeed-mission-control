@@ -23,7 +23,7 @@ test('runs verifier-owned setup only through loopback public API routes',async()
  const plan=path.join(folder,'plan.json'),log=path.join(folder,'results.jsonl');
  fs.writeFileSync(plan,JSON.stringify([
   {name:'prepared note',path:'/api/query',body:{table:'notes'},capture:{note_id:'data.id'},expect:{status:200,json:{'data.id':'prepared-1'}}},
-  {name:'use prepared note',path:'/api/query',body:{id:'{{note_id}}',label:'note {{note_id}}',day:'{{today}}'},expect:{body_includes:'"ok":true',body_excludes:'not present'}},
+  {name:'use prepared note',path:'/api/query',body:{id:'{{note_id}}',label:'note {{note_id}}',day:'{{today}}'},expect:{body_includes:'"ok":true',body_excludes:'not present',json_excludes:{ok:'not present'}}},
  ]));
  const child=spawn(process.execPath,[verifierScript,`http://127.0.0.1:${server.address().port}`,plan,log],{stdio:['ignore','ignore','pipe']});
  let stderr='';child.stderr.setEncoding('utf8');child.stderr.on('data',chunk=>stderr+=chunk);

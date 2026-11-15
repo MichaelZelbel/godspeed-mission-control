@@ -1,8 +1,11 @@
 # Saved briefing holdout inputs
 
-These are complete public-route inputs for H-04, H-05, H-06, and H-18. Each plan asserts the exact
-visible replies and retains every public request and response. The bounded AI plan fails an
-unexpected call instead of inventing a substitute.
+These are complete public-route inputs for H-04, H-05, H-06, and H-18. Each plan starts with source
+facts, runs the real `morning-brief` job through the same public routes as Settings, asserts the
+produced note and exact visible replies, and retains every public request and response. H-04 drives
+both drafts through refusal and observes the grounded fallback. H-18 asks twice before creation,
+proves ordinary chat saved no briefing, then runs and observes the later routine. The bounded AI
+plan fails an unexpected call instead of inventing a substitute.
 
 From the repository root, choose free ports as `harness/RUNTIME.md` requires. Start the AI once:
 
@@ -28,5 +31,5 @@ node notebook/scripts/brief-verifier-setup.mjs "http://127.0.0.1:$NOTEBOOK_PORT"
 ```
 
 Stop only the recorded notebook PID between journeys, and stop `AI_PID` after H-18. Retain the four
-public logs, AI log, notebook logs, and exact head. Only H-04 may call ordinary chat before save;
+public logs, AI log, notebook logs, and exact head. Only H-18 calls ordinary chat before the routine;
 all saved requests must bypass AI, so redrafting produces an unmatched failure or extra AI record.
