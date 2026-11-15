@@ -219,6 +219,7 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
   const add=line=>{if(!line)return false;const candidate=[...parts,line].join('\n\n');if(codeGate(candidate).some(error=>!error.startsWith('Include ')))return false;parts.push(line);return true;};
   const addFirst=(rows,line)=>rows.some(row=>add(line(row)));
   const text=(value,max=500)=>typeof value==='string'&&value.trim()&&value.length<=max&&!/[\r\n\u0000-\u001f]/.test(value)?value.trim():null;
+  add('Your full morning briefing for '+today+' could not be written today, because the checks refused what was drafted. A repair item has been opened for it.');
   const contribution=context.contribution;
   if(contribution&&([contribution.id,contribution.note_id,...contribution.source_ids].some(id=>id!=null&&rejectedIds.has(String(id)))))context.contribution=null;
   const required=[context.done_line,context.cycle_heads_up,context.charm_line].filter(Boolean);

@@ -22,6 +22,7 @@ test('saved brief requests bypass provider and native agents word for word',asyn
  assert.equal((await providerDomains.invoke('conversation-chat',{conversation_id:'notebook:provider',message:"Please show me today's brief."})).reply,saved);
  assert.equal((await nativeDomains.invoke('conversation-chat',{conversation_id:'notebook:native',message:'Zeig mir das heutige Briefing, bitte.'})).reply,saved);
  assert.equal((await providerDomains.invoke('conversation-chat',{conversation_id:'notebook:bare',message:'brief'})).reply,saved);
+ assert.equal((await providerDomains.invoke('conversation-chat',{conversation_id:'notebook:saved',message:'show my saved morning brief again'})).reply,saved);
  assert.equal((await providerDomains.invoke('conversation-chat',{conversation_id:'notebook:unicode',message:'😀'.repeat(59)+'brief'})).reply,saved);
  assert.equal(providerCalls,0);assert.equal(nativeCalls,0);
  assert.equal(store.list('notes').filter(note=>note.source_app==='morning-brief').length,1);
