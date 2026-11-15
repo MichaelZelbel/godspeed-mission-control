@@ -95,7 +95,7 @@ run_installed_preparation() {
   [ "$(printf '%s' "$after" | cut -f2)" = ok ] || fail "the installed preparation job failed: $(printf '%s' "$after" | cut -f3)"
   printf 'id=%s\nafter=%s\nstatus=ok\n' "$id" "$(printf '%s' "$after" | cut -f1)" >"$EVIDENCE/prep-run-after.txt"
   cp "$jobs" "$EVIDENCE/prep-jobs-after.json"
-  produced=$(find "$ROOT/coach" -path '*/prep/*.md' -type f -newer "$EVIDENCE/prep-run-request.json" -print 2>/dev/null | head -n 1)
+  produced=$(first_file_newer_than "$ROOT/coach" '*/prep/*.md' "$EVIDENCE/prep-run-request.json")
   [ -n "$produced" ] || fail "the successful installed preparation run produced no preparation attributable to that run"
   cp "$produced" "$EVIDENCE/routine-preparation.md"
   printf '%s\n' "${produced#"$ROOT"/}" >"$EVIDENCE/routine-preparation-source.txt"

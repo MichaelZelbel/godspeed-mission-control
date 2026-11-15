@@ -3479,6 +3479,27 @@ talk_good() { # <folder>
 }
 section talk-prep-honest
 T=$TMP/talk
+
+mkdir -p "$T/freshness/coach/health/prep"
+printf 'old\n' >"$T/freshness/coach/health/prep/old.md"
+touch -d '2026-11-01 09:00:00 UTC' "$T/freshness/coach/health/prep/old.md"
+printf 'request\n' >"$T/freshness/request.json"
+touch -d '2026-11-01 10:00:00 UTC' "$T/freshness/request.json"
+FRESH_PREP=$(SCENARIO=freshness-test bash -c '. "$1/scenarios/scenario-lib.sh"; first_file_newer_than "$2/coach" "*/prep/*.md" "$2/request.json"' _ "$ROOT" "$T/freshness")
+if [ -z "$FRESH_PREP" ]; then
+  ok 'Run now freshness refuses a preparation older than its request'
+else
+  bad "Run now freshness accepted an older preparation: $FRESH_PREP"
+fi
+printf 'new\n' >"$T/freshness/coach/health/prep/new.md"
+touch -d '2026-11-01 11:00:00 UTC' "$T/freshness/coach/health/prep/new.md"
+FRESH_PREP=$(SCENARIO=freshness-test bash -c '. "$1/scenarios/scenario-lib.sh"; first_file_newer_than "$2/coach" "*/prep/*.md" "$2/request.json"' _ "$ROOT" "$T/freshness")
+if [ "$FRESH_PREP" = "$T/freshness/coach/health/prep/new.md" ]; then
+  ok 'Run now freshness retains a preparation newer than its request'
+else
+  bad "Run now freshness did not retain the newer preparation: $FRESH_PREP"
+fi
+
 talk_good "$T/good"
 passes 'a talk opened unprepared saying so, then one opened from a sealed preparation of all three goals' \
   talk-prep-honest "$T/good" 'opened from the preparation'"'"'s own opening'

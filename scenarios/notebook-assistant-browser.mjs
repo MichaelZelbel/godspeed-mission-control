@@ -15,17 +15,23 @@ const write=(name,value)=>fs.writeFileSync(path.join(evidence,name),typeof value
 const chrome=process.env.CHROME_PATH||['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(fs.existsSync);
 if(!chrome)throw Error('Chromium is not installed at a documented executable name; set CHROME_PATH');
 const profile=path.join(evidence,'.chromium-profile'),port=48764;
-const browser=spawn(chrome,[`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'--headless=new','--no-first-run','--disable-gpu','about:blank'],{stdio:['ignore',fs.openSync(path.join(evidence,'browser.stdout.log'),'a'),fs.openSync(path.join(evidence,'browser.stderr.log'),'a')]});
-write('browser.pid',String(browser.pid)+'\n');
+let browser,fixture,ws,browserOut,browserErr;
 const fixtureRows=[];
-const fixture=http.createServer((request,response)=>{let body='';request.on('data',x=>body+=x);request.on('end',()=>{const operation=globalThis.momentOperation||'connect',at=globalThis.phase||'';fixtureRows.push({phase:at.includes('without-ai')?'without-ai':at.includes('with-ai')?'with-ai':at,operation:request.url?.includes('chat/completions')?'extract-moment-profile':'provider-check',action:operation});response.writeHead(200,{'content-type':'application/json'});response.end(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model:'fixture-model',choices:[{index:0,message:{role:'assistant',content:'{"suggestions":[]}'},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}));});});
-await new Promise((ok,no)=>fixture.once('error',no).listen(48763,'127.0.0.1',ok));
-let ws;
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
-for(let n=0;n<100;n++){try{const tabs=await fetch(`http://127.0.0.1:${port}/json`).then(r=>r.json());if(tabs[0]?.webSocketDebuggerUrl){ws=new WebSocket(tabs[0].webSocketDebuggerUrl);break;}}catch{}await pause(100);}
-if(!ws){browser.kill('SIGTERM');await new Promise(r=>fixture.close(r));throw Error('Chromium did not expose its debugging page');}
-await new Promise((ok,no)=>{ws.onopen=ok;ws.onerror=no});let seq=0;const pending=new Map();
-ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id&&pending.has(m.id)){const [ok,no]=pending.get(m.id);pending.delete(m.id);m.error?no(Error(m.error.message)):ok(m.result);}else if(m.method==='Runtime.consoleAPICalled')consoleRows.push({phase:globalThis.phase||'',text:(m.params.args||[]).map(x=>x.value||x.description).join(' ')});else if(m.method==='Network.requestWillBeSent')network.push({url:m.params.request.url,method:m.params.request.method});};
+const waitForBrowserExit=async timeout=>{
+  if(browser.exitCode!==null||browser.signalCode!==null)return true;
+  return Promise.race([new Promise(r=>browser.once('exit',()=>r(true))),pause(timeout).then(()=>false)]);
+};
+const stopBrowser=async()=>{
+  if(!browser||browser.exitCode!==null||browser.signalCode!==null)return;
+  browser.kill('SIGTERM');
+  if(!await waitForBrowserExit(5000)&&browser.exitCode===null&&browser.signalCode===null){
+    const exited=waitForBrowserExit(5000);
+    browser.kill('SIGKILL');
+    await exited;
+  }
+};
+let seq=0;const pending=new Map();
 const cdp=(method,params={})=>new Promise((ok,no)=>{const id=++seq;pending.set(id,[ok,no]);ws.send(JSON.stringify({id,method,params}));});
 const js=async expression=>(await cdp('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true})).result.value;
 const go=async url=>{await cdp('Page.navigate',{url});await pause(1200);};
@@ -33,6 +39,17 @@ const action=async(name,fn)=>{globalThis.phase=name;try{await fn();actions.push(
 const formValue=label=>js(`(()=>{const l=[...document.querySelectorAll('label')].find(x=>x.textContent.includes(${JSON.stringify(label)}));const e=l&&l.querySelector('input,select');return e&&e.value})()`);
 const observeProvider=async name=>write(name,{service:(await formValue('Your AI service'))==='other'?'Another service':'',url:await formValue('Its address'),model:await formValue('Model, written'),key:(await js(`document.body.innerText.includes('leave it empty to keep the saved one')`))===true});
 try{
+  browserOut=fs.openSync(path.join(evidence,'browser.stdout.log'),'a');
+  browserErr=fs.openSync(path.join(evidence,'browser.stderr.log'),'a');
+  browser=spawn(chrome,[`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'--headless=new','--no-first-run','--disable-gpu','about:blank'],{stdio:['ignore',browserOut,browserErr]});
+  await new Promise((ok,no)=>{browser.once('spawn',ok);browser.once('error',no);});
+  write('browser.pid',String(browser.pid)+'\n');
+  fixture=http.createServer((request,response)=>{let body='';request.on('data',x=>body+=x);request.on('end',()=>{const operation=globalThis.momentOperation||'connect',at=globalThis.phase||'';fixtureRows.push({phase:at.includes('without-ai')?'without-ai':at.includes('with-ai')?'with-ai':at,operation:request.url?.includes('chat/completions')?'extract-moment-profile':'provider-check',action:operation});response.writeHead(200,{'content-type':'application/json'});response.end(JSON.stringify({id:'fixture',object:'chat.completion',created:1,model:'fixture-model',choices:[{index:0,message:{role:'assistant',content:'{"suggestions":[]}'},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}));});});
+  await new Promise((ok,no)=>fixture.once('error',no).listen(48763,'127.0.0.1',ok));
+  for(let n=0;n<100;n++){try{const tabs=await fetch(`http://127.0.0.1:${port}/json`).then(r=>r.json());if(tabs[0]?.webSocketDebuggerUrl){ws=new WebSocket(tabs[0].webSocketDebuggerUrl);break;}}catch{}await pause(100);}
+  if(!ws)throw Error('Chromium did not expose its debugging page');
+  await new Promise((ok,no)=>{ws.onopen=ok;ws.onerror=no});
+  ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id&&pending.has(m.id)){const [ok,no]=pending.get(m.id);pending.delete(m.id);m.error?no(Error(m.error.message)):ok(m.result);}else if(m.method==='Runtime.consoleAPICalled')consoleRows.push({phase:globalThis.phase||'',text:(m.params.args||[]).map(x=>x.value||x.description).join(' ')});else if(m.method==='Network.requestWillBeSent')network.push({url:m.params.request.url,method:m.params.request.method});};
   await cdp('Page.enable');await cdp('Runtime.enable');await cdp('Network.enable');
   // The exact visible interaction sequence is implemented in the page so the retained action list
   // cannot be produced by direct API writes. input/change/click are the same DOM events a person causes.
@@ -56,7 +73,10 @@ try{
   write('moments.json',{'without-ai':{saved:true,edited:true},'with-ai':{saved:true,edited:true}});
 } finally {
   write('actions.json',actions);write('browser-console.json',consoleRows);write('browser-network.json',network);write('fixture-requests.jsonl',fixtureRows.map(x=>JSON.stringify(x)).join('\n')+'\n');
-  await new Promise(r=>fixture.close(r));
-  try{ws?.close();}catch{}browser.kill('SIGTERM');await Promise.race([new Promise(r=>browser.once('exit',r)),pause(5000)]);if(browser.exitCode===null)browser.kill('SIGKILL');
+  if(fixture?.listening)await new Promise(r=>fixture.close(r));
+  try{ws?.close();}catch{}
+  await stopBrowser();
+  if(browserOut!==undefined)fs.closeSync(browserOut);
+  if(browserErr!==undefined)fs.closeSync(browserErr);
   fs.rmSync(profile,{recursive:true,force:true});write('cleanup.txt','browser=stopped\nfixture=stopped\n');
 }
