@@ -3,7 +3,7 @@ import {momentDraft} from './moment-draft.mjs';
 import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
 import {startCharmJudgement} from './charm-judgement.mjs';
 import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
-import {asksForTodaysBrief,savedBriefToday,briefing} from './briefing.mjs';
+import {asksForTodaysBrief,savedBriefToday} from './briefing.mjs';
 
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
 import {draftEvent} from './draft-event.mjs';
@@ -289,11 +289,7 @@ export class Domains {
       if(!input.message)input={...input,message:input.messages?.filter(m=>m.role==='user').at(-1)?.content||''};
     }
     if(name==='conversation-chat'&&asksForTodaysBrief(input.message)){
-      let saved=savedBriefToday(this.store).note;
-      if(!saved&&this.provider){
-        await briefing({id:'brief-chat-'+hash([input.request_id||input.conversation_id||'conversation',new Date().toISOString().slice(0,10)])},{store:this.store,query:this.query,provider:this.provider});
-        saved=savedBriefToday(this.store).note;
-      }
+      const saved=savedBriefToday(this.store).note;
       if(saved){
         const reply=String(saved.content||'');
         await this.store.saveAsync('conversation_messages',{role:'assistant',content:reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'morning-brief'},undefined,{signal:input.signal});
