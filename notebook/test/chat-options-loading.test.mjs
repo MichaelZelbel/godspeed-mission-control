@@ -21,9 +21,9 @@ async function optionsFrom(t,provider,{defer=false}={}){
  for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
  const {createService}=await import('../server/main.mjs');const service=await createService({root:path.join(root,'workspace'),port:0,provider});
  t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
- const base='http://127.0.0.1:'+service.address.port,status=await (await fetch(base+'/api/status')).json();
+ const base='http://127.0.0.1:'+service.address.port,readStatus=async()=>await (await fetch(base+'/api/status')).json(),status=await readStatus();
  const readOptions=()=>loadChatOptions({fetcher:(url,init)=>fetch(base+url,init)});
- return {status,options:defer?null:await readOptions(),readOptions};
+ return {status,options:defer?null:await readOptions(),readOptions,readStatus};
 }
 test('with no AI connected the model choices say so rather than naming a connected model',async t=>{
  const {status,options}=await optionsFrom(t);
@@ -43,21 +43,24 @@ test('AI usability is rechecked every five seconds in both directions',async t=>
  let now=100000,usable=true;
  t.mock.method(Date,'now',()=>now);
  const provider=Object.assign(async()=>({reply:'ok'}),{check:async()=>{if(!usable)throw Error('Fictional provider refusal');}});
- const {options,readOptions}=await optionsFrom(t,provider);
+ const {options,readOptions,readStatus}=await optionsFrom(t,provider);
  assert.equal(options.usable,true);
  usable=false;now+=5000;
  assert.equal((await readOptions()).usable,false);
+ assert.equal((await readStatus()).runtimeConfigured,false);
  usable=true;now+=5000;
  assert.equal((await readOptions()).usable,true);
+ assert.equal((await readStatus()).runtimeConfigured,true);
 });
 test('overlapping availability reads share a failed health check result',async t=>{
  let rejectCheck,checkStarted;const started=new Promise(resolve=>{checkStarted=resolve;});
  const provider=Object.assign(async()=>({reply:'ok'}),{check:()=>{checkStarted();return new Promise((resolve,reject)=>{rejectCheck=reject;});}});
- const {readOptions}=await optionsFrom(t,provider,{defer:true});
+ const {readOptions,readStatus}=await optionsFrom(t,provider,{defer:true});
  const first=readOptions();await started;
  const second=readOptions();rejectCheck(new Error('Fictional private provider failure'));
  const results=await Promise.all([first,second]);
  assert.deepEqual(results.map(result=>result.usable),[false,false]);
+ assert.equal((await readStatus()).runtimeConfigured,false);
  assert.doesNotMatch(JSON.stringify(results),/Fictional private provider failure/);
 });
 test('a refused chat returns plain guidance instead of provider diagnostics',async t=>{
