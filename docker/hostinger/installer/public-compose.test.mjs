@@ -5,13 +5,17 @@ import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { publicCompose, registrationCode } from './public-compose.mjs';
 
 const endpoint = 'https://godspeedmissioncontrol.com/godspeed-install/api/servers/register';
 const setup = '0123456789abcdef'.repeat(4);
 const require = createRequire(import.meta.url);
+const stage = JSON.parse(fs.readFileSync(new URL('../../../stage.json', import.meta.url), 'utf8'));
+const releasedImage = stage.serverEditions.server.image;
+const otherImage = `ghcr.io/michaelzelbel/godspeed-mission-control@sha256:${'1'.repeat(64)}`;
+const generator = fileURLToPath(new URL('./public-compose.mjs', import.meta.url));
 
 async function registration({ hostname = 'srv123456', token = setup, statuses = [202], unhealthy = 0, configuredAfter = statuses.length } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-public-register-'));
@@ -67,10 +71,28 @@ test('prolonged failure keeps retrying with a bounded pause and never logs or re
 });
 
 test('checked-in public GitHub manifest matches its generator and carries no per-buyer credential or setup fields', () => {
-  const rendered = publicCompose();
+  const rendered = publicCompose(releasedImage);
   assert.equal(fs.readFileSync(new URL('../one-click.yaml', import.meta.url), 'utf8').replace(/\r\n/g, '\n'), rendered);
   assert.equal(/GODSPEED_INSTALL_CALLBACK|\/api\/ready\/|\$\{GODSPEED_(HOST|SETUP_CODE)/.test(rendered), false);
   assert.equal(/GODSPEED_ACCESS_TOKEN:\s*\S/.test(rendered), false);
+});
+
+test('public manifest uses the supplied released image and refuses anything except an immutable digest', () => {
+  assert.ok(publicCompose(otherImage).includes(`image: ${otherImage}`));
+  assert.equal(publicCompose(otherImage).includes(`image: ${releasedImage}`), false);
+  assert.throws(() => publicCompose(), /immutable image digest/);
+  assert.throws(() => publicCompose('ghcr.io/example/godspeed:latest'), /immutable image digest/);
+});
+
+test('generator command checks the supplied released image and rejects missing or unknown arguments', () => {
+  const run = (...args) => spawnSync(process.execPath, [generator, ...args], { encoding: 'utf8', windowsHide: true });
+  assert.equal(run(releasedImage, '--check').status, 0);
+  const stale = run(otherImage, '--check');
+  assert.equal(stale.status, 1); assert.match(stale.stderr, /needs regeneration/);
+  for (const args of [[], [releasedImage, '--unknown'], [releasedImage, '--check', 'extra'], ['not-a-digest']]) {
+    const result = run(...args);
+    assert.equal(result.status, 2); assert.match(result.stderr, /^usage:/);
+  }
 });
 
 test('Docker parses the public file with zero fields, zero host ports and read-only hostname discovery', {
