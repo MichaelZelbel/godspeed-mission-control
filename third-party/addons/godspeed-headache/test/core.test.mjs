@@ -110,6 +110,11 @@ test("the pattern report compares headache days with a daily table only when the
   for (let i = 1; i <= 6; i++) episodes.push({ id: `h${i}`, start: `2026-09-0${i}T06:00:00.000Z`, end: `2026-09-0${i}T08:00:00.000Z`, open: false, minutes: 120, pain_max: 3, side: null, quality: null, symptoms: [], triggers: [], meds: [] });
   const r = patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ, daily_table: csv, daily_columns: ["sleep_total_h"] }, new Date("2026-09-20T12:00:00Z"), { days: 30 });
   assert.deepEqual(r.compare[0], { column: "sleep_total_h", headache_days: 6, free_days: 14, mean_on: 5, mean_off: 8, enough: true });
+  const rows = lines.slice(1).map((line) => { const [date, sleep_total_h] = line.split(","); return { date, sleep_total_h }; });
+  const memory = patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ, daily_columns: ["sleep_total_h"] }, new Date("2026-09-20T12:00:00Z"), { days: 30, dailyRows: rows });
+  assert.deepEqual(memory.compare, r.compare);
+  const preferred = patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ, daily_table: csv, daily_columns: ["sleep_total_h"] }, new Date("2026-09-20T12:00:00Z"), { days: 30, dailyRows: rows.map((row) => ({ ...row, sleep_total_h: 99 })) });
+  assert.deepEqual(preferred.compare, r.compare,'the configured CSV remains authoritative');
   const none = patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ }, NOW, { days: 30 });
   assert.equal(none.compare, null);
 });

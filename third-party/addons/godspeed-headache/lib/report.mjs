@@ -68,7 +68,7 @@ function readCsv(file) {
   return lines.map((l) => Object.fromEntries(l.split(",").map((v, i) => [head[i], v])));
 }
 
-export function patterns(log, s, now, { days = 90 } = {}) {
+export function patterns(log, s, now, { days = 90, dailyRows } = {}) {
   const tz = s.timezone;
   const to = localParts(now, tz).date;
   const from = addDays(to, -(days - 1));
@@ -111,15 +111,17 @@ export function patterns(log, s, now, { days = 90 } = {}) {
     meds: count(eps.flatMap((e) => e.meds.map((m) => m.med)).concat(log.loose.filter((m) => dayOf(m.taken, tz) >= from).map((m) => m.med))),
     compare: null,
   };
-  r.compare = compareWithTable(s, headacheDays, from, to);
+  r.compare = compareWithTable(s, headacheDays, from, to, 5, dailyRows);
   return r;
 }
 
 // Headache days against headache-free days, column by column, from the person's daily health
 // table when they have one. Only printed once both sides have enough days to mean anything.
-export function compareWithTable(s, headacheDays, from, to, minDays = 5) {
-  if (!s.daily_table || !s.daily_columns?.length || !fs.existsSync(s.daily_table)) return null;
-  const rows = readCsv(s.daily_table).filter((r) => r.date >= from && r.date <= to);
+export function compareWithTable(s, headacheDays, from, to, minDays = 5, dailyRows) {
+  if (!s.daily_columns?.length) return null;
+  const source = s.daily_table && fs.existsSync(s.daily_table) ? readCsv(s.daily_table) : dailyRows;
+  if (!Array.isArray(source)) return null;
+  const rows = source.filter((r) => r && typeof r === "object" && typeof r.date === "string" && r.date >= from && r.date <= to);
   const hd = new Set(headacheDays);
   const out = [];
   for (const col of s.daily_columns) {

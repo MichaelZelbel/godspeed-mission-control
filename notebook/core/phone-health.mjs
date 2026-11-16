@@ -144,14 +144,15 @@ function kilometresOf(distance){
  return String(distance.units||'km').toLowerCase()==='m'?qty/1000:qty;
 }
 
-// The points of every upload, each once per (metric name, date text, source): a later upload's copy
-// replaces an earlier one. `at` is the arrival order, which settles two points of one instant.
+// Whole-minute points keep the latest copy per metric, date and source. Sub-minute points retain
+// their metric-payload boundary so summed metrics can choose one coherent samples window.
 function pointsOf(uploads){
- const seen=new Map();let at=0;
- for(const {data} of uploads)for(const metric of Array.isArray(data?.metrics)?data.metrics:[])for(const point of Array.isArray(metric?.data)?metric.data:[]){
+ const seen=new Map();let at=0,payload=0;
+ for(const {data} of uploads)for(const metric of Array.isArray(data?.metrics)?data.metrics:[]){const payloadAt=payload++;for(const point of Array.isArray(metric?.data)?metric.data:[]){
   const timestamp=timestampOf(point?.date);if(!timestamp)continue;
-  seen.set(JSON.stringify([metric.name,point.date,point.source]),{name:metric.name,units:metric.units,point,day:timestamp.day,instant:timestamp.instant,hms:timestamp.hms,at:at++});
- }
+  const sample=timestamp.hms.slice(6)!=='00';
+  seen.set(JSON.stringify([metric.name,point.date,point.source,sample?payloadAt:null]),{name:metric.name,units:metric.units,point,day:timestamp.day,instant:timestamp.instant,hms:timestamp.hms,at:at++,payload:payloadAt});
+ }}
  return [...seen.values()];
 }
 // A workout sent again (same id or same start) counts once, as the copy received last.
@@ -164,6 +165,29 @@ function workoutsOf(uploads){
  return kept;
 }
 const later=(a,b)=>b.instant>a.instant||b.instant===a.instant&&b.at>a.at?b:a;
+const sumQuantity=p=>{const qty=number(p.point.qty);return qty===null?null:String(p.units).toLowerCase()==='kj'?qty/4.184:qty;};
+function summedMetric(group){
+ const payloads=new Map(),minute=[],samples=[];
+ for(const point of group)(payloads.get(point.payload)||payloads.set(point.payload,[]).get(point.payload)).push(point);
+ for(const points of payloads.values())(points.some(p=>p.hms.slice(6)!=='00')?samples:minute).push(points);
+ const byMinute=new Map();
+ for(const p of minute.flat()){
+  if(sumQuantity(p)===null)continue;
+  const key=p.hms.slice(0,5),kept=byMinute.get(key)||[];
+  const source=String(p.point.source||'');
+  if(source)byMinute.set(key,[...kept.filter(old=>String(old.point.source||'')),p]);
+  else if(!kept.some(old=>old.point.source))byMinute.set(key,[p]);
+ }
+ const kept=[...byMinute.values()].flat(),perMinute=kept.reduce((sum,p)=>sum+sumQuantity(p),0);
+ if(!samples.length)return kept.length?perMinute:null;
+ const lastMinute=kept.length?Math.max(...kept.map(p=>p.instant)):-Infinity;
+ const candidates=samples.map(points=>{
+  const usable=points.map(p=>[p,sumQuantity(p)]).filter(([,qty])=>qty!==null);
+  const total=usable.reduce((sum,[,qty])=>sum+qty,0),trailing=usable.filter(([p])=>p.instant>lastMinute).reduce((sum,[,qty])=>sum+qty,0);
+  return usable.length?Math.max(total,perMinute+trailing):null;
+ }).filter(value=>value!==null);
+ return candidates.length?Math.max(...candidates):kept.length?perMinute:null;
+}
 
 // uploads: [{received_at,data}] in receive order. Returns Map(day -> Map(metric -> value)).
 export function buildDays(uploads){
@@ -176,9 +200,7 @@ export function buildDays(uploads){
  for(const group of groups.values()){
   const {name,day}=group[0];
   if(PHONE_SUM_METRICS[name]){
-   let sum=0,any=false;
-   for(const p of group){const qty=number(p.point.qty);if(qty===null)continue;any=true;sum+=String(p.units).toLowerCase()==='kj'?qty/4.184:qty;}
-   if(any)put(day,PHONE_SUM_METRICS[name],sum);
+   const sum=summedMetric(group);if(sum!==null)put(day,PHONE_SUM_METRICS[name],sum);
   }else if(LAST[name]){
    const winner=group.filter(p=>number(p.point.qty)!==null).reduce((a,b)=>a?later(a,b):b,null);
    if(winner)put(day,LAST[name],number(winner.point.qty));

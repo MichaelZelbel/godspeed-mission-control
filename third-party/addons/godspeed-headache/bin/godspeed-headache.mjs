@@ -80,6 +80,14 @@ function saveAll(list, label) {
   if (diary.kind === "files") syncInBackground(mcDir, `headache: ${label}`, syncMode);
 }
 const log = () => diary.log();
+function notebookDailyRows() {
+  const text = process.env.GODSPEED_HEADACHE_DAILY_ROWS;
+  if (!text || Buffer.byteLength(text) > 20 * 1024) return undefined;
+  try {
+    const rows = JSON.parse(text);
+    return Array.isArray(rows) && rows.every((r) => r && typeof r === "object" && !Array.isArray(r) && typeof r.date === "string") ? rows : undefined;
+  } catch { return undefined; }
+}
 
 function details() {
   const d = {};
@@ -181,7 +189,7 @@ const commands = {
     out(eps.map((e) => describe(e, tz, at)).join("\n") || `No headache tracked in the last ${days} days.`, eps);
   },
   patterns() {
-    const r = patterns(log(), s, at, { days: Number(f.days || 90) });
+    const r = patterns(log(), s, at, { days: Number(f.days || 90), dailyRows: notebookDailyRows() });
     out(renderPatterns(r), r);
   },
   daily() {

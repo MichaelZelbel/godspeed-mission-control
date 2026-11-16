@@ -1,7 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';import {backup,restore} from '../core/archives.mjs';
 import {jobExecutor} from '../core/runtime.mjs';
-import {nativeTick} from '../core/native-personal.mjs';
+import {nativeTick,addonInvocation} from '../core/native-personal.mjs';
+import {saveSettings as saveHeadacheSettings,DEFAULTS as HEADACHE_DEFAULTS} from '../../third-party/addons/godspeed-headache/lib/settings.mjs';
 const temp=()=>fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-native-'));
 test('native coach and journal commands share canonical notebook files and survive backup restore',async()=>{
  const store=new Store(temp()),query=new QueryService(store),domains=new Domains(query);
@@ -49,6 +50,18 @@ test('the native coach tick reads the newest same-day measurement, whichever fee
  assert.equal(await run([['Health Auto Export',90,'a-phone'],['Fictional CSV',70,'b-csv']]),1);
  // The phone row is written again after the CSV (91): it is the newest, so the rule fails.
  assert.equal(await run([['Health Auto Export',90,'a-phone'],['Fictional CSV',70,'b-csv'],['Health Auto Export',91,'a-phone']]),0);
+});
+
+test('headache patterns receive complete phone days only when no daily table is configured',()=>{
+ const store=new Store(temp());store.save('settings',{id:'installation',timezone:'UTC'});
+ const today=new Date().toISOString().slice(0,10),yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+ store.save('health_observations',{metric:'sleep_total_h',value:8,source:'Health Auto Export',via:'phone-receiver',observed_on:yesterday,date_precision:'day',observed_at:yesterday+'T00:00:00Z',data_until:'22:00:00'});
+ store.save('health_observations',{metric:'protein_g',value:20,source:'Health Auto Export',via:'phone-receiver',observed_on:today,date_precision:'day',observed_at:today+'T00:00:00Z',data_until:'22:00:00'});
+ saveHeadacheSettings(store.root,{...HEADACHE_DEFAULTS,daily_columns:['sleep_total_h']});
+ const rows=JSON.parse(addonInvocation(store,{addon:'headache',args:['patterns','--days','30']}).env.GODSPEED_HEADACHE_DAILY_ROWS);
+ assert.deepEqual(rows,[{date:yesterday,sleep_total_h:8}],'the current incomplete day is excluded');
+ saveHeadacheSettings(store.root,{...HEADACHE_DEFAULTS,daily_table:'daily.csv',daily_columns:['sleep_total_h']});
+ assert.equal(addonInvocation(store,{addon:'headache',args:['patterns']}).env.GODSPEED_HEADACHE_DAILY_ROWS,undefined,'a configured table remains authoritative');
 });
 
 test('the native coach leaves a short phone day unknown until its manual value settles',async()=>{

@@ -98,7 +98,14 @@ export function addonInvocation(store,{addon,args},{judge=false}={}){
  fs.mkdirSync(path.join(store.root,'observations'),{recursive:true});
  if(!fs.existsSync(path.join(store.root,'AGENTS.md')))atomic(path.join(store.root,'AGENTS.md'),'# Personal workspace\n\nKeep durable state in user files. Outward actions require exact approval.\n');
  const script=fileURLToPath(new URL('../../third-party/addons/godspeed-'+addon+'/bin/godspeed-'+addon+'.mjs',import.meta.url));
- return {command:process.execPath,argv:[script,...args,'--godspeed',store.root,'--json'],cwd:store.root,env:{...process.env,GODSPEED_COACH_APP:path.join(store.state,'coach-app'),GODSPEED_JOURNAL_APP:path.join(store.state,'journal-app'),GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off',GODSPEED_HEADACHE_GIT_SYNC:'off'}};
+ const env={...process.env,GODSPEED_COACH_APP:path.join(store.state,'coach-app'),GODSPEED_JOURNAL_APP:path.join(store.state,'journal-app'),GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off',GODSPEED_HEADACHE_GIT_SYNC:'off'};delete env.GODSPEED_HEADACHE_DAILY_ROWS;
+ if(addon==='headache'&&args[0]==='patterns'&&!settings.daily_table){
+  const at=args.indexOf('--days'),requested=at===-1?90:Number(args[at+1]),days=Number.isFinite(requested)&&requested>0?requested:90;
+  const health=currentHealth(new QueryService(store),{now:Date.now(),days}),rows=[];
+  for(const day of health.days){const row={date:day.date};for(const [metric,column] of Object.entries(day.columns))if(isAutomaticHealthColumn(column))row[metric.replaceAll(' ','_')]=column.value;if(Object.keys(row).length>1)rows.push(row);}
+  const text=JSON.stringify(rows);if(Buffer.byteLength(text)<=20*1024)env.GODSPEED_HEADACHE_DAILY_ROWS=text;
+ }
+ return {command:process.execPath,argv:[script,...args,'--godspeed',store.root,'--json'],cwd:store.root,env};
 }
 export function addonCommand(store,{addon,args}){
  const {command,argv,cwd,env}=addonInvocation(store,{addon,args});
