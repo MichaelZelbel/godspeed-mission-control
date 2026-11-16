@@ -5,13 +5,17 @@ import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { publicCompose, registrationCode } from './public-compose.mjs';
 
 const endpoint = 'https://godspeedmissioncontrol.com/godspeed-install/api/servers/register';
 const setup = '0123456789abcdef'.repeat(4);
 const require = createRequire(import.meta.url);
+const stage = JSON.parse(fs.readFileSync(new URL('../../../stage.json', import.meta.url), 'utf8'));
+const releasedImage = stage.serverEditions.server.image;
+const otherImage = `ghcr.io/michaelzelbel/godspeed-mission-control@sha256:${'1'.repeat(64)}`;
+const generator = fileURLToPath(new URL('./public-compose.mjs', import.meta.url));
 
 async function registration({ hostname = 'srv123456', token = setup, statuses = [202], unhealthy = 0, configuredAfter = statuses.length } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-public-register-'));
@@ -67,10 +71,50 @@ test('prolonged failure keeps retrying with a bounded pause and never logs or re
 });
 
 test('checked-in public GitHub manifest matches its generator and carries no per-buyer credential or setup fields', () => {
-  const rendered = publicCompose();
+  const rendered = publicCompose(releasedImage);
   assert.equal(fs.readFileSync(new URL('../one-click.yaml', import.meta.url), 'utf8').replace(/\r\n/g, '\n'), rendered);
   assert.equal(/GODSPEED_INSTALL_CALLBACK|\/api\/ready\/|\$\{GODSPEED_(HOST|SETUP_CODE)/.test(rendered), false);
   assert.equal(/GODSPEED_ACCESS_TOKEN:\s*\S/.test(rendered), false);
+});
+
+test('public manifest uses the supplied released image and refuses anything except an immutable digest', () => {
+  assert.ok(publicCompose(otherImage).includes(`image: ${otherImage}`));
+  assert.equal(publicCompose(otherImage).includes(`image: ${releasedImage}`), false);
+  assert.throws(() => publicCompose(), /immutable image digest/);
+  assert.throws(() => publicCompose('ghcr.io/example/godspeed:latest'), /immutable image digest/);
+});
+
+test('generator command checks the supplied released image and rejects missing or unknown arguments', () => {
+  const run = (...args) => spawnSync(process.execPath, [generator, ...args], { encoding: 'utf8', windowsHide: true });
+  assert.equal(run(releasedImage, '--check').status, 0);
+  const stale = run(otherImage, '--check');
+  assert.equal(stale.status, 1); assert.match(stale.stderr, /needs regeneration/);
+  for (const args of [[], [releasedImage, '--unknown'], [releasedImage, '--check', 'extra'], ['not-a-digest']]) {
+    const result = run(...args);
+    assert.equal(result.status, 2); assert.match(result.stderr, /^usage:/);
+  }
+});
+
+test('generator command writes the supplied released image to its manifest', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-public-compose-'));
+  const installer = path.join(directory, 'installer');
+  try {
+    fs.mkdirSync(installer);
+    fs.copyFileSync(generator, path.join(installer, 'public-compose.mjs'));
+    fs.copyFileSync(new URL('./compose.mjs', import.meta.url), path.join(installer, 'compose.mjs'));
+    fs.writeFileSync(path.join(directory, 'one-click.yaml'), 'old manifest\n');
+    execFileSync(process.execPath, [path.join(installer, 'public-compose.mjs'), otherImage]);
+    assert.equal(fs.readFileSync(path.join(directory, 'one-click.yaml'), 'utf8'), publicCompose(otherImage));
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('supported Hostinger link serves the generated manifest from the public beta line', () => {
+  const readme = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const checkout = readme.match(/\[Install Godspeed Mission Control on Hostinger\]\((https:\/\/www\.hostinger\.com\/docker-hosting\?[^)]+)\)/);
+  assert.ok(checkout, 'the supported Hostinger purchase link must remain present');
+  const manifest = new URL(new URL(checkout[1]).searchParams.get('compose_url'));
+  assert.equal(manifest.hostname, 'raw.githubusercontent.com');
+  assert.equal(manifest.pathname, '/MichaelZelbel/godspeed-mission-control/beta/docker/hostinger/one-click.yaml');
 });
 
 test('Docker parses the public file with zero fields, zero host ports and read-only hostname discovery', {
