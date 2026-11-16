@@ -26,8 +26,10 @@
 //         no head, a short or malformed one, or another commit approves nothing. No commit or comment
 //         date is read, because a commit's date can be set to anything. A newer `sent back`, `needs owner` or
 //         `not merged` comment means no approval, except for two `not merged` notes that only say a merge
-//         the reviewer had already accepted was refused: one whose text says "`gh pr merge` refused"
-//         (GitHub itself refused the merge, and all of land's own record rules held), and land's
+//         the reviewer had already accepted was refused: land's "`gh pr merge` refused: <GitHub's text>"
+//         note (GitHub itself refused the merge, and all of land's own record rules held), counted only
+//         in land's exact form, starting `Loop review: not merged (route: <route>). `gh pr merge`
+//         refused:`, with no other reason in it (no "- " line, no merge-gate list); and land's
 //         "The merge gate refused the reviewer's merge:" note when every line in its list is the
 //         owner-only one ("which only the owner changes; the owner merges it by hand if it is
 //         intended"). These are skipped, so the earlier `approved` or `merging` still decides. Land
@@ -289,7 +291,10 @@ export function isRefusalOfAcceptedMerge(body) {
   const read = readLoopReview(body);
   if (read === null || read.decision !== "not merged") return false;
   const text = String(body ?? "");
-  if (/`?gh pr merge`? refused/i.test(text)) return true;
+  // land.ts's exact form, written only when all its record rules held; its reasons would be "- " bullets
+  const landForm = /^Loop review:\s*not merged\s*\(route:[^)\n]*\)\.\s*`gh pr merge` refused:/;
+  const hasBullet = text.split(/\r?\n/).some((line) => line.startsWith("- "));
+  if (landForm.test(text) && !text.includes("The merge gate refused the reviewer's merge:") && !hasBullet) return true;
   if (!text.includes("The merge gate refused the reviewer's merge:")) return false;
   const bullets = text.split(/\r?\n/).filter((line) => line.startsWith("- "));
   return bullets.length > 0 && bullets.every((line) => line.includes(OWNER_ONLY_LINE));
@@ -515,6 +520,9 @@ const T3 = "2026-10-25T08:20:00Z";
 const T4 = "2026-10-25T08:30:00Z";
 // land.ts's own notes after a refused merge, as the reviewer's land step writes them.
 const GH_REFUSED = "not merged (route: simple). `gh pr merge` refused: the base branch policy prohibits the merge";
+const GH_DEFECT_BULLET = "not merged (route: x). `gh pr merge` refused: the base branch policy prohibits the merge\n\n- the app check found a defect";
+const GH_NOT_AT_START = "not merged (route: x). The merge gate refused the reviewer's merge:\n\n- the app check found a defect\n\n`gh pr merge` refused: the base branch policy prohibits the merge";
+const GH_REAL_STDERR = "not merged (route: x). `gh pr merge` refused: X Pull request MichaelZelbel/godspeed-mission-control#654 is not mergeable: the base branch policy prohibits the merge.\nTo have the pull request merged after all the requirements have been met, add the `--auto` flag.\nTo use administrator privileges to immediately merge the pull request, add the `--admin` flag.";
 const OWNER_ONLY_FILE = "- it changes a.yml, which only the owner changes; the owner merges it by hand if it is intended";
 const OWNER_ONLY_NOTE = `not merged (route: simple). The merge gate refused the reviewer's merge:\n\n${OWNER_ONLY_FILE}\n\nThe next lap continues this pull request.`;
 const RECORD_RULE_NOTE = "not merged (route: simple). The merge gate refused the reviewer's merge:\n\n- the app check found a defect";
@@ -1029,6 +1037,24 @@ const CASES = [
     want: false,
     says: "says sent back, not approved",
     args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T2, SHA), loop(BUILDER, GH_REFUSED, T3), loop(BUILDER, "sent back", T4)] }),
+  },
+  {
+    name: "a later not merged with a defect bullet and the gh phrase still fails",
+    want: false,
+    says: "says not merged, not approved",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T2, SHA), loop(BUILDER, GH_DEFECT_BULLET, T3)] }),
+  },
+  {
+    name: "a not merged with the gh phrase after another reason still fails",
+    want: false,
+    says: "says not merged, not approved",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T2, SHA), loop(BUILDER, GH_NOT_AT_START, T3)] }),
+  },
+  {
+    name: "land's exact gh-refused form with gh's real multi-line stderr still passes",
+    want: true,
+    says: `Cole's loop review from ${BUILDER} is merging for ${SHA}`,
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T2, SHA), loop(BUILDER, GH_REAL_STDERR, T3)] }),
   },
   {
     name: "a push to main by the builder's commit still needs no review",
