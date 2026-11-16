@@ -791,7 +791,7 @@ export class NativeScheduler{
    this.requireOwner('Add the routine');
    const known=enableKind(input.kind),skill=known?.skill||skills[input.kind]||input.kind;
    if(!/^[a-z0-9-]+$/.test(skill)||!fs.existsSync(path.join(this.store.root,'skills',skill,'SKILL.md')))throw Error('This mission control does not have the recipe for that routine');
-   const starting=input.kind==='coach-prep'?STARTING_ROUTINES.find(routine=>routine.key===input.kind):null;
+   const starting=STARTING_ROUTINES.find(routine=>routine.key===input.kind)||null;
    const installed=starting&&installedRoutine(this.home,this.store.root,starting);
    if(installed)throw Error('"'+starting.name+'" already runs this. Change its time under Routine times, or pause it under Routines.');
    const running=hermesJobs(this.home).find(j=>!pausedJob(j)&&(input.kind==='morning-brief'?isBriefJob(j):[j.skill,...(Array.isArray(j.skills)?j.skills:[])].includes(skill)));

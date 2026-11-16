@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync,execFile,spawnSync,spawn} from 'node:child_process';
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
-import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes,OWNER_CHAT_KEY} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
+import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes,OWNER_CHAT_KEY,STARTING_ROUTINES} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX,ROUTINES_LABEL} from '../core/connection-names.mjs';
 import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,writeNotebookRoutines,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor,CONNECTION_JOB,CONNECTION_WHAT} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
@@ -97,6 +97,14 @@ test('Enable routine offers the mission control\'s own recipes by name, and Herm
  assert.ok(readNotebookRoutines(store).jobs.some(j=>j.id===made.id&&j.what),'its row says what it does');
  await assert.rejects(scheduler.control({kind:'review',at:'18:00'},{enable:true}),/already runs/);
  await assert.rejects(scheduler.control({kind:'audit',at:'18:00'},{enable:true}),/does not have the recipe/);
+});
+test('every selectable starting routine keeps its canonical script route',async t=>{
+ const {root,home,hermes,scheduler}=await withGoal(t),routine={key:'future-starting',name:'Future starting routine',script:'godspeed-future-starting.py',what:'Proves registry-owned dispatch.'};
+ STARTING_ROUTINES.push(routine);t.after(()=>STARTING_ROUTINES.splice(STARTING_ROUTINES.indexOf(routine),1));
+ fs.mkdirSync(path.join(root,'skills',routine.key),{recursive:true});fs.writeFileSync(path.join(root,'skills',routine.key,'SKILL.md'),'# Future starting routine');
+ const row=await scheduler.control({kind:routine.key,at:'04:15'},{enable:true}),made=hermes.jobs().find(job=>job.id===row.id);
+ assert.equal(made.script,routine.script);assert.equal(made.skill,null);assert.equal(made.no_agent,true);
+ assert.match(fs.readFileSync(path.join(home,'scripts',routine.script),'utf8'),/main\("future-starting"\)/);
 });
 test('a routine Hermes holds paused in any of its three forms is shown paused and can be resumed through enable',async t=>{
  const {hermes,scheduler}=await withGoal(t);
