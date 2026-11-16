@@ -99,7 +99,8 @@ export function addonInvocation(store,{addon,args},{judge=false}={}){
  fs.mkdirSync(path.join(store.root,'observations'),{recursive:true});
  if(!fs.existsSync(path.join(store.root,'AGENTS.md')))atomic(path.join(store.root,'AGENTS.md'),'# Personal workspace\n\nKeep durable state in user files. Outward actions require exact approval.\n');
  const script=fileURLToPath(new URL('../../third-party/addons/godspeed-'+addon+'/bin/godspeed-'+addon+'.mjs',import.meta.url));
- const env={...process.env,GODSPEED_COACH_APP:path.join(store.state,'coach-app'),GODSPEED_JOURNAL_APP:path.join(store.state,'journal-app'),GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off',GODSPEED_HEADACHE_GIT_SYNC:'off'};delete env.GODSPEED_HEADACHE_DAILY_ROWS;
+ const env={...process.env,GODSPEED_COACH_APP:path.join(store.state,'coach-app'),GODSPEED_JOURNAL_APP:path.join(store.state,'journal-app'),GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off',GODSPEED_HEADACHE_GIT_SYNC:'off'};delete env.GODSPEED_HEADACHE_DAILY_ROWS;delete env.GODSPEED_HEADACHE_DAILY_TABLE_REQUIRED;
+ if(addon==='headache'&&args[0]==='patterns'&&settings.daily_table&&fs.existsSync(settings.daily_table))env.GODSPEED_HEADACHE_DAILY_TABLE_REQUIRED='1';
  if(addon==='headache'&&args[0]==='patterns'&&!(settings.daily_table&&fs.existsSync(settings.daily_table))){
   const at=args.indexOf('--days'),requested=at===-1?90:Number(args[at+1]),days=Number.isFinite(requested)&&requested>0?requested:90;
   const health=currentHealth(new QueryService(store),{now:Date.now(),days}),rows=[];
