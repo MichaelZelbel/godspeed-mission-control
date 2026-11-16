@@ -411,6 +411,7 @@ export class QueryService {
           // let through for a person saved without a name before the rule. Until issue 266 it was
           // refused, and the first open of such a person ended in this error.
           if(table==='contacts'&&operation!=='delete'&&!(old&&Object.keys(payload).every(key=>key==='last_viewed_at'||key==='id'))&&!(typeof record.name==='string'&&record.name.trim()))throw new Error('A person needs a name. Type their name and save again.');
+          if(table==='collections'&&operation!=='delete'&&!(typeof record.name==='string'&&record.name.trim()))throw new Error('A collection needs a name. Type a name and save again.');
           if(table==='contact_groups'&&payload.type&&payload.type!=='contact_groups')record.group_type=payload.type;
           if(table==='contact_group_memberships'&&!record.status_changed_at)record.status_changed_at=record.created_at;
           if(table==='contact_group_memberships'&&(!record.last_movement_at||old&&payload.status&&old.status!==payload.status))record.last_movement_at=record.updated_at;
