@@ -14,10 +14,14 @@ export default function ChatComposer(p:Props){
   const [options,setOptions]=useState<{current:string;label?:string;connected?:boolean;usable?:boolean;availability?:ChatAvailability;models:Array<{id:string;efforts:string[]}>}>({current:'',models:[]});
   const [modelError,setModelError]=useState(''),[modelAttempt,setModelAttempt]=useState(0);
   const canRecord=!!navigator.mediaDevices?.getUserMedia&&typeof MediaRecorder!=='undefined';
-  useEffect(()=>{let alive=true;const request=new AbortController();setModelError('');loadChatOptions({signal:request.signal}).then(data=>{if(alive){setOptions(data);p.onModel(data.current);}}).catch(e=>{if(alive)setModelError(e.message||'Model choices could not be loaded. Try again.');});return()=>{alive=false;request.abort();};},[modelAttempt]);
+  useEffect(()=>{let alive=true,request:AbortController|undefined;
+    const refresh=()=>{request?.abort();const currentRequest=request=new AbortController();setModelError('');loadChatOptions({signal:currentRequest.signal}).then(data=>{if(alive){setOptions(data);p.onModel(data.current);}}).catch(e=>{if(alive&&!currentRequest.signal.aborted)setModelError(e.message||'Model choices could not be loaded. Try again.');});};
+    refresh();const interval=window.setInterval(refresh,5000);
+    return()=>{alive=false;window.clearInterval(interval);request?.abort();};
+  },[modelAttempt]);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;clearTimeout(recordingTimer.current);audioRequest.current?.abort();if(recorder.current?.state==='recording')recorder.current.stop();recorder.current?.stream.getTracks().forEach(t=>t.stop());window.speechSynthesis?.cancel();};},[]);
   const noAI=options.connected===false,unusable=options.usable===false,efforts=noAI||unusable?[]:options.models.find(m=>m.id===p.model)?.efforts||[];
-  const unavailableLabel=options.availability==='refused'?'AI key or sign-in refused':'AI connection unavailable';
+  const unavailableLabel=noAI?'No AI connected':options.availability==='refused'?'AI key or sign-in refused':'AI connection unavailable';
   const addFiles=async(list:FileList|File[])=>{
     const files=Array.from(list);if(p.files.length+files.length>10){p.onError('Attach up to 10 files per message');return;}
     if(files.reduce((n,f)=>n+f.size,0)>20*1024*1024){p.onError('Choose files totaling at most 20 MB');return;}

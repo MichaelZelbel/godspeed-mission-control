@@ -113,8 +113,8 @@ describe("the Godspeed card", () => {
   // is only the wait for the status (#552).
   it("says no AI is connected and links to Settings, Your AI", async () => {
     page(false, { show: false }, { runtimeConfigured: false, assistantProblem: null });
-    expect(await screen.findByText(/No AI is connected yet\./)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Connect it in Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
+    expect(await screen.findByText("No AI connected")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
     expect(screen.queryByText("Connecting…")).toBeNull();
   });
   it("says Connecting only while the status is loading", async () => {
@@ -123,7 +123,7 @@ describe("the Godspeed card", () => {
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
     expect(await screen.findByText("Connecting…")).toBeInTheDocument();
     answer(new Response(JSON.stringify({ runtimeConfigured: false, assistantProblem: null }), { status: 200, headers: { "Content-Type": "application/json" } }));
-    expect(await screen.findByText(/No AI is connected yet\./)).toBeInTheDocument();
+    expect(await screen.findByText("No AI connected")).toBeInTheDocument();
     expect(screen.queryByText("Connecting…")).toBeNull();
   });
   it("keeps the short status in large type", async () => {
@@ -133,13 +133,15 @@ describe("the Godspeed card", () => {
   it("does not call a provider that refused its key ready", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url) === "/api/chat/options" ? { connected: true, usable: false, availability: "refused" } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
-    expect(await screen.findByText("AI key or sign-in refused")).toBeInTheDocument();
+    expect(await screen.findByText("Your AI key or sign-in was refused")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
     expect(screen.queryByText("Ready to chat")).toBeNull();
   });
   it("distinguishes an unreachable configured AI from refused credentials", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url) === "/api/chat/options" ? { connected: true, usable: false, availability: "unreachable" } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
-    expect(await screen.findByText("AI connection unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("Your AI could not be reached")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
     expect(screen.queryByText(/refused/i)).toBeNull();
   });
 });

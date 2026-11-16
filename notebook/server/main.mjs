@@ -75,6 +75,7 @@ import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/herm
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
 import {MEDIA_PRESENCE_BATCH_SIZE,MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
+import {chatAvailability} from '../core/chat-availability.mjs';
 
 // A backup AI is another service than the main AI, in Settings and in /backupai alike: when one
 // service fails, its other models and keys usually fail with it, and Hermes counts the same service
@@ -693,10 +694,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       // With no AI connected (the same test as runtimeConfigured in /api/status), the picker says so instead of naming a "Connected model" (#563).
       if(route==='/api/chat/options'&&req.method==='GET'){
-        if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,availability:'none',current:'No AI connected',models:[{id:'',efforts:[]}]});
+        if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,availability:chatAvailability('none'),current:'No AI connected',models:[{id:'',efforts:[]}]});
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
         if(provider?.check&&Date.now()-chatAICheckedAt>=5000){chatAICheckedAt=Date.now();try{await provider.check();chatAIUsable=true;}catch(error){chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}}
-        const availability=chatAIUsable?'ready':provider?.health?.()==='refused'?'refused':'unreachable';
+        const availability=chatAvailability(chatAIUsable?'ready':provider?.health?.()==='refused'?'refused':'unreachable');
         return send(res,200,{connected:true,usable:chatAIUsable,availability,...options});
       }
       if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}

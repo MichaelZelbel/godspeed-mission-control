@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import '@testing-library/jest-dom/vitest';
@@ -15,7 +15,15 @@ function show(){
 }
 // jsdom has no AbortSignal.timeout or AbortSignal.any, which the model loader uses in browsers; these stand-ins never fire.
 beforeEach(()=>{const S=AbortSignal as any;S.timeout??=()=>new AbortController().signal;S.any??=(signals:AbortSignal[])=>signals[0];});
-afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+afterEach(()=>{cleanup();vi.unstubAllGlobals();vi.useRealTimers();});
+
+it('refreshes an already-open composer when an AI is connected',async()=>{
+ vi.useFakeTimers();let connected=false;
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(connected?{connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}:{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}),{headers:{'Content-Type':'application/json'}})));
+ const props=show();await vi.waitFor(()=>expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('No AI connected'));
+ connected=true;await act(()=>vi.advanceTimersByTimeAsync(5000));
+ expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('fictional-model');expect(props.onModel).toHaveBeenLastCalledWith('fictional-model');
+});
 
 it('with no AI connected the model picker says so and both pickers are off',async()=>{
  answer({connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]});show();
@@ -65,8 +73,8 @@ it.each([
  const model=screen.getByRole('combobox',{name:'Model'});
  await waitFor(()=>expect(model).toHaveDisplayValue(label));
  const css=readFileSync(join(process.cwd(),'src/index.css'),'utf8');
- expect(css).toMatch(/@container \(max-width: 32rem\)[\s\S]*?\[data-chat-toolbar\][\s\S]*?display: grid;[\s\S]*?grid-template-columns: 2\.75rem minmax\(0, 1fr\) auto;/);
- expect(css).toMatch(/@container \(max-width: 32rem\)[\s\S]*?\[data-chat-model\][\s\S]*?grid-column: 1 \/ -1;[\s\S]*?max-width: none;[\s\S]*?width: 100%;/);
+ expect(css).toMatch(/@container \(max-width: 40rem\)[\s\S]*?\[data-chat-toolbar\][\s\S]*?display: grid;[\s\S]*?grid-template-columns: 2\.75rem minmax\(0, 1fr\) auto;/);
+ expect(css).toMatch(/@container \(max-width: 40rem\)[\s\S]*?\[data-chat-model\][\s\S]*?grid-column: 1 \/ -1;[\s\S]*?max-width: none;[\s\S]*?width: 100%;/);
  expect(container.querySelector('[data-chat-toolbar]')).toContainElement(model);
 });
 
