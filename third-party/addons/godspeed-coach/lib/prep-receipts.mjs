@@ -280,7 +280,7 @@ export function sealReview({ prepFile, area, evidenceFile, answer, reviewer, rev
   const evidenceProblem = parsed ? researchEvidenceProblem(readPrep(prepFile), area, now, { evidence: evidenceFile, review: out })
     : "its independent reviewer did not answer with the JSON the review recipe asks for";
   const uncovered = leaveUncoveredGoalsDraft(prepFile, area, coverage);
-  const problem = evidenceProblem || (uncovered.length ? "its independent review left an adopted goal uncovered" : null);
+  const problem = evidenceProblem || (uncovered.length ? "its independent review did not pass because it left an adopted goal uncovered" : null);
   const next = [...issues, ...coverage.filter((r) => r.verdict !== "pass").map((r) => `${r.id}: ${r.reason || "not substantiated"}`)];
   for (const id of uncovered) if (!next.some((issue) => issue.startsWith(`${id}:`))) next.push(`${id}: the independent review left this adopted goal uncovered`);
   if (problem && !next.length) next.push(problem.replace(/^its /, "The preparation's "));
