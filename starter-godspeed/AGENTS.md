@@ -45,10 +45,10 @@ If it contradicts something you believe about me, the file wins.
   `skills/<name>/SKILL.md` and tell me what you saved. `answer-email-my-way`,
   `plan-my-day`, `prep-me-for-a-meeting`, `draft-my-update`, `check-my-email` and
   `summarize-for-me` are single files, at
-  `https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/skills/<name>.md`.
+  `https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/beta/skills/<name>.md`.
   `prepare-a-decision` is a folder: fetch
-  `.../main/skills/<name>/SKILL.md` and any file beside it. The kit's list is
-  `https://github.com/MichaelZelbel/godspeed-mission-control/tree/main/skills`.
+  `.../beta/skills/<name>/SKILL.md` and any file beside it. The kit's list is
+  `https://github.com/MichaelZelbel/godspeed-mission-control/tree/beta/skills`.
 - **The morning brief is yours.** A message in my chat that starts
   `[Cron delivery: morning-brief]` is the brief you sent me, placed there by
   Hermes; it is your own words, not mine. When I ask about it, answer from it in
