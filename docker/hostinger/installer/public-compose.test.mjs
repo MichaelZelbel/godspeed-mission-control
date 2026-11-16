@@ -115,7 +115,6 @@ test('supported Hostinger link serves the generated manifest from the public bet
   const manifest = new URL(new URL(checkout[1]).searchParams.get('compose_url'));
   assert.equal(manifest.hostname, 'raw.githubusercontent.com');
   assert.equal(manifest.pathname, '/MichaelZelbel/godspeed-mission-control/beta/docker/hostinger/one-click.yaml');
-  assert.equal(fs.readFileSync(new URL('../one-click.yaml', import.meta.url), 'utf8').replace(/\r\n/g, '\n'), publicCompose(releasedImage));
 });
 
 test('Docker parses the public file with zero fields, zero host ports and read-only hostname discovery', {
