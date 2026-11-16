@@ -95,6 +95,21 @@ test('a refused model provider is reclassified when its next response is malform
  }finally{globalThis.fetch=original;}
 });
 
+test('a model provider keeps its last completed refusal while the next response body is pending',async()=>{
+ const original=globalThis.fetch,provider=modelProvider({url:'http://localhost/fixture',key:'fictional',model:'fictional',retryWaits:[]});let call=0,releaseJson,jsonStarted;
+ const parsing=new Promise(resolve=>{jsonStarted=resolve;});
+ try{
+  globalThis.fetch=async()=>{
+   if(call++===0)return new Response('{}',{status:401});
+   return {ok:true,status:200,json:async()=>{jsonStarted();await new Promise(resolve=>{releaseJson=resolve;});return {};}};
+  };
+  await assert.rejects(provider.check(),/HTTP 401/);assert.equal(provider.health(),'refused');
+  const pending=provider.check();await parsing;
+  assert.equal(provider.health(),'refused','a request does not replace the last completed classification');
+  releaseJson();await assert.rejects(pending,/no text/);assert.equal(provider.health(),'unreachable');
+ }finally{globalThis.fetch=original;}
+});
+
 test('Hermes exposes a bounded check and classifies an authentication refusal',async()=>{
  const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-health-'));let prompt;
  const provider=hermesProvider({home,cwd:home,spawnProcess:()=>{const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',data=>{prompt=JSON.parse(data);queueMicrotask(()=>{child.stdout.end();child.stderr.end('AuthenticationError: token expired, private diagnostic\n');child.emit('close',1);});});return child;}});
