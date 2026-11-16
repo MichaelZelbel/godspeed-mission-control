@@ -78,14 +78,21 @@ settings_connects_the_model() {
 }
 
 run_installed_preparation() {
-  local jobs=$EVIDENCE/.prep-jobs.json id before after code produced attempt=0 answer summary status
+  local jobs=$EVIDENCE/.prep-jobs.json id before after code produced attempt=0 answer summary status enable=$EVIDENCE/prep-enable-request.json
   installed_preparation_is_listed() {
     curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{"table":"jobs"}' "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$jobs" 2>/dev/null || return 1
     id=$("$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>x.name==="Coaching talk preparation"||x.title==="Coaching talk preparation"||x.kind==="coach-prep");if(j)process.stdout.write(String(j.id))' "$jobs")
     [ -n "$id" ]
   }
-  wait_for 90 "the installed Coaching talk preparation job to be listed" installed_preparation_is_listed ||
-    fail "the installed routine list has no Coaching talk preparation job"
+  if ! installed_preparation_is_listed; then
+    code=$(curl -sS -o "$enable" -w '%{http_code}' --max-time 60 -X POST -H 'Content-Type: application/json' \
+      -d '{"kind":"coach-prep","at":"03:00"}' "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/add") ||
+      fail "the public routine selector could not request Coaching talk preparation"
+    { [ "$code" = 200 ] || [ "$code" = 201 ]; } ||
+      fail "the public routine selector refused Coaching talk preparation with HTTP $code: $(tr -d '\n' <"$enable" | cut -c1-200)"
+  fi
+  wait_for 90 "the public selector to list Coaching talk preparation" installed_preparation_is_listed ||
+    fail "the public routine selector created no Coaching talk preparation job"
   before=$("$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>String(x.id)===process.argv[2]);process.stdout.write(String(j?.last_run_at||"never"))' "$jobs" "$id")
   printf 'id=%s\nbefore=%s\n' "$id" "$before" >"$EVIDENCE/prep-run-before.txt"
   while [ "$attempt" -lt 18 ]; do

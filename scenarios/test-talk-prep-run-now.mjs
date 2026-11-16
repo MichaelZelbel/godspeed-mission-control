@@ -19,7 +19,7 @@ test('the scenario fixture gives every adopted goal its public card ID',()=>{
   assert.doesNotMatch(scenario,/write_installed_fixture_area|TALK_PREP_SUPPORTED_FIXTURE/);
 });
 
-const runRoute=async(createFresh,{busyOnce=false,failed=false}={})=>{
+const runRoute=async(createFresh,{busyOnce=false,failed=false,missingInitially=false}={})=>{
   const folder=fs.mkdtempSync(path.join(os.tmpdir(),'talk-prep-run-now-'));
   const root=path.join(folder,'root');
   const work=path.join(folder,'work');
@@ -28,7 +28,7 @@ const runRoute=async(createFresh,{busyOnce=false,failed=false}={})=>{
   const old=path.join(prep,'old.md');
   fs.writeFileSync(old,'old preparation\n');
   fs.utimesSync(old,new Date('2020-01-01T00:00:00Z'),new Date('2020-01-01T00:00:00Z'));
-  let queried=0,runRequests=0;
+  let queried=0,runRequests=0,enabled=!missingInitially;
   const server=http.createServer((request,response)=>{
     let body='';
     request.on('data',chunk=>body+=chunk);
@@ -37,10 +37,14 @@ const runRoute=async(createFresh,{busyOnce=false,failed=false}={})=>{
       if(request.url==='/api/query'){
         queried++;
         response.end(JSON.stringify({
-          data:[{id:'prep-job',name:'Coaching talk preparation',last_run_at:queried===1?'before':'after',last_status:queried===1?'':failed?'failed':'ok',last_error:failed?'fixture preparation failed':''}],
-          count:1,
+          data:enabled?[{id:'prep-job',name:'Coaching talk preparation',last_run_at:runRequests===0?'before':'after',last_status:runRequests===0?'':failed?'failed':'ok',last_error:failed?'fixture preparation failed':''}]:[],
+          count:enabled?1:0,
           error:null
         }));
+      }else if(request.url==='/api/jobs/add'){
+        assert.deepEqual(JSON.parse(body),{kind:'coach-prep',at:'03:00'});
+        enabled=true;
+        response.end('{"data":{"id":"prep-job","name":"Coaching talk preparation"}}');
       }else if(request.url==='/api/jobs/run'){
         assert.deepEqual(JSON.parse(body),{id:'prep-job'});
         runRequests++;
@@ -106,6 +110,16 @@ test('the public Run now caller retains the preparation created by that run',asy
       count:1,
       error:null
     });
+  }finally{fs.rmSync(result.folder,{recursive:true,force:true});}
+});
+
+test('the clean installed route enables Coaching talk preparation through the public selector',async()=>{
+  const result=await runRoute(true,{missingInitially:true});
+  try{
+    assert.equal(result.code,0,result.output);
+    const enabled=JSON.parse(fs.readFileSync(path.join(result.evidence,'prep-enable-request.json'),'utf8'));
+    assert.deepEqual(enabled,{data:{id:'prep-job',name:'Coaching talk preparation'}});
+    assert.equal(result.runRequests(),1);
   }finally{fs.rmSync(result.folder,{recursive:true,force:true});}
 });
 
