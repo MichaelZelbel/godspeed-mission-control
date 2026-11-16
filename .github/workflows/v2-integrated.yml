@@ -12,11 +12,24 @@ name: Integrated Godspeed v2
 #
 # Actions are named by tag, not yet by commit hash: the hashes were not looked up when
 # this changed (no network on the machine that wrote it).
+#
+# Since 16 November 2026 every pull request runs it too, before it can merge: `required` waits for
+# every other check on a pull request's commit, so these tests now gate the merge instead of
+# finding a break on main afterwards. On 16 November #668 passed every pull-request check, merged,
+# and then failed tracker-recipe.test.mjs here on main; main stayed red and the release step of
+# 2.0.0-beta.25 could not freeze for hours. A pull request runs on GitHub's merge of it into the
+# newest main, with no path filter (that change touched the headache add-on, which the push filter
+# below did not name), and never publishes: PUBLISH is true only on main. A newer commit on the
+# same pull request cancels the older run.
 on:
   push:
     branches: [main]
-    paths: [.github/workflows/v2-integrated.yml, 'notebook/**', 'third-party/addons/godspeed-coach/**', 'third-party/addons/godspeed-charm/**', 'docker/full-candidate/**', 'docker/rootfs/**', 'docker/test/**', install-godspeed.sh, install-godspeed-dev.sh]
+    paths: [.github/workflows/v2-integrated.yml, 'notebook/**', 'third-party/addons/**', 'docker/full-candidate/**', 'docker/rootfs/**', 'docker/test/**', install-godspeed.sh, install-godspeed-dev.sh]
+  pull_request:
   workflow_dispatch:
+concurrency:
+  group: v2-integrated-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
 jobs:
