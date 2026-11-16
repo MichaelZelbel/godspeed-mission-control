@@ -102,6 +102,7 @@ export default function PeopleMultiSelect({ people, value, onChange, newNames = 
             variant="outline"
             size="sm"
             role="combobox"
+            aria-label="People"
             aria-expanded={open}
             className="w-full justify-between font-normal text-muted-foreground"
           >
