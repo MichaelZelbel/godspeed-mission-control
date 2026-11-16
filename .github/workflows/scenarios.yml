@@ -534,8 +534,9 @@ jobs:
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) update-keeps-everything:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL update-keeps-everything: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
 
-  # The scenarios of 2.0.0-beta.12: reminders and their closings live in the notebook. None of them
-  # needs a key: two computers are two installations on the one machine, joined through one bare
+  # The scenarios of 2.0.0-beta.12: reminders and their closings live in the notebook. Their reminder
+  # work needs no key; two-machines-move-at-once receives the read-only workflow token below for its
+  # final live GitHub privacy proof. Two computers are two installations on the one machine, joined through one bare
   # repository on it standing in for the private GitHub repository (scenarios/README.md).
   # reminder-closed-elsewhere, reminders-move-keeps-everything and late-reminder-file were taken out
   # on 31 October 2026, their scripts testing the wrong thing, and are back here fixed (#108).
@@ -557,6 +558,8 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
+        env:
+          GODSPEED_SCENARIO_GITHUB_TOKEN: ${{ github.token }}
         run: bash scenarios/two-machines-move-at-once.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Say so when it stopped before its own verdict
         if: failure()

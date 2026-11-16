@@ -30,6 +30,15 @@ Version 2 is the current edition. The install lines on this page install the cur
 
 Godspeed carries the Workouts add-on. With Hevy Pro, open **Settings** > **Workouts from Hevy**, make a Hevy developer key, and connect it there. The key stays in the add-on's private state; Settings shows the imported-row count and last run, and the one hourly **Workouts from Hevy** routine appears under **Settings** > **Routines**. When taking over a standalone add-on schedule, Godspeed first proves the carried routine can import; if setup fails, Settings names the safe reason and retry time while the existing schedule stays in place. If retiring that schedule fails after the proof, the carried routine keeps running and Settings reports the removal retry. Disconnect stops that routine while keeping the tracker and its rows.
 
+## New in 2.0.0-beta.25
+
+Voice notes work without a paid key, and the morning briefing is the same wherever you ask for it.
+
+- **Voice notes are understood without a paid key, in the language you speak.** A native install now sets up the local transcriber, as the Docker server already did, and leaves the language on automatic, so a German voice note comes back in German, with or without ElevenLabs. A language you chose yourself in Settings stays. Where a computer cannot get the local transcriber, Settings says plainly that voice notes need a key there.
+- **"Today's briefing" asked in any chat is the saved morning briefing**, with its next step and Charm Challenge line when the saved one has them. No chat makes up a briefing of its own.
+- **Adding a moment by hand can add a new person**, also when People is still empty. Enter on a partly typed name picks the person who already exists; a new person is made only by choosing "Add ... as a new person", or by Enter when nobody matches.
+- **A large picture or PDF that stayed on one computer explains itself on the other.** A file over the 50 MB travelling limit shows a placeholder in the note, the media library and previews on every other computer, saying which computer has the original and what to do: open it there, or make it smaller so it travels. Never a broken image or a bare error.
+
 ## New in 2.0.0-beta.24
 
 Godspeed no longer leaves you empty-handed when one of its own safety checks refuses what the AI wrote, and your pictures and PDFs travel with your notebook.
