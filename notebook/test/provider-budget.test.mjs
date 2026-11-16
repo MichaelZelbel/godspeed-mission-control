@@ -68,11 +68,52 @@ test('a passing 502, 503, 504 or 429 from the provider is tried again, and other
   calls=0;answers.push([401,{error:{message:'Invalid key'}}]);
   assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]});
   await assert.rejects(provider({kind:'connection-test'}),/HTTP 401: Invalid key/);assert.equal(calls,1,'a wrong key is said at once');
+  assert.equal(provider.health(),'refused');
   assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]},'a refused key does not erase the configured model identity');
   answers.push([200,{choices:[{message:{content:'Connected again.'}}]}]);
   assert.equal(await provider({kind:'connection-test'}),'Connected again.');
+  assert.equal(provider.health(),'unreachable');
   assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]});
  }finally{await new Promise(r=>server.close(r));}
+});
+
+test('a refused model provider is reclassified when its next check cannot reach the service',async()=>{
+ const original=globalThis.fetch,provider=modelProvider({url:'http://localhost/fixture',key:'fictional',model:'fictional',retryWaits:[]});let call=0;
+ try{
+  globalThis.fetch=async()=>{if(call++===0)return new Response('{}',{status:401});throw new TypeError('fetch failed');};
+  await assert.rejects(provider({kind:'connection-check',timeout_ms:15000}),/HTTP 401/);assert.equal(provider.health(),'refused');
+  await assert.rejects(provider({kind:'connection-check',timeout_ms:15000}),/could not be reached/);assert.equal(provider.health(),'unreachable');
+ }finally{globalThis.fetch=original;}
+});
+
+test('Hermes exposes a bounded check and classifies an authentication refusal',async()=>{
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-health-'));let prompt;
+ const provider=hermesProvider({home,cwd:home,spawnProcess:()=>{const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',data=>{prompt=JSON.parse(data);queueMicrotask(()=>{child.stdout.end();child.stderr.end('AuthenticationError: token expired, private diagnostic\n');child.emit('close',1);});});return child;}});
+ await assert.rejects(provider.check(),/needs sign-in/);assert.equal(provider.health(),'refused');assert.equal(prompt.kind,'connection-check');assert.equal(prompt.timeout_ms,undefined);
+});
+
+test('the Hermes health check stops at its 15-second process deadline',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-health-timeout-'));let call=0;
+ const provider=hermesProvider({home,cwd:home,spawnProcess:()=>{const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();if(call++===0)child.stdin.on('data',()=>queueMicrotask(()=>{child.stderr.end('AuthenticationError: token expired\n');child.stdout.end();child.emit('close',1);}));return child;}});
+ await assert.rejects(provider.check(),/needs sign-in/);assert.equal(provider.health(),'refused');
+ const check=provider.check();let rejected=false;check.catch(()=>{rejected=true;});t.mock.timers.tick(14999);assert.equal(provider.health(),'unreachable');t.mock.timers.tick(1);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(rejected,true,'the health check rejects at its 15-second deadline');
+ await assert.rejects(check,/ten minutes/);
+});
+
+test('a refused Hermes provider is reclassified when its next check cannot start',async()=>{
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-health-transition-'));let call=0;
+ const provider=hermesProvider({home,cwd:home,spawnProcess:()=>{if(call++)throw new Error('fictional spawn failure');const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',()=>queueMicrotask(()=>{child.stdout.end();child.stderr.end('AuthenticationError: token expired\n');child.emit('close',1);}));return child;}});
+ await assert.rejects(provider.check(),/needs sign-in/);assert.equal(provider.health(),'refused');
+ await assert.rejects(provider.check(),/could not start/);assert.equal(provider.health(),'unreachable');
+});
+
+test('a refused Hermes provider is reclassified when its next check exceeds the output limit',async()=>{
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-health-output-'));let call=0;
+ const provider=hermesProvider({home,cwd:home,spawnProcess:()=>{const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',()=>queueMicrotask(()=>{if(call++===0){child.stderr.end('AuthenticationError: token expired\n');child.stdout.end();child.emit('close',1);}else child.stdout.write('x'.repeat(1024*1024+1));}));return child;}});
+ await assert.rejects(provider.check(),/needs sign-in/);assert.equal(provider.health(),'refused');
+ await assert.rejects(provider.check(),/output exceeded/);assert.equal(provider.health(),'unreachable');
 });
 
 // Only a connection that failed is called unreachable (#506): a header Node refused on this computer

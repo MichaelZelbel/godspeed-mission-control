@@ -15,7 +15,7 @@
   container-type: inline-size;
 }
 
-@container (max-width: 32rem) {
+@container (max-width: 40rem) {
   .chat-composer [data-chat-toolbar] {
     display: grid;
     grid-template-columns: 2.75rem minmax(0, 1fr) auto;

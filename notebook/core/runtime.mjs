@@ -30,6 +30,7 @@ export function unreachableAI(url,cause){
 }
 export function hermesProvider({executable='hermes',home,cwd,model,provider,sourceRoot,spawnProcess}={}){
   if(!isHermesExecutable(executable))throw new Error('Choose the verified Hermes runtime');
+  let healthFailure='unreachable';
   const run=async input=>{
     const timeoutMs=providerTimeBudget(input);
     if(input.attachments?.some(a=>a.mime==='application/pdf'))throw new Error('Use a document-capable model endpoint for PDF analysis');
@@ -52,11 +53,15 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider,sour
       // waiting for their chat must not be used up here (godspeed-coach lib/context.mjs).
       const result=await runChild(executable,args,{cwd,env:{...assistantEnvironment({home,workspace:cwd}),GODSPEED_SCHEDULED_RUN:'1'},input:JSON.stringify(prompt),timeoutMs,maxBytes:1024*1024,signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The AI connection could not start');});
       const text=hermesResponse(result.stdout);
-      if(result.code===0&&text)return text;
+      if(result.code===0&&text){healthFailure='unreachable';return text;}
+      healthFailure=AI_SIGN_IN.test(result.stderr+'\n'+text)?'refused':'unreachable';
       throw new Error(hermesFailureMessage(result.stderr+'\n'+text));
     }finally{for(const file of temporary)try{fs.unlinkSync(file);}catch{}}
   };
-  let cached,loadedAt=0;run.options=async()=>{if(cached&&Date.now()-loadedAt<300000)return cached;const {python,source}=hermesPython({executable,sourceRoot,home});if(!python)throw new Error('Model choices could not be loaded');const helper=fileURLToPath(new URL('../assistant-files/chat-options.py',import.meta.url));cached=await runChild(python,['-I',helper,source],{cwd:fs.existsSync(source)?source:home||cwd,env:assistantEnvironment({home,workspace:cwd}),timeoutMs:20000,spawnProcess}).then(result=>{if(result.code)throw Error();return JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));}).catch(()=>{throw new Error('Model choices could not be loaded');});loadedAt=Date.now();return cached;};return run;
+  let cached,loadedAt=0;run.options=async()=>{if(cached&&Date.now()-loadedAt<300000)return cached;const {python,source}=hermesPython({executable,sourceRoot,home});if(!python)throw new Error('Model choices could not be loaded');const helper=fileURLToPath(new URL('../assistant-files/chat-options.py',import.meta.url));cached=await runChild(python,['-I',helper,source],{cwd:fs.existsSync(source)?source:home||cwd,env:assistantEnvironment({home,workspace:cwd}),timeoutMs:20000,spawnProcess}).then(result=>{if(result.code)throw Error();return JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));}).catch(()=>{throw new Error('Model choices could not be loaded');});loadedAt=Date.now();return cached;};
+  run.check=async()=>{healthFailure='unreachable';await run({kind:'connection-check',contract:'Reply with OK.',timeout_ms:15000});};
+  run.health=()=>healthFailure;
+  return run;
 }
 // THE PYTHON HERMES RUNS ON, for the model list under the chat (assistant-files/chat-options.py
 // imports Hermes' own modules). Until 18 October 2026 it was looked for only where the one-click
@@ -169,7 +174,7 @@ const RETRY_STATUS=new Set([429,502,503,504]);
 export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = [2000,5000] } = {}) {
   if(!url || !key || !model)return null;
   const parsed=new URL(url);if(parsed.protocol!=='https:' && !['127.0.0.1','localhost'].includes(parsed.hostname))throw new Error('Model provider requires HTTPS');
-  let refused=false;
+  let healthFailure='unreachable';
   const run=async input=>{
     const timeoutMs=providerTimeBudget(input),{attachments=[],signal,timeout_ms:ignoredBudget,max_tokens:answerBudget,...textInput}=input;
     const parts=[{type:'text',text:JSON.stringify(textInput)},...attachments.map(a=>a.mime==='application/pdf'?{type:'file',file:{filename:a.name,file_data:'data:'+a.mime+';base64,'+a.data}}:{type:'image_url',image_url:{url:'data:'+a.mime+';base64,'+a.data}})];
@@ -177,21 +182,22 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
     let response;
     for(let attempt=0;;attempt++){
       try{response=await fetch(url,{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:request,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs)});}
-      catch(error){if(error.name==='TimeoutError')throw Error(providerTimeoutMessage(timeoutMs));if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
+      catch(error){healthFailure='unreachable';if(error.name==='TimeoutError')throw Error(providerTimeoutMessage(timeoutMs));if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
       if(response.ok||!RETRY_STATUS.has(response.status)||attempt>=retryWaits.length||signal?.aborted)break;
       await response.arrayBuffer().catch(()=>{});
       await new Promise((resolve,reject)=>{const timer=setTimeout(resolve,retryWaits[attempt]);signal?.addEventListener('abort',()=>{clearTimeout(timer);reject(signal.reason);},{once:true});});
     }
-    if(!response.ok){if([401,403].includes(response.status))refused=true;let reason='';try{const body=await response.json();reason=String(body?.error?.message||body?.message||'').replace(/\s+/g,' ').slice(0,200);}catch{}throw new Error('Model provider failed with HTTP '+response.status+(reason?': '+reason:''));}
+    if(!response.ok){healthFailure=[401,403].includes(response.status)?'refused':'unreachable';let reason='';try{const body=await response.json();reason=String(body?.error?.message||body?.message||'').replace(/\s+/g,' ').slice(0,200);}catch{}throw new Error('Model provider failed with HTTP '+response.status+(reason?': '+reason:''));}
     const result=await response.json(), text=result.choices?.[0]?.message?.content;if(typeof text!=='string')throw new Error('Model provider returned no text');
-    refused=false;
+    healthFailure='unreachable';
     return text;
   };
   // Keep the configured identity available to the picker. Checking uses the same
   // request path as chat, so a refused key or unreachable address cannot look ready.
   return Object.assign(run,{
     options:async()=>({current:model,models:[{id:model,efforts:[]}]}),
-    check:async()=>{await run({kind:'connection-check',contract:'Reply with OK.',max_tokens:8,timeout_ms:15000});}
+    check:async()=>{await run({kind:'connection-check',contract:'Reply with OK.',max_tokens:8,timeout_ms:15000});},
+    health:()=>healthFailure
   });
 }
 export function commandProvider({ command, args = [], cwd, timeoutMs = 120000 } = {}) {
