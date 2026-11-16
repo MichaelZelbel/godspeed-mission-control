@@ -1,8 +1,9 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawnSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';import {backup,restore} from '../core/archives.mjs';
 import {jobExecutor} from '../core/runtime.mjs';
 import {nativeTick,addonInvocation} from '../core/native-personal.mjs';
 import {saveSettings as saveHeadacheSettings,DEFAULTS as HEADACHE_DEFAULTS} from '../../third-party/addons/godspeed-headache/lib/settings.mjs';
+import {writeEntry as writeHeadacheEntry} from '../../third-party/addons/godspeed-headache/lib/store.mjs';
 const temp=()=>fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-native-'));
 test('native coach and journal commands share canonical notebook files and survive backup restore',async()=>{
  const store=new Store(temp()),query=new QueryService(store),domains=new Domains(query);
@@ -52,16 +53,19 @@ test('the native coach tick reads the newest same-day measurement, whichever fee
  assert.equal(await run([['Health Auto Export',90,'a-phone'],['Fictional CSV',70,'b-csv'],['Health Auto Export',91,'a-phone']]),0);
 });
 
-test('headache patterns receive complete phone days only when no daily table is configured',()=>{
+test('headache patterns receive complete requested phone columns across the executable boundary',()=>{
  const store=new Store(temp());store.save('settings',{id:'installation',timezone:'UTC'});
- const today=new Date().toISOString().slice(0,10),yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
- store.save('health_observations',{metric:'sleep_total_h',value:8,source:'Health Auto Export',via:'phone-receiver',observed_on:yesterday,date_precision:'day',observed_at:yesterday+'T00:00:00Z',data_until:'22:00:00'});
- store.save('health_observations',{metric:'protein_g',value:20,source:'Health Auto Export',via:'phone-receiver',observed_on:today,date_precision:'day',observed_at:today+'T00:00:00Z',data_until:'22:00:00'});
- saveHeadacheSettings(store.root,{...HEADACHE_DEFAULTS,daily_columns:['sleep_total_h']});
- const rows=JSON.parse(addonInvocation(store,{addon:'headache',args:['patterns','--days','30']}).env.GODSPEED_HEADACHE_DAILY_ROWS);
- assert.deepEqual(rows,[{date:yesterday,sleep_total_h:8}],'the current incomplete day is excluded');
- saveHeadacheSettings(store.root,{...HEADACHE_DEFAULTS,daily_table:'daily.csv',daily_columns:['sleep_total_h']});
- assert.equal(addonInvocation(store,{addon:'headache',args:['patterns']}).env.GODSPEED_HEADACHE_DAILY_ROWS,undefined,'a configured table remains authoritative');
+ const baseMetrics=['sleep_total_h','steps','distance_km','active_kcal','basal_kcal','food_kcal','protein_g','carbs_g','fat_g','flights'].map(metric=>[metric,123.456789012345]),dates=[];
+ store.transaction(records=>{for(let ago=89;ago>=1;ago--){const date=new Date(Date.now()-ago*86400000).toISOString().slice(0,10);dates.push(date);for(const [index,[metric,value]] of baseMetrics.entries())records.saveUnderLock('health_observations',{id:index+'-'+date,metric,value:metric==='sleep_total_h'?(ago<=6?5:8):value,source:'Health Auto Export',via:'phone-receiver',observed_on:date,date_precision:'day',observed_at:date+'T00:00:00Z',data_until:'22:00:00'});}});
+ const today=new Date().toISOString().slice(0,10);store.save('health_observations',{id:'incomplete-current-day',metric:'sleep_total_h',value:99,source:'Health Auto Export',via:'phone-receiver',observed_on:today,date_precision:'day',observed_at:today+'T00:00:00Z',data_until:'09:00:00'});
+ saveHeadacheSettings(store.root,{...HEADACHE_DEFAULTS,git_sync:'off',daily_columns:['sleep_total_h']});
+ for(const [i,date] of dates.slice(-6).entries()){const episode='fixture-'+i,start=new Date(date+'T06:00:00Z'),end=new Date(date+'T08:00:00Z');writeHeadacheEntry(store.root,HEADACHE_DEFAULTS,{kind:'start',episode,start:start.toISOString()},start);writeHeadacheEntry(store.root,HEADACHE_DEFAULTS,{kind:'end',episode,end:end.toISOString()},end);}
+ const invocation=addonInvocation(store,{addon:'headache',args:['patterns','--days','90']});
+ const rows=JSON.parse(invocation.env.GODSPEED_HEADACHE_DAILY_ROWS);assert.equal(rows.length,89);assert.ok(rows.every(row=>Object.keys(row).join(',')==='date,sleep_total_h'),'unrequested complete metrics do not consume the bridge');
+ const run=spawnSync(invocation.command,invocation.argv,{cwd:invocation.cwd,env:invocation.env,encoding:'utf8',shell:false});assert.equal(run.status,0,run.stderr);const report=JSON.parse(run.stdout);assert.deepEqual(report.compare[0],{column:'sleep_total_h',headache_days:6,free_days:83,mean_on:5,mean_off:8,enough:true});
+ saveHeadacheSettings(store.root,{...HEADACHE_DEFAULTS,git_sync:'off',daily_columns:baseMetrics.map(([metric])=>metric)});assert.throws(()=>addonInvocation(store,{addon:'headache',args:['patterns','--days','90']}),/too much daily health data/,'a requested comparison that cannot cross the bridge is explicit');
+ fs.writeFileSync(path.join(store.root,'daily.csv'),['date,sleep_total_h',...dates.map(date=>date+',99')].join('\n'));saveHeadacheSettings(store.root,{...HEADACHE_DEFAULTS,git_sync:'off',daily_table:'daily.csv',daily_columns:['sleep_total_h']});
+ const preferred=addonInvocation(store,{addon:'headache',args:['patterns','--days','90']});assert.equal(preferred.env.GODSPEED_HEADACHE_DAILY_ROWS,undefined);const csvRun=spawnSync(preferred.command,preferred.argv,{cwd:preferred.cwd,env:preferred.env,encoding:'utf8',shell:false});assert.equal(csvRun.status,0,csvRun.stderr);assert.equal(JSON.parse(csvRun.stdout).compare[0].mean_on,99,'a configured table remains authoritative');
 });
 
 test('the native coach leaves a short phone day unknown until its manual value settles',async()=>{

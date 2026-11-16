@@ -10,6 +10,7 @@ import { episodesFrom, normSide, normQuality, parsePain, parseMed, newEpisodeId 
 import { dailyRollup, patterns, minutesByDay } from "../lib/report.mjs";
 import { contextBlock } from "../lib/context.mjs";
 import { validateSettings, DEFAULTS } from "../lib/settings.mjs";
+import { NOTEBOOK_DAILY_ROWS_MAX_BYTES, notebookDailyRows } from "../lib/notebook-daily-rows.mjs";
 import { claudeHookMerge } from "../lib/setup.mjs";
 
 const TZ = "Europe/Berlin";
@@ -117,6 +118,13 @@ test("the pattern report compares headache days with a daily table only when the
   assert.deepEqual(preferred.compare, r.compare,'the configured CSV remains authoritative');
   const none = patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ }, NOW, { days: 30 });
   assert.equal(none.compare, null);
+});
+
+test("notebook daily rows reject malformed and oversized bridge input", () => {
+  assert.equal(notebookDailyRows("not json"), undefined);
+  assert.equal(notebookDailyRows(JSON.stringify([{ date: "2026-09-01" }, null])), undefined);
+  assert.equal(notebookDailyRows("x".repeat(NOTEBOOK_DAILY_ROWS_MAX_BYTES + 1)), undefined);
+  assert.deepEqual(notebookDailyRows('[{"date":"2026-09-01","sleep_total_h":8}]'), [{ date: "2026-09-01", sleep_total_h: 8 }]);
 });
 
 test("the context block is empty when nothing is open, and names the open headache", () => {
