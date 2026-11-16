@@ -171,7 +171,7 @@ function HabitCard({ habit }: { habit: HabitCardData }) {
   );
 }
 
-function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [values, setValues] = useState<CollectionFormValues>({ name: "", icon: "📚", description: "", visibility: "private" });
@@ -248,9 +248,9 @@ function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         <form className="space-y-5" onSubmit={submit}>
           <div className="space-y-2">
             <Label htmlFor="collection-name">Name</Label>
-            <Input id="collection-name" value={values.name} maxLength={60} onChange={(event) => updateValue("name", event.target.value)} onBlur={validate} placeholder="Reading List" />
+            <Input id="collection-name" value={values.name} maxLength={60} onChange={(event) => updateValue("name", event.target.value)} onBlur={validate} placeholder="Reading List" aria-invalid={errors.name ? "true" : undefined} aria-describedby={errors.name ? "collection-name-error" : undefined} />
             <p className="text-xs text-muted-foreground">Slug: {slugPreview}</p>
-            {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
+            {errors.name && <p id="collection-name-error" className="text-xs text-destructive">{errors.name}</p>}
           </div>
 
           <div className="space-y-2">
@@ -284,7 +284,7 @@ function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={!values.name.trim() || isSubmitting}>Create</Button>
+            <Button type="submit" disabled={isSubmitting}>Create</Button>
           </DialogFooter>
         </form>
       </DialogContent>
