@@ -8,6 +8,17 @@ import test from 'node:test';
 
 const here=path.dirname(new URL(import.meta.url).pathname);
 
+test('the maintained route accepts browser-runner Chrome executable variables',()=>{
+  const source=fs.readFileSync(path.join(here,'notebook-assistant-browser.mjs'),'utf8');
+  assert.match(source,/process\.env\.CHROME_BIN/);
+  assert.match(source,/process\.env\.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH/);
+  assert.match(source,/\/usr\/bin\/google-chrome-stable/);
+  assert.match(source,/\/opt\/google\/chrome\/chrome/);
+  assert.match(source,/waitVisible/);
+  assert.match(source,/l\.querySelector\('input,select,textarea'\)/);
+  assert.match(source,/fill\('Start Date',new Date\(\)\.toISOString\(\)\.slice\(0,10\)\)/);
+});
+
 test('a fixture bind failure stops the browser it started',async()=>{
   const folder=fs.mkdtempSync(path.join(os.tmpdir(),'notebook-assistant-cleanup-'));
   const evidence=path.join(folder,'evidence');
