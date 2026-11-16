@@ -6,12 +6,27 @@ import path from 'node:path';
 import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
+import {NOTEBOOK_CHAT_FUNCTIONS} from '../core/notebook-chat.mjs';
 import {createService} from '../server/main.mjs';
 import {Telegram} from '../core/telegram.mjs';
 
+const CHAT_SURFACES=['conversation-chat','note-chat','collection-chat'];
+assert.deepEqual(new Set(CHAT_SURFACES),new Set(NOTEBOOK_CHAT_FUNCTIONS),'saved brief cases must cover every notebook chat surface');
+
 const saved='Saved filtered briefing.\n\nNext: exact allowed next step.\n\nCharm Challenge: exact line.';
+const savedWithoutChallenge='Saved filtered briefing.\n\nNext: exact allowed next step.';
 const day=()=>new Date().toISOString().slice(0,10);
-const saveBrief=store=>store.save('notes',{title:'Your morning briefing',content:saved,source_app:'morning-brief',brief_day:day()});
+const saveBrief=(store,content=saved)=>store.save('notes',{title:'Your morning briefing',content,source_app:'morning-brief',brief_day:day()});
+const chatInputs=store=>{
+ const note=store.save('notes',{title:'Current note',content:'Current note content'});
+ const collection=store.save('collections',{name:'Current collection',field_schema:[{key:'name',label:'Name',type:'text',primary:true}]});
+ const inputByName={
+  'conversation-chat':{conversation_id:'notebook:conversation'},
+  'note-chat':{note_id:note.id},
+  'collection-chat':{collection_id:collection.id},
+ };
+ return CHAT_SURFACES.map(name=>[name,inputByName[name]]);
+};
 
 test('saved brief requests bypass provider and native agents word for word',async t=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-saved-brief-chat-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
@@ -19,7 +34,7 @@ test('saved brief requests bypass provider and native agents word for word',asyn
  let providerCalls=0,nativeCalls=0;
  const providerDomains=new Domains(query,{provider:async()=>{providerCalls++;return {reply:'Provider substitute'};}});
  const nativeDomains=new Domains(query,{provider:async()=>({reply:'unused'})});nativeDomains.nativeAgent=async()=>{nativeCalls++;return {reply:'Native substitute'};};
- assert.equal((await providerDomains.invoke('conversation-chat',{conversation_id:'notebook:provider',message:"Please show me today's brief."})).reply,saved);
+ for(const [name,input] of chatInputs(store))assert.equal((await providerDomains.invoke(name,{...input,message:"Please show me today's brief."})).reply,saved);
  assert.equal((await nativeDomains.invoke('conversation-chat',{conversation_id:'notebook:native',message:'Zeig mir das heutige Briefing, bitte.'})).reply,saved);
  assert.equal((await providerDomains.invoke('conversation-chat',{conversation_id:'notebook:bare',message:'brief'})).reply,saved);
  assert.equal((await providerDomains.invoke('conversation-chat',{conversation_id:'notebook:saved',message:'show my saved morning brief again'})).reply,saved);
@@ -29,14 +44,24 @@ test('saved brief requests bypass provider and native agents word for word',asyn
  assert.equal(saved.includes('FILTERED OUT SENTENCE'),false);
 });
 
+test('all chat surfaces preserve a saved brief without adding a Charm Challenge',async t=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-saved-brief-no-challenge-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
+ saveBrief(store,savedWithoutChallenge);let calls=0;
+ const domains=new Domains(query,{provider:async()=>{calls++;return {reply:'Substitute with a Charm Challenge'};}});
+ for(const [name,input] of chatInputs(store))assert.equal((await domains.invoke(name,{...input,message:"today's brief"})).reply,savedWithoutChallenge);
+ assert.equal(calls,0);
+});
+
 test('a brief request without a saved briefing keeps ordinary chat behavior',async t=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-new-brief-chat-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
  const calls=[],provider=async input=>{calls.push(input.kind);return {reply:'The ordinary chat answer'};};
  const domains=new Domains(query,{provider});
- const first=await domains.invoke('conversation-chat',{conversation_id:'notebook:first',request_id:'brief-first',message:"today's brief"});
- assert.equal(first.reply,'The ordinary chat answer');
+ for(const [name,input] of chatInputs(store)){
+  const result=await domains.invoke(name,{...input,request_id:'brief-first-'+name,message:"today's brief"});
+  assert.equal(result.reply,'The ordinary chat answer');
+ }
  assert.equal(store.list('notes').filter(note=>note.source_app==='morning-brief').length,0);
- assert.deepEqual(calls,['conversation-chat']);
+ assert.deepEqual(calls,CHAT_SURFACES);
 });
 
 test('candidate Telegram reports a definitely incomplete long saved brief',async t=>{
