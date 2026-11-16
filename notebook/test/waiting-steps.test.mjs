@@ -391,14 +391,20 @@ test('only steps asked in the receiving chat count, whatever waits in the other 
 });
 
 test('a Hermes routine that prints a step question makes it answerable only after Hermes delivered the words',async t=>{
- const {store}=fixture(t),{words,id}=open(store,'The bot stopped.');
- await recordRoutine(store,{routine:'asker',text:words,delivery:'telegram'});
- assert.deepEqual(store.list("conversation_messages")[0].report.steps,[id]);
- assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');
- delivered(store,'Other words');
- assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');
- delivered(store,words);
- assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'answered');
+ const RealDate=Date;let now=Date.now();
+ global.Date=class extends RealDate{constructor(...a){super(...(a.length?a:[now]));}static now(){return now;}};
+ try{
+  const {store}=fixture(t),{words,id}=open(store,'The bot stopped.');
+  await recordRoutine(store,{routine:'asker',text:words,delivery:'telegram'});
+  assert.deepEqual(store.list('conversation_messages')[0].report.steps,[id]);
+  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');
+  delivered(store,'Other words');
+  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');
+  now++;
+  delivered(store,words);
+  now=Date.parse(store.get('approvals',id).sent_at)+1;
+  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'answered');
+ }finally{global.Date=RealDate;}
 });
 
 test('two equal-text records certify one delivery each, in order, and a delivery names the whole step set of its record',async t=>{
