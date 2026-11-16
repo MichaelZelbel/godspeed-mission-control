@@ -51,7 +51,7 @@ const runRoute=async(createFresh,{busyOnce=false,failed=false}={})=>{
         }
         if(createFresh){
           const fresh=path.join(prep,'fresh.md');
-          fs.writeFileSync(fresh,'fresh preparation\n');
+          fs.writeFileSync(fresh,typeof createFresh==='string'?createFresh:'AREA: health\nTALK: 2030-01-02 19:00\nSTATE: ready\n\n## The opening\n\nStart here.\n\n## Talk card\n\n- One move.\n');
           fs.utimesSync(fresh,new Date('2030-01-01T00:00:00Z'),new Date('2030-01-01T00:00:00Z'));
         }
         if(failed){
@@ -97,7 +97,7 @@ test('the public Run now caller retains the preparation created by that run',asy
   const result=await runRoute(true);
   try{
     assert.equal(result.code,0,result.output);
-    assert.equal(fs.readFileSync(path.join(result.evidence,'routine-preparation.md'),'utf8'),'fresh preparation\n');
+    assert.match(fs.readFileSync(path.join(result.evidence,'routine-preparation.md'),'utf8'),/^STATE: ready$/m);
     assert.equal(fs.readFileSync(path.join(result.evidence,'routine-preparation-source.txt'),'utf8'),'coach/health/prep/fresh.md\n');
     assert.equal(fs.existsSync(path.join(result.folder,'root','coach','health','prep','fresh.md')),false);
     const jobs=JSON.parse(fs.readFileSync(path.join(result.evidence,'prep-jobs-after.json'),'utf8'));
@@ -106,6 +106,15 @@ test('the public Run now caller retains the preparation created by that run',asy
       count:1,
       error:null
     });
+  }finally{fs.rmSync(result.folder,{recursive:true,force:true});}
+});
+
+test('the public Run now caller refuses a fresh draft',async()=>{
+  const result=await runRoute('AREA: health\nTALK: 2030-01-02 19:00\nSTATE: draft\n\n## The opening\n\nNot ready.\n\n## Talk card\n\n- Missing evidence.\n');
+  try{
+    assert.notEqual(result.code,0);
+    assert.match(result.output,/did not produce a ready, usable preparation/);
+    assert.equal(fs.existsSync(path.join(result.evidence,'routine-preparation.md')),false);
   }finally{fs.rmSync(result.folder,{recursive:true,force:true});}
 });
 

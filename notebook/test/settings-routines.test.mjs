@@ -76,7 +76,7 @@ test('Routine times moves the routines a first goal started, and says the new ti
 });
 
 test('Enable routine offers the mission control\'s own recipes by name, and Hermes runs them',async t=>{
- const {root,store,hermes,scheduler}=await withGoal(t);
+ const {root,home,store,hermes,scheduler}=await withGoal(t);
  // The starter's recipes, and the notebook's packaged ones (installed by godspeed init, three here).
  for(const name of ['coach-prep','mc-radar','audit']){fs.mkdirSync(path.join(root,'skills',name),{recursive:true});fs.writeFileSync(path.join(root,'skills',name,'SKILL.md'),'# '+name);}
  assert.deepEqual(enableKinds(root),[{kind:'morning-brief',label:'Morning brief'},{kind:'review',label:'Weekly review'},{kind:'coach-prep',label:'Coaching talk preparation'},{kind:'research-watch',label:'Research watches'},{kind:'radar',label:'AI radar'},{kind:'audit',label:'Mission control audit'}]);
@@ -85,6 +85,15 @@ test('Enable routine offers the mission control\'s own recipes by name, and Herm
  const made=hermes.jobs().find(j=>j.id===row.id);
  assert.equal(made.name,'Weekly review');assert.equal(made.skill,'weekly-review');assert.equal(made.schedule.expr,'0 17 * * *');assert.equal(made.workdir,store.root);assert.equal(made.deliver,'local');
  assert.match(made.prompt,/weekly-review recipe/);
+ const installedPrep=hermes.jobs().find(j=>j.name==='Coaching talk preparation');
+ await assert.rejects(scheduler.control({kind:'coach-prep',at:'04:00'},{enable:true}),/already runs/);
+ hermes.write(hermes.jobs().filter(j=>j.id!==installedPrep.id));
+ const prep=await scheduler.control({kind:'coach-prep',at:'03:30'},{enable:true});
+ const prepJob=hermes.jobs().find(j=>j.id===prep.id);
+ assert.equal(prepJob.script,'godspeed-coach-prep.py');assert.equal(prepJob.skill,null);assert.equal(prepJob.no_agent,true);assert.equal(prepJob.schedule.expr,'30 3 * * *');
+ assert.match(fs.readFileSync(path.join(home,'scripts','godspeed-coach-prep.py'),'utf8'),/main\("coach-prep"\)/);
+ await assert.rejects(scheduler.control({kind:'coach-prep',at:'04:00'},{enable:true}),/already runs/);
+ assert.equal(hermes.jobs().filter(j=>j.name==='Coaching talk preparation').length,1);
  assert.ok(readNotebookRoutines(store).jobs.some(j=>j.id===made.id&&j.what),'its row says what it does');
  await assert.rejects(scheduler.control({kind:'review',at:'18:00'},{enable:true}),/already runs/);
  await assert.rejects(scheduler.control({kind:'audit',at:'18:00'},{enable:true}),/does not have the recipe/);

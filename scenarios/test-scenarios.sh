@@ -3445,8 +3445,9 @@ talk_good() { # <folder>
   printf 'id=prep-job\nafter=2026-11-01T10:01:00Z\nstatus=ok\n' >"$folder/prep-run-after.txt"
   printf '{"started":true}\n' >"$folder/prep-run-request.json"
   printf '[{"id":"prep-job","name":"Coaching talk preparation","last_status":"ok","last_run_at":"2026-11-01T10:01:00Z"}]\n' >"$folder/prep-jobs-after.json"
-  printf '## The opening\n\nA preparation made by the installed job.\n' >"$folder/routine-preparation.md"
+  printf 'AREA: health\nTALK: 2026-11-03 19:00\nSTATE: ready\n\n## The opening\n\nA preparation made by the installed job.\n\n## Talk card\n\n- One move.\n' >"$folder/routine-preparation.md"
   printf 'coach/health/prep/2026-11-03.md\n' >"$folder/routine-preparation-source.txt"
+  printf 'ready: coach/health/prep/2026-11-03.md, prepared 2026-11-02 21:00\n' >"$folder/routine-preparation-check.txt"
   printf 'a=2026-11-02\nb=2026-11-03\noffset=+0000\n' >"$folder/days.txt"
   {
     printf 'AREA: health\nSERVES: lower-ldl, sleep-better, visible-abs\n'

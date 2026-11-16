@@ -115,6 +115,16 @@ run_installed_preparation() {
   [ "$status" = ok ] || fail "the installed preparation job failed: $(printf '%s' "$after" | cut -f3); retained summary: $(tr '\n' ' ' <"${summary:-/dev/null}" | cut -c1-300)"
   produced=$(first_file_newer_than "$ROOT/coach" '*/prep/*.md' "$EVIDENCE/prep-run-request.json")
   [ -n "$produced" ] || fail "the successful installed preparation run produced no preparation attributable to that run"
+  "$NODE" -e 'const fs=require("fs"),text=fs.readFileSync(process.argv[1],"utf8");if(!/^STATE: ready$/m.test(text)||!/^## The opening\s*$/m.test(text)||!/^## Talk card\s*$/m.test(text))process.exit(1)' "$produced" ||
+    fail "the successful installed preparation run did not produce a ready, usable preparation"
+  if [ "${TALK_PREP_RUN_NOW_TEST_ONLY:-}" != 1 ]; then
+    local area talk
+    area=$(sed -n 's/^AREA: *//p' "$produced" | head -n 1)
+    talk=$(sed -n 's/^TALK: *\([0-9-]*\).*/\1/p' "$produced" | head -n 1)
+    coach prep-check "$area" --date "$talk" >"$EVIDENCE/routine-preparation-check.txt" 2>&1 ||
+      fail "the installed coach did not accept the preparation produced by Run now: $(tr '\n' ' ' <"$EVIDENCE/routine-preparation-check.txt" | cut -c1-240)"
+    grep -q '^ready' "$EVIDENCE/routine-preparation-check.txt" || fail "the installed coach did not call the preparation produced by Run now ready"
+  fi
   cp "$produced" "$EVIDENCE/routine-preparation.md"
   printf '%s\n' "${produced#"$ROOT"/}" >"$EVIDENCE/routine-preparation-source.txt"
   rm -f "$produced" "${produced%.md}.evidence.json" "${produced%.md}.review.json"
@@ -336,7 +346,7 @@ claims_research_time() { # <file>: prints the first line that does, and leaves 0
 check() { # <evidence folder>
   local folder=$1 sentence a b opening_b goal route_count label field reply run_id before after
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a talk's preparation"
-  kept_all "$folder" 'the installed preparation job and its public Run now request' prep-run-before.txt prep-run-after.txt prep-run-request.json prep-jobs-after.json routine-preparation.md routine-preparation-source.txt
+  kept_all "$folder" 'the installed preparation job and its public Run now request' prep-run-before.txt prep-run-after.txt prep-run-request.json prep-jobs-after.json routine-preparation.md routine-preparation-source.txt routine-preparation-check.txt
   run_id=$(sed -n 's/^id=//p' "$folder/prep-run-before.txt"); before=$(sed -n 's/^before=//p' "$folder/prep-run-before.txt"); after=$(sed -n 's/^after=//p' "$folder/prep-run-after.txt")
   [ -n "$run_id" ] || fail "the retained preparation run names no installed job"
   [ -n "$after" ] && [ "$after" != "$before" ] || fail "the installed preparation job recorded no new completed run"
@@ -344,7 +354,10 @@ check() { # <evidence folder>
   grep -Eq '"started"[[:space:]]*:[[:space:]]*true|"results"' "$folder/prep-run-request.json" || fail "the public Run now request did not start the preparation job"
   "$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>String(x.id)===process.argv[2]);process.exit(j&&(j.name==="Coaching talk preparation"||j.title==="Coaching talk preparation"||j.kind==="coach-prep")&&j.last_status==="ok"?0:1)' "$folder/prep-jobs-after.json" "$run_id" || fail "the successful run is not attributable to the installed Coaching talk preparation job"
   grep -Eq '^coach/[^/]+/prep/[^/]+\.md$' "$folder/routine-preparation-source.txt" || fail "the installed run's preparation has no product-owned source path"
+  grep -q '^STATE: ready$' "$folder/routine-preparation.md" || fail "the installed run's preparation is not ready"
   grep -q '^## The opening' "$folder/routine-preparation.md" || fail "the installed run's preparation has no opening to judge"
+  grep -q '^## Talk card' "$folder/routine-preparation.md" || fail "the installed run's preparation has no talk card"
+  grep -q '^ready' "$folder/routine-preparation-check.txt" || fail "the installed gate did not call the Run now preparation ready"
   b=$(sed -n 's/^b=//p' "$folder/days.txt" 2>/dev/null)
   if [ ! -s "$folder/talk-b.md" ]; then
     [ -n "$b" ] || fail "days.txt does not say which two talk days this scenario worked on"
