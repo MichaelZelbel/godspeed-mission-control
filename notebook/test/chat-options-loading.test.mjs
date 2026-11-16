@@ -66,16 +66,31 @@ test('AI usability is rechecked every five seconds in both directions',async t=>
  const ready=await readOptions();assert.equal(ready.usable,true);assert.equal(ready.availability,'ready');assert.deepEqual([...CHAT_AVAILABILITIES],['none','ready','refused','unreachable']);
 });
 test('overlapping option requests wait for the same failing health check',async t=>{
- let now=100000,checks=0,rejectCheck,startCheck;const checkStarted=new Promise(resolve=>{startCheck=resolve;});
+ let now=100000,checks=0,optionReads=0,rejectCheck,startCheck,secondRequestArrived;
+ const checkStarted=new Promise(resolve=>{startCheck=resolve;}),secondArrival=new Promise(resolve=>{secondRequestArrived=resolve;});
  t.mock.method(Date,'now',()=>now);
- const provider=Object.assign(async()=>({reply:'ok'}),{check:async()=>{if(checks++===0)return;startCheck();await new Promise((resolve,reject)=>{rejectCheck=reject;});}});
+ const provider=Object.assign(async()=>({reply:'ok'}),{options:async()=>{if(++optionReads===3)secondRequestArrived();return {current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]};},check:async()=>{if(checks++===0)return;startCheck();await new Promise((resolve,reject)=>{rejectCheck=reject;});}});
  const {readOptions}=await optionsFrom(t,provider);now+=5000;
  const first=readOptions();await checkStarted;const second=readOptions();let secondSettled=false;second.finally(()=>{secondSettled=true;});
- await new Promise(resolve=>setImmediate(resolve));assert.equal(secondSettled,false);assert.equal(checks,2);
+ await secondArrival;assert.equal(secondSettled,false);assert.equal(checks,2);
  rejectCheck(Error('Fictional provider failure'));
  const [firstResult,secondResult]=await Promise.all([first,second]);
  for(const result of [firstResult,secondResult]){assert.equal(result.usable,false);assert.equal(result.availability,'unreachable');}
  assert.equal(checks,2,'overlapping requests share one health check');
+});
+test('a pending model request preserves the last completed refusal in cached options',async t=>{
+ let calls=0,releasePending,requestArrived;const arrived=new Promise(resolve=>{requestArrived=resolve;});
+ const endpoint=http.createServer(async(req,res)=>{
+  for await(const chunk of req);calls++;res.setHeader('Content-Type','application/json');res.statusCode=401;
+  if(calls===2){requestArrived();await new Promise(resolve=>{releasePending=resolve;});}
+  res.end(JSON.stringify({error:{message:'invalid fictional key'}}));
+ });
+ await new Promise(resolve=>endpoint.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>endpoint.close(resolve)));
+ const provider=modelProvider({url:'http://127.0.0.1:'+endpoint.address().port,key:'fictional-key',model:'fictional-model',retryWaits:[]});
+ const {options,readOptions}=await optionsFrom(t,provider);assert.equal(options.availability,'refused');
+ const pending=provider({kind:'conversation-chat'});await arrived;
+ const cached=await readOptions();assert.equal(cached.availability,'refused');
+ releasePending();await assert.rejects(pending,/HTTP 401/);
 });
 test('a refused chat returns plain guidance instead of provider diagnostics',async t=>{
  const provider=async()=>{throw Error('Model provider failed with HTTP 401: secret provider detail');};
