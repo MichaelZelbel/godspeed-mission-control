@@ -25,7 +25,18 @@
 //         ("Reviewed head `<full 40-hex sha>`"), which must be the head commit. A comment that names
 //         no head, a short or malformed one, or another commit approves nothing. No commit or comment
 //         date is read, because a commit's date can be set to anything. A newer `sent back`, `needs owner` or
-//         `not merged` comment means no approval. Like (b), it is tried when no listed reviewer's
+//         `not merged` comment means no approval, except for two `not merged` notes that only say a merge
+//         the reviewer had already accepted was refused: one whose text says "`gh pr merge` refused"
+//         (GitHub itself refused the merge, and all of land's own record rules held), and land's
+//         "The merge gate refused the reviewer's merge:" note when every line in its list is the
+//         owner-only one ("which only the owner changes; the owner merges it by hand if it is
+//         intended"). These are skipped, so the earlier `approved` or `merging` still decides. Land
+//         merges seconds after the verdict, before the rerun of this check that the verdict triggers has
+//         finished, so GitHub refuses because this very check is still red, and without the skip that
+//         note would turn the rerun red for good (pull request #654, 2026-11-16: `merging` at 00:54:33Z,
+//         `gh pr merge` refused at 00:54:41Z, the rerun at 00:55:03Z failed). Land's owner-only note asks
+//         the owner to merge by hand, which a revoked approval would forbid. Every other `not merged`
+//         (a record rule such as an app-check defect, an untested merge) still revokes. Like (b), it is tried when no listed reviewer's
 //         approval stands, so it also passes beside a listed reviewer's request for changes.
 //      A push to main or a manual run needs no review.
 //
@@ -267,6 +278,23 @@ export function readLoopReview(body) {
   return { decision: decision ?? "unknown", reviewed: sha ? sha.toLowerCase() : null };
 }
 
+// The owner-only line land.ts writes for each file a change touches that only the owner may change.
+const OWNER_ONLY_LINE = "which only the owner changes; the owner merges it by hand if it is intended";
+
+// True for a `not merged` note that only reports a merge the reviewer had already accepted being
+// refused, so it must not undo that verdict: either GitHub refused the merge itself (land's own record
+// rules all held), or land's note lists nothing but owner-only files (the owner merges those by hand).
+// Any other `not merged` (a record rule, an untested merge, another pull request tested) is not this.
+export function isRefusalOfAcceptedMerge(body) {
+  const read = readLoopReview(body);
+  if (read === null || read.decision !== "not merged") return false;
+  const text = String(body ?? "");
+  if (/`?gh pr merge`? refused/i.test(text)) return true;
+  if (!text.includes("The merge gate refused the reviewer's merge:")) return false;
+  const bullets = text.split(/\r?\n/).filter((line) => line.startsWith("- "));
+  return bullets.length > 0 && bullets.every((line) => line.includes(OWNER_ONLY_LINE));
+}
+
 // comments: [{ id, body, created_at, user: { login } }]; maintainers: a Set of lower-cased logins;
 export function loopVerdict({ comments = [], maintainers = new Set(), headSha }) {
   const trusted = comments
@@ -274,6 +302,8 @@ export function loopVerdict({ comments = [], maintainers = new Set(), headSha })
       const login = comment?.user?.login;
       return readLoopReview(comment?.body) !== null && typeof login === "string" && login !== "" && maintainers.has(login.toLowerCase());
     })
+    // a refused merge of an accepted verdict is skipped, so the verdict before it still decides
+    .filter((comment) => !isRefusalOfAcceptedMerge(comment.body))
     .map((comment) => ({ comment, at: Date.parse(comment.created_at || "") || 0 }))
     .sort((a, b) => b.at - a.at || Number(b.comment.id) - Number(a.comment.id));
   if (trusted.length === 0) return { ok: false, line: "Cole's loop review: none (no `Loop review:` comment from a login in .archon/sdlc/policy/maintainers.json)" };
@@ -482,6 +512,14 @@ const PERSON = "MichaelZelbel";
 const T1 = "2026-10-25T08:00:00Z";
 const T2 = "2026-10-25T08:10:00Z";
 const T3 = "2026-10-25T08:20:00Z";
+const T4 = "2026-10-25T08:30:00Z";
+// land.ts's own notes after a refused merge, as the reviewer's land step writes them.
+const GH_REFUSED = "not merged (route: simple). `gh pr merge` refused: the base branch policy prohibits the merge";
+const OWNER_ONLY_FILE = "- it changes a.yml, which only the owner changes; the owner merges it by hand if it is intended";
+const OWNER_ONLY_NOTE = `not merged (route: simple). The merge gate refused the reviewer's merge:\n\n${OWNER_ONLY_FILE}\n\nThe next lap continues this pull request.`;
+const RECORD_RULE_NOTE = "not merged (route: simple). The merge gate refused the reviewer's merge:\n\n- the app check found a defect";
+const OWNER_AND_OTHER_NOTE = `not merged (route: simple). The merge gate refused the reviewer's merge:\n\n${OWNER_ONLY_FILE}\n- the app check found a defect`;
+
 
 // A green pull request with an approval from the one listed reviewer. Each case changes one thing.
 function pullRequest(changed) {
@@ -949,6 +987,48 @@ const CASES = [
     want: false,
     says: "says not merged, not approved",
     args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T2, SHA), loop(BUILDER, "not merged", T3)] }),
+  },
+  {
+    name: "a merging loop review then a gh-refused not merged still passes",
+    want: true,
+    says: `Cole's loop review from ${BUILDER} is merging for ${SHA}`,
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T2, SHA), loop(BUILDER, GH_REFUSED, T3)] }),
+  },
+  {
+    name: "a merging loop review then an owner-only-only not merged still passes",
+    want: true,
+    says: `Cole's loop review from ${BUILDER} is merging for ${SHA}`,
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T2, SHA), loop(BUILDER, OWNER_ONLY_NOTE, T3)] }),
+  },
+  {
+    name: "a merging loop review then a record-rule not merged fails",
+    want: false,
+    says: "says not merged, not approved",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T2, SHA), loop(BUILDER, RECORD_RULE_NOTE, T3)] }),
+  },
+  {
+    name: "a merging loop review then an owner-only note with another reason fails",
+    want: false,
+    says: "says not merged, not approved",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T2, SHA), loop(BUILDER, OWNER_AND_OTHER_NOTE, T3)] }),
+  },
+  {
+    name: "a gh-refused not merged after a merging naming an older head fails",
+    want: false,
+    says: `not ${SHA}`,
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T2, OLDER_SHA), loop(BUILDER, GH_REFUSED, T3)] }),
+  },
+  {
+    name: "a merging loop review then sent back fails",
+    want: false,
+    says: "says sent back, not approved",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T2, SHA), loop(BUILDER, "sent back", T3)] }),
+  },
+  {
+    name: "a merging loop review, a gh-refused not merged, then sent back fails",
+    want: false,
+    says: "says sent back, not approved",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T2, SHA), loop(BUILDER, GH_REFUSED, T3), loop(BUILDER, "sent back", T4)] }),
   },
   {
     name: "a push to main by the builder's commit still needs no review",
