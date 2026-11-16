@@ -147,9 +147,9 @@ random_marker() { printf '%s-%s' "$1" "$(od -An -N8 -tx1 /dev/urandom | tr -d ' 
 
 write_area() {
   mkdir -p "$ROOT/coach/health" "$ROOT/goals"
-  printf 'ID: lower-ldl\nGOAL: lower-ldl\nTITLE: Lower my LDL cholesterol\nSTATUS: adopted\n' >"$ROOT/goals/lower-ldl.md"
-  printf 'ID: sleep-better\nGOAL: sleep-better\nTITLE: Sleep seven hours most nights\nSTATUS: adopted\n' >"$ROOT/goals/sleep-better.md"
-  printf 'ID: visible-abs\nGOAL: visible-abs\nTITLE: Visible abs by the summer\nSTATUS: adopted\n' >"$ROOT/goals/visible-abs.md"
+  printf 'ID: lower-ldl\nGOAL: lower-ldl\nTITLE: Lower my LDL cholesterol\nSTATUS: adopted\n\n## Outcome\nLower LDL from 155 mg/dL, measured 2026-10-30, after the next clinician-ordered test.\n' >"$ROOT/goals/lower-ldl.md"
+  printf 'ID: sleep-better\nGOAL: sleep-better\nTITLE: Sleep seven hours most nights\nSTATUS: adopted\n\n## Outcome\nIncrease the current five and a half hours on work nights to seven hours by 2027-01-31.\n' >"$ROOT/goals/sleep-better.md"
+  printf 'ID: visible-abs\nGOAL: visible-abs\nTITLE: Visible abs by the summer\nSTATUS: adopted\n\n## Outcome\nReduce the current 22 percent body-fat estimate gradually by 2027-06-01 without sacrificing sleep.\n' >"$ROOT/goals/visible-abs.md"
   {
     printf 'AREA: health\nTITLE: Health\nRHYTHM: daily\nTIME: 19:00\nSTARTS: %s\nSTATUS: on\nSTYLE: compass\nTONE: gentle\n' "$(day_in -2)"
     printf 'SERVES: lower-ldl, sleep-better, visible-abs\n'
