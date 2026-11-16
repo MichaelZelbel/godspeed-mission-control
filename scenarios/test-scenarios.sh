@@ -4818,6 +4818,20 @@ RFS=$WH/refused-scan
 REFUSED_HEVY_KEY='refused-'"scenario-key"
 mkdir -p "$RFS/root/.godspeed" "$RFS/assistant"
 printf '{"home":"%s"}\n' "$RFS/assistant" >"$RFS/root/.godspeed/assistant.json"
+mkdir -p "$RFS/root/.godspeed/integrated-runtime/versions/current/scenarios"
+printf '%s\n%s\n' "$REFUSED_HEVY_KEY" '00000000-0000-4000-8000-000000000001' >"$RFS/root/.godspeed/integrated-runtime/versions/current/scenarios/source-fixture"
+REFUSED_SOURCE_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  refused_not_retained native
+' refused-source-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+REFUSED_SOURCE_SCAN_CODE=$?
+case "$REFUSED_SOURCE_SCAN_CODE" in
+  0) ok "a refused key in installed native source is not treated as retained" ;;
+  *) bad "a refused key in installed native source was treated as retained (exit $REFUSED_SOURCE_SCAN_CODE: $REFUSED_SOURCE_SCAN)" ;;
+esac
 printf '%s\n' "$REFUSED_HEVY_KEY" >"$RFS/assistant/settings.json"
 REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
