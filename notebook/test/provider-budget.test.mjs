@@ -86,6 +86,15 @@ test('a refused model provider is reclassified when its next check cannot reach 
  }finally{globalThis.fetch=original;}
 });
 
+test('a refused model provider is reclassified when its next response is malformed',async()=>{
+ const original=globalThis.fetch,provider=modelProvider({url:'http://localhost/fixture',key:'fictional',model:'fictional',retryWaits:[]});let call=0;
+ try{
+  globalThis.fetch=async()=>call++===0?new Response('{}',{status:401}):new Response('not json',{status:200});
+  await assert.rejects(provider.check(),/HTTP 401/);assert.equal(provider.health(),'refused');
+  await assert.rejects(provider.check(),/JSON/);assert.equal(provider.health(),'unreachable');
+ }finally{globalThis.fetch=original;}
+});
+
 test('Hermes exposes a bounded check and classifies an authentication refusal',async()=>{
  const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-health-'));let prompt;
  const provider=hermesProvider({home,cwd:home,spawnProcess:()=>{const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',data=>{prompt=JSON.parse(data);queueMicrotask(()=>{child.stdout.end();child.stderr.end('AuthenticationError: token expired, private diagnostic\n');child.emit('close',1);});});return child;}});
