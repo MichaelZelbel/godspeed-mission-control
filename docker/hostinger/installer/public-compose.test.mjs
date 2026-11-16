@@ -95,6 +95,29 @@ test('generator command checks the supplied released image and rejects missing o
   }
 });
 
+test('generator command writes the supplied released image to its manifest', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-public-compose-'));
+  const installer = path.join(directory, 'installer');
+  try {
+    fs.mkdirSync(installer);
+    fs.copyFileSync(generator, path.join(installer, 'public-compose.mjs'));
+    fs.copyFileSync(new URL('./compose.mjs', import.meta.url), path.join(installer, 'compose.mjs'));
+    fs.writeFileSync(path.join(directory, 'one-click.yaml'), 'old manifest\n');
+    execFileSync(process.execPath, [path.join(installer, 'public-compose.mjs'), otherImage]);
+    assert.equal(fs.readFileSync(path.join(directory, 'one-click.yaml'), 'utf8'), publicCompose(otherImage));
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('supported Hostinger link serves the generated manifest from the public beta line', () => {
+  const readme = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const checkout = readme.match(/\[Install Godspeed Mission Control on Hostinger\]\((https:\/\/www\.hostinger\.com\/docker-hosting\?[^)]+)\)/);
+  assert.ok(checkout, 'the supported Hostinger purchase link must remain present');
+  const manifest = new URL(new URL(checkout[1]).searchParams.get('compose_url'));
+  assert.equal(manifest.hostname, 'raw.githubusercontent.com');
+  assert.equal(manifest.pathname, '/MichaelZelbel/godspeed-mission-control/beta/docker/hostinger/one-click.yaml');
+  assert.equal(fs.readFileSync(new URL('../one-click.yaml', import.meta.url), 'utf8').replace(/\r\n/g, '\n'), publicCompose(releasedImage));
+});
+
 test('Docker parses the public file with zero fields, zero host ports and read-only hostname discovery', {
   skip: process.env.GODSPEED_TEST_COMPOSE !== '1' ? 'set GODSPEED_TEST_COMPOSE=1 where Docker Compose is available; no containers are started' : false,
 }, () => {

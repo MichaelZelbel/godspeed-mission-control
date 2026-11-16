@@ -268,6 +268,12 @@ EXE=$(get windowsSetup.file)
 TAG=$(get windowsSetup.releaseTag)
 EXESHA=$(get windowsSetup.sha256)
 
+if sh stage/update-hostinger-manifest.sh --check; then
+  ok "  the generated Hostinger manifest agrees with the released stage image"
+else
+  bad "  the generated Hostinger manifest does not agree with the released stage image"
+fi
+
 printf '%s\n' "  against docs/full-version/release-beta6-2026-10-24.md, the record this stage was read from:"
 compare "version" "$VERSION" "$RECORD"
 compare "product commit" "$PRODUCT" "$RECORD"

@@ -81,9 +81,9 @@ rules() {
 # Addresses that are allowed on purpose: the file, the expression that finds the line, and why.
 #
 # Also allowed and needing no line here: Hostinger's purchase link in docker/hostinger/README.md.
-# Its compose_url names a fixed commit (78ea790d...), which is neither main nor a dated tag, so no
-# rule above objects to it. The one-click server has no update path, so that link stays at its
-# commit; and because the file is read, changing it to main or to a dated tag would be found.
+# Its compose_url names beta, the public line that only the release step moves. The generated
+# manifest itself pins an immutable image digest, and because this file is read, changing the link
+# to main or to a dated tag would be found.
 allowed() {
   printf '%s\t%s\t%s\n' \
     'install-godspeed-dev.sh' \
