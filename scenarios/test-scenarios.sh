@@ -5156,7 +5156,7 @@ facts_good() {
   printf '{"messages":[{"id":"move-1","at":"%s","text":"%s"},{"id":"doctor-1","at":"%s","text":"%s"},{"id":"machine-1","at":"%s","text":"[IMPORTANT: You are running as a scheduled job]"},{"id":"track-1","at":"%s","text":"track this"}]}\n' "$archive_at" "$move_text" "$archive_at" "$doctor_text" "$archive_at" >"$f/archive.json"
   facts_json '[{"value":"Berlin"}]' >"$f/before.json"
   printf '{"name":"Remember what you said","cron":"40 3 * * *","script":"scenario-facts","exit":0}\n' >"$f/routine.json"
-  facts_json "[{\"value\":\"Berlin\",\"valid_to\":\"$archive_day\"},{\"value\":\"Hamburg\",\"valid_from\":\"$archive_day\",\"evidence_quote\":\"$move_text\",\"source_id\":\"move-1\"},{\"value\":\"Dr. Lang\",\"valid_from\":\"$archive_day\",\"evidence_quote\":\"$doctor_text\",\"source_id\":\"doctor-1\"}]" >"$f/after.json"
+  facts_json "[{\"value\":\"Berlin\"},{\"value\":\"Hamburg\",\"valid_from\":\"$archive_day\",\"evidence_quote\":\"$move_text\",\"source_id\":\"move-1\"},{\"value\":\"Dr. Lang\",\"valid_from\":\"$archive_day\",\"evidence_quote\":\"$doctor_text\",\"source_id\":\"doctor-1\"}]" >"$f/after.json"
   cp "$f/after.json" "$f/second.json"
 }
 facts_good "$DF2/good"
@@ -5231,7 +5231,7 @@ FACTS_ARCHIVE_DAY=$(facts_archive_value move-1 at) || bad 'the dated-facts fixtu
 FACTS_ARCHIVE_DAY=${FACTS_ARCHIVE_DAY:0:10}
 FACTS_MOVE_QUOTE=$(facts_archive_value move-1 text) || bad 'the dated-facts fixture has no move archive quote'
 FACTS_WRONG_DAY=$(node -e 'const day=process.argv[1];const date=new Date(`${day}T00:00:00Z`);date.setUTCDate(date.getUTCDate()+1);process.stdout.write(date.toISOString().slice(0,10))' "$FACTS_ARCHIVE_DAY")
-passes 'dated facts are filed once and excluded messages file nothing' day-becomes-facts "$DF2/good" 'Berlin was closed'
+passes 'dated facts are filed once and excluded messages file nothing' day-becomes-facts "$DF2/good" 'manually confirmed Berlin stayed current'
 copy "$DF2/good" "$DF2/wrong-time"; sed -i 's/40 3/41 3/' "$DF2/wrong-time/routine.json"
 refuses 'a remembered-facts routine at the wrong time' day-becomes-facts "$DF2/wrong-time" 'successful 03:40'
 copy "$DF2/good" "$DF2/no-date"; sed -i "s/\"valid_from\":\"$FACTS_ARCHIVE_DAY\",//" "$DF2/no-date/after.json"; cp "$DF2/no-date/after.json" "$DF2/no-date/second.json"
@@ -5240,8 +5240,8 @@ copy "$DF2/good" "$DF2/wrong-date"; sed -i "s/\"valid_from\":\"$FACTS_ARCHIVE_DA
 refuses 'facts dated differently from their archive' day-becomes-facts "$DF2/wrong-date" 'Hamburg is not a dated'
 copy "$DF2/good" "$DF2/no-quote"; sed -i "s/$FACTS_MOVE_QUOTE/I moved somewhere/" "$DF2/no-quote/after.json"; cp "$DF2/no-quote/after.json" "$DF2/no-quote/second.json"
 refuses 'a fact without the exact move quote' day-becomes-facts "$DF2/no-quote" 'Hamburg is not a dated'
-copy "$DF2/good" "$DF2/berlin-current"; sed -i "s/,\"valid_to\":\"$FACTS_ARCHIVE_DAY\"//" "$DF2/berlin-current/after.json"; cp "$DF2/berlin-current/after.json" "$DF2/berlin-current/second.json"
-refuses 'an older city left current' day-becomes-facts "$DF2/berlin-current" 'Berlin was deleted or left current'
+copy "$DF2/good" "$DF2/berlin-closed"; sed -i "s/{\"value\":\"Berlin\"}/{\"value\":\"Berlin\",\"valid_to\":\"$FACTS_ARCHIVE_DAY\"}/" "$DF2/berlin-closed/after.json"; cp "$DF2/berlin-closed/after.json" "$DF2/berlin-closed/second.json"
+refuses 'a manually confirmed city that was closed' day-becomes-facts "$DF2/berlin-closed" 'manually confirmed Berlin fact was deleted or closed'
 copy "$DF2/good" "$DF2/no-doctor"; sed -i 's/,{"value":"Dr. Lang"[^}]*}//' "$DF2/no-doctor/after.json"; cp "$DF2/no-doctor/after.json" "$DF2/no-doctor/second.json"
 refuses 'an absent doctor fact' day-becomes-facts "$DF2/no-doctor" 'Dr. Lang is not a dated'
 copy "$DF2/good" "$DF2/second-changed"; sed -i 's/"moments":\[\]/"moments":[{"source_id":"later"}]/' "$DF2/second-changed/second.json"
