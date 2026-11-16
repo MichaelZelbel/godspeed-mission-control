@@ -66,6 +66,8 @@ test('headache patterns receive complete requested phone columns across the exec
  saveHeadacheSettings(store.root,{...HEADACHE_DEFAULTS,git_sync:'off',daily_columns:baseMetrics.map(([metric])=>metric)});assert.throws(()=>addonInvocation(store,{addon:'headache',args:['patterns','--days','90']}),/too much daily health data/,'a requested comparison that cannot cross the bridge is explicit');
  fs.writeFileSync(path.join(store.root,'daily.csv'),['date,sleep_total_h',...dates.map(date=>date+',99')].join('\n'));saveHeadacheSettings(store.root,{...HEADACHE_DEFAULTS,git_sync:'off',daily_table:'daily.csv',daily_columns:['sleep_total_h']});
  const preferred=addonInvocation(store,{addon:'headache',args:['patterns','--days','90']});assert.equal(preferred.env.GODSPEED_HEADACHE_DAILY_ROWS,undefined);const csvRun=spawnSync(preferred.command,preferred.argv,{cwd:preferred.cwd,env:preferred.env,encoding:'utf8',shell:false});assert.equal(csvRun.status,0,csvRun.stderr);assert.equal(JSON.parse(csvRun.stdout).compare[0].mean_on,99,'a configured table remains authoritative');
+ saveHeadacheSettings(store.root,{...HEADACHE_DEFAULTS,git_sync:'off',daily_table:'missing.csv',daily_columns:['sleep_total_h']});
+ const missing=addonInvocation(store,{addon:'headache',args:['patterns','--days','90']});assert.ok(missing.env.GODSPEED_HEADACHE_DAILY_ROWS,'a missing configured table keeps the phone fallback');const missingRun=spawnSync(missing.command,missing.argv,{cwd:missing.cwd,env:missing.env,encoding:'utf8',shell:false});assert.equal(missingRun.status,0,missingRun.stderr);assert.equal(JSON.parse(missingRun.stdout).compare[0].mean_on,5);
 });
 
 test('the native coach leaves a short phone day unknown until its manual value settles',async()=>{
