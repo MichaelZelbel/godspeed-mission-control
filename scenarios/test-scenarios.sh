@@ -4819,7 +4819,7 @@ REFUSED_HEVY_KEY='refused-'"scenario-key"
 mkdir -p "$RFS/root/.godspeed" "$RFS/assistant"
 printf '{"home":"%s"}\n' "$RFS/assistant" >"$RFS/root/.godspeed/assistant.json"
 mkdir -p "$RFS/root/.godspeed/integrated-runtime/versions/current/scenarios"
-printf '%s\n%s\n' "$REFUSED_HEVY_KEY" '00000000-0000-4000-8000-000000000001' >"$RFS/root/.godspeed/integrated-runtime/versions/current/scenarios/source-fixture"
+printf '%s\n' "$REFUSED_HEVY_KEY" >"$RFS/root/.godspeed/integrated-runtime/versions/current/scenarios/source-fixture"
 REFUSED_SOURCE_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
