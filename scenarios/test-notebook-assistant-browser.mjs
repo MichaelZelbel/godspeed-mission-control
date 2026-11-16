@@ -16,6 +16,7 @@ test('the maintained route accepts browser-runner Chrome executable variables',(
   assert.match(source,/\/opt\/google\/chrome\/chrome/);
   assert.match(source,/waitVisible/);
   assert.match(source,/l\.querySelector\('input,select,textarea'\)/);
+  assert.match(source,/fill\('Start Date',new Date\(\)\.toISOString\(\)\.slice\(0,10\)\)/);
 });
 
 test('a fixture bind failure stops the browser it started',async()=>{

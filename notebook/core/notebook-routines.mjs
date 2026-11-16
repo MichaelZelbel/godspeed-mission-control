@@ -23,6 +23,7 @@ export function rememberNotebookRoutine(store,job){const data=readNotebookRoutin
 export const ENABLE_KINDS=[
  {kind:'morning-brief',skill:'morning-brief',label:'Morning brief',what:'Writes your morning brief: the one thing that needs you, what changed, your dates and what your watches found.'},
  {kind:'review',skill:'weekly-review',label:'Weekly review',what:'Files the notes waiting in your inbox, asks about the unclear ones and says how each goal is going.'},
+ {kind:'coach-prep',skill:'coach-prep',label:'Coaching talk preparation',what:'Prepares the next coaching talk ahead of time so it opens with current evidence and a clear question.'},
  {kind:'research-watch',skill:'research-watch',label:'Research watches',what:'Checks the questions you asked it to keep researching, and tells you only what is new.'},
  {kind:'memory-review',skill:'memory-audit',label:'Memory review',what:'Checks what your mission control remembers about you against dated evidence, and repairs what is wrong.'},
  {kind:'radar',skill:'mc-radar',label:'AI radar',what:'Looks for one new idea from the sources you chose that would change part of your setup, for your verdict.'},
