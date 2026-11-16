@@ -56,7 +56,7 @@ it.each([
  show();
  const model=screen.getByRole('combobox',{name:'Model'}),effort=screen.getByRole('combobox',{name:'Reasoning effort'});
  await waitFor(()=>expect(model).toHaveDisplayValue(label));
- expect(model).toBeDisabled();expect(effort).toBeDisabled();expect(effort).toHaveDisplayValue('Unavailable');
+ expect(model).toBeDisabled();expect(effort).toBeDisabled();expect(effort).toHaveDisplayValue(label);
  expect(screen.queryByRole('option',{name:'fictional-model'})).not.toBeInTheDocument();
 });
 
@@ -77,6 +77,7 @@ it.each([
  const css=readFileSync(join(process.cwd(),'src/index.css'),'utf8');
  expect(css).toMatch(/@container \(max-width: 48rem\)[\s\S]*?\[data-chat-toolbar\][\s\S]*?display: grid;[\s\S]*?grid-template-columns: 2\.75rem minmax\(0, 1fr\) auto;/);
  expect(css).toMatch(/@container \(max-width: 48rem\)[\s\S]*?\[data-chat-model\][\s\S]*?grid-column: 1 \/ -1;[\s\S]*?max-width: none;[\s\S]*?width: 100%;/);
+ expect(css).toMatch(/@container \(max-width: 48rem\)[\s\S]*?\[data-chat-effort\][\s\S]*?grid-column: 1 \/ -1;[\s\S]*?max-width: none;[\s\S]*?width: 100%;/);
  expect(container.querySelector('[data-chat-toolbar]')).toContainElement(model);
 });
 

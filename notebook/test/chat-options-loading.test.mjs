@@ -93,14 +93,23 @@ test('a pending model response body preserves the last completed refusal in cach
  const cached=await readOptions();assert.equal(cached.availability,'refused');
  releasePending();assert.equal(await pending,'Connected.');assert.equal(provider.health(),'unreachable');
 });
-test('a refused chat returns plain guidance instead of provider diagnostics',async t=>{
- const provider=async()=>{throw Error('Model provider failed with HTTP 401: secret provider detail');};
+for(const status of [401,403])test(`a ${status} refused chat names the refused credential without provider diagnostics`,async t=>{
+ const provider=async()=>{throw Error(`Model provider failed with HTTP ${status}: secret provider detail`);};provider.health=()=>status===403?'refused':'unreachable';
  const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-refused-'));for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
  const {createService}=await import('../server/main.mjs');const service=await createService({root:path.join(root,'workspace'),port:0,provider});
  t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
  const result=await fetch('http://127.0.0.1:'+service.address.port+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})});
- const body=await result.json();assert.equal(result.status,400);assert.match(body.error,/Your AI could not be used.*Settings, Your AI/);assert.doesNotMatch(body.error,/401|secret provider detail/);
+ const body=await result.json();assert.equal(result.status,400);assert.match(body.error,/key or sign-in was refused.*Settings, Your AI/);assert.doesNotMatch(body.error,/401|403|secret provider detail/);
+});
+for(const failure of ['Model provider failed with HTTP 500: fictional outage','fetch failed'])test(`an outage chat names an unreachable AI: ${failure}`,async t=>{
+ const provider=async()=>{throw Error(failure);};provider.health=()=>failure==='fetch failed'?'refused':'unreachable';
+ const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-outage-'));for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
+ const {createService}=await import('../server/main.mjs');const service=await createService({root:path.join(root,'workspace'),port:0,provider});
+ t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
+ const result=await fetch('http://127.0.0.1:'+service.address.port+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})});
+ const body=await result.json();assert.equal(result.status,400);assert.match(body.error,/could not be reached.*Settings, Your AI/);assert.doesNotMatch(body.error,/500|fictional outage|fetch failed|refused/);
 });
 test('a chat send with no AI keeps the no-AI setup guidance',async t=>{
  const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
