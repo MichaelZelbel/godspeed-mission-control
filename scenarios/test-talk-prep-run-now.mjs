@@ -98,6 +98,7 @@ test('the public Run now caller retains the preparation created by that run',asy
     assert.equal(result.code,0,result.output);
     assert.equal(fs.readFileSync(path.join(result.evidence,'routine-preparation.md'),'utf8'),'fresh preparation\n');
     assert.equal(fs.readFileSync(path.join(result.evidence,'routine-preparation-source.txt'),'utf8'),'coach/health/prep/fresh.md\n');
+    assert.equal(fs.existsSync(path.join(result.folder,'root','coach','health','prep','fresh.md')),false);
     const jobs=JSON.parse(fs.readFileSync(path.join(result.evidence,'prep-jobs-after.json'),'utf8'));
     assert.deepEqual(jobs,{
       data:[{id:'prep-job',name:'Coaching talk preparation',last_run_at:'after',last_status:'ok',last_error:''}],
