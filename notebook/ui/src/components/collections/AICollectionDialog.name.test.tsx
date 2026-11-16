@@ -51,11 +51,15 @@ describe("AI collection name", () => {
     expect(insert).not.toHaveBeenCalled();
   });
 
-  it("uses the collection name limit", async () => {
+  it("saves a name longer than the ordinary form limit", async () => {
     render(<MemoryRouter><AICollectionDialog open onOpenChange={() => {}} /></MemoryRouter>);
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Make a reading list for my books" } });
     fireEvent.click(screen.getByRole("button", { name: /generate/i }));
 
-    expect(await screen.findByRole("textbox", { name: "Collection name" })).toHaveAttribute("maxlength", "60");
+    const longName = "A".repeat(61);
+    fireEvent.change(await screen.findByRole("textbox", { name: "Collection name" }), { target: { value: longName } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Collection" }));
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ name: longName }));
   });
 });

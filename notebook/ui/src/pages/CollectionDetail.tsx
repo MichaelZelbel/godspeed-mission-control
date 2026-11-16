@@ -368,7 +368,7 @@ const emojiOptions = [
   "🌱",
 ];
 const collectionFormSchema = z.object({
-  name: collectionNameSchema,
+  name: collectionNameSchema.max(60, "Name must be 60 characters or fewer"),
   icon: z
     .string()
     .trim()

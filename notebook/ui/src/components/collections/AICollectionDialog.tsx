@@ -412,7 +412,6 @@ export function AICollectionDialog({ open, onOpenChange, onCreated }: { open: bo
                         aria-invalid={Boolean(nameError)}
                         aria-describedby={nameError ? "ai-collection-name-error" : undefined}
                         value={generated.collection.name}
-                        maxLength={60}
                         onChange={(event) => {
                           setNameError("");
                           updateGenerated((current) => ({ ...current, collection: { ...current.collection, name: event.target.value } }));

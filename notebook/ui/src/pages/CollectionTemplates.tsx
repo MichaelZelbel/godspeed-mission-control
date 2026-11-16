@@ -205,7 +205,6 @@ function ConfirmCreateDialog({ template, open, onOpenChange }: { template: Templ
             aria-invalid={Boolean(nameError)}
             aria-describedby={nameError ? "template-collection-name-error" : undefined}
             value={name}
-            maxLength={60}
             onChange={(event) => {
               setNameError("");
               setName(event.target.value);

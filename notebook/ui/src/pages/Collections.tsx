@@ -35,7 +35,7 @@ type CollectionWithCount = Collection & { itemCount: number | null };
 const iconMap: Record<string, LucideIcon> = { LayoutGrid, Sparkles };
 const emojiOptions = ["📚", "🏠", "💼", "🎯", "🍳", "✏️", "🎨", "💡", "🔧", "🌱"];
 const collectionFormSchema = z.object({
-  name: collectionNameSchema,
+  name: collectionNameSchema.max(60, "Name must be 60 characters or fewer"),
   icon: z.string().trim().refine((value) => !value || (/^\p{Emoji}/u.test(value) && Array.from(value.replace(/\uFE0F/g, "")).length === 1), "Use a single emoji"),
   description: z.string().trim().max(200, "Description must be 200 characters or fewer").optional(),
   visibility: z.enum(["private", "personal"]),
