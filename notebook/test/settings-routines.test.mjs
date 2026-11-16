@@ -77,8 +77,10 @@ test('Routine times moves the routines a first goal started, and says the new ti
 
 test('Enable routine offers the mission control\'s own recipes by name, and Hermes runs them',async t=>{
  const {root,home,store,hermes,scheduler}=await withGoal(t);
- // The starter's recipes, and the notebook's packaged ones (installed by godspeed init, three here).
- for(const name of ['coach-prep','mc-radar','audit']){fs.mkdirSync(path.join(root,'skills',name),{recursive:true});fs.writeFileSync(path.join(root,'skills',name,'SKILL.md'),'# '+name);}
+ // The starter includes coach-prep because its canonical script routine requires that recipe.
+ // Two other notebook-packaged recipes stand in for the ones godspeed init adds.
+ assert.ok(fs.existsSync(path.join(root,'skills','coach-prep','SKILL.md')),'a clean installed workspace carries the coaching preparation recipe');
+ for(const name of ['mc-radar','audit']){fs.mkdirSync(path.join(root,'skills',name),{recursive:true});fs.writeFileSync(path.join(root,'skills',name,'SKILL.md'),'# '+name);}
  assert.deepEqual(enableKinds(root),[{kind:'morning-brief',label:'Morning brief'},{kind:'review',label:'Weekly review'},{kind:'coach-prep',label:'Coaching talk preparation'},{kind:'research-watch',label:'Research watches'},{kind:'radar',label:'AI radar'},{kind:'audit',label:'Mission control audit'}]);
  fs.rmSync(path.join(root,'skills','audit'),{recursive:true,force:true});assert.ok(!enableKinds(root).some(k=>k.kind==='audit'),'a recipe that is not here is not offered');
  const row=await scheduler.control({kind:'review',at:'17:00'},{enable:true});
