@@ -196,6 +196,20 @@ test("a failed review hands its issues to the next try", async () => {
   assert.equal(none.r.review.verdict, "fail");
 });
 
+test("an uncovered adopted goal independently keeps a passing review in draft", async () => {
+  const s = await sealed({ answer: (c) => JSON.stringify({
+    verdict: "pass",
+    coverage: [...c(["income", "market"]), { id: "buffer", verdict: "fail", reason: "No route covers this adopted goal.", sources: [] }],
+    issues: [],
+  }) });
+  assert.equal(s.r.problem, 'its independent review does not substantiate goal "buffer"');
+  assert.deepEqual(s.r.uncovered, ["buffer"]);
+  assert.deepEqual(s.r.issues, ["buffer: No route covers this adopted goal."]);
+  assert.match(fs.readFileSync(s.file, "utf8"), /^STATE: draft$/m);
+  assert.match(fs.readFileSync(s.file, "utf8"), /Independent review left these adopted goals uncovered: buffer\./);
+  assert.notEqual(s.gate(), null);
+});
+
 test("one byte changed in the preparation after the seal is refused", async () => {
   const s = await sealed(); s.place();
   assert.equal(s.gate(), null);
