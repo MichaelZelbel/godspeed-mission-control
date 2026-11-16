@@ -40,6 +40,17 @@ it('a connected AI keeps its model and effort choices',async()=>{
  expect(screen.getByRole('combobox',{name:'Model'})).toBeEnabled();
 });
 
+it('clears an already selected model when the connected AI is unusable',async()=>{
+ answer({connected:true,usable:false,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]});
+ const props={value:'',onChange(){},onSend(){},onStop(){},busy:false,files:[],onFiles(){},model:'fictional-model',effort:'high',onModel:vi.fn(),onEffort:vi.fn(),reply:'',onError(){}};
+ const {rerender}=render(<ChatComposer {...props}/>);
+ await waitFor(()=>expect(props.onModel).toHaveBeenCalledWith(''));
+ expect(props.onEffort).toHaveBeenCalledWith('');
+ rerender(<ChatComposer {...props} model="" effort=""/>);
+ expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('AI unavailable');
+ expect(screen.getByRole('combobox',{name:'Model'})).toBeDisabled();
+});
+
 it.each([
  ['collection chat at 1280 px','No AI connected',{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
  ['collection chat at 1280 px','claude-sonnet-4-5-20250929',{connected:true,current:'claude-sonnet-4-5-20250929',models:[{id:'claude-sonnet-4-5-20250929',efforts:[]}]}],
