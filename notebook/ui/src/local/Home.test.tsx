@@ -119,7 +119,7 @@ describe("the Godspeed card", () => {
   });
   it("describes a configured but unreachable AI instead of saying none is connected", async () => {
     page(false, { show: false }, { aiConfigured: true, runtimeConfigured: false, assistantProblem: null });
-    expect(await screen.findByText(/Your AI is connected but could not be reached\./)).toBeInTheDocument();
+    expect(await screen.findByText(/Your AI is configured but could not be reached\./)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Check it in Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
     expect(screen.queryByText(/No AI is connected yet\./)).toBeNull();
   });
