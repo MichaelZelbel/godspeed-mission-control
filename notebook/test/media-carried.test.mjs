@@ -9,7 +9,8 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {createService} from '../server/main.mjs';
 import {mediaObjectName} from '../core/media-names.mjs';
-import {CARRY_LIMIT,carriedName,carryMedia,findMedia,keptElsewhere,mediaPresence,missingHere} from '../core/media-store.mjs';
+import {CARRY_LIMIT,carriedName,carryMedia,findMedia,keepMedia,keptElsewhere,mediaPresence,missingHere} from '../core/media-store.mjs';
+import {MEDIA_CARRY_MAX_BYTES,MEDIA_CARRY_MAX_MB} from '../shared/media-limits.mjs';
 import {chatAttachments} from '../core/chat-context.mjs';
 import {Connectors} from '../core/connectors.mjs';
 import {Review} from '../core/review.mjs';
@@ -28,6 +29,21 @@ async function start(t,root,mediaRoot=path.join(root,'m'),device='local'){
   return {service,base,mediaRoot,carried:path.join(root,'notebook','_media'),upload,read,close};
 }
 const snapshot=dir=>Object.fromEntries(fs.readdirSync(dir).sort().map(name=>[name,sha(fs.readFileSync(path.join(dir,name)))]));
+
+test('media bytes at the shared carry limit travel and one byte over does not',t=>{
+  const root=workspace(t),carried=path.join(root,'notebook','_media');
+  const atLimit=Buffer.alloc(MEDIA_CARRY_MAX_BYTES),overLimit=Buffer.alloc(MEDIA_CARRY_MAX_BYTES+1);
+  const atPath='user/at-carry-limit.pdf',overPath='user/over-carry-limit.pdf';
+  const mapping=(original,data)=>({path:original,file:carriedName(sha(data),original),sha256:sha(data),size:data.length,contentType:'application/pdf'});
+
+  keepMedia(carried,mapping(atPath,atLimit),atLimit);
+  keepMedia(carried,mapping(overPath,overLimit),overLimit);
+
+  assert.deepEqual(fs.readFileSync(path.join(carried,carriedName(sha(atLimit),atPath))),atLimit,'content at the advertised limit is carried');
+  assert.ok(!fs.existsSync(path.join(carried,carriedName(sha(overLimit),overPath))),'content one byte over the advertised limit stays local');
+  assert.ok(fs.existsSync(path.join(carried,sha(atPath)+'.mapping.json')),'the carried item has its mapping');
+  assert.ok(fs.existsSync(path.join(carried,sha(overPath)+'.mapping.json')),'the local-only item still carries its mapping');
+});
 
 test('a picture saved through the upload lands in notebook/_media and is served from there',async t=>{
   const root=workspace(t),{upload,read,carried,mediaRoot}=await start(t,root);
@@ -110,7 +126,7 @@ test('items whose files are kept on another computer explain where to open them,
   for(const original of [bigPath,bigPicture]){
     const opened=await fetch(two.base+'/api/media/file/'+encodeURIComponent(original));
     assert.equal(opened.status,404);assert.match(opened.headers.get('content-type'),/^text\/html/);
-    const explanation=await opened.text();assert.match(explanation,/kept on the computer where it was added/i);assert.match(explanation,/make the file smaller than 50 MB/i);
+    const explanation=await opened.text();assert.match(explanation,/kept on the computer where it was added/i);assert.match(explanation,new RegExp('make the file smaller than '+MEDIA_CARRY_MAX_MB+' MB','i'));
   }
   assert.notEqual((await missing(two.base,'x')).status,200);
   assert.notEqual((await presence(two.base,'x')).status,200);

@@ -18,11 +18,19 @@ const self={kind:'self'};
 const answer=row=>({facts:[{subject:self,kind:'home-city',value:'Hamburg',date:'2026-11-01',one_or_many:'one',confidence:'certain',citation:{id:row.id,quote:'I moved to Hamburg on 1 November'}}],people:[],things:[],events:[]});
 
 test('the daily memory files a dated quoted fact once and retains the fact it replaces',async t=>{
- const root=workspace(t),store=new Store(root),query=new QueryService(store),domains=new Domains(query);domains.writeFact({label:'Home city',value:'Kiel',valid_from:'2026-01-01'});
+ const root=workspace(t),store=new Store(root),query=new QueryService(store),domains=new Domains(query);domains.writeFact({label:'Home city',value:'Kiel',valid_from:'2026-01-01',origin:'remember-what-you-said'});
  const row={id:'moved',at:'2026-11-01T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);let calls=0;
  const run=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,model:async()=>{calls++;return answer(row);}});
- assert.equal(run.completed,1);assert.equal(calls,1);const facts=query.rows('claims').filter(f=>f.attribute==='lives-in');assert.equal(facts.length,2);assert.equal(facts.find(f=>f.value==='Kiel').valid_to,'2026-11-01');assert.equal(facts.find(f=>f.value==='Hamburg').evidence_quote,row.text);
+ assert.equal(run.completed,1);assert.equal(calls,1);const facts=query.rows('claims').filter(f=>f.attribute==='lives-in');assert.equal(facts.length,2);assert.equal(facts.find(f=>f.value==='Kiel').valid_to,'2026-11-01','new routine evidence still ends a fact filed by the routine');assert.equal(facts.find(f=>f.value==='Hamburg').evidence_quote,row.text);
  await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,model:async()=>{calls++;return answer(row);}});assert.equal(calls,1,'a consumed archive row is never sent again');
+});
+
+test('the daily memory does not end a fact the person entered',async t=>{
+ const root=workspace(t),store=new Store(root),query=new QueryService(store),domains=new Domains(query);domains.writeFact({label:'Home city',value:'Kiel',valid_from:'2026-01-01'});
+ const before=query.rows('claims').find(fact=>fact.value==='Kiel'),row={id:'typed-value',at:'2026-11-01T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);
+ await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,model:async()=>answer(row)});
+ const facts=query.rows('claims').filter(fact=>fact.attribute==='lives-in'),typed=facts.find(fact=>fact.value==='Kiel');
+ assert.equal(facts.length,2);assert.equal(typed.valid_to,null);assert.equal(typed.origin,'user_manual');assert.equal(typed._hash,before._hash);assert.equal(facts.find(fact=>fact.value==='Hamburg').origin,'remember-what-you-said');
 });
 
 test('concurrent daily-memory runs submit one archive piece once',async t=>{
@@ -142,6 +150,16 @@ test('a starter entity file is reused, not rewritten, when the routine names the
   fs.rmSync(path.join(root,'routines'),{recursive:true,force:true});}
  assert.equal(fs.readFileSync(entity,'utf8'),original);assert.deepEqual(fs.readdirSync(path.join(root,'world','entities')),['peter-mueller.md']);
  assert.deepEqual(fs.readdirSync(path.join(root,'world','claims')).map(n=>n.split('--')[0]),['peter-mueller'],'an alias fact already filed is not filed twice');
+});
+
+test('the world fallback ends only facts filed by daily memory',async t=>{
+ const root=workspace(t),claims=path.join(root,'world','claims');fs.mkdirSync(claims,{recursive:true});
+ const manual='---\nsubject: me\norigin: user_manual\nattribute: lives-in\nvalue: Kiel\nvalid_from: 2026-01-01\n---\nTyped by me.\n',legacy='---\nsubject: me\nattribute: lives-in\nvalue: Bremen\nvalid_from: 2025-01-01\n---\nOld import.\n',routine='---\nsubject: me\norigin: remember-what-you-said\nattribute: lives-in\nvalue: Bonn\nvalid_from: 2026-02-01\n---\nI moved to Bonn.\n';
+ for(const [name,text] of [['manual.md',manual],['legacy.md',legacy],['routine.md',routine]])fs.writeFileSync(path.join(claims,name),text);
+ const row={id:'world-ownership',at:'2026-11-01T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);await rememberWhatYouSaid({root,now,model:async()=>answer(row)});
+ assert.equal(fs.readFileSync(path.join(claims,'manual.md'),'utf8'),manual);assert.equal(fs.readFileSync(path.join(claims,'legacy.md'),'utf8'),legacy);
+ assert.equal(frontMatter(fs.readFileSync(path.join(claims,'routine.md'),'utf8')).fields.valid_to,'2026-11-01');
+ const filed=fs.readdirSync(claims).map(name=>frontMatter(fs.readFileSync(path.join(claims,name),'utf8')).fields).find(fields=>fields.value==='Hamburg');assert.equal(filed.origin,'remember-what-you-said');assert.equal(filed.valid_to,undefined);
 });
 
 test('a world file the starter formats allow is read the way it was written',()=>{

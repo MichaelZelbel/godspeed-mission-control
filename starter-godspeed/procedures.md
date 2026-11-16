@@ -86,7 +86,7 @@ Rhythm: "Daily round: choose today's work" every day at 05:30; "Daily round: do 
 day at 10:00 and 16:00. Your time zone.
 Lands: the day's record in routines/next-action/<date>/decision.md and the work in work/. You get
 the record's one line for you ("For you today"), or nothing on a day that needs nothing from you.
-With a morning brief switched on, the brief opens with that line instead, so you get it once.
+Daily round sends its own message even when the notebook morning brief is switched on.
 Lives: Hermes' schedule on the computer that runs your routines, working in this folder.
 May: read this folder, research on the web, write files here. Anything that reaches another
 person, costs money or signs you up waits for your yes.
@@ -101,15 +101,14 @@ a model is still to be watched.
 Does: runs mc-due check, which closes what proves itself done, then mc-due today, and tells you
 the dates that need a mention today: at most three, the most pressing first.
 Rhythm: every day at 08:00, your time zone. Silent on a day with nothing to say.
-Lands: a message to you (Telegram, or a note in "From your routines" on a computer). With a
-morning brief switched on, the reminders say nothing and your dates are in the brief's
-"Deadlines and targets" section instead, so no date comes twice in a morning.
+Lands: a message to you (Telegram, or a note in "From your routines" on a computer). It sends its
+own message even when the notebook morning brief is switched on.
 Lives: Hermes' schedule on the computer that runs your routines. No model is used.
 May: read the reminders in your notebook and write the closing moment of a thing that proved
 itself done.
 Off-switch: Pause "Deadline reminders" under Settings > Routines.
 Last checked: 2026-10-09, run once by a real Hermes on a test computer with a practice date and no
-morning brief, and its reply kept as a note; quiet on a day the brief carries the dates.
+morning brief, and its reply kept as a note.
 
 ### Weekly check-in
 
