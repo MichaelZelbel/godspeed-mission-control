@@ -178,7 +178,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   if(provider){const connected=provider;provider=Object.assign(async input=>beatWhile(connected(input),beat,{limitMs:(input?.timeout_ms||600000)+60000}),connected);}
   const descriptor=originalRuntime?assistant.descriptor??null:null;
   const lifecycle=originalRuntime?new HermesLifecycle():null,domains=new Domains(query,{provider}),recordRoutines=()=>new Scheduler(store,{device,executor:jobExecutor(provider,query),only:NativeScheduler.recordKinds,delivery:'notebook'}),scheduler=assistantMissing?recordRoutines():originalRuntime?new NativeScheduler(store,{...descriptor,device,lifecycle,records:recordRoutines()}):new Scheduler(store,{device,query,executor:jobExecutor(provider,query)});scheduler.onProgress=beat;scheduler.onFailure=error=>console.error('Godspeed Mission Control: a routine could not be created, the next tick tries again:',error.message);
-  let chatAIUsable=!!domains.provider,chatAICheckedAt=0;
+  let chatAIUsable=!!domains.provider,chatAICheckedAt=0,chatAICheck=null;
   let workouts=null;
   const automaticUpdate=new AutomaticUpdate({store,lifecycle,start:()=>startUpdate({root:store.root})});
   domains.assistantProblem=assistantMissing?assistantProblem:null;
@@ -695,7 +695,13 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/chat/options'&&req.method==='GET'){
         if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]});
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
-        if(provider?.check&&Date.now()-chatAICheckedAt>=5000){chatAICheckedAt=Date.now();try{await provider.check();chatAIUsable=true;}catch(error){chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}}
+        if(provider?.check){
+          if(!chatAICheck&&Date.now()-chatAICheckedAt>=5000){
+            chatAICheckedAt=Date.now();
+            chatAICheck=(async()=>{try{await provider.check();chatAIUsable=true;}catch(error){chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}})().finally(()=>{chatAICheck=null;});
+          }
+          if(chatAICheck)await chatAICheck;
+        }
         return send(res,200,{connected:true,usable:chatAIUsable,...options});
       }
       if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}

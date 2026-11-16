@@ -15,7 +15,7 @@ test('invalid choices fail visibly rather than making up a model',async()=>{
 
 // #563: with no AI connected the picker said "Connected model" while the Dashboard and the chat said no AI is connected.
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-async function optionsFrom(t,provider){
+async function optionsFrom(t,provider,{defer=false}={}){
  const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL','GODSPEED_MODEL_KEY','GODSPEED_MODEL'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-options-'));
  for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
@@ -23,7 +23,7 @@ async function optionsFrom(t,provider){
  t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
  const base='http://127.0.0.1:'+service.address.port,status=await (await fetch(base+'/api/status')).json();
  const readOptions=()=>loadChatOptions({fetcher:(url,init)=>fetch(base+url,init)});
- return {status,options:await readOptions(),readOptions};
+ return {status,options:defer?null:await readOptions(),readOptions};
 }
 test('with no AI connected the model choices say so rather than naming a connected model',async t=>{
  const {status,options}=await optionsFrom(t);
@@ -49,6 +49,16 @@ test('AI usability is rechecked every five seconds in both directions',async t=>
  assert.equal((await readOptions()).usable,false);
  usable=true;now+=5000;
  assert.equal((await readOptions()).usable,true);
+});
+test('overlapping availability reads share a failed health check result',async t=>{
+ let rejectCheck,checkStarted;const started=new Promise(resolve=>{checkStarted=resolve;});
+ const provider=Object.assign(async()=>({reply:'ok'}),{check:()=>{checkStarted();return new Promise((resolve,reject)=>{rejectCheck=reject;});}});
+ const {readOptions}=await optionsFrom(t,provider,{defer:true});
+ const first=readOptions();await started;
+ const second=readOptions();rejectCheck(new Error('Fictional private provider failure'));
+ const results=await Promise.all([first,second]);
+ assert.deepEqual(results.map(result=>result.usable),[false,false]);
+ assert.doesNotMatch(JSON.stringify(results),/Fictional private provider failure/);
 });
 test('a refused chat returns plain guidance instead of provider diagnostics',async t=>{
  const provider=async()=>{throw Error('Model provider failed with HTTP 401: secret provider detail');};
