@@ -74,7 +74,7 @@ import {recordRunningNotebook} from '../core/running-notebook.mjs';
 import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/hermes-update.mjs';
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
-import {MEDIA_PRESENCE_BATCH_SIZE,MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
+import {MEDIA_CARRY_MAX_MB,MEDIA_PRESENCE_BATCH_SIZE,MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
 
 // A backup AI is another service than the main AI, in Settings and in /backupai alike: when one
 // service fails, its other models and keys usually fail with it, and Hermes counts the same service
@@ -679,7 +679,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const original = decodeURIComponent(route.slice('/api/media/file/'.length)), found = findMedia(media, original);
         if(!found)return send(res,404,{error:'Media not found'});
         if(found.removed)return send(res,404,{error:'Media removed'});
-        const keptElsewhere=()=>{res.writeHead(404,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>File kept on another computer</title><body style="font-family:system-ui,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1rem;line-height:1.5"><h1 style="font-size:1.3rem">This file is kept on the computer where it was added.</h1><p>Open it on that computer, or make the file smaller than 50 MB so it can travel to this one.</p></body></html>');};
+        const keptElsewhere=()=>{res.writeHead(404,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>File kept on another computer</title><body style="font-family:system-ui,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1rem;line-height:1.5"><h1 style="font-size:1.3rem">This file is kept on the computer where it was added.</h1><p>Open it on that computer, or make the file smaller than '+MEDIA_CARRY_MAX_MB+' MB so it can travel to this one.</p></body></html>');};
         return sendFile(res, found.file, { 'Content-Type': found.mapping.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }, found.mapping.size>CARRY_LIMIT ? keptElsewhere : null);
       }
       if(route==='/api/media/kept-here'&&req.method==='GET')return send(res,200,{data:keptHere(media)});

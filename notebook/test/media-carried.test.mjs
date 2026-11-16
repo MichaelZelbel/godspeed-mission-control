@@ -10,6 +10,7 @@ import {createHash} from 'node:crypto';
 import {createService} from '../server/main.mjs';
 import {mediaObjectName} from '../core/media-names.mjs';
 import {CARRY_LIMIT,carriedName,carryMedia,findMedia,keptElsewhere,mediaPresence,missingHere} from '../core/media-store.mjs';
+import {MEDIA_CARRY_MAX_MB} from '../shared/media-limits.mjs';
 import {chatAttachments} from '../core/chat-context.mjs';
 import {Connectors} from '../core/connectors.mjs';
 import {Review} from '../core/review.mjs';
@@ -110,7 +111,7 @@ test('items whose files are kept on another computer explain where to open them,
   for(const original of [bigPath,bigPicture]){
     const opened=await fetch(two.base+'/api/media/file/'+encodeURIComponent(original));
     assert.equal(opened.status,404);assert.match(opened.headers.get('content-type'),/^text\/html/);
-    const explanation=await opened.text();assert.match(explanation,/kept on the computer where it was added/i);assert.match(explanation,/make the file smaller than 50 MB/i);
+    const explanation=await opened.text();assert.match(explanation,/kept on the computer where it was added/i);assert.match(explanation,new RegExp('make the file smaller than '+MEDIA_CARRY_MAX_MB+' MB','i'));
   }
   assert.notEqual((await missing(two.base,'x')).status,200);
   assert.notEqual((await presence(two.base,'x')).status,200);

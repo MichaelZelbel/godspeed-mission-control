@@ -86,7 +86,7 @@ Rhythm: "Daily round: choose today's work" every day at 05:30; "Daily round: do 
 day at 10:00 and 16:00. Your time zone.
 Lands: the day's record in routines/next-action/<date>/decision.md and the work in work/. You get
 the record's one line for you ("For you today"), or nothing on a day that needs nothing from you.
-With a morning brief switched on, the brief opens with that line instead, so you get it once.
+Daily round sends its own message even when the notebook morning brief is switched on.
 Lives: Hermes' schedule on the computer that runs your routines, working in this folder.
 May: read this folder, research on the web, write files here. Anything that reaches another
 person, costs money or signs you up waits for your yes.

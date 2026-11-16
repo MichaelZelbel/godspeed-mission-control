@@ -146,7 +146,8 @@ test('beside the notebook\'s own morning briefing the deadline reminders speak f
  const run=runScript(home,'godspeed-deadline-reminders.py');
  assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/^From your deadline reminders:/,'the notebook\'s briefing does not carry the reminders\' lines');
  for(const key of ['decide','due'])assert.match(STARTING_ROUTINES.find(routine=>routine.key===key).what,/own message even when the notebook morning brief is switched on/);
- const procedures=fs.readFileSync(new URL('../../starter-godspeed/procedures.md',import.meta.url),'utf8'),deadline=procedures.match(/### Deadline reminders[\s\S]*?(?=\n### )/)?.[0]||'';
+ const procedures=fs.readFileSync(new URL('../../starter-godspeed/procedures.md',import.meta.url),'utf8'),daily=procedures.match(/### Daily round[\s\S]*?(?=\n### )/)?.[0]||'',deadline=procedures.match(/### Deadline reminders[\s\S]*?(?=\n### )/)?.[0]||'';
+ assert.match(daily,/own message even when the notebook morning brief is switched on/);assert.doesNotMatch(daily,/brief opens with that line instead/);
  assert.match(deadline,/own message even when the notebook morning brief is switched on/);assert.doesNotMatch(deadline,/reminders say nothing|brief carries the dates/);
 });
 

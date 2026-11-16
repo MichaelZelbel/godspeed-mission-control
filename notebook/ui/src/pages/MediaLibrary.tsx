@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import { MEDIA_CARRY_MAX_MB } from "../../../shared/media-limits.mjs";
 import { SEOHead } from "@/components/SEOHead";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -878,7 +879,7 @@ export default function MediaLibrary() {
                       {keptHere.has(group.storage_path) && (
                         <Badge
                           variant="secondary"
-                          title="Over 50 MB, so it is not in your private GitHub copy. It stays on this computer and in its backups."
+                          title={`Over ${MEDIA_CARRY_MAX_MB} MB, so it is not in your private GitHub copy. It stays on this computer and in its backups.`}
                           className="min-w-0 text-[9px]"
                         >
                           Kept on this computer only
@@ -887,7 +888,7 @@ export default function MediaLibrary() {
                       {notHere && (
                         <Badge
                           variant="secondary"
-                          title="Its file is not on this computer. Files over 50 MB stay on the computer they were added on, so open it there."
+                          title={`Its file is not on this computer. Files over ${MEDIA_CARRY_MAX_MB} MB stay on the computer they were added on, so open it there.`}
                           className="min-w-0 text-[9px]"
                         >
                           Kept on another computer
@@ -945,7 +946,7 @@ export default function MediaLibrary() {
                     )}
                     {notHere && (
                       <p className="text-[10px] leading-tight text-muted-foreground">
-                        Open it on the computer where it was added, or make it smaller than 50 MB so it can travel.
+                        Open it on the computer where it was added, or make it smaller than {MEDIA_CARRY_MAX_MB} MB so it can travel.
                       </p>
                     )}
                     {group.description && (
