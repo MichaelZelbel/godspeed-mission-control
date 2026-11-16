@@ -148,7 +148,7 @@ export class Domains {
     const reply=await this.nativeAgent({...input,conversation_id:(input.conversation_id||'general')+'-coach-start-resolution',coach_start_resolution:true,message:'Resolve this owner message into JSON only. Return {"area":"<existing coach area slug>"} only when it explicitly asks to start that area\'s coaching talk now; otherwise return {"area":null}. Do not use tools or change files. Owner message: '+JSON.stringify(String(input.message||''))});
     const area=resolvedCoachArea(reply.reply,this.store.root);return area&&canStartTalk(area)?coachTalkStart(this.store,area):null;
   }
-  writeFact(input) {
+  writeFact(input, { mayClose = () => true } = {}) {
     const subject_type = input.entity_id ? 'entity' : input.contact_id ? 'contact' : input.subject_type||'self', subject_id = input.entity_id || input.contact_id || input.subject_id || null;
     // A kind of fact the list names (core/fields.mjs, a workspace's
     // world/fields.json read over it) is filed under its one name, whatever
@@ -214,7 +214,7 @@ export class Domains {
       const slot = this.store.prepare('fact_slots', { subject_type, subject_id, contact_id: input.contact_id || null, attribute, label: input.label||oldSlot?.label||input.attribute||attribute, category_slug: input.category_slug||oldSlot?.category_slug||kinSlot?.category_slug||null, cardinality, show_to_agent: kept('show_to_agent',true)!==false, is_pinned: kept('is_pinned',kinSlot?.is_pinned??false)===true }, oldSlot);
       // What this value ends: every current one of a one-at-a-time fact, the one it corrects of a
       // many. An assistant ends one it was not asked to correct only when it read that version.
-      const changed = all.filter(c => current(c) && (slot.cardinality!=='many'||c.id===input.replaces_claim_id) && (!this.assistant||c.id===input.replaces_claim_id||this.mayChange?.('claims',c)))
+      const changed = all.filter(c => current(c) && mayClose(c) && (slot.cardinality!=='many'||c.id===input.replaces_claim_id) && (!this.assistant||c.id===input.replaces_claim_id||this.mayChange?.('claims',c)))
         .map(c => this.store.prepare('claims', { valid_to: asOf,closure_evidence }, c));
       const claim = this.store.prepare('claims', { subject_type, subject_id, attribute, value, valid_from, recorded_on: today, valid_to: null, confidence: input.origin === 'remember-what-you-said' && input.confidence === 'likely' ? 'likely' : 'confirmed', cardinality: slot.cardinality, source_type: input.source_type || 'manual', source_id: input.source_id || null, evidence_quote: input.evidence_quote || null, origin: input.origin || 'user_manual' });
       for (const r of [slot, claim]) r.references = this.query.references(r.type, r);
@@ -236,7 +236,7 @@ export class Domains {
       for(const effect of plan.effects){
         if(effect.type==='fact'){
           const subject=subjects.get(memoryKey(effect.subject.type,effect.subject.id))||effect.subject;
-          staged.writeFact({subject_type:subject.type,subject_id:subject.id,contact_id:subject.type==='contact'?subject.id:null,entity_id:subject.type==='entity'?subject.id:null,label:effect.kind,attribute:effect.kind,value:effect.value,valid_from:effect.date,cardinality:effect.cardinality,confidence:effect.confidence==='likely'?'likely':'confirmed',source_type:'conversation_archive',source_id:effect.citation.id,evidence_quote:effect.citation.quote,origin:'remember-what-you-said'});
+          staged.writeFact({subject_type:subject.type,subject_id:subject.id,contact_id:subject.type==='contact'?subject.id:null,entity_id:subject.type==='entity'?subject.id:null,label:effect.kind,attribute:effect.kind,value:effect.value,valid_from:effect.date,cardinality:effect.cardinality,confidence:effect.confidence==='likely'?'likely':'confirmed',source_type:'conversation_archive',source_id:effect.citation.id,evidence_quote:effect.citation.quote,origin:'remember-what-you-said'},{mayClose:claim=>claim.origin==='remember-what-you-said'});
           continue;
         }
         const participants=effect.participants.map(reference=>subjects.get(memoryKey(reference.type,reference.id))||reference),keys=[...new Set(participants.filter(person=>person?.type==='contact'||person?.type==='entity').map(person=>memoryKey(person.type,person.id)))].sort(),id='memory-'+hash(['event',effect.citation.id,effect.what,effect.day,keys]).slice(0,20),records=[];

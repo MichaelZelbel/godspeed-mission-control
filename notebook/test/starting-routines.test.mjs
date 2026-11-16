@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {checkConnections,CONNECTIONS} from '../core/connection-check.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {installStarter} from '../core/starter-workspace.mjs';
-import {finalReply,saveRoutineResults,RESULTS_FOLDER,routineFiles,prepareCheckIn,coachRoutineTimes} from '../core/starting-routines.mjs';import {QueryService} from '../core/query.mjs';
+import {finalReply,saveRoutineResults,RESULTS_FOLDER,STARTING_ROUTINES,routineFiles,prepareCheckIn,coachRoutineTimes} from '../core/starting-routines.mjs';import {QueryService} from '../core/query.mjs';
 import {withTimezone} from '../core/hermes-config.mjs';
 import {routineRow,scheduleWords} from '../ui/src/local/routine-row.mjs';
 import {checkRoutines} from '../core/routine-check.mjs';import {readNotices} from '../core/notices.mjs';
@@ -145,6 +145,9 @@ test('beside the notebook\'s own morning briefing the deadline reminders speak f
  const {root,home}=scriptFixture(t,{brief});addDue(root);
  const run=runScript(home,'godspeed-deadline-reminders.py');
  assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/^From your deadline reminders:/,'the notebook\'s briefing does not carry the reminders\' lines');
+ for(const key of ['decide','due'])assert.match(STARTING_ROUTINES.find(routine=>routine.key===key).what,/own message even when the notebook morning brief is switched on/);
+ const procedures=fs.readFileSync(new URL('../../starter-godspeed/procedures.md',import.meta.url),'utf8'),deadline=procedures.match(/### Deadline reminders[\s\S]*?(?=\n### )/)?.[0]||'';
+ assert.match(deadline,/own message even when the notebook morning brief is switched on/);assert.doesNotMatch(deadline,/reminders say nothing|brief carries the dates/);
 });
 
 test('deadline reminders say nothing on a day a morning brief carries the dates, and speak when it is paused',{skip:!havePython&&'no Python here'},t=>{

@@ -138,6 +138,9 @@ const ROOM_FOR_A_READERS_OWN_RULES=300;
 test('the starter manual says what the live run needed, and leaves a reader room for rules of their own under the ceiling Hermes reads',()=>{
   const manual=fs.readFileSync(new URL('../../starter-godspeed/AGENTS.md',import.meta.url),'utf8'),size=[...manual].length;
   assert.ok(size<=MANUAL_WARN-ROOM_FOR_A_READERS_OWN_RULES,'AGENTS.md is '+size+' characters, which leaves a reader '+(MANUAL_WARN-size)+' characters of room for rules of their own; it has to leave '+ROOM_FOR_A_READERS_OWN_RULES);
+  const bookKit=manual.match(/- \*\*A recipe from the book's kit\.\*\*[\s\S]*?(?=\n- \*\*)/)?.[0]||'';
+  for(const url of ['https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/beta/skills/<name>.md','.../beta/skills/<name>/SKILL.md','https://github.com/MichaelZelbel/godspeed-mission-control/tree/beta/skills'])assert.match(bookKit,new RegExp(url.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.doesNotMatch(bookKit,/\/main\/skills/);
   for(const said of [/will NOT fire\s+until the gateway is started/,/never from `procedures\.md`/,/`save_record` type `collections`/,/"How I like to be helped" and "My hard limits"/,
     /`mc-goals file --kind/,/never write a card by hand/,/never make one yourself/,/`mc-work file --what "\.\.\." --done-when/,/--check "<a\s+line that exits 0/,
     // Live run of 9 October 2026: the assistant answered its own questions, filed a "(?)" item as a
