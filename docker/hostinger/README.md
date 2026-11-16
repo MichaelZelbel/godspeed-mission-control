@@ -10,15 +10,12 @@ Hostinger's supported purchase link is:
 
 Current purchase and install link, including the author's Hostinger referral:
 
-[Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2F78ea790d766073bf77059fadf4d1c340b022059d%2Fdocker%2Fhostinger%2Fone-click.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
+[Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2Fbeta%2Fdocker%2Fhostinger%2Fone-click.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
 
-The link names the commit whose `compose.yaml` pins the current image
-(`v2-sha-9390da4`, digest `70a07e63…`, 2.0.0-beta.6 with private server add-on access and package-manager AI support; before that `v2-sha-b81160c`, digest `cfcc97ee…`, 2.0.0-beta.5 with responsive search, retained note text and backup AI; before that `v2-sha-5a7bd7c`, digest `f5f6a2d3…`, 2.0.0-beta.4 with small update copies; before that `v2-sha-9b8b3d0`, digest `dd115e26…`, the conversation reset fix; before that `v2-sha-d02745d`, digest `45cb1106…`, the journal pause fix; before that `v2-sha-770eb12`, digest `1d93988d…`, the replacement beta with checked move references; before that `v2-sha-503703e`, digest `b55e9595…`, the superseded beta; before that `v2-sha-54f72d3`, digest `ceb11a10…`, from the release of 18 October 2026, Hermes installs in a terminal and the assistant gets its notebook, then `v2-sha-1a9261a`, digest `87ab520b…`, from the release of 17 October 2026, a first goal starts its routines, then `v2-sha-e09577c`, digest `9a82b069…`, from the second release of 16 October 2026, the setup in two parts, then `v2-sha-c2ce006`, digest `bafaadb2…`, from the Identity page release of 15 October 2026, then `v2-sha-02f4ecb`, digest `60df0c65…`, from the notebook label correction of 14 October 2026, then `v2-sha-377124c`, digest `5a154b6d…`, from 13 October 2026, then `v2-sha-d023277`, digest `8682ddd5…`, from the second release of 12 October, then `v2-sha-d457ded`, digest `4dc94340…`, from the first release of 12 October, then `v2-sha-da2098e`, digest `a67da492…`, from 10 October, then `v2-sha-c83b399`, digest `13232a90…`,
-from 9 October, the book's second edition, then
-`v2-sha-b327fe0`, digest `c3706e1c…`, from 7 October, and `v2-sha-20cdd7b`, digest `351e8a16…`). Until 6 October 2026 it named `a759dc8`, an
-older file with an older image, so the button installed a version this page no longer
-described. Whenever `compose.yaml` pins a new image, point this link at the commit that
-made that change.
+The link reads the generated manifest from `beta`, the public line that only the release
+step moves. The manifest pins the released server image by its immutable digest. The release
+step regenerates it from the checked `stage.json`, so a new purchase gets the current public
+version without changing this link by hand.
 
 The `#pricing` anchor opens the plan selection section, where Hostinger displays
 the project name `godspeed-mission-control` and a `Referral code applied` badge.
@@ -27,16 +24,9 @@ the generic main heading; this is not a fully branded Godspeed purchase page.
 For a public launch, use a Godspeed installation page explaining what happens
 after purchase, with this referral-aware link as its deployment button.
 
-Use the public raw URL of `compose.yaml` at the release commit. The file pins the
-complete tested image by digest, so unrelated changes to `latest` cannot replace it.
-
-After checkout, Hostinger opens Docker Manager with the installation ready to deploy.
-Fill `GODSPEED_HOST` with the VPS hostname shown by Hostinger, without `https://`,
-and choose a private `GODSPEED_SETUP_CODE` of at least 32 random letters and digits (let
-your password manager make it). Save that code there. A shorter code is refused once the
-server runs an image with that check, because whoever enters it first owns the server.
-Deploy, then open `https://YOUR_VPS_HOSTNAME`. Enter the setup code, create your
-username and password, and save the recovery code. Later visits use your account.
+After checkout, Hostinger opens Docker Manager with the installation ready to deploy and
+no setup fields to fill. Deploy it, then return to the Godspeed installation page. It detects
+the server address and opens the private account-creation link when HTTPS is ready.
 
 ## Telegram, connected after the account
 
