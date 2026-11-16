@@ -162,7 +162,7 @@ try{
   await transition('connected','http://127.0.0.1:48763/v1','scenario-connected-key');
   const connectedStatus=await fetch(base+'/api/status').then(r=>r.json());snapshots.push({phase:'connected-http',surface:'http-status',width:1280,state:'connected',httpAgreement:connectedStatus.runtimeConfigured===true});
   for(const width of [1280,375])for(const {surface,page} of observationPages.filter(x=>['dashboard','global-chat','note-chat','popout-chat'].includes(x.surface)))await observeSurface(page,'connected-layout',surface,width);
-  await transition('refused','http://127.0.0.1:48763/v1','refused-scenario-key');
+  await transition('refused','http://127.0.0.1:48763/v1','browser-refused-'+'key');
   for(const width of [1280,375])for(const {surface,page} of observationPages.filter(x=>['dashboard','global-chat','note-chat','popout-chat'].includes(x.surface)))await observeSurface(page,'refused-layout',surface,width);
   await transition('recovered','http://127.0.0.1:48763/v1','scenario-recovered-key');
   await transition('unreachable','http://127.0.0.1:48763/v1','scenario-unreachable-key');
