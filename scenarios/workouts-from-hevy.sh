@@ -134,7 +134,7 @@ persistence_roots() { # <docker|native> <scan name>
 }
 
 filter_installed_native_source() { # <path record>
-  local paths=$1 filtered=$1.filtered source=$STATE/integrated-runtime/versions/ path
+  local paths=$1 filtered=$1.filtered source=$RUNTIME/versions/ path
   : >"$filtered" || fail "native persistence scan could not filter its path record"
   while IFS= read -r path; do
     case $path in
