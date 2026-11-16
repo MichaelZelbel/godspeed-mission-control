@@ -10,6 +10,7 @@ import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
 import { openDiary } from "../lib/diary.mjs";
 import { resolveFrom, newEpisodeId, normSide, normQuality, parsePain, parseMed } from "../lib/episodes.mjs";
 import { describe, dailyRollup, patterns, renderPatterns, dayOf } from "../lib/report.mjs";
+import { notebookDailyRows } from "../lib/notebook-daily-rows.mjs";
 import { contextBlock } from "../lib/context.mjs";
 import { syncInBackground, syncQueued } from "../lib/sync.mjs";
 import { addDays } from "../lib/when.mjs";
@@ -80,7 +81,6 @@ function saveAll(list, label) {
   if (diary.kind === "files") syncInBackground(mcDir, `headache: ${label}`, syncMode);
 }
 const log = () => diary.log();
-
 function details() {
   const d = {};
   if (f.pain !== undefined) { try { d.pain = parsePain(f.pain); } catch (e) { die(e.message); } }
@@ -181,7 +181,7 @@ const commands = {
     out(eps.map((e) => describe(e, tz, at)).join("\n") || `No headache tracked in the last ${days} days.`, eps);
   },
   patterns() {
-    const r = patterns(log(), s, at, { days: Number(f.days || 90) });
+    const r = patterns(log(), s, at, { days: Number(f.days || 90), dailyRows: notebookDailyRows(process.env.GODSPEED_HEADACHE_DAILY_ROWS), requiredDailyTable: process.env.GODSPEED_HEADACHE_DAILY_TABLE_REQUIRED === "1" });
     out(renderPatterns(r), r);
   },
   daily() {

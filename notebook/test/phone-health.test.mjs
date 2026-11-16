@@ -38,6 +38,18 @@ test('overlapping windows count each point once, and kJ becomes kcal',()=>{
  assert.equal(days(store)[D+' active_kcal'],100);
 });
 
+test('whole-minute totals and repeated sample windows count one coherent sum',()=>{
+ const point=(date,qty,source='Fictional Phone')=>({date,qty,source});
+ const payload=(units,points)=>upload([{name:'dietary_energy',units,data:points}]);
+ const minute=payload('kJ',[point(D+' 12:00:00 +0100',4184),point(D+' 13:00:00 +0100',2092),point(D+' 13:00:00 +0100',2092,'')]);
+ const samples=payload('kJ',[point(D+' 11:59:30 +0100',836),point(D+' 12:00:30 +0100',3348),point(D+' 13:00:30 +0100',2092),point(D+' 14:00:30 +0100',418.4)]);
+ const repeated=payload('kJ',[point(D+' 11:59:30 +0100',836),point(D+' 12:00:30 +0100',3348),point(D+' 13:00:30 +0100',2092)]);
+ assert.equal(build(minute,samples,repeated).get(D).get('food_kcal'),2100,'minute total plus only the trailing samples from the best payload wins');
+ assert.equal(build(samples,repeated).get(D).get('food_kcal'),1600,'the largest one sample payload wins without minute totals');
+ const distinct=upload([{name:'step_count',units:'count',data:[point(D+' 09:00:00 +0100',10,'Phone'),point(D+' 09:00:00 +0100',20,'Watch'),point(D+' 09:00:00 +0100',10,'')]}]);
+ assert.equal(build(distinct).get(D).get('steps'),30,'distinct named sources still both count');
+});
+
 test('a day re-sent the next morning adds only its new points and rewrites nothing unchanged',()=>{
  const store=setup();
  acceptUpload(store,upload([metric('step_count','count',[D+' 08:00:00 +0100',100]),metric('flights_climbed','count',[D+' 08:00:00 +0100',3])]),{now:at('2026-11-04T20:00:00Z')});
@@ -154,8 +166,8 @@ test('an expired raw file leaves its day\'s records as they were, and only a new
 
 test('the import builds the same days from the same lines as the receiver, and never stores the sender',()=>{
  const lines=[
-  {received_at:'2026-11-04T09:00:00Z',remote:'203.0.113.9',data:upload([metric('step_count','count',[D+' 08:00:00 +0100',100]),metric('active_energy','kJ',[D+' 08:00:00 +0100',836.8])],[{name:'Running',start:D+' 07:00:00 +0100',duration:1800,distance:{qty:5,units:'km'}}])},
-  {received_at:'2026-11-04T10:00:00Z',remote:'203.0.113.9',data:upload([metric('step_count','count',[D+' 08:00:00 +0100',100],[D+' 09:30:00 +0100',60]),metric('weight_body_mass','kg',[D+' 07:30:00 +0100',79.5])])},
+  {received_at:'2026-11-04T09:00:00Z',remote:'203.0.113.9',data:upload([metric('step_count','count',[D+' 08:00:00 +0100',100]),metric('active_energy','kJ',[D+' 08:00:00 +0100',836.8],[D+' 08:00:00 +0100',836.8,{source:''}])],[{name:'Running',start:D+' 07:00:00 +0100',duration:1800,distance:{qty:5,units:'km'}}])},
+  {received_at:'2026-11-04T10:00:00Z',remote:'203.0.113.9',data:upload([metric('step_count','count',[D+' 08:00:00 +0100',100],[D+' 09:30:00 +0100',60]),metric('active_energy','kJ',[D+' 07:59:30 +0100',418.4],[D+' 08:00:30 +0100',418.4]),metric('weight_body_mass','kg',[D+' 07:30:00 +0100',79.5])])},
  ];
  const a=setup(),b=setup(),folder=tmp('godspeed-phone-import-');
  for(const line of lines)acceptUpload(a,line.data,{now:at(line.received_at)});

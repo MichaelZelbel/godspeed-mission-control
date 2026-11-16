@@ -34,8 +34,8 @@
     "strict": false,
     "target": "ES2022",
     "types": [
-      "vitest/globals",
-      "node"
+      "node",
+      "vitest/globals"
     ],
     "useDefineForClassFields": true
   },

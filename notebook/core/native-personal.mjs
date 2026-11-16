@@ -23,6 +23,7 @@ import {visibleRows} from './visibility.mjs';
 import {currentHealth,isAutomaticHealthColumn} from './health-inputs.mjs';
 import {QueryService} from './query.mjs';
 import {loadSettings as headacheSettings,saveSettings as saveHeadache} from '../../third-party/addons/godspeed-headache/lib/settings.mjs';
+import {NOTEBOOK_DAILY_ROWS_MAX_BYTES} from '../../third-party/addons/godspeed-headache/lib/notebook-daily-rows.mjs';
 import {loadSettings as charmSettings,saveSettings as saveCharm} from '../../third-party/addons/godspeed-charm/lib/settings.mjs';
 const iso=()=>new Date().toISOString();
 // The Headaches tracker (D-321): the collection whose tracker card names the headache specialist,
@@ -98,7 +99,16 @@ export function addonInvocation(store,{addon,args},{judge=false}={}){
  fs.mkdirSync(path.join(store.root,'observations'),{recursive:true});
  if(!fs.existsSync(path.join(store.root,'AGENTS.md')))atomic(path.join(store.root,'AGENTS.md'),'# Personal workspace\n\nKeep durable state in user files. Outward actions require exact approval.\n');
  const script=fileURLToPath(new URL('../../third-party/addons/godspeed-'+addon+'/bin/godspeed-'+addon+'.mjs',import.meta.url));
- return {command:process.execPath,argv:[script,...args,'--godspeed',store.root,'--json'],cwd:store.root,env:{...process.env,GODSPEED_COACH_APP:path.join(store.state,'coach-app'),GODSPEED_JOURNAL_APP:path.join(store.state,'journal-app'),GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off',GODSPEED_HEADACHE_GIT_SYNC:'off'}};
+ const env={...process.env,GODSPEED_COACH_APP:path.join(store.state,'coach-app'),GODSPEED_JOURNAL_APP:path.join(store.state,'journal-app'),GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off',GODSPEED_HEADACHE_GIT_SYNC:'off'};delete env.GODSPEED_HEADACHE_DAILY_ROWS;delete env.GODSPEED_HEADACHE_DAILY_TABLE_REQUIRED;
+ if(addon==='headache'&&args[0]==='patterns'&&settings.daily_table&&fs.existsSync(settings.daily_table))env.GODSPEED_HEADACHE_DAILY_TABLE_REQUIRED='1';
+ if(addon==='headache'&&args[0]==='patterns'&&!(settings.daily_table&&fs.existsSync(settings.daily_table))){
+  const at=args.indexOf('--days'),requested=at===-1?90:Number(args[at+1]),days=Number.isFinite(requested)&&requested>0?requested:90;
+  const health=currentHealth(new QueryService(store),{now:Date.now(),days}),rows=[];
+  const wanted=new Set(settings.daily_columns||[]);
+  for(const day of health.days){const row={date:day.date};for(const [metric,column] of Object.entries(day.columns)){const name=metric.replaceAll(' ','_');if(wanted.has(name)&&isAutomaticHealthColumn(column))row[name]=column.value;}if(Object.keys(row).length>1)rows.push(row);}
+  const text=JSON.stringify(rows);if(Buffer.byteLength(text)>NOTEBOOK_DAILY_ROWS_MAX_BYTES)throw Error('The headache comparison has too much daily health data for this command. Choose fewer daily columns or fewer days.');env.GODSPEED_HEADACHE_DAILY_ROWS=text;
+ }
+ return {command:process.execPath,argv:[script,...args,'--godspeed',store.root,'--json'],cwd:store.root,env};
 }
 export function addonCommand(store,{addon,args}){
  const {command,argv,cwd,env}=addonInvocation(store,{addon,args});

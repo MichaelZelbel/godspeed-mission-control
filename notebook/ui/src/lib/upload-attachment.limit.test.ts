@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { MEDIA_UPLOAD_MAX_BYTES, MEDIA_UPLOAD_MAX_MB } from "../../../shared/media-limits.mjs";
+import { MEDIA_CARRY_MAX_BYTES, MEDIA_UPLOAD_MAX_BYTES, MEDIA_UPLOAD_MAX_MB } from "../../../shared/media-limits.mjs";
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: {} }));
 import { validateFile } from "./upload-attachment";
@@ -13,9 +13,9 @@ import { validateFile } from "./upload-attachment";
 const sized = (size: number, type = "video/mp4") => ({ size, type, name: "clip.mp4" }) as File;
 
 describe("the note editor's attachment limit", () => {
-  it("is well above the 50 MB a file needs to be kept on one computer only", () => {
-    expect(MEDIA_UPLOAD_MAX_BYTES).toBeGreaterThan(50 * 1024 * 1024);
-    expect(validateFile(sized(60 * 1024 * 1024))).toBeNull();
+  it("is above the shared limit at which a file is kept on one computer only", () => {
+    expect(MEDIA_UPLOAD_MAX_BYTES).toBeGreaterThan(MEDIA_CARRY_MAX_BYTES);
+    expect(validateFile(sized(MEDIA_CARRY_MAX_BYTES + 1))).toBeNull();
   });
 
   it("takes a file of exactly the limit and tells a person what to do with a larger file", () => {

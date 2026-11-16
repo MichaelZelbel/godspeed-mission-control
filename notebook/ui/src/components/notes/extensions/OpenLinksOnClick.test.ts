@@ -12,7 +12,7 @@ import { OpenLinksOnClick, openLinkOnClick } from "./OpenLinksOnClick";
 // jsdom's own address is http://localhost:3000, so that is "the notebook's own address" here.
 let editor: Editor | null = null;
 let navigate: ReturnType<typeof vi.fn<(path: string) => void>>;
-let open: ReturnType<typeof vi.fn<(url?: string | URL, target?: string, features?: string) => Window | null>>;
+let open: ReturnType<typeof vi.fn>;
 
 function mount(html: string, editable = true) {
   const element = document.createElement("div");

@@ -37,7 +37,7 @@ test('the command files a quoted notebook fact once through its model-command bo
  const root=workspace(t),log=path.join(root,'model.log'),row={id:'hamburg',at:'2026-11-01T12:00:00Z',text:'I moved to Hamburg on 1 November'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);archive(root,[row]);
  const store=new Store(root),query=new QueryService(store),domains=new Domains(query);domains.writeFact({label:'Home city',value:'Kiel',valid_from:'2026-01-01'});
  const env={FIXTURE_MEMORY_MODEL_LOG:log,FIXTURE_MEMORY_MODEL_RESPONSE:response(fact(row.id,row.text))};const first=await run(root,{env});assert.equal(first.completed,1);
- const facts=new QueryService(new Store(root)).rows('claims').filter(item=>item.attribute==='lives-in');assert.equal(facts.find(item=>item.value==='Kiel').valid_to,'2026-11-01');assert.equal(facts.find(item=>item.value==='Hamburg').evidence_quote,row.text);
+ const facts=new QueryService(new Store(root)).rows('claims').filter(item=>item.attribute==='lives-in');assert.equal(facts.find(item=>item.value==='Kiel').valid_to,null);assert.equal(facts.find(item=>item.value==='Hamburg').evidence_quote,row.text);
  await run(root,{env});assert.equal(fs.readFileSync(log,'utf8').trim().split('\n').length,1,'the archive command receives a consumed row only once');
 });
 
@@ -181,13 +181,13 @@ test('malformed successful deadline state stops before a model request or cursor
  }
 });
 
-test('the command closes an older world home city without a notebook and keeps its words',async t=>{
+test('the command preserves an older unmarked world home city without a notebook and keeps its words',async t=>{
  const root=workspace(t),row={id:'hamburg',at:'2026-11-01T12:00:00Z',text:'I moved to Hamburg on 1 November'},claims=path.join(root,'world','claims');fs.mkdirSync(claims,{recursive:true});
  fs.writeFileSync(path.join(claims,'me--lives-in--2026-01-01.md'),'---\nsubject: me\nattribute: lives-in\nvalue: "Kiel"\nvalid_from: 2026-01-01\nmenerio_id: 12345\n# kept\nnotes:\n  - a\n---\nI live in Kiel.\n');archive(root,[row]);
  const result=await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(fact(row.id,row.text))}});assert.equal(result.completed,1);
  const files=fs.readdirSync(claims).map(name=>fs.readFileSync(path.join(claims,name),'utf8'));assert.equal(files.length,2);
  const kiel=files.find(text=>/Kiel/.test(text)),hamburg=files.find(text=>/Hamburg/.test(text));
- assert.match(kiel,/valid_to: 2026-11-01/);assert.match(kiel,/I live in Kiel\./);assert.match(kiel,/menerio_id: 12345\n# kept\nnotes:\n  - a\n/,'lines the routine does not own stay as written');assert.doesNotMatch(hamburg,/valid_to/);assert.match(hamburg,/I moved to Hamburg on 1 November/);
+ assert.doesNotMatch(kiel,/valid_to/);assert.match(kiel,/I live in Kiel\./);assert.match(kiel,/menerio_id: 12345\n# kept\nnotes:\n  - a\n/,'lines the routine does not own stay as written');assert.doesNotMatch(hamburg,/valid_to/);assert.match(hamburg,/I moved to Hamburg on 1 November/);
 });
 
 test('the command refuses a fact naming a redacted term the cited message does not contain',async t=>{
