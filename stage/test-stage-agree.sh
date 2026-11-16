@@ -274,6 +274,39 @@ else
   bad "  the generated Hostinger manifest does not agree with the released stage image"
 fi
 
+# Exercise the release wrapper in an isolated checkout with a future stage image. This boundary
+# must read the stage file itself: checking only today's matching pair would let a fixed digest
+# pass until the next release.
+RELEASE_FIXTURE="$TMP/release"
+mkdir -p "$RELEASE_FIXTURE/stage" "$RELEASE_FIXTURE/docker/hostinger/installer"
+cp stage/stage.mjs stage/update-hostinger-manifest.sh "$RELEASE_FIXTURE/stage/"
+cp stage.schema.json "$RELEASE_FIXTURE/stage.schema.json"
+cp docker/hostinger/installer/public-compose.mjs docker/hostinger/installer/compose.mjs \
+  "$RELEASE_FIXTURE/docker/hostinger/installer/"
+cp docker/hostinger/one-click.yaml "$RELEASE_FIXTURE/docker/hostinger/one-click.yaml"
+FUTURE_IMAGE="ghcr.io/michaelzelbel/godspeed-mission-control@sha256:$(printf '1%.0s' {1..64})"
+sed "s|$IMAGE|$FUTURE_IMAGE|" stage.json > "$RELEASE_FIXTURE/stage.json"
+if (cd "$RELEASE_FIXTURE" && sh stage/update-hostinger-manifest.sh --check >/dev/null 2>&1); then
+  bad "  the release wrapper rejects a stale manifest for a changed valid stage image"
+else
+  ok "  the release wrapper rejects a stale manifest for a changed valid stage image"
+fi
+if (cd "$RELEASE_FIXTURE" && sh stage/update-hostinger-manifest.sh); then
+  ok "  the release wrapper writes a manifest for a changed valid stage image"
+else
+  bad "  the release wrapper writes a manifest for a changed valid stage image"
+fi
+if grep -qF -- "image: $FUTURE_IMAGE" "$RELEASE_FIXTURE/docker/hostinger/one-click.yaml"; then
+  ok "  the release wrapper wrote the changed stage image"
+else
+  bad "  the release wrapper did not write the changed stage image"
+fi
+if (cd "$RELEASE_FIXTURE" && sh stage/update-hostinger-manifest.sh --check); then
+  ok "  the release wrapper accepts the manifest it wrote from the changed stage image"
+else
+  bad "  the release wrapper rejects the manifest it wrote from the changed stage image"
+fi
+
 printf '%s\n' "  against docs/full-version/release-beta6-2026-10-24.md, the record this stage was read from:"
 compare "version" "$VERSION" "$RECORD"
 compare "product commit" "$PRODUCT" "$RECORD"
