@@ -181,8 +181,7 @@ const commands = {
     out(eps.map((e) => describe(e, tz, at)).join("\n") || `No headache tracked in the last ${days} days.`, eps);
   },
   patterns() {
-    if (process.env.GODSPEED_HEADACHE_DAILY_TABLE_REQUIRED === "1" && (!s.daily_table || !fs.existsSync(s.daily_table))) die("The configured daily table disappeared before the headache comparison could read it. Try again after restoring the file.");
-    const r = patterns(log(), s, at, { days: Number(f.days || 90), dailyRows: notebookDailyRows(process.env.GODSPEED_HEADACHE_DAILY_ROWS) });
+    const r = patterns(log(), s, at, { days: Number(f.days || 90), dailyRows: notebookDailyRows(process.env.GODSPEED_HEADACHE_DAILY_ROWS), requiredDailyTable: process.env.GODSPEED_HEADACHE_DAILY_TABLE_REQUIRED === "1" });
     out(renderPatterns(r), r);
   },
   daily() {

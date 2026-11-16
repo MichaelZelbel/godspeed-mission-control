@@ -116,6 +116,10 @@ test("the pattern report compares headache days with a daily table only when the
   assert.deepEqual(memory.compare, r.compare);
   const preferred = patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ, daily_table: csv, daily_columns: ["sleep_total_h"] }, new Date("2026-09-20T12:00:00Z"), { days: 30, dailyRows: rows.map((row) => ({ ...row, sleep_total_h: 99 })) });
   assert.deepEqual(preferred.compare, r.compare,'the configured CSV remains authoritative');
+  fs.unlinkSync(csv);
+  assert.throws(() => patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ, daily_table: csv, daily_columns: ["sleep_total_h"] }, new Date("2026-09-20T12:00:00Z"), { days: 30, requiredDailyTable: true }), /configured daily table disappeared/, "the final source reader rejects a selected table that is gone");
+  const fallback = patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ, daily_table: csv, daily_columns: ["sleep_total_h"] }, new Date("2026-09-20T12:00:00Z"), { days: 30, dailyRows: rows });
+  assert.deepEqual(fallback.compare, r.compare, "an already-missing configured CSV still permits notebook rows");
   const none = patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ }, NOW, { days: 30 });
   assert.equal(none.compare, null);
 });

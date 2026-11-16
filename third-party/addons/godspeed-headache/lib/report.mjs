@@ -68,7 +68,7 @@ function readCsv(file) {
   return lines.map((l) => Object.fromEntries(l.split(",").map((v, i) => [head[i], v])));
 }
 
-export function patterns(log, s, now, { days = 90, dailyRows } = {}) {
+export function patterns(log, s, now, { days = 90, dailyRows, requiredDailyTable = false } = {}) {
   const tz = s.timezone;
   const to = localParts(now, tz).date;
   const from = addDays(to, -(days - 1));
@@ -111,15 +111,23 @@ export function patterns(log, s, now, { days = 90, dailyRows } = {}) {
     meds: count(eps.flatMap((e) => e.meds.map((m) => m.med)).concat(log.loose.filter((m) => dayOf(m.taken, tz) >= from).map((m) => m.med))),
     compare: null,
   };
-  r.compare = compareWithTable(s, headacheDays, from, to, 5, dailyRows);
+  r.compare = compareWithTable(s, headacheDays, from, to, 5, dailyRows, requiredDailyTable);
   return r;
 }
 
 // Headache days against headache-free days, column by column, from the person's daily health
 // table when they have one. Only printed once both sides have enough days to mean anything.
-export function compareWithTable(s, headacheDays, from, to, minDays = 5, dailyRows) {
+export function compareWithTable(s, headacheDays, from, to, minDays = 5, dailyRows, requiredDailyTable = false) {
   if (!s.daily_columns?.length) return null;
-  const source = s.daily_table && fs.existsSync(s.daily_table) ? readCsv(s.daily_table) : dailyRows;
+  let source = dailyRows;
+  if (s.daily_table) {
+    try {
+      source = readCsv(s.daily_table);
+    } catch (error) {
+      if (requiredDailyTable) throw new Error("The configured daily table disappeared before the headache comparison could read it. Try again after restoring the file.", { cause: error });
+      if (error?.code !== "ENOENT") throw error;
+    }
+  }
   if (!Array.isArray(source)) return null;
   const rows = source.filter((r) => r && typeof r === "object" && typeof r.date === "string" && r.date >= from && r.date <= to);
   const hd = new Set(headacheDays);
