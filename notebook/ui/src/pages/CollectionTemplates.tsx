@@ -217,7 +217,7 @@ function ConfirmCreateDialog({ template, open, onOpenChange }: { template: Templ
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" disabled={isCreating} onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="button" disabled={!name.trim() || isCreating} onClick={create}>Create</Button>
+          <Button type="button" disabled={isCreating} onClick={create}>Create</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
