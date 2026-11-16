@@ -17,6 +17,8 @@ test('the maintained route accepts browser-runner Chrome executable variables',(
   assert.match(source,/waitVisible/);
   assert.match(source,/l\.querySelector\('input,select,textarea'\)/);
   assert.match(source,/fill\('Start Date',new Date\(\)\.toISOString\(\)\.slice\(0,10\)\)/);
+  assert.match(source,/button\[role="combobox"\]\[aria-label="People"\]/);
+  assert.match(source,/chooseNewPerson\('No AI Fixture Person'\)|false,'No AI Fixture Person'/);
 });
 
 test('a fixture bind failure stops the browser it started',async()=>{
