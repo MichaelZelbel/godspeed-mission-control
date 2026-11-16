@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { IMAGE, CADDY } from './compose.mjs';
+import { CADDY } from './compose.mjs';
 
 export const REGISTRATION_ENDPOINT = 'https://godspeedmissioncontrol.com/godspeed-install/api/servers/register';
 
@@ -13,7 +13,10 @@ export function registrationCode({ endpoint = REGISTRATION_ENDPOINT, hostnameFil
   return `const fs=require('fs');let h=fs.readFileSync(${JSON.stringify(hostnameFile)},'utf8').trim();if(/^srv[0-9]+$/.test(h))h+='.hstgr.cloud';if(!/^srv[0-9]+\\.hstgr\\.cloud$/.test(h))throw Error('Hostinger server address could not be detected');const setup=process.env.GODSPEED_ACCESS_TOKEN;if(!/^[a-f0-9]{64}$/.test(setup||''))throw Error('Private setup code could not be loaded');async function register(){let failures=0;for(;;){let renewed=false;try{const r=await fetch('http://127.0.0.1:47831/health',{redirect:'error',signal:AbortSignal.timeout(3000)});if(r.ok){const auth=await fetch('http://127.0.0.1:47831/api/auth/status',{redirect:'error',signal:AbortSignal.timeout(3000)});if(auth.ok){const state=await auth.json();if(state.configured===true)return;if(state.configured===false){const registered=await fetch(${JSON.stringify(url.href)},{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({hostname:h,setup}),redirect:'error',signal:AbortSignal.timeout(10000)});renewed=registered.status===202;}}}}catch{}if(renewed)failures=0;else failures++;const delay=renewed?1200000:Math.min(300000,5000*2**Math.min(failures-1,6));await new Promise(r=>setTimeout(r,delay));}}register();`;
 }
 
-export function publicCompose() {
+export function publicCompose(image) {
+  if (!/^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$/.test(image || '')) {
+    throw new Error('Public Hostinger image must be an immutable image digest');
+  }
   const setupFile = '/opt/data/full-candidate/.install-setup-code';
   const setup = `if [ ! -s ${setupFile} ]; then (umask 077; node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("hex"))' > ${setupFile}); fi; GODSPEED_ACCESS_TOKEN=$$(cat ${setupFile}); export GODSPEED_ACCESS_TOKEN; `;
   const startup = `${setup}node -e ${shellQuote(registrationCode())} & exec /opt/godspeed/kit/docker/full-candidate/entrypoint.sh`;
@@ -27,7 +30,7 @@ export function publicCompose() {
 name: godspeed-mission-control
 services:
   godspeed:
-    image: ${IMAGE}
+    image: ${image}
     restart: unless-stopped
     init: true
     environment:
@@ -76,8 +79,18 @@ volumes:
 function shellQuote(value) { return "'" + value.replace(/'/g, "'\\''") + "'"; }
 
 if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
-  const file = new URL('../one-click.yaml', import.meta.url), expected = publicCompose();
-  if (process.argv.includes('--check')) {
-    if (fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n') !== expected) { console.error('Public Hostinger manifest needs regeneration.'); process.exitCode = 1; }
-  } else fs.writeFileSync(file, expected);
+  const usage = 'usage: node docker/hostinger/installer/public-compose.mjs <released image> [--check]';
+  const args = process.argv.slice(2);
+  if ((args.length !== 1 && args.length !== 2) || (args.length === 2 && args[1] !== '--check')) {
+    console.error(usage);
+    process.exitCode = 2;
+  } else {
+    let expected;
+    try { expected = publicCompose(args[0]); }
+    catch { console.error(usage); process.exitCode = 2; }
+    const file = new URL('../one-click.yaml', import.meta.url);
+    if (expected && args[1] === '--check') {
+      if (fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n') !== expected) { console.error('Public Hostinger manifest needs regeneration.'); process.exitCode = 1; }
+    } else if (expected) fs.writeFileSync(file, expected);
+  }
 }

@@ -39,6 +39,15 @@ sh   stage/stage.sh   stage.json get serverEditions.server.image
 sh   stage/stage.sh   withdrawn installed-stage.json public-stage.json
 ```
 
+The release step regenerates the public Hostinger manifest after freezing `stage.json`:
+
+```sh
+sh stage/update-hostinger-manifest.sh
+```
+
+After promoting that exact commit to `beta`, it runs
+`sh stage/update-hostinger-manifest.sh --check`. A mismatch stops release completion.
+
 `check` reads and checks a file and prints nothing, `fields` names everything it can read,
 `get` prints one of them, `json` prints the whole checked file, and `withdrawn` answers
 `yes` or `no` for a version, saying yes when either the stage being installed or the public
