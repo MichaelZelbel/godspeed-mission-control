@@ -49,8 +49,8 @@ it('a connected AI keeps its model and effort choices',async()=>{
 });
 
 it.each([
- ['refused','AI key or sign-in refused'],
- ['unreachable','AI connection unavailable'],
+ ['refused','Your AI key or sign-in was refused'],
+ ['unreachable','Your AI could not be reached'],
 ] as const)('an unusable AI marked %s does not present its model or effort as active',async(availability,label)=>{
  answer({connected:true,usable:false,availability,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]});
  show();
@@ -65,8 +65,8 @@ it.each([
  ['collection chat at 1280 px','No AI connected',{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
  ['collection chat at 1280 px','claude-sonnet-4-5-20250929',{connected:true,current:'claude-sonnet-4-5-20250929',models:[{id:'claude-sonnet-4-5-20250929',efforts:[]}]}],
  ['collection chat at 1280 px','Model choices unavailable',null],
- ['full chat at 1280 px','Model: AI connection unavailable',{connected:true,usable:false,availability:'unreachable',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
- ['pop-out chat at 720 px','Model: AI key or sign-in refused',{connected:true,usable:false,availability:'refused',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
+ ['full chat at 1280 px','Model: Your AI could not be reached',{connected:true,usable:false,availability:'unreachable',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
+ ['pop-out chat at 720 px','Model: Your AI key or sign-in was refused',{connected:true,usable:false,availability:'refused',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
  ['floating chat at 375 px','No AI connected',{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
  ['floating chat at 375 px','claude-sonnet-4-5-20250929',{connected:true,current:'claude-sonnet-4-5-20250929',models:[{id:'claude-sonnet-4-5-20250929',efforts:[]}]}],
  ['floating chat at 375 px','Model choices unavailable',null],
