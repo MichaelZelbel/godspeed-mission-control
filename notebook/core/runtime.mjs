@@ -188,9 +188,10 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
       await new Promise((resolve,reject)=>{const timer=setTimeout(resolve,retryWaits[attempt]);signal?.addEventListener('abort',()=>{clearTimeout(timer);reject(signal.reason);},{once:true});});
     }
     if(!response.ok){healthFailure=[401,403].includes(response.status)?'refused':'unreachable';let reason='';try{const body=await response.json();reason=String(body?.error?.message||body?.message||'').replace(/\s+/g,' ').slice(0,200);}catch{}throw new Error('Model provider failed with HTTP '+response.status+(reason?': '+reason:''));}
-    healthFailure='unreachable';
-    const result=await response.json(), text=result.choices?.[0]?.message?.content;if(typeof text!=='string')throw new Error('Model provider returned no text');
-    return text;
+    try{
+      const result=await response.json(), text=result.choices?.[0]?.message?.content;if(typeof text!=='string')throw new Error('Model provider returned no text');
+      healthFailure='unreachable';return text;
+    }catch(error){healthFailure='unreachable';throw error;}
   };
   // Keep the configured identity available to the picker. Checking uses the same
   // request path as chat, so a refused key or unreachable address cannot look ready.

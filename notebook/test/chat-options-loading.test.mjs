@@ -78,19 +78,20 @@ test('overlapping option requests wait for the same failing health check',async 
  for(const result of [firstResult,secondResult]){assert.equal(result.usable,false);assert.equal(result.availability,'unreachable');}
  assert.equal(checks,2,'overlapping requests share one health check');
 });
-test('a pending model request preserves the last completed refusal in cached options',async t=>{
+test('a pending model response body preserves the last completed refusal in cached options',async t=>{
  let calls=0,releasePending,requestArrived;const arrived=new Promise(resolve=>{requestArrived=resolve;});
  const endpoint=http.createServer(async(req,res)=>{
-  for await(const chunk of req);calls++;res.setHeader('Content-Type','application/json');res.statusCode=401;
-  if(calls===2){requestArrived();await new Promise(resolve=>{releasePending=resolve;});}
-  res.end(JSON.stringify({error:{message:'invalid fictional key'}}));
+  for await(const chunk of req);calls++;res.setHeader('Content-Type','application/json');
+  if(calls===1){res.statusCode=401;return res.end(JSON.stringify({error:{message:'invalid fictional key'}}));}
+  res.write('{"choices":[{"message":{"content":"Connected');res.flushHeaders();requestArrived();
+  await new Promise(resolve=>{releasePending=resolve;});res.end('."}}]}');
  });
  await new Promise(resolve=>endpoint.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>endpoint.close(resolve)));
  const provider=modelProvider({url:'http://127.0.0.1:'+endpoint.address().port,key:'fictional-key',model:'fictional-model',retryWaits:[]});
  const {options,readOptions}=await optionsFrom(t,provider);assert.equal(options.availability,'refused');
  const pending=provider({kind:'conversation-chat'});await arrived;
  const cached=await readOptions();assert.equal(cached.availability,'refused');
- releasePending();await assert.rejects(pending,/HTTP 401/);
+ releasePending();assert.equal(await pending,'Connected.');assert.equal(provider.health(),'unreachable');
 });
 test('a refused chat returns plain guidance instead of provider diagnostics',async t=>{
  const provider=async()=>{throw Error('Model provider failed with HTTP 401: secret provider detail');};
