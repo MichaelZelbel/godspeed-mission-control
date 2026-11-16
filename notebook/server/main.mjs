@@ -76,6 +76,7 @@ import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
 import {MEDIA_CARRY_MAX_MB,MEDIA_PRESENCE_BATCH_SIZE,MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
 import {chatAvailability} from '../core/chat-availability.mjs';
+import {NO_AI_STATUS} from '../core/no-ai.mjs';
 
 // A backup AI is another service than the main AI, in Settings and in /backupai alike: when one
 // service fails, its other models and keys usually fail with it, and Hermes counts the same service
@@ -694,7 +695,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       // With no AI connected (the same test as runtimeConfigured in /api/status), the picker says so instead of naming a "Connected model" (#563).
       if(route==='/api/chat/options'&&req.method==='GET'){
-        if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,availability:chatAvailability('none'),current:'No AI connected',models:[{id:'',efforts:[]}]});
+        if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,availability:chatAvailability('none'),current:NO_AI_STATUS,models:[{id:'',efforts:[]}]});
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
         if(provider?.check&&(chatAICheck||Date.now()-chatAICheckedAt>=5000)){
           if(!chatAICheck){chatAICheckedAt=Date.now();chatAICheck=provider.check().then(()=>{chatAIUsable=true;},error=>{chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}).finally(()=>{chatAICheck=null;});}

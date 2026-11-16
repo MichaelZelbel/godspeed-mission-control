@@ -36,7 +36,7 @@ it('refreshes an open chat in the background when AI availability changes',async
   let options={connected:false,usable:false};
   vi.stubGlobal('fetch',vi.fn(async()=>response(options)));
   wrap(<ChatConnectionEmptyState ready={<div>Ready to chat</div>}/>);
-  await vi.waitFor(()=>expect(screen.getByText('No AI connected')).toBeInTheDocument());
+  await vi.waitFor(()=>expect(screen.getByText('No AI is connected yet')).toBeInTheDocument());
 
   options={connected:true,usable:true};
   await act(()=>vi.advanceTimersByTimeAsync(5000));
@@ -50,7 +50,7 @@ it('refreshes an open chat in the background when AI availability changes',async
 for(const [name,show] of surfaces){
   it(`${name} shows setup guidance with no AI`,async()=>{
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}):response({data:[]})));
-    show();expect(await screen.findByText('No AI connected')).toBeInTheDocument();expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
+    show();expect(await screen.findByText('No AI is connected yet')).toBeInTheDocument();expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
   });
   it(`${name} explains when the configured AI refuses its key or sign-in`,async()=>{
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:true,usable:false,availability:'refused',current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}):response({data:[]})));
@@ -62,6 +62,6 @@ for(const [name,show] of surfaces){
   });
   it(`${name} retains its ready empty state with usable AI`,async()=>{
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}):response({data:[]})));
-    show();expect(await screen.findByTestId('composer')).toBeInTheDocument();expect(screen.queryByText('Your AI could not be reached')).not.toBeInTheDocument();expect(screen.queryByText('No AI connected')).not.toBeInTheDocument();
+    show();expect(await screen.findByTestId('composer')).toBeInTheDocument();expect(screen.queryByText('Your AI could not be reached')).not.toBeInTheDocument();expect(screen.queryByText('No AI is connected yet')).not.toBeInTheDocument();
   });
 }

@@ -4,6 +4,7 @@ import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
 import {loadChatOptions} from '@/local/chat-options.mjs';
 import type {ChatAvailability} from './ChatConnectionEmptyState';
+import {NO_AI_STATUS} from '../../../../core/no-ai.mjs';
 
 export type ChatFile={path:string;name:string;type:string;text?:string};
 type Props={value:string;onChange:(text:string)=>void;onSend:()=>void;onStop:()=>void;busy:boolean;files:ChatFile[];onFiles:(files:ChatFile[])=>void;model:string;effort:string;onModel:(v:string)=>void;onEffort:(v:string)=>void;reply:string;context?:string;compact?:boolean;onError:(message:string)=>void};
@@ -21,7 +22,7 @@ export default function ChatComposer(p:Props){
   },[modelAttempt]);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;clearTimeout(recordingTimer.current);audioRequest.current?.abort();if(recorder.current?.state==='recording')recorder.current.stop();recorder.current?.stream.getTracks().forEach(t=>t.stop());window.speechSynthesis?.cancel();};},[]);
   const noAI=options.connected===false,unusable=options.usable===false,efforts=noAI||unusable?[]:options.models.find(m=>m.id===p.model)?.efforts||[];
-  const unavailableLabel=noAI?'No AI connected':options.availability==='refused'?'Your AI key or sign-in was refused':'Your AI could not be reached';
+  const unavailableLabel=noAI?NO_AI_STATUS:options.availability==='refused'?'Your AI key or sign-in was refused':'Your AI could not be reached';
   const unavailableModelLabel='Model: '+unavailableLabel,unavailableEffortLabel='Effort: '+unavailableLabel;
   const addFiles=async(list:FileList|File[])=>{
     const files=Array.from(list);if(p.files.length+files.length>10){p.onError('Attach up to 10 files per message');return;}
@@ -69,7 +70,7 @@ export default function ChatComposer(p:Props){
     <div className="flex flex-nowrap items-center gap-1 px-2 pb-2" data-chat-toolbar data-chat-unavailable={unusable||undefined}>
       <input ref={picker} type="file" multiple className="hidden" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.txt,.md,.csv,.json,.log,.xml,.html,.yaml,.yml" aria-label="Choose attachments" onChange={e=>{if(e.target.files)void addFiles(e.target.files);}}/>
       <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" data-chat-attachment aria-label="Add files" title="Add images, PDFs, or text files" disabled={p.busy||uploading} onClick={()=>picker.current?.click()}>{uploading?<Loader2 className="h-5 w-5 animate-spin"/>:<Plus className="h-5 w-5"/>}</Button>
-      <select aria-label="Model" title={unusable?unavailableModelLabel:p.model} data-chat-model className="h-11 flex-1 basis-0 rounded-md bg-transparent text-xs px-1 min-w-0 max-w-40 focus-visible:outline focus-visible:outline-primary" disabled={p.busy||noAI||unusable||!options.models.length} value={unusable?'':p.model} onChange={e=>{p.onModel(e.target.value);p.onEffort('');}}>{unusable?<option value="">{unavailableModelLabel}</option>:!options.models.length&&<option value="">{modelError?'Model choices unavailable':'Loading models...'}</option>}{!unusable&&options.models.map(m=><option key={m.id} value={m.id}>{noAI?'No AI connected':m.id||options.label||'Connected model'}</option>)}</select>
+      <select aria-label="Model" title={unusable?unavailableModelLabel:p.model} data-chat-model className="h-11 flex-1 basis-0 rounded-md bg-transparent text-xs px-1 min-w-0 max-w-40 focus-visible:outline focus-visible:outline-primary" disabled={p.busy||noAI||unusable||!options.models.length} value={unusable?'':p.model} onChange={e=>{p.onModel(e.target.value);p.onEffort('');}}>{unusable?<option value="">{unavailableModelLabel}</option>:!options.models.length&&<option value="">{modelError?'Model choices unavailable':'Loading models...'}</option>}{!unusable&&options.models.map(m=><option key={m.id} value={m.id}>{noAI?NO_AI_STATUS:m.id||options.label||'Connected model'}</option>)}</select>
       <select aria-label="Reasoning effort" title={unusable?unavailableEffortLabel:p.effort||'Automatic effort'} data-chat-effort className="h-11 flex-1 basis-0 min-w-0 rounded-md bg-transparent text-xs px-1 max-w-24" value={unusable?'':p.effort} disabled={p.busy||unusable||!efforts.length} onChange={e=>p.onEffort(e.target.value)}><option value="">{unusable?unavailableEffortLabel:'Auto'}</option>{efforts.map(e=><option key={e} value={e}>{e==='none'?'None':e[0].toUpperCase()+e.slice(1)}</option>)}</select>
       <div className="flex shrink-0 items-center ml-auto" data-chat-actions>
         <Button variant="ghost" size="icon" className={'h-11 w-11 '+(listening?'text-red-500':'')} aria-pressed={listening} aria-label={transcribing?'Transcribing recording':listening?'Stop dictation':'Dictate message'} title={canRecord?'Dictate message':'Microphone access requires HTTPS or localhost'} disabled={!canRecord||p.busy||transcribing} onClick={()=>void dictate()}>{transcribing?<Loader2 className="h-4 w-4 animate-spin"/>:<Mic className="h-4 w-4"/>}</Button>

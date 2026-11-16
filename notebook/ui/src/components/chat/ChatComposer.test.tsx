@@ -20,15 +20,15 @@ afterEach(()=>{cleanup();vi.unstubAllGlobals();vi.useRealTimers();});
 it('refreshes an already-open composer when an AI is connected',async()=>{
  vi.useFakeTimers();let connected=false;
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(connected?{connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}:{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}),{headers:{'Content-Type':'application/json'}})));
- const props=show();await vi.waitFor(()=>expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('Model: No AI connected'));
+ const props=show();await vi.waitFor(()=>expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('Model: No AI is connected yet'));
  connected=true;await act(()=>vi.advanceTimersByTimeAsync(5000));
  expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('fictional-model');expect(props.onModel).toHaveBeenLastCalledWith('fictional-model');
 });
 
 it('with no AI connected the model picker says so and both pickers are off',async()=>{
- answer({connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]});show();
+ answer({connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]});show();
  const model=screen.getByRole('combobox',{name:'Model'});
- await waitFor(()=>expect(model).toHaveDisplayValue('No AI connected'));
+ await waitFor(()=>expect(model).toHaveDisplayValue('Model: No AI is connected yet'));
  expect(model).toBeDisabled();expect(screen.getByRole('combobox',{name:'Reasoning effort'})).toBeDisabled();
  expect(screen.queryByText('Connected model')).not.toBeInTheDocument();
 });
@@ -62,12 +62,12 @@ it.each([
 });
 
 it.each([
- ['collection chat at 1280 px','No AI connected',{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
+ ['collection chat at 1280 px','Model: No AI is connected yet',{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
  ['collection chat at 1280 px','claude-sonnet-4-5-20250929',{connected:true,current:'claude-sonnet-4-5-20250929',models:[{id:'claude-sonnet-4-5-20250929',efforts:[]}]}],
  ['collection chat at 1280 px','Model choices unavailable',null],
  ['full chat at 1280 px','Model: Your AI could not be reached',{connected:true,usable:false,availability:'unreachable',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
  ['pop-out chat at 720 px','Model: Your AI key or sign-in was refused',{connected:true,usable:false,availability:'refused',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
- ['floating chat at 375 px','No AI connected',{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
+ ['floating chat at 375 px','Model: No AI is connected yet',{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
  ['floating chat at 375 px','claude-sonnet-4-5-20250929',{connected:true,current:'claude-sonnet-4-5-20250929',models:[{id:'claude-sonnet-4-5-20250929',efforts:[]}]}],
  ['floating chat at 375 px','Model choices unavailable',null],
 ] as const)('%s leaves the complete current Model label readable in the narrow composer',async(_surface,label,state)=>{

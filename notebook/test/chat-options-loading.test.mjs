@@ -28,7 +28,7 @@ async function optionsFrom(t,provider){
 }
 test('with no AI connected the model choices say so rather than naming a connected model',async t=>{
  const {status,options}=await optionsFrom(t);
- assert.equal(status.aiConfigured,false);assert.equal(status.runtimeConfigured,false);assert.equal(options.connected,false);assert.equal(options.availability,'none');assert.equal(options.label,'No AI connected');assert.doesNotMatch(JSON.stringify(options),/Connected model/);
+ assert.equal(status.aiConfigured,false);assert.equal(status.runtimeConfigured,false);assert.equal(options.connected,false);assert.equal(options.availability,'none');assert.equal(options.label,'No AI is connected yet');assert.doesNotMatch(JSON.stringify(options),/Connected model/);
 });
 test('a connected AI keeps its own model choices',async t=>{
  let checks=0;const provider=Object.assign(async()=>({reply:'ok'}),{options:async()=>({current:'fictional-model',models:[{id:'fictional-model',efforts:['low','high']}]}),check:async()=>{checks++;}});

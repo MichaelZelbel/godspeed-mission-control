@@ -17,7 +17,7 @@ function show(options:unknown){
 describe.each(surfaces)('%s pre-composer state',surface=>{
   it('names no AI and routes to Settings, Your AI',async()=>{
     show({connected:false,usable:false});
-    expect(await screen.findByText('No AI connected')).toBeInTheDocument();
+    expect(await screen.findByText('No AI is connected yet')).toBeInTheDocument();
     expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
     expect(screen.queryByText('Ordinary ready state')).not.toBeInTheDocument();
   });
