@@ -86,7 +86,6 @@ run_installed_preparation() {
   }
   wait_for 90 "the installed Coaching talk preparation job to be listed" installed_preparation_is_listed ||
     fail "the installed routine list has no Coaching talk preparation job"
-  if [ "${TALK_PREP_SUPPORTED_FIXTURE:-}" = 1 ]; then write_installed_fixture_area; fi
   before=$("$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>String(x.id)===process.argv[2]);process.stdout.write(String(j?.last_run_at||"never"))' "$jobs" "$id")
   printf 'id=%s\nbefore=%s\n' "$id" "$before" >"$EVIDENCE/prep-run-before.txt"
   while [ "$attempt" -lt 18 ]; do
@@ -156,15 +155,6 @@ write_area() {
     printf 'SERVES: lower-ldl, sleep-better, visible-abs\n'
     printf 'LIMIT: never diagnose and never tell them to buy or book anything\n'
     printf '\n## Preparation\n\nRead the goals, the health data and the last talk, then prepare the talk.\n'
-  } >"$ROOT/coach/health/area.md"
-}
-
-write_installed_fixture_area() {
-  mkdir -p "$ROOT/coach/health"
-  {
-    printf 'AREA: health\nTITLE: Health route fixture\nRHYTHM: daily\nTIME: 19:00\nSTARTS: %s\nSTATUS: on\nSTYLE: compass\nTONE: gentle\n' "$(day_in -2)"
-    printf 'LIMIT: use only the fixture text and recommend no outward action\n'
-    printf '\n## Preparation\n\nPrepare a short check-in about keeping this maintained route working.\n'
   } >"$ROOT/coach/health/area.md"
 }
 
@@ -293,9 +283,7 @@ act() {
 
   phase 'a supported coaching-area fixture is prepared through installed Run now'
   write_area
-  TALK_PREP_SUPPORTED_FIXTURE=1
   run_installed_preparation
-  TALK_PREP_SUPPORTED_FIXTURE=
   phase 'a fixture person: one health area, three goals, three research domains'
   write_area
   add_research_domains
