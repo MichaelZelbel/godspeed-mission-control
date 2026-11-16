@@ -109,6 +109,7 @@ not a pattern. A difference between headache days and free days is a difference,
 
 ## Settings
 
-`godspeed-headache config show`. `daily_table` and `daily_columns` let the pattern report compare
-headache days with a daily health table (sleep, steps, food) when mission control has one;
+`godspeed-headache config show`. `daily_columns` lets the notebook compare headache days with
+complete phone-health days (sleep, steps, food) without a separate table. A usable `daily_table`
+CSV is an optional override and takes priority;
 `overuse_days` is the painkiller limit (10 fits combination painkillers, 15 plain ones).
