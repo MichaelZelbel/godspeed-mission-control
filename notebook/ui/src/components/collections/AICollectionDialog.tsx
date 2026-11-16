@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { Json } from "@/integrations/supabase/types";
 import { BRAND } from "@/lib/brand";
+import { collectionNameSchema } from "@/lib/collection-name";
 
 type FieldType =
   | "text"
@@ -223,6 +224,7 @@ export function AICollectionDialog({ open, onOpenChange, onCreated }: { open: bo
   const [editingInstructions, setEditingInstructions] = useState(false);
   const [refinement, setRefinement] = useState("");
   const [dirtyGenerated, setDirtyGenerated] = useState(false);
+  const [nameError, setNameError] = useState("");
 
   useEffect(() => {
     if (!open || stage !== "input" || description.trim()) return;
@@ -250,6 +252,7 @@ export function AICollectionDialog({ open, onOpenChange, onCreated }: { open: bo
       });
       if (error || !data) throw error ?? new Error("No schema returned");
       setGenerated(normalizeGenerated(data));
+      setNameError("");
       setStage("preview");
       setDirtyGenerated(true);
     } catch (error) {
@@ -271,6 +274,7 @@ export function AICollectionDialog({ open, onOpenChange, onCreated }: { open: bo
     setEditingInstructions(false);
     setRefinement("");
     setDirtyGenerated(false);
+    setNameError("");
   };
 
   const close = (next: boolean) => {
@@ -316,6 +320,11 @@ export function AICollectionDialog({ open, onOpenChange, onCreated }: { open: bo
 
   const saveCollection = async () => {
     if (!user || !generated || generated.field_schema.length === 0) return;
+    const parsedName = collectionNameSchema.safeParse(generated.collection.name);
+    if (!parsedName.success) {
+      setNameError(parsedName.error.issues[0]?.message ?? "Invalid name");
+      return;
+    }
     if (generated.field_schema.filter((field) => field.primary).length !== 1) {
       toast.error("Choose exactly one primary field");
       return;
@@ -325,7 +334,7 @@ export function AICollectionDialog({ open, onOpenChange, onCreated }: { open: bo
       .from("collections")
       .insert({
         user_id: user.id,
-        name: generated.collection.name.trim(),
+        name: parsedName.data,
         slug: slugify(generated.collection.name),
         icon: generated.collection.icon || null,
         description: generated.collection.description || null,
@@ -397,7 +406,19 @@ export function AICollectionDialog({ open, onOpenChange, onCreated }: { open: bo
                 <CardContent className="space-y-3 p-4">
                   <div className="grid gap-3 sm:grid-cols-[4rem_1fr]">
                     <Input aria-label="Collection icon" value={generated.collection.icon} maxLength={4} onChange={(event) => updateGenerated((current) => ({ ...current, collection: { ...current.collection, icon: event.target.value } }))} />
-                    <Input value={generated.collection.name} onChange={(event) => updateGenerated((current) => ({ ...current, collection: { ...current.collection, name: event.target.value } }))} />
+                    <div>
+                      <Input
+                        aria-label="Collection name"
+                        aria-invalid={Boolean(nameError)}
+                        aria-describedby={nameError ? "ai-collection-name-error" : undefined}
+                        value={generated.collection.name}
+                        onChange={(event) => {
+                          setNameError("");
+                          updateGenerated((current) => ({ ...current, collection: { ...current.collection, name: event.target.value } }));
+                        }}
+                      />
+                      {nameError && <p id="ai-collection-name-error" className="mt-1 text-xs text-destructive">{nameError}</p>}
+                    </div>
                   </div>
                   <Textarea value={generated.collection.description} onChange={(event) => updateGenerated((current) => ({ ...current, collection: { ...current.collection, description: event.target.value } }))} />
                 </CardContent>
