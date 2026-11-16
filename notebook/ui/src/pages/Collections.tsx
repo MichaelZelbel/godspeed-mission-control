@@ -25,6 +25,7 @@ import { LoadErrorState } from "@/components/collections/LoadErrorState";
 import { charmShelf, habitShelf, lastEntryDays, shelve, talksLabel, type CharmListed } from "@/lib/tracker-shelf";
 import type { HabitProgress } from "@/lib/habit-progress";
 import { CharmCard } from "@/components/collections/CharmCard";
+import { collectionNameSchema } from "@/lib/collection-name";
 
 type Collection = Database["public"]["Tables"]["collections"]["Row"];
 // itemCount is null when the count could not be read: "0 items" would be a
@@ -34,7 +35,7 @@ type CollectionWithCount = Collection & { itemCount: number | null };
 const iconMap: Record<string, LucideIcon> = { LayoutGrid, Sparkles };
 const emojiOptions = ["📚", "🏠", "💼", "🎯", "🍳", "✏️", "🎨", "💡", "🔧", "🌱"];
 const collectionFormSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(60, "Name must be 60 characters or fewer"),
+  name: collectionNameSchema,
   icon: z.string().trim().refine((value) => !value || (/^\p{Emoji}/u.test(value) && Array.from(value.replace(/\uFE0F/g, "")).length === 1), "Use a single emoji"),
   description: z.string().trim().max(200, "Description must be 200 characters or fewer").optional(),
   visibility: z.enum(["private", "personal"]),

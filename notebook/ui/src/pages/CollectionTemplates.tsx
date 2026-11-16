@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { BRAND } from "@/lib/brand";
 import { LoadErrorState } from "@/components/collections/LoadErrorState";
+import { collectionNameSchema } from "@/lib/collection-name";
 
 type Template = Database["public"]["Tables"]["collection_templates"]["Row"];
 type FieldType =
@@ -146,21 +147,30 @@ function ConfirmCreateDialog({ template, open, onOpenChange }: { template: Templ
   const { user } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState("");
+  const [nameError, setNameError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
-    if (template && open) setName(template.name);
+    if (template && open) {
+      setName(template.name);
+      setNameError("");
+    }
   }, [open, template]);
 
   const create = async () => {
-    if (!user || !template || !name.trim()) return;
+    if (!user || !template) return;
+    const parsedName = collectionNameSchema.safeParse(name);
+    if (!parsedName.success) {
+      setNameError(parsedName.error.issues[0]?.message ?? "Invalid name");
+      return;
+    }
     setIsCreating(true);
-    const slug = slugify(name);
+    const slug = slugify(parsedName.data);
     const { data, error } = await supabase
       .from("collections")
       .insert({
         user_id: user.id,
-        name: name.trim(),
+        name: parsedName.data,
         slug,
         icon: template.icon,
         description: template.description,
@@ -190,7 +200,19 @@ function ConfirmCreateDialog({ template, open, onOpenChange }: { template: Templ
         <DialogHeader><DialogTitle>Use This Template</DialogTitle></DialogHeader>
         <div className="space-y-2">
           <Label htmlFor="template-collection-name">Collection name</Label>
-          <Input id="template-collection-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="My Books" />
+          <Input
+            id="template-collection-name"
+            aria-invalid={Boolean(nameError)}
+            aria-describedby={nameError ? "template-collection-name-error" : undefined}
+            value={name}
+            maxLength={60}
+            onChange={(event) => {
+              setNameError("");
+              setName(event.target.value);
+            }}
+            placeholder="My Books"
+          />
+          {nameError && <p id="template-collection-name-error" className="text-xs text-destructive">{nameError}</p>}
           <p className="text-xs text-muted-foreground">URL: {BRAND.domain}/collections/{slugify(name)}</p>
         </div>
         <DialogFooter>

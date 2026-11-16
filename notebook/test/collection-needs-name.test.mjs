@@ -26,3 +26,10 @@ test('an old collection without a name is readable and can be repaired',()=>{
   assert.equal(collections(query)[0].name,'Repaired');
   assert.equal(collections(query)[0].description,'Written by an older notebook');
 });
+
+test('an existing named collection cannot be edited to have a blank name',()=>{
+  const {query}=setup();
+  query.execute({table:'collections',operation:'insert',values:{id:'named',name:'Reading list'}});
+  assert.throws(()=>query.execute({table:'collections',operation:'update',values:{id:'named',name:'   '},filters:[['eq','id','named']]}),{message:MESSAGE});
+  assert.equal(collections(query)[0].name,'Reading list');
+});

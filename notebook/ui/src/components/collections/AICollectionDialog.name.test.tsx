@@ -50,4 +50,12 @@ describe("AI collection name", () => {
     expect(name).toHaveAttribute("aria-invalid", "true");
     expect(insert).not.toHaveBeenCalled();
   });
+
+  it("uses the collection name limit", async () => {
+    render(<MemoryRouter><AICollectionDialog open onOpenChange={() => {}} /></MemoryRouter>);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Make a reading list for my books" } });
+    fireEvent.click(screen.getByRole("button", { name: /generate/i }));
+
+    expect(await screen.findByRole("textbox", { name: "Collection name" })).toHaveAttribute("maxlength", "60");
+  });
 });
