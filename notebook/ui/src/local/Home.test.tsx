@@ -96,6 +96,8 @@ describe("the Godspeed card", () => {
     const problem = 'The assistant program set in /state/assistant.json is "/usr/bin/python3", which is not Hermes. Set "executable" in that file to your Hermes program (its name is hermes), or run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.';
     page(false, { show: false }, { runtimeConfigured: false, assistantProblem: problem });
     expect(await screen.findByText(problem)).toBeInTheDocument();
+    expect(screen.getByText("No AI connected")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
     expect(screen.queryByText("Connecting…")).toBeNull();
   });
   // The sentence carries a long file path with no spaces; it wraps inside the card instead of
