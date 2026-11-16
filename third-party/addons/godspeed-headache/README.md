@@ -64,8 +64,9 @@ medicine with its dose and time. German words are understood (links, rechts, poc
 typical length, strongest pain, time of day, weekday, side, kind, triggers, which medicines, how
 long from the first pill to the end (for pills whose time you said), and your **painkiller days in any 30**, against the limit
 where frequent painkillers start causing headaches themselves (10 days a month for combination
-painkillers, 15 for plain ones). With a daily health table (`daily_table` in the settings), it
-compares headache days with free days, column by column, once each side has five days.
+painkillers, 15 for plain ones). In the notebook, `daily_columns` compares complete phone-health
+days with free days without requiring a separate table. A usable `daily_table` CSV is an optional
+override and wins when configured. Comparisons appear once each side has five days.
 `godspeed-headache daily --csv` gives one row per day for your own table.
 
 ## Install
@@ -135,8 +136,10 @@ A time later than now means yesterday; an end before its start means the next da
 
 - `timezone`, `language` (en or de)
 - `overuse_days`: painkiller days in 30 at which the recipe mentions it, default 10
-- `daily_table`, `daily_columns`: a CSV with a `date` column in your mission control, and the
-  numeric columns to compare on headache and free days
+- `daily_columns`: numeric health columns to compare on headache and free days; the notebook can
+  supply them from complete phone-health days
+- `daily_table`: an optional CSV override with a `date` column; when usable, it takes priority over
+  notebook phone health
 - `git_sync`: auto (commit and push each entry), commit, or off. It works per mission control
   folder in effect: one push sends every local commit, so commit-only entries go out with the next
   push of an add-on set to auto. An entry that cannot be committed or pushed straight away (another

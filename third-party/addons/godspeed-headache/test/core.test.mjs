@@ -10,6 +10,7 @@ import { episodesFrom, normSide, normQuality, parsePain, parseMed, newEpisodeId 
 import { dailyRollup, patterns, minutesByDay } from "../lib/report.mjs";
 import { contextBlock } from "../lib/context.mjs";
 import { validateSettings, DEFAULTS } from "../lib/settings.mjs";
+import { NOTEBOOK_DAILY_ROWS_MAX_BYTES, notebookDailyRows } from "../lib/notebook-daily-rows.mjs";
 import { claudeHookMerge } from "../lib/setup.mjs";
 
 const TZ = "Europe/Berlin";
@@ -110,8 +111,24 @@ test("the pattern report compares headache days with a daily table only when the
   for (let i = 1; i <= 6; i++) episodes.push({ id: `h${i}`, start: `2026-09-0${i}T06:00:00.000Z`, end: `2026-09-0${i}T08:00:00.000Z`, open: false, minutes: 120, pain_max: 3, side: null, quality: null, symptoms: [], triggers: [], meds: [] });
   const r = patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ, daily_table: csv, daily_columns: ["sleep_total_h"] }, new Date("2026-09-20T12:00:00Z"), { days: 30 });
   assert.deepEqual(r.compare[0], { column: "sleep_total_h", headache_days: 6, free_days: 14, mean_on: 5, mean_off: 8, enough: true });
+  const rows = lines.slice(1).map((line) => { const [date, sleep_total_h] = line.split(","); return { date, sleep_total_h }; });
+  const memory = patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ, daily_columns: ["sleep_total_h"] }, new Date("2026-09-20T12:00:00Z"), { days: 30, dailyRows: rows });
+  assert.deepEqual(memory.compare, r.compare);
+  const preferred = patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ, daily_table: csv, daily_columns: ["sleep_total_h"] }, new Date("2026-09-20T12:00:00Z"), { days: 30, dailyRows: rows.map((row) => ({ ...row, sleep_total_h: 99 })) });
+  assert.deepEqual(preferred.compare, r.compare,'the configured CSV remains authoritative');
+  fs.unlinkSync(csv);
+  assert.throws(() => patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ, daily_table: csv, daily_columns: ["sleep_total_h"] }, new Date("2026-09-20T12:00:00Z"), { days: 30, requiredDailyTable: true }), /configured daily table disappeared/, "the final source reader rejects a selected table that is gone");
+  const fallback = patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ, daily_table: csv, daily_columns: ["sleep_total_h"] }, new Date("2026-09-20T12:00:00Z"), { days: 30, dailyRows: rows });
+  assert.deepEqual(fallback.compare, r.compare, "an already-missing configured CSV still permits notebook rows");
   const none = patterns({ episodes, loose: [] }, { ...DEFAULTS, timezone: TZ }, NOW, { days: 30 });
   assert.equal(none.compare, null);
+});
+
+test("notebook daily rows reject malformed and oversized bridge input", () => {
+  assert.equal(notebookDailyRows("not json"), undefined);
+  assert.equal(notebookDailyRows(JSON.stringify([{ date: "2026-09-01" }, null])), undefined);
+  assert.equal(notebookDailyRows("x".repeat(NOTEBOOK_DAILY_ROWS_MAX_BYTES + 1)), undefined);
+  assert.deepEqual(notebookDailyRows('[{"date":"2026-09-01","sleep_total_h":8}]'), [{ date: "2026-09-01", sleep_total_h: 8 }]);
 });
 
 test("the context block is empty when nothing is open, and names the open headache", () => {
