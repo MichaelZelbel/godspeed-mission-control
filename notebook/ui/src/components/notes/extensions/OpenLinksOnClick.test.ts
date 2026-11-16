@@ -11,7 +11,7 @@ import { OpenLinksOnClick, openLinkOnClick } from "./OpenLinksOnClick";
 // up the way NoteEditor sets up a note: Link with openOnClick off, plus OpenLinksOnClick.
 // jsdom's own address is http://localhost:3000, so that is "the notebook's own address" here.
 let editor: Editor | null = null;
-let navigate: ReturnType<typeof vi.fn>;
+let navigate: ReturnType<typeof vi.fn<(path: string) => void>>;
 let open: ReturnType<typeof vi.fn>;
 
 function mount(html: string, editable = true) {

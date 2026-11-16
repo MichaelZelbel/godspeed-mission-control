@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import path from 'node:path';
-export default defineConfig({ esbuild:{jsx:'automatic'}, resolve: { alias: {
+export default defineConfig({ build: { assetsInlineLimit: 0 }, esbuild:{jsx:'automatic'}, resolve: { alias: {
   '@': path.resolve(__dirname, 'src'),
   '@powersync/tanstack-react-query': path.resolve(__dirname, 'src/local/disabled-row-sync.ts'),
   '@powersync/react': path.resolve(__dirname, 'src/local/disabled-row-sync.ts'),
