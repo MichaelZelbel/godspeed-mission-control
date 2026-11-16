@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
+import { collectionNameSchema } from "@/lib/collection-name";
 import { SEOHead } from "@/components/SEOHead";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -367,11 +368,7 @@ const emojiOptions = [
   "🌱",
 ];
 const collectionFormSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "Name is required")
-    .max(60, "Name must be 60 characters or fewer"),
+  name: collectionNameSchema.max(60, "Name must be 60 characters or fewer"),
   icon: z
     .string()
     .trim()
