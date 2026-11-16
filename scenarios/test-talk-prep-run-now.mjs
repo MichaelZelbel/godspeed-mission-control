@@ -15,6 +15,7 @@ test('the scenario fixture gives every adopted goal its public card ID',()=>{
   }
   assert.match(scenario,/SERVES: lower-ldl, sleep-better, visible-abs/);
   assert.match(scenario,/write_area\n  run_installed_preparation\n[\s\S]*write_area\n  add_research_domains/);
+  assert.match(scenario,/run_installed_preparation\n  rm -f "\$ROOT\/coach\/health\/prep\/\$DAY_A\.md"[\s\S]*"\$ROOT\/coach\/health\/prep\/\$DAY_B\.review\.json"/);
   assert.doesNotMatch(scenario,/write_installed_fixture_area|TALK_PREP_SUPPORTED_FIXTURE/);
 });
 

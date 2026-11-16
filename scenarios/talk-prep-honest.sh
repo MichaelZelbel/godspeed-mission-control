@@ -285,6 +285,8 @@ act() {
   phase 'a supported coaching-area fixture is prepared through installed Run now'
   write_area
   run_installed_preparation
+  rm -f "$ROOT/coach/health/prep/$DAY_A.md" "$ROOT/coach/health/prep/$DAY_A.evidence.json" "$ROOT/coach/health/prep/$DAY_A.review.json"
+  rm -f "$ROOT/coach/health/prep/$DAY_B.md" "$ROOT/coach/health/prep/$DAY_B.evidence.json" "$ROOT/coach/health/prep/$DAY_B.review.json"
   phase 'a fixture person: one health area, three goals, three research domains'
   write_area
   add_research_domains
