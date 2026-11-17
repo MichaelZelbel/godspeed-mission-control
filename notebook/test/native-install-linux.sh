@@ -19,6 +19,16 @@ port=47841
 state="$root/.godspeed/integrated-runtime"
 scope=system
 service_command() { if [ "$scope" = user ]; then systemctl --user "$@"; else sudo -n systemctl "$@"; fi; }
+kill_service() {
+  if [ "$scope" = user ]; then
+    local group pids
+    group=$(service_command show -p ControlGroup --value "$service")
+    mapfile -t pids < "/sys/fs/cgroup$group/cgroup.procs"
+    kill -KILL "${pids[@]}"
+  else
+    service_command kill -s KILL "$service"
+  fi
+}
 fail() { echo "FAILED: $*" >&2; if [ "$scope" = user ]; then journalctl --user -u "$service" -n 60 --no-pager >&2 || true; else sudo -n journalctl -u "$service" -n 60 --no-pager >&2 || true; fi; exit 1; }
 cleanup() {
   sudo -n systemctl disable --now "$service" >/dev/null 2>&1 || true
@@ -179,7 +189,7 @@ answers || fail 'the notebook that ran before does not answer again'
 while IFS= read -r name; do [ -e "$state/backups/$name" ] || fail "the undone update removed $name"; done < "$work/kept"
 
 echo '== a notebook killed from outside comes back'
-service_command kill -s KILL "$service"
+kill_service
 sleep 8
 service_command is-active --quiet "$service" || fail 'systemd did not restart a killed notebook'
 answers || fail 'the restarted notebook does not answer'
