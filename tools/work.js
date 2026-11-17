@@ -163,7 +163,13 @@ const fileOnDisk = (written, root) => {
   let c = written.replace(/^["'`(\[<]+/, '').replace(/[.,;:)"'`\]>]+$/, '');
   if (!/[\\/]/.test(c) || !NAMED_FILE_EXT.test(c)) return '';
   if (/^([\\/]|[A-Za-z]:[\\/])/.test(c)) {
-    const rel = path.relative(root, c);
+    // Compare the places on disk, not their spellings. Installed workspaces can be reached through
+    // a symlink (for example the stable Godspeed folder pointing at the current installation), and
+    // an absolute DONE WHEN written through that name must not evade the same review as a relative
+    // path. realpath also prevents a symlink inside the workspace from making an outside file count.
+    let realRoot, realFile;
+    try { realRoot = fs.realpathSync(root); realFile = fs.realpathSync(c); } catch (e) { return ''; }
+    const rel = path.relative(realRoot, realFile);
     if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return '';
     c = rel;
   }

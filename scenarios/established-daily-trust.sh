@@ -47,7 +47,7 @@ STANDIN
   today=$(date -u +%Y-%m-%d)
   incomplete=W-${today//-/}-91; complete=W-${today//-/}-92
   GODSPEED_ROOT=$ROOT "$NODE" "$work_js" file --id "$incomplete" --key established-incomplete --what 'Write the candidate note' \
-    --done-when 'work/established-incomplete.md names Atlas, River, and the third candidate: Cedar' --check 'test -s work/established-incomplete.md' --source scenario >/dev/null
+    --done-when "$ROOT/work/established-incomplete.md names Atlas, River, and the third candidate: Cedar" --check 'test -s work/established-incomplete.md' --source scenario >/dev/null
   GODSPEED_ROOT=$ROOT "$NODE" "$work_js" file --id "$complete" --key established-complete --what 'Write the complete candidate note' \
     --done-when 'work/established-complete.md names Atlas, River, and the third candidate: Cedar' --check 'test -s work/established-complete.md' --source scenario >/dev/null
   GODSPEED_ROOT=$ROOT GODSPEED_TODAY=$today bash "$bin/mc-work-run" --godspeed "$ROOT" --only "$incomplete" >"$EVIDENCE/incomplete-run.txt" 2>&1 || fail 'the incomplete installed work run stopped'

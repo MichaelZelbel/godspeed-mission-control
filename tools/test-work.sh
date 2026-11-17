@@ -15,7 +15,8 @@ done
 [ -n "$NODE" ] || { echo "FAIL: no node on this box"; exit 1; }
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
+ALIAS_PARENT="$(mktemp -d)"
+trap 'rm -rf "$TMP" "$ALIAS_PARENT" "$TEST_GUARD_HOME"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin"
 : > "$TMP/AGENTS.md"
 cp "$HERE/work.js" "$TMP/bin/"
@@ -88,6 +89,19 @@ contains "  and names the missing content" "$OUT" "the corrected cover"
 printf '%s\n' '{"passed":true,"reason":"the corrected cover is present","missing":[]}' > "$TMP/review-pass.json"
 OUT="$(hw verify W-20260913-03 --content-review "$TMP/review-pass.json" 2>&1)"
 contains "  once both judgments pass it verifies" "$OUT" "verified by its check and content review"
+
+# An installed workspace may be reached through a stable symlink. The absolute spelling still names
+# the same Godspeed-owned result and therefore gets exactly the same content gate as the relative one.
+ln -s "$TMP" "$ALIAS_PARENT/workspace-link"
+OUT="$(hw file --what "Fix the absolute-path cover" --done-when "$ALIAS_PARENT/workspace-link/work/absolute-cover.md describes the corrected cover" --check "test -s work/absolute-cover.md" --key absolute-cover --source test 2>&1)"
+ABSOLUTE_COVER="$(idof absolute-cover)"
+printf '%s\n' 'shape only' > "$TMP/work/absolute-cover.md"
+hw take "$ABSOLUTE_COVER" --runner claude-laptop >/dev/null
+hw attempt "$ABSOLUTE_COVER" --runner claude-laptop --ok --result "wrote the cover result" >/dev/null
+OUT="$(hw verify "$ABSOLUTE_COVER" 2>&1)"; check "  an absolute workspace result also needs content review" "$?" "2"
+contains "  its path spelling cannot bypass the content gate" "$OUT" "content review found missing work"
+OUT="$(hw verify "$ABSOLUTE_COVER" --content-review "$TMP/review-pass.json" 2>&1)"
+contains "  an absolute workspace result verifies after both judgments" "$OUT" "verified by its check and content review"
 
 hw file --what "Restart the local counter" --done-when "the counter reads 4" --check "test -f $TMP/counter-four" --key counter --source test >/dev/null
 COUNTER="$(idof counter)"; hw take "$COUNTER" --runner claude-laptop >/dev/null; hw attempt "$COUNTER" --runner claude-laptop --ok --result "counter reads 4" >/dev/null; touch "$TMP/counter-four"
