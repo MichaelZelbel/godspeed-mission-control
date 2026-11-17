@@ -61,13 +61,13 @@ try {
  if(JSON.stringify(stable(a))!==JSON.stringify(stable(s)))fail('the second run changed a routine-writable record');
  const hamburg=has(a.claims,'Hamburg'), berlin=has(a.claims,'Berlin'),doctor=has(a.claims,'Dr. Lang');
  if(!hamburg||hamburg.valid_from!==archiveDay||!quote(hamburg,move.text,move.id))fail('Hamburg is not a dated fact with the exact move quote and source');
- if(!berlin||berlin.valid_to!==archiveDay)fail('Berlin was deleted or left current instead of closed');
+ if(!berlin||berlin.valid_to)fail('the manually confirmed Berlin fact was deleted or closed');
  if(!doctor||doctor.valid_from!==archiveDay||!quote(doctor,doctorMessage.text,doctorMessage.id))fail('Dr. Lang is not a dated fact with the exact doctor quote and source');
  for(const family of families)for(const row of a[family])if(['machine-1','track-1'].includes(row?.source_id)||['[IMPORTANT: You are running as a scheduled job]','track this'].includes(row?.evidence_quote))fail(`an excluded message was filed in ${family}`);
 } catch(error) { process.stdout.write(error.message); process.exit(1); }
 NODE
   ) || fail "$why"
-  pass "the dated move to Hamburg and Dr. Lang were filed with their archive sources, Berlin was closed, excluded archive messages filed nothing, and a second run changed no records"
+  pass "the dated move to Hamburg and Dr. Lang were filed with their archive sources, manually confirmed Berlin stayed current, excluded archive messages filed nothing, and a second run changed no records"
 }
 
 act() {

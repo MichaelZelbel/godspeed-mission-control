@@ -81,7 +81,7 @@ GODSPEED_PRODUCT_REF=\$(git ls-remote $HUB.git refs/heads/main | cut -f1)
 hook=\$(curl -fsSL "$RAW/\$GODSPEED_PRODUCT_REF/notebook/scripts/install-native-notebook.sh")
 EOF
   cat > "$d/docker/hostinger/README.md" <<EOF
-[Install on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2F78ea790d766073bf77059fadf4d1c340b022059d%2Fdocker%2Fhostinger%2Fone-click.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
+[Install on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2Fbeta%2Fdocker%2Fhostinger%2Fone-click.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
 A pin of another repository's main: $RAW/../kit-bootstrap/main/setup-godspeed.sh
 EOF
   cat > "$d/other-repository-note.md" <<'EOF'
@@ -140,9 +140,9 @@ run "$T"
 same  "it is refused too" "$CODE" 1
 holds "the file and the line are named" "$OUT" 'docker/hostinger/README.md:3:'
 
-printf "Hostinger's purchase link at its fixed commit is allowed\n"
+printf "Hostinger's purchase link on the public beta line is allowed\n"
 tree "$T"; run "$T"
-same  "a link naming a commit is no dated tag and no branch" "$CODE" 0
+same  "the beta line is release-owned, not main or a dated tag" "$CODE" 0
 
 printf "The alpha line's own main is allowed, and only that line\n"
 tree "$T"; run "$T"

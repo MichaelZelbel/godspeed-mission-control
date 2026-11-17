@@ -13,9 +13,10 @@ import {randomUUID} from 'node:crypto';
 import {hash,retrying,syncFolder} from './records/store.mjs';
 import {mediaFileName} from './media-names.mjs';
 import {recordsFolder} from './file-policy.mjs';
+import {MEDIA_CARRY_MAX_BYTES} from '../shared/media-limits.mjs';
 
 // Sync uploads nothing larger: it is FileSync's largeFile.
-export const CARRY_LIMIT=50*1024*1024;
+export const CARRY_LIMIT=MEDIA_CARRY_MAX_BYTES;
 export const CARRIED_FOLDER='_media';
 export const carriedRoot=store=>path.join(store.recordsRoot,CARRIED_FOLDER);
 // "md" and "json" are never kept: a file named <hash>.md would be read as a
