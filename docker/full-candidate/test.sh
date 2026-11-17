@@ -123,4 +123,11 @@ node docker/full-candidate/test-browser.cjs "$name" "$evidence"
 node docker/full-candidate/test-screens.cjs https://localhost:48443 "$evidence/session.json" | tee "$evidence/screens.log"
 docker restart "$name" >/dev/null
 node docker/full-candidate/test-browser.cjs "$name" "$evidence" resumed
+docker logs "$name" > "$evidence/container.log" 2>&1
+grep -q 'startup main-door-listening' "$evidence/container.log"
+grep -q 'startup index-published' "$evidence/container.log"
+grep -q 'startup first-authenticated-query' "$evidence/container.log"
+grep -q 'browser-document-request' "$evidence/restart-timing.jsonl"
+grep -q 'browser-first-query-request' "$evidence/restart-timing.jsonl"
+grep -q 'browser-first-query-response' "$evidence/restart-timing.jsonl"
 du -sm "$evidence" > "$evidence/evidence-size.txt"

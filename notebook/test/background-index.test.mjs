@@ -6,9 +6,16 @@ import path from 'node:path';
 import {performance} from 'node:perf_hooks';
 import {Store,encode} from '../core/records/store.mjs';
 import {SearchIndex} from '../core/index/search.mjs';
-import {createService} from '../server/main.mjs';
+import {createService,startupReadiness,startupTrace} from '../server/main.mjs';
 
 const temporary=()=>fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-background-index-'));
+test('startup readiness follows initial publication and traces contain only time and event',async()=>{
+  let publish;const publication=new Promise(resolve=>{publish=resolve;}),readiness=startupReadiness(publication);
+  assert.deepEqual({status:readiness.status,body:readiness.body},{status:503,body:{ready:false}});
+  publish();await publication;await Promise.resolve();
+  assert.deepEqual({status:readiness.status,body:readiness.body},{status:200,body:{ready:true}});
+  assert.equal(startupTrace('index-published',new Date('2026-11-17T12:34:56.789Z')),'2026-11-17T12:34:56.789Z startup index-published');
+});
 test('background refresh reads changed bytes with restored timestamps, skips unchanged writes and retains exclusions',async()=>{
   const root=temporary(),store=new Store(root),note=store.save('notes',{id:'fictional-note',title:'Fictional',content:'Alpha'}),index=new SearchIndex(store);
   try{
@@ -55,6 +62,8 @@ test('actual file indexing leaves static and authentication requests responsive'
     await refresh;
     t.diagnostic(`1500 real files: unchanged synchronous refresh ${syncMs.toFixed(1)}ms, queued auth request ${syncRequestMs.toFixed(1)}ms; changed background ${ (performance.now()-start).toFixed(1)}ms; maximum static/auth/health request group ${maxMs.toFixed(1)}ms; ${whileReading} groups served during disk reads`);
     assert.equal(service.index.search('changed-background-marker').length,1);
+    assert.equal((await fetch(url+'/health')).status,200);await service.index.ready;
+    const ready=await fetch(url+'/ready');assert.equal(ready.status,200);assert.deepEqual(await ready.json(),{ready:true});
     assert.ok(whileReading>=2,'requests must complete while actual disk indexing is still in progress');assert.ok(maxMs<1200,`request group stalled for ${maxMs}ms`);
   }finally{await service.close();fs.rmSync(root,{recursive:true,force:true});}
 });
