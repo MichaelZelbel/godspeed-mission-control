@@ -31,7 +31,7 @@ and press Send yourself. Saving a draft you asked for needs no extra approval.
 
 **One connection, several assistants.** Every assistant on the computer where you connected uses
 the same connection: Claude Code, Codex, Hermes, and Claude Desktop once it has been restarted.
-A second computer does not get your Gmail by copying the mission control folder; see Chapter 33.
+A second computer does not get your Gmail by copying the mission control folder; see Chapter 34.
 
 ## What protects you, and what does not
 

@@ -6,7 +6,7 @@ only when reality changed. You stop checking. It starts.
 A watchdog reads the public web and needs almost nothing out of your
 folder, so nothing ties it to the computer in front of you. Build it on
 your laptop first, so you can watch it work; move it to the machine that
-never sleeps (Chapter 34) the day you own one, because on a laptop it
+never sleeps (Chapter 35) the day you own one, because on a laptop it
 patrols only while Hermes is open.
 
 ## The five parts
@@ -88,7 +88,7 @@ rotates public free tiers of several search vendors.
 A watchdog that shares a program, a subscription and a machine with the
 thing it watches cannot see every failure: if Hermes will not start, the
 job that would have told you does not start either. For a weekly look at
-release notes that is a fair trade. For the machine itself, Chapter 34
+release notes that is a fair trade. For the machine itself, Chapter 35
 adds a check that runs with no AI in it and a test that the repairing
 agent can still answer. For a genuinely separate pair of eyes, the
 cross-vendor watchdog kit runs a different company's tool as the watcher.
