@@ -16,6 +16,8 @@ work=$(mktemp -d)
 root="$HOME/godspeed-native-test"
 service=godspeed-native-install-test.service
 port=47841
+web_port=47843
+https_port=48443
 state="$root/.godspeed/integrated-runtime"
 scope=system
 service_command() { if [ "$scope" = user ]; then systemctl --user "$@"; else sudo -n systemctl "$@"; fi; }
@@ -74,7 +76,7 @@ git -C "$work/product" -c user.name=test -c user.email=test@example.invalid comm
 second=$(git -C "$work/product" rev-parse HEAD)
 git -C "$work/product" config uploadpack.allowAnySHA1InWant true
 git -C "$work/product" config uploadpack.allowFilter true
-install() { GODSPEED_FOOD_TABLE=off GODSPEED_SERVICE="$service" GODSPEED_PORT="$port" GODSPEED_SKIP_WEB_ADDRESS=1 GODSPEED_PRODUCT_REPOSITORY="file://$work/product" GODSPEED_PRODUCT_REF="$1" bash "$here/notebook/scripts/install-native-notebook.sh" "$root"; }
+install() { GODSPEED_FOOD_TABLE=off GODSPEED_SERVICE="$service" GODSPEED_PORT="$port" GODSPEED_WEB_PORT="$web_port" GODSPEED_HTTPS_PORT="$https_port" GODSPEED_SKIP_WEB_ADDRESS=0 GODSPEED_PRODUCT_REPOSITORY="file://$work/product" GODSPEED_PRODUCT_REF="$1" bash "$here/notebook/scripts/install-native-notebook.sh" "$root"; }
 answers() { for _ in $(seq 1 30); do curl -fsS "http://127.0.0.1:$port/health" >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
 
 echo '== a first installation, as the server called production'
@@ -86,6 +88,10 @@ service_command is-active --quiet "$service" || fail 'the notebook is not runnin
 grep -qx "User=$(id -un)" "$unit" || { [ "$scope" = user ] && ! grep -q '^User=' "$unit"; } || fail 'the service does not run as the installing account'
 [ "$(cat "$state/version")" = "$first" ] || fail 'the installed version is not the one named'
 grep -q '"GODSPEED_DEVICE":"production"' "$state/start.mjs" || fail 'the machine name was not kept'
+grep -q '"GODSPEED_WEB_ADDRESS":"https://' "$state/start.mjs" || fail 'automatic hostname discovery did not give the isolated installation an HTTPS address'
+grep -q '"GODSPEED_WEB_PORT":"47843"' "$state/start.mjs" || fail 'the isolated installation did not keep its own web door'
+[ -f /etc/caddy/godspeed-native-install-test-notebook.caddy ] || fail 'the isolated installation has no Caddy site of its own'
+grep -q "127.0.0.1:$web_port" /etc/caddy/godspeed-native-install-test-notebook.caddy || fail 'the isolated Caddy site does not use its own web door'
 answers || fail 'the notebook does not answer'
 before=$(service_command show -p MainPID --value "$service")
 # Copies earlier updates left (notebook/core/upgrade-copies.mjs): four whole ones, one that

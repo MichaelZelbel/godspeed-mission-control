@@ -276,15 +276,25 @@ previous_setting() {
 # (server-address.mjs finds its provider name or the checked sslip.io fallback),
 # or one named in GODSPEED_HOST.
 CADDY_VERSION=2.11.4
-HTTPS_SERVICE=godspeed-https.service
+web_resource_names() {
+  if [ "$SERVICE" = godspeed-integrated-notebook.service ]; then
+    HTTPS_SERVICE=godspeed-https.service
+    SITE_FILE=/etc/caddy/godspeed-notebook.caddy
+    ADDON_SITES=/etc/caddy/godspeed-addons
+  else
+    local web_identity=${SERVICE%.service}
+    HTTPS_SERVICE=$web_identity-https.service
+    SITE_FILE=/etc/caddy/$web_identity-notebook.caddy
+    ADDON_SITES=/etc/caddy/$web_identity-addons
+  fi
+}
+web_resource_names
 CADDYFILE=/etc/caddy/Caddyfile
-SITE_FILE=/etc/caddy/godspeed-notebook.caddy
 # Add-ons' web addresses, whichever Caddy gives the notebook its address: each add-on that needs one
 # writes a file of its own here, a site of its own, or in paths/ paths on the notebook's own
 # address (docs/full-version/addon-model.md, "A web address for an add-on"). The installer makes the
 # folder once Caddy reads it and never writes in it. Until 24 October 2026 an add-on edited the
 # Caddyfile this installer writes, and on Godspeed's own Caddy every update took its line out.
-ADDON_SITES=/etc/caddy/godspeed-addons
 
 desktop_here() { systemd_here && systemctl is-active --quiet display-manager 2>/dev/null; }
 

@@ -24,6 +24,12 @@ const site=(address,port,folder='/etc/caddy/godspeed-addons')=>'# The Godspeed M
   +'\treverse_proxy 127.0.0.1:'+port+'\n}\n\n'
   +'# Add-ons\' own web addresses: one file each, written by the add-on (docs/full-version/addon-model.md).\nimport '+folder+'/*.caddy\n';
 
+test('an alternate notebook service gets web resources of its own while the default keeps its established names',options,()=>{
+  const names=service=>sh('SERVICE='+service+'; web_resource_names; printf "%s\\n%s\\n%s\\n" "$HTTPS_SERVICE" "$SITE_FILE" "$ADDON_SITES"');
+  assert.equal(names('godspeed-integrated-notebook.service').out,'godspeed-https.service\n/etc/caddy/godspeed-notebook.caddy\n/etc/caddy/godspeed-addons\n');
+  assert.equal(names('godspeed-native-install-test.service').out,'godspeed-native-install-test-https.service\n/etc/caddy/godspeed-native-install-test-notebook.caddy\n/etc/caddy/godspeed-native-install-test-addons\n');
+});
+
 test('the site hands every visit to the web door, and the installation\'s own Caddy has no admin endpoint',options,()=>{
   const result=sh('own_caddyfile srv1.example.com 47833');
   assert.equal(result.status,0,result.err);
