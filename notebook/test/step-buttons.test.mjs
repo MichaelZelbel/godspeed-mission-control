@@ -53,4 +53,11 @@ test('a Telegram reminder is marked only after its card went out, and its button
  const step=store.get('approvals',id);store.save('approvals',{...step,sent_at:'2026-11-17T05:50:00.000Z'});
  remindWaitingSteps(store,{at:new Date('2026-11-17T12:00:00.000Z')});assert.equal(store.get('approvals',id).reminded_at,undefined);
 }));
+test('a queued reminder expires at seven days and the delayed gateway discards it',opts,t=>scenario(t,'expired_reminder',['The bot stopped.'],async(store,[id])=>{
+ assert.equal(await cardSent(store,id),true);
+ const now=new Date(),sent=new Date(now.getTime()-7*24*3600000+60000),step=store.get('approvals',id);store.save('approvals',{...step,sent_at:sent.toISOString()});
+ remindWaitingSteps(store,{at:now});
+ const item=JSON.parse(fs.readFileSync(path.join(store.state,'step-reminders',id+'.json')));
+ assert.equal(item.expires_at,new Date(sent.getTime()+7*24*3600000).toISOString());
+}));
 test('the installed plugin registers the step buttons with Telegram and closes them on unload',opts,t=>scenario(t,'registered',['The bot stopped.']));

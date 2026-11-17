@@ -723,7 +723,7 @@ export class NativeScheduler{
   // A setup asking inside a running tick or the cooldown still hears whether the connection check could be made.
   if(this.ticking){if(raise){await this.current?.catch(()=>null);await this.followConnectionCheck();}return records;}
   const now=this.now();if(now-(this.lastTick||0)<60000){this.onProgress?.();if(raise)await this.followConnectionCheck();return records;}
-  if(now-(this.lastReminderSweep||0)>=3600000){try{remindWaitingSteps(this.store,{at:new Date(now)});this.lastReminderSweep=now;}catch(error){try{this.onFailure?.(error);}catch{}}}
+  if(now-(this.lastReminderSweep||0)>=3600000){try{remindWaitingSteps(this.store,{at:new Date(now),onFailure:error=>this.onFailure?.(error)});}catch(error){try{this.onFailure?.(error);}catch{}}this.lastReminderSweep=now;}
   if(this.updater)await beatWhile(this.updater.tick(this.store.get('settings','installation')?.timezone),()=>this.onProgress?.(),{limitMs:this.updateLimit,every:this.beatEvery}).catch(error=>console.error('Godspeed Mission Control: the Hermes update could not be checked: '+String(error?.message||error)));
   if(this.chatHealth)await beatWhile(this.chatHealth.tick(),()=>this.onProgress?.(),{limitMs:CHAT_CHECK_LIMIT,every:this.beatEvery}).catch(error=>console.error('Godspeed Mission Control: the chat check could not run: '+String(error?.message||error)));
   const release=this.lifecycle.acquire('routine tick');if(!release)return records;

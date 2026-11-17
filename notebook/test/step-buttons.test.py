@@ -262,6 +262,21 @@ def reminder():
     assert status(IDS[0]) == "yes"
 
 
+def expired_reminder():
+    buttons, bot = gateway()
+    file = os.path.join(ROOT, ".godspeed", "step-reminders", IDS[0] + ".json")
+    with open(file, encoding="utf-8") as f:
+        item = json.load(f)
+    item["expires_at"] = "2020-01-01T00:00:00.000Z"
+    with open(file, "w", encoding="utf-8") as f:
+        json.dump(item, f)
+    buttons.post_waiting()
+    assert reminder_queue() == [] and bot.sent == []
+    records = os.path.join(ROOT, "notebook", "_system", "approvals")
+    with open(os.path.join(records, IDS[0] + ".json"), encoding="utf-8") as f:
+        assert "reminded_at" not in json.load(f)
+
+
 def registered():
     spec = importlib.util.spec_from_file_location("godspeed_context_plugin", os.path.join(folder, "__init__.py"),
                                                   submodule_search_locations=[folder])

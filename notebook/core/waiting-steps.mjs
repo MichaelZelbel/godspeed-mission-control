@@ -11,7 +11,10 @@ import {appendAssistantMessage} from './conversation-state.mjs';
 // reads it back into a step id (answerChosen).
 // Each chat a step can be asked in, with the one conversation it is read from; `asked_in` and the
 // matcher's route both come from this table.
-export const ROUTES={telegram:{conversation:'telegram-owner',matches:id=>id==='telegram-owner'},notebook:{conversation:'notebook:general',matches:id=>/^notebook:general(:session:|$)/.test(id)}};
+export const ROUTES={
+ telegram:{conversation:'telegram-owner',matches:id=>id==='telegram-owner',remind:handOffTelegramReminder},
+ notebook:{conversation:'notebook:general',matches:id=>/^notebook:general(:session:|$)/.test(id),remind:appendNotebookReminder}
+};
 export const CHATS=Object.keys(ROUTES);
 export const ASKER_KINDS=['routine','addon','job'];
 const CHATS_FILE='waiting-step-chats.json',CLARIFICATION_MS=30*60000;
@@ -72,18 +75,21 @@ const reminderDue=(record,now)=>{
 
 // An hourly scheduler pass delivers notebook reminders itself and hands Telegram reminders to the
 // gateway that owns that chat. The hand-off is idempotent; only successful delivery stamps the step.
-export function remindWaitingSteps(store,{at=new Date(),append=appendAssistantMessage}={}){
+export function remindWaitingSteps(store,{at=new Date(),append=appendAssistantMessage,onFailure}={}){
  const now=at instanceof Date?at:new Date(at),due=store.list('approvals').filter(record=>reminderDue(record,now.getTime())),queued=[];
  for(const record of due){
-  const text=reminderText(record);
-  if(record.asked_in==='notebook'){
-   append(store,ROUTES.notebook.conversation.replace(/^notebook:/,''),text);
-   stampReminder(store,record.id);
-  }else{
-   handOffReminder(store,record.id,text,record.expires_at);queued.push(record.id);
-  }
+  try{if(ROUTES[record.asked_in].remind(store,record,reminderText(record),now,append))queued.push(record.id);}
+  catch(error){try{onFailure?.(error);}catch{}}
  }
  return queued;
+}
+
+function appendNotebookReminder(store,record,text,_now,append){
+ append(store,ROUTES.notebook.conversation.replace(/^notebook:/,''),text);
+ stampReminder(store,record.id);return false;
+}
+function handOffTelegramReminder(store,record,text,now){
+ handOffReminder(store,record.id,text,record.expires_at,record.sent_at,now);return true;
 }
 
 // What the system may do by itself without asking, declared by the asking code from this fixed list.
@@ -238,10 +244,10 @@ function handOffButtons(store,ids){
   if(record&&STEP_ID.test(id))atomic(path.join(dir,id+'.json'),JSON.stringify({id,text:record.about+' '+record.question,expires_at:new Date(Date.now()+STEP_QUESTION_MAX_AGE_MS).toISOString()})+'\n');
  }
 }
-function handOffReminder(store,id,text,stepExpiry){
+function handOffReminder(store,id,text,stepExpiry,sentAt,now){
  if(!STEP_ID.test(id))return;
  const dir=path.join(store.state,STEP_REMINDERS);fs.mkdirSync(dir,{recursive:true,mode:0o700});
- const expires=Math.min(Date.now()+STEP_QUESTION_MAX_AGE_MS,Date.parse(stepExpiry)||Infinity);
+ const expires=Math.min(now.getTime()+STEP_QUESTION_MAX_AGE_MS,Date.parse(stepExpiry)||Infinity,Date.parse(sentAt)+REMINDER_BEFORE_MS);
  atomic(path.join(dir,id+'.json'),JSON.stringify({id,text,expires_at:new Date(expires).toISOString()})+'\n');
 }
 // The pending, unsent Telegram steps whose questions a routine printed in full, oldest first; a

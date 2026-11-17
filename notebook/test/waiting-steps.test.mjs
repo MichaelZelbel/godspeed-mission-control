@@ -11,6 +11,8 @@ import {Domains} from '../core/domains.mjs';
 import {cardSent,reminderSent,recordReport,recordRoutine,delivered} from '../core/background-reports.mjs';
 import {Telegram} from '../core/telegram.mjs';
 import {Scheduler} from '../core/jobs/scheduler.mjs';
+import {NativeScheduler} from '../core/native-scheduler.mjs';
+import {appendAssistantMessage} from '../core/conversation-state.mjs';
 import {openStep,ROUTES,CHATS,chatOf,ASKER_KINDS,answerStep,answerChosen,heard,remindWaitingSteps,stampReply,readStep,waitingSteps} from '../core/waiting-steps.mjs';
 
 for(const key of Object.keys(process.env))if(/^GODSPEED_/.test(key))delete process.env[key];
@@ -239,14 +241,27 @@ test('an unanswered delivered step gets one reminder after six hours, and inelig
  assert.equal(await reminderSent(store,'step-11111111-1111-1111-1111-111111111111'),false);
 });
 
-test('a notebook reminder is written before its marker, and a failed write is retried',t=>{
- const {store}=fixture(t),id='step-77777777-7777-7777-7777-777777777777',now=new Date('2026-11-17T12:00:00.000Z');
- store.save('approvals',{id,status:'pending',about:'The backup is waiting.',question:'Shall I retry it?',asked_by:{kind:'routine',name:'test'},asked_in:'notebook',asked_at:'2026-11-17T05:00:00.000Z',sent_at:'2026-11-17T05:50:00.000Z'});
- assert.throws(()=>remindWaitingSteps(store,{at:now,append:()=>{throw Error('chat unavailable');}}),/chat unavailable/);
+test('one failed notebook reminder does not prevent another reminder, and is retried',t=>{
+ const {store}=fixture(t),id='step-77777777-7777-7777-7777-777777777777',healthy='step-88888888-8888-8888-8888-888888888888',now=new Date('2026-11-17T12:00:00.000Z'),failures=[];
+ const pending=(stepId,about)=>store.save('approvals',{id:stepId,status:'pending',about,question:'Shall I retry it?',asked_by:{kind:'routine',name:'test'},asked_in:'notebook',asked_at:'2026-11-17T05:00:00.000Z',sent_at:'2026-11-17T05:50:00.000Z'});
+ pending(id,'The backup is waiting.');pending(healthy,'The upload is waiting.');
+ remindWaitingSteps(store,{at:now,append:(...args)=>{if(args[2].startsWith('The backup'))throw Error('chat unavailable');return appendAssistantMessage(...args);},onFailure:error=>failures.push(error.message)});
  assert.equal(store.get('approvals',id).reminded_at,undefined);
+ assert.ok(store.get('approvals',healthy).reminded_at);assert.deepEqual(failures,['chat unavailable']);
  remindWaitingSteps(store,{at:new Date(now.getTime()+3600000)});
  assert.ok(store.get('approvals',id).reminded_at);
  const chat=store.list('note_conversations')[0];assert.equal(chat.state.messages.at(-1).content,'The backup is waiting. Shall I retry it? Please answer yes or no.');
+});
+
+test('the native scheduler reaches waiting-step reminders hourly and never repeats one',async t=>{
+ const {root,store}=fixture(t),id='step-99999999-9999-9999-9999-999999999999';let now=Date.parse('2026-11-17T12:00:00.000Z');
+ store.save('approvals',{id,status:'pending',about:'The backup is waiting.',question:'Shall I retry it?',asked_by:{kind:'routine',name:'test'},asked_in:'notebook',asked_at:'2026-11-17T05:00:00.000Z',sent_at:'2026-11-17T05:50:00.000Z'});
+ const scheduler=new NativeScheduler(store,{home:path.join(root,'.hermes'),executable:'hermes',now:()=>now,lifecycle:{acquire:()=>null}});
+ await scheduler.tick();assert.ok(store.get('approvals',id).reminded_at);
+ const messages=()=>store.list('note_conversations')[0].state.messages;
+ assert.equal(messages().length,1);assert.match(messages()[0].content,/The backup is waiting.*Please answer yes or no/);
+ now+=30*60000;await scheduler.tick();assert.equal(messages().length,1,'the under-hour pass is skipped');
+ now+=31*60000;await scheduler.tick();assert.equal(messages().length,1,'the hourly pass does not repeat a marked reminder');
 });
 
 test('a scheduled run answers for nobody, and a step text holding a code is refused',async t=>{
@@ -356,7 +371,7 @@ test('a notebook step whose question could not be written is withdrawn and the e
 });
 
 test('every chat a step can be asked in has one conversation that routes back to it, and every asker kind opens a step',async t=>{
- for(const chat of CHATS)assert.equal(chatOf(ROUTES[chat].conversation),chat);
+ for(const chat of CHATS){assert.equal(chatOf(ROUTES[chat].conversation),chat);assert.equal(typeof ROUTES[chat].remind,'function');}
  assert.equal(chatOf('notebook:person:x'),null);
  const {store}=fixture(t);
  for(const kind of ASKER_KINDS)assert.ok(open(store,'About '+kind,'telegram',{by:kind+':x'}).id);
