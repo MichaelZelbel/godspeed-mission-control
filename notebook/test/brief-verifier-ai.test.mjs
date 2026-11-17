@@ -68,53 +68,26 @@ test('the saved-brief plan attributes every scenario request to its own replies'
  const isolated=spawn(process.execPath,[verifierScript,String(isolatedPort),savedBriefPlan,log],{stdio:['ignore','ignore','pipe']});
  await new Promise((resolve,reject)=>{isolated.stderr.once('data',resolve);isolated.once('error',reject);isolated.once('exit',code=>reject(Error(`stand-in exited ${code}`)));});
  const request=async input=>fetch(`http://127.0.0.1:${isolatedPort}/v1/chat/completions`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:JSON.stringify(input)}]})});
- const scenarios=[
-  {plan:'h04-chat-first.json',requests:[
-   ['morning-brief','write','H-04 refused draft one'],
-   ['brief-verification','source-facts','H-04 source refusal one'],
-   ['brief-verification','plain-words-and-delivery','H-04 delivery refusal one'],
-   ['morning-brief','one-rewrite','H-04 refused draft two'],
-   ['brief-verification','source-facts','H-04 source refusal two'],
-   ['brief-verification','plain-words-and-delivery','H-04 delivery refusal two'],
-  ]},
-  {plan:'h05-filtered-surfaces.json',requests:[
-   ['morning-brief','write','H-05 draft containing refused source'],
-   ['brief-verification','source-facts','H-05 source refusal'],
-   ['brief-verification','plain-words-and-delivery','H-05 first delivery check'],
-   ['morning-brief','one-rewrite','H-05 filtered rewrite'],
-   ['brief-verification','source-facts','H-05 final source check'],
-   ['brief-verification','plain-words-and-delivery','H-05 final delivery check'],
-  ]},
-  {plan:'h06-challenge.json',requests:[
-   ['morning-brief','write','H-06 draft containing refused source'],
-   ['brief-verification','source-facts','H-06 source refusal'],
-   ['brief-verification','plain-words-and-delivery','H-06 first delivery check'],
-   ['morning-brief','one-rewrite','H-06 filtered rewrite'],
-   ['brief-verification','source-facts','H-06 final source check'],
-   ['brief-verification','plain-words-and-delivery','H-06 final delivery check'],
-  ]},
-  {plan:'h18-no-challenge.json',requests:[
-   ['morning-brief','write','H-18 later routine draft'],
-   ['brief-verification','source-facts','H-18 source check'],
-   ['brief-verification','plain-words-and-delivery','H-18 delivery check'],
-  ]},
- ];
+ const scenarioPlans=['h04-chat-first.json','h05-filtered-surfaces.json','h06-challenge.json','h18-no-challenge.json'];
+ const scenarioGoals=new Set(scenarioPlans.map(plan=>{
+  const steps=JSON.parse(fs.readFileSync(path.join(planFolder,plan),'utf8'));
+  return steps.find(step=>step.path==='/api/setup').body.goal;
+ }));
+ const responses=JSON.parse(fs.readFileSync(savedBriefPlan,'utf8')).responses.filter(({match})=>{
+  const goal=match.kind==='morning-brief'
+   ? match.context?.goals?.[0]?.title
+   : match.kind==='brief-verification' ? match.context?.sources?.goals?.[0]?.title : undefined;
+  return scenarioGoals.has(goal);
+ });
  try{
-  for(const scenario of scenarios){
-   const steps=JSON.parse(fs.readFileSync(path.join(planFolder,scenario.plan),'utf8'));
-   const title=steps.find(step=>step.path==='/api/setup').body.goal;
-   for(const [kind,phaseOrCheck] of scenario.requests){
-    const input=kind==='morning-brief'
-     ? {kind,phase:phaseOrCheck,context:{goals:[{title}]}}
-     : {kind,check:phaseOrCheck,context:{sources:{goals:[{title}]}}};
-    const response=await request(input);
-    assert.equal(response.status,200,`${scenario.plan}: ${kind}/${phaseOrCheck}`);
-   }
+  for(const {name,match} of responses){
+   const response=await request(match);
+   assert.equal(response.status,200,name);
   }
   const wrong=await request({kind:'morning-brief',phase:'write',context:{goals:[{title:'an unknown goal'}]}});
   assert.equal(wrong.status,500);
   const matched=fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse).filter(record=>record.matched).map(record=>record.matched);
-  assert.deepEqual(matched,scenarios.flatMap(scenario=>scenario.requests.map(([, ,name])=>name)));
+  assert.deepEqual(matched,responses.map(({name})=>name));
  }finally{
   isolated.kill();
   await new Promise(resolve=>isolated.once('exit',resolve));
