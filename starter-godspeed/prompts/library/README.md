@@ -67,7 +67,7 @@ this folder and, if you switched collection on, the log next door in
 
 ## An online copy, if you want one
 
-Chapter 38 gives a prompt a web copy you can reach from another device or share.
+Chapter 39 gives a prompt a web copy you can reach from another device or share.
 Remove private details before it goes online. When you bring a revised version
 back, compare it with the file here and decide which copy your changes start in.
 

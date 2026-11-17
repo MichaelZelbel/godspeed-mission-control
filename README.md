@@ -30,6 +30,15 @@ Version 2 is the current edition. The install lines on this page install the cur
 
 Godspeed carries the Workouts add-on. With Hevy Pro, open **Settings** > **Workouts from Hevy**, make a Hevy developer key, and connect it there. The key stays in the add-on's private state; Settings shows the imported-row count and last run, and the one hourly **Workouts from Hevy** routine appears under **Settings** > **Routines**. When taking over a standalone add-on schedule, Godspeed first proves the carried routine can import; if setup fails, Settings names the safe reason and retry time while the existing schedule stays in place. If retiring that schedule fails after the proof, the carried routine keeps running and Settings reports the removal retry. Disconnect stops that routine while keeping the tracker and its rows.
 
+## New in 2.0.0-beta.26
+
+Godspeed stays steady and says what is true.
+
+- **A Timeline moment can be linked to a person who already exists.**
+- **The screens and the starter files stop promising what Godspeed no longer does**: deadline reminders beside the morning brief, pictures in the GitHub copy, the book's ready-made skills from the public line.
+- **The notebook's building blocks get their security fixes again, and a restart keeps working.**
+- **The Hostinger one-click button installs the current public version and follows every release by itself.**
+
 ## New in 2.0.0-beta.25
 
 Voice notes work without a paid key, and the morning briefing is the same wherever you ask for it.
