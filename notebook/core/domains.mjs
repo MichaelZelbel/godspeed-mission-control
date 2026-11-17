@@ -3,16 +3,17 @@ import {momentDraft} from './moment-draft.mjs';
 import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
 import {startCharmJudgement} from './charm-judgement.mjs';
 import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
-import {asksForTodaysBrief,briefing,savedBriefToday} from './briefing.mjs';
+import {asksForTodaysBrief,briefing,briefingDay,savedBriefToday} from './briefing.mjs';
 import {NOTEBOOK_CHAT_FUNCTIONS} from './notebook-chat.mjs';
 
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
 const briefingCreations=new WeakMap();
-async function createBriefingOnce(store,create){
- const pending=briefingCreations.get(store);if(pending)return pending;
- const creation=(async()=>{const saved=savedBriefToday(store);if(!saved.note&&!saved.hidden)await create();})();
- briefingCreations.set(store,creation);
- try{return await creation;}finally{if(briefingCreations.get(store)===creation)briefingCreations.delete(store);}
+async function createBriefingOnce(store,day,requestedAt,create){
+ let byDay=briefingCreations.get(store);if(!byDay){byDay=new Map();briefingCreations.set(store,byDay);}
+ const pending=byDay.get(day);if(pending)return pending;
+ const creation=(async()=>{const saved=savedBriefToday(store,requestedAt);if(!saved.note&&!saved.hidden)await create();})();
+ byDay.set(day,creation);
+ try{return await creation;}finally{if(byDay.get(day)===creation)byDay.delete(day);if(!byDay.size)briefingCreations.delete(store);}
 }
 import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
@@ -297,10 +298,11 @@ export class Domains {
       if(!input.message)input={...input,message:input.messages?.filter(m=>m.role==='user').at(-1)?.content||''};
     }
     if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode!=='summarize'&&asksForTodaysBrief(input.message)){
-      let today=savedBriefToday(this.store),saved=today.note;
+      const requestedAt=new Date(),day=briefingDay(this.store,requestedAt);
+      let today=savedBriefToday(this.store,requestedAt),saved=today.note;
       if(name==='conversation-chat'&&!saved&&!today.hidden&&this.provider){
-        await createBriefingOnce(this.store,()=>briefing({id:'brief-chat-'+hash([input.request_id||input.conversation_id||'conversation',new Date().toISOString().slice(0,10)])},{store:this.store,query:this.query,provider:this.provider}));
-        today=savedBriefToday(this.store);saved=today.note;
+        await createBriefingOnce(this.store,day,requestedAt,()=>briefing({id:'brief-chat-'+hash([input.request_id||input.conversation_id||'conversation',day])},{store:this.store,query:this.query,provider:this.provider,now:requestedAt}));
+        today=savedBriefToday(this.store,requestedAt);saved=today.note;
       }
       if(today.hidden)return {reply:''};
       if(saved){

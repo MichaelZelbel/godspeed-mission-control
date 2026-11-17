@@ -43,6 +43,7 @@ export const BRIEFING_SOURCE_TABLES=Object.freeze(Object.keys(BRIEFING_SOURCE_SE
 // commits after local midnight must not move; notes saved before that field have only created_at.
 const briefedOn=(note,zone)=>note.source_app==='morning-brief'&&(note.brief_day||(note.created_at&&dayOf(new Date(note.created_at),zone)));
 const installationZone=store=>store.get('settings','installation')?.timezone||'UTC';
+export const briefingDay=(store,now=new Date())=>dayOf(now,installationZone(store));
 // The notes that may say whose a trip or appointment of today is (#386): one naming today, or a date
 // range holding it, and anything written in the last three days.
 const DAY_RANGE=/(\d{4}-\d{2}-\d{2})\s*(?:-|–|to|bis|until)\s*(\d{4}-\d{2}-\d{2})/gi;
@@ -56,7 +57,7 @@ function notesAboutDay(rows,today,nowMs){
 // Today's saved briefing note as the assistant may see it; hidden is true when a note for today
 // exists but the person has hidden it, so that nothing is written beside it.
 export function savedBriefToday(store,now=new Date()){
- const zone=installationZone(store),today=dayOf(now,zone),query=new QueryService(store);
+ const zone=installationZone(store),today=briefingDay(store,now),query=new QueryService(store);
  const mine=rows=>rows.filter(n=>briefedOn(n,zone)===today).at(-1);
  if(!mine(query.rows('notes')))return {note:null,hidden:false};
  const note=mine(visibleRows(query,'notes'));
