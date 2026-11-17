@@ -14,7 +14,8 @@ import {fileURLToPath} from 'node:url';
 // GODSPEED_WEB_ADDRESS is that whole address, which the notebook gives an assistant asked
 // for the link to it (core/notebook-address.mjs).
 // GODSPEED_SERVICE keeps an installation with an alternate unit on that unit during handover.
-export const NAMES=['GODSPEED_WORKSPACE','GODSPEED_ORIGINAL_RUNTIME','GODSPEED_SERVICE','GODSPEED_PORT','GODSPEED_BIND','HERMES_HOME','GODSPEED_DEVICE','GODSPEED_MEDIA_ROOT','GODSPEED_WEB_PORT','GODSPEED_HOST','GODSPEED_WEB_ADDRESS'];
+// GODSPEED_SKIP_WEB_ADDRESS keeps a loopback-only installation away from shared web resources.
+export const NAMES=['GODSPEED_WORKSPACE','GODSPEED_ORIGINAL_RUNTIME','GODSPEED_SERVICE','GODSPEED_PORT','GODSPEED_BIND','HERMES_HOME','GODSPEED_DEVICE','GODSPEED_MEDIA_ROOT','GODSPEED_WEB_PORT','GODSPEED_HOST','GODSPEED_WEB_ADDRESS','GODSPEED_SKIP_WEB_ADDRESS'];
 
 // The Update now button (core/update.mjs) cannot stop and start the service it runs in: that needs
 // the administrator, and the service's stop ends every program the notebook started. So start.mjs

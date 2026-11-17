@@ -259,7 +259,11 @@ fetch("http://127.0.0.1:"+port+"/health").then(r=>r.ok?r.json():Promise.reject()
 # "production" to "local", and every routine it owned stopped running.
 previous_setting() {
   [ -f "$state/start.mjs" ] || return 0
-  "$node" -e 'const t=require("fs").readFileSync(process.argv[1],"utf8"),m=t.match(new RegExp("\""+process.argv[2]+"\":(\"(?:[^\"\\\\]|\\\\.)*\")"));if(m)process.stdout.write(JSON.parse(m[1]))' "$state/start.mjs" "$1" 2>/dev/null || true
+  "$node" --check "$state/start.mjs" >/dev/null 2>&1 || {
+    echo "The saved installation settings in $state/start.mjs cannot be read, so the installer stopped before choosing a service." >&2
+    return 1
+  }
+  "$node" -e 'const t=require("fs").readFileSync(process.argv[1],"utf8"),m=t.match(new RegExp("\""+process.argv[2]+"\":(\"(?:[^\"\\\\]|\\\\.)*\")"));if(m)process.stdout.write(JSON.parse(m[1]))' "$state/start.mjs" "$1"
 }
 
 # --- The web address, on a server ---------------------------------------------------
@@ -503,7 +507,7 @@ install_update_command() {
 
 restore_kept_settings() {
   local kept setting value
-  kept="GODSPEED_DEVICE GODSPEED_SERVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT GODSPEED_WEB_PORT GODSPEED_HOST"
+  kept="GODSPEED_DEVICE GODSPEED_SERVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT GODSPEED_WEB_PORT GODSPEED_HOST GODSPEED_SKIP_WEB_ADDRESS"
   [ -z "$mode" ] || kept="$kept GODSPEED_WEB_ADDRESS HERMES_HOME"
   for setting in $kept; do
     if [ -z "${!setting:-}" ]; then

@@ -159,6 +159,14 @@ test('a re-run keeps the machine name and settings the last installation ran wit
   assert.equal(sh('previous_setting GODSPEED_DEVICE',{state:scratch('fresh'),node}).out,'','a first installation has nothing to keep');
 });
 
+test('an unreadable saved start script stops settings restoration',options,()=>{
+  const state=scratch('broken-settings'),node=slash(process.execPath);
+  fs.writeFileSync(path.join(state,'start.mjs'),'const settings={"GODSPEED_SERVICE":"isolated.service"');
+  const read=sh('mode=""; restore_kept_settings',{state,node});
+  assert.notEqual(read.status,0);
+  assert.match(read.err,/saved installation settings.*cannot be read/);
+});
+
 // The copies made before updates (core/upgrade-copies.mjs): until 15 October 2026 every update
 // added one and none was removed. The installer's own step, with this checkout as the new version.
 const product=slash(fileURLToPath(new URL('../..',import.meta.url))).replace(/\/$/,'');

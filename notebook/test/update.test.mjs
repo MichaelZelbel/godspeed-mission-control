@@ -139,25 +139,56 @@ test('a terminal update runs install-godspeed.sh out of the checked archive, at 
 
 test('a terminal update restores the persisted service after filtering the caller environment',async()=>{
   const root=computer('2.0.0-beta.20'),runtime=path.join(root,'.godspeed','integrated-runtime'),service='godspeed-native-install-test.service';
-  fs.writeFileSync(path.join(runtime,'start.mjs'),`const settings={"GODSPEED_SERVICE":${JSON.stringify(service)}};`);
+  fs.writeFileSync(path.join(runtime,'start.mjs'),`const settings={"GODSPEED_SERVICE":${JSON.stringify(service)},"GODSPEED_SKIP_WEB_ADDRESS":"1"};`);
+  fs.writeFileSync(path.join(root,'AGENTS.md'),'test');fs.mkdirSync(path.join(root,'rules'));
+  const installedVersion=path.join(runtime,'versions','a'.repeat(40));
+  fs.mkdirSync(path.join(installedVersion,'notebook','bin'),{recursive:true});fs.writeFileSync(path.join(installedVersion,'notebook','bin','godspeed.mjs'),'');
+  const platform=process.platform==='darwin'?'darwin':process.platform==='linux'?'linux':null;
+  const architecture=process.arch==='arm64'?'arm64':process.arch==='x64'?'x64':null;
+  if(!platform||!architecture)return;
+  const installedNode=path.join(runtime,'runtime',`node-v22.19.0-${platform}-${architecture}`,'bin','node');
+  fs.mkdirSync(path.dirname(installedNode),{recursive:true});
+  fs.writeFileSync(installedNode,`#!/bin/sh\nif [ "$1" = --version ]; then echo v22.19.0; else exec ${JSON.stringify(process.execPath)} "$@"; fi\n`,{mode:0o755});
+  const marker=path.join(root,'selected-service'),bashEnv=path.join(root,'observe-installer');
+  fs.writeFileSync(bashEnv,`service_assignments=0\ntrap 'if [[ "$BASH_COMMAND" == SERVICE=* ]]; then service_assignments=$((service_assignments+1)); if [ "$service_assignments" = 2 ]; then trap - DEBUG; eval "$BASH_COMMAND"; printf "%s %s" "$SERVICE" "${'${GODSPEED_SKIP_WEB_ADDRESS:-}'}" > ${JSON.stringify(marker)}; exit 0; fi; fi' DEBUG\n`);
   const {fetchImpl}=github(release());
   const {run}=spy((command,args,options)=>{
-    if(command!=='bash')return 0;
+    if(command==='tar'){
+      const target=path.join(args[args.indexOf('-C')+1],args.at(-1));
+      fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(installer,target+'.native');
+      fs.writeFileSync(target,'#!/bin/sh\nexec bash "$0.native" "$2"\n',{mode:0o755});return 0;
+    }
+    assert.equal(command,'bash');
     assert.equal(options.env.GODSPEED_SERVICE,undefined,'godspeed-update removes the ambient identity');
-    const checked=spawnSync('bash',['-c','set -euo pipefail; GODSPEED_INSTALLER_FUNCTIONS_ONLY=1; . "$1"; state="$2"; node="$3"; mode=""; restore_kept_settings; printf %s "$GODSPEED_SERVICE"','test',installer,runtime,process.execPath],{encoding:'utf8',env:options.env});
+    const checked=spawnSync(command,args,{encoding:'utf8',cwd:options.cwd,env:{...options.env,BASH_ENV:bashEnv,GODSPEED_PRODUCT_REF:'a'.repeat(40),GODSPEED_SKIP_UI:'1'}});
     assert.equal(checked.status,0,checked.stderr);
-    assert.equal(checked.stdout,service,'the installer restores the installation identity from start.mjs');
-    return 0;
+    return checked.status;
   });
-  const outcome=await runUpdate({...silent,root,fetchImpl,run,env:{GODSPEED_SERVICE:'owner.service'},platform:'linux'});
+  const outcome=await runUpdate({...silent,root,fetchImpl,run,env:{...process.env,GODSPEED_SERVICE:'owner.service'},platform:'linux'});
   assert.equal(outcome.state,'updated');
+  assert.equal(fs.readFileSync(marker,'utf8'),service+' 1','the downloaded installer itself restores isolation before selecting its service');
 });
 
 test('persisted installer settings stay conformant across their three roles',()=>{
   const source=fs.readFileSync(installer,'utf8'),kept=/kept="([^"]+)"/.exec(source)?.[1].split(' ')??[];
   assert.deepEqual(SERVICE_NAMES,[...NAMES,'GODSPEED_HANDOVER'],'the updater filters every saved setting plus its handover signal');
-  assert.deepEqual(kept,['GODSPEED_DEVICE','GODSPEED_SERVICE','GODSPEED_PORT','GODSPEED_MEDIA_ROOT','GODSPEED_WEB_PORT','GODSPEED_HOST'],'terminal reruns restore every saved, caller-selectable installation setting');
-  assert.ok(NAMES.includes('GODSPEED_SERVICE')&&kept.includes('GODSPEED_SERVICE'),'service identity is saved, filtered, and restored');
+  assert.deepEqual(kept,['GODSPEED_DEVICE','GODSPEED_SERVICE','GODSPEED_PORT','GODSPEED_MEDIA_ROOT','GODSPEED_WEB_PORT','GODSPEED_HOST','GODSPEED_SKIP_WEB_ADDRESS'],'terminal reruns restore every saved, caller-selectable installation setting');
+  for(const name of ['GODSPEED_SERVICE','GODSPEED_SKIP_WEB_ADDRESS'])assert.ok(NAMES.includes(name)&&kept.includes(name),name+' is saved, filtered, and restored');
+});
+
+test('a terminal update fails before selecting a default service when saved settings are malformed',async()=>{
+  const root=computer('2.0.0-beta.20'),runtime=path.join(root,'.godspeed','integrated-runtime');
+  fs.writeFileSync(path.join(runtime,'start.mjs'),'const settings={"GODSPEED_SERVICE":"godspeed-native-install-test.service"');
+  const {fetchImpl}=github(release());
+  const {run}=spy((command,args,options)=>{
+    if(command!=='bash')return 0;
+    const checked=spawnSync('bash',['-c','set -euo pipefail; GODSPEED_INSTALLER_FUNCTIONS_ONLY=1; . "$1"; state="$2"; node="$3"; mode=""; restore_kept_settings','test',installer,runtime,process.execPath],{encoding:'utf8',env:options.env});
+    assert.notEqual(checked.status,0);
+    assert.match(checked.stderr,/saved installation settings.*cannot be read/);
+    return checked.status;
+  });
+  await assert.rejects(runUpdate({...silent,root,fetchImpl,run,env:{},platform:'linux'}),/stopped before it was finished/);
+  assert.equal(readStatus(root).state,'failed');
 });
 
 test('an installer that fails leaves the update failed, in plain words',async()=>{
