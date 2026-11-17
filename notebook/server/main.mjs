@@ -83,8 +83,8 @@ const SAME_SERVICE='That is the service your main AI uses already. A backup step
 const BACKUP_SERVICE='That is the service your backup AI uses. Remove the backup first, or choose another service for your main AI.';
 export const startupTrace=(event,now=new Date())=>`${now.toISOString()} startup ${event}`;
 export const startupReadiness=publication=>{
-  const state={ready:false,status:503,body:{ready:false}};
-  const markReady=()=>{state.ready=true;state.status=200;state.body={ready:true};};
+  const state={status:503,body:{ready:false}};
+  const markReady=()=>{state.status=200;state.body={ready:true};};
   publication.then(markReady,()=>{});
   return state;
 };
