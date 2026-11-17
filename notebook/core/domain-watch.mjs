@@ -69,20 +69,32 @@ async function lookup(domain,fetcher){
 }
 
 export async function runDomainWatches({store,fetcher}){
-  const outcomes=[];
+  const outcomes=[],successful=[];
   for(const snapshot of active(store)){
     let read;try{read=await lookup(snapshot.domain,fetcher);}catch(error){outcomes.push({domain:snapshot.domain,ok:false,error:error.message});continue;}
-    await store.waitForWriter();
-    const at=new Date().toISOString();
-    store.withLock(()=>{
+    successful.push({snapshot,read});
+  }
+  await store.waitForWriter();
+  let delivery;
+  store.withLock(()=>{
+    const records=[],transitions=[];
+    for(const {snapshot,read} of successful){
+      const at=new Date().toISOString();
       const current=store.get('domain_watches',snapshot.id);
-      if(!current||current.removed_at){outcomes.push({domain:snapshot.domain,ok:false,removed:true});return;}
+      if(!current||current.removed_at){outcomes.push({domain:snapshot.domain,ok:false,removed:true});continue;}
       const changed=!!current.state&&current.state!==read.state,transition=changed?hash([current.id,current.state,read.state,current._hash]):null;
       const observation=store.prepare('domain_watch_observations',{watch_id:current.id,domain:current.domain,state:read.state,observed_at:at,endpoint:read.endpoint,http_status:read.http_status,statuses:read.statuses,changed});
-      const records=[observation,store.prepare('domain_watches',{state:read.state,checked_at:at,last_observation_id:observation.id},current)];
-      if(changed)records.push(store.prepare('notifications',{id:'domain-watch-'+transition,status:'ready',domain:current.domain,watch_id:current.id,observation_id:observation.id,body:current.domain+' is now '+read.state+': '+advice[read.state]+'.'}));
-      store.commit(records);outcomes.push({domain:current.domain,ok:true,state:read.state,changed});
-    });
-  }
-  return {verified:true,silent:!outcomes.some(o=>o.changed),domains:outcomes};
+      records.push(observation,store.prepare('domain_watches',{state:read.state,checked_at:at,last_observation_id:observation.id},current));
+      if(changed)transitions.push({id:'domain-watch-'+transition,domain:current.domain,watch_id:current.id,observation_id:observation.id,body:current.domain+' is now '+read.state+': '+advice[read.state]+'.'});
+      outcomes.push({domain:current.domain,ok:true,state:read.state,changed});
+    }
+    if(transitions.length){
+      const note=store.prepare('notes',{title:'Domain registration changes',content:transitions.map(change=>change.body).join('\n\n'),source_app:'domain-watch'});
+      records.push(note,...transitions.map(change=>store.prepare('notifications',{...change,status:'ready',record_id:note.id})));
+      delivery=note;
+    }
+    if(records.length)store.commit(records);
+  });
+  const failed=outcomes.filter(outcome=>!outcome.ok);
+  return {verified:outcomes.length===0||failed.length<outcomes.length,silent:!delivery,domains:outcomes,...(delivery?{record_id:delivery.id,content_hash:store.get('notes',delivery.id)._hash,delivery:'notebook'}:{})};
 }
