@@ -34,6 +34,15 @@ test('one saved message is delivered once, whichever run hands it over',async t=
  assert.equal(sends.length,2);
 });
 
+test('a fresh public routine inventory can enable Coaching talk preparation',async t=>{
+ const {store}=workspace(t,'local');
+ store.save('settings',{id:'installation',owner:'local',timezone:'Europe/Berlin',delivery:'notebook'});
+ const routine=await controlRoutine(store,{kind:'coach-prep',at:'03:00'},{enable:true,now:t0});
+ assert.equal(routine.kind,'coach-prep');
+ assert.equal(routine.title,'Coaching talk preparation');
+ assert.deepEqual(routine.calendar,{time:'03:00'});
+});
+
 test('a delivered run stays delivered when its bookkeeping meets a busy workspace',async t=>{
  const {store}=workspace(t);brief(store);let executions=0;const sends=[];
  const scheduler=new Scheduler(store,{device:'vps',executor:async()=>{executions++;const note=store.save('notes',{title:'Your morning briefing',content:'Good morning! Today: dentist at 10.'});return {verified:true,record_id:note.id,delivery:'notebook'};}});
