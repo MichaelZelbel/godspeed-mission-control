@@ -134,7 +134,6 @@ run_installed_preparation() {
   fi
   cp "$produced" "$EVIDENCE/routine-preparation.md"
   printf '%s\n' "${produced#"$ROOT"/}" >"$EVIDENCE/routine-preparation-source.txt"
-  rm -f "$produced" "${produced%.md}.evidence.json" "${produced%.md}.review.json"
 }
 
 if [ "${TALK_PREP_RUN_NOW_TEST_ONLY:-}" = 1 ]; then

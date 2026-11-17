@@ -131,7 +131,7 @@ try{
   // The exact visible interaction sequence is implemented in the page so the retained action list
   // cannot be produced by direct API writes. input/change/click are the same DOM events a person causes.
   const visible=expression=>js(`(()=>{const e=${expression};if(!e)return false;const r=e.getBoundingClientRect();return !e.disabled&&r.width>0&&r.height>0})()`);
-  const waitVisible=async(expression,description)=>{for(let n=0;n<100;n++){if(await visible(expression))return;await pause(100);}throw Error('visible control not found: '+description);};
+  const waitVisible=async(expression,description)=>{const until=Date.now()+deadline;while(Date.now()<until){if(await visible(expression))return;await pause(100);}throw Error('visible control not found: '+description);};
   const click=async text=>{const expression=`[...document.querySelectorAll('button,a')].find(x=>x.textContent.trim()===${JSON.stringify(text)})`;await waitVisible(expression,text);await js(`(()=>{const e=${expression};e.click();return true})()`);await pause(700);};
   const openMoment=async title=>{const ok=await js(`(()=>{const title=[...document.querySelectorAll('button p')].find(x=>x.textContent.trim()===${JSON.stringify(title)});const button=title?.closest('button');if(!button)return false;button.click();return true})()`);if(!ok)throw Error('visible Timeline moment not found: '+title);await pause(700);};
   const controlFor=label=>`(()=>{const l=[...document.querySelectorAll('label')].find(x=>x.textContent.includes(${JSON.stringify(label)}));return l&&(l.htmlFor?document.getElementById(l.htmlFor):l.querySelector('input,select,textarea')||l.parentElement?.querySelector('input,select,textarea'))})()`;
