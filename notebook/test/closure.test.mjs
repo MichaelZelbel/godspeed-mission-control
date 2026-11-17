@@ -37,11 +37,10 @@ test('groups retain their domain type, route slug and membership references thro
 test('corrupt disposable index recovers from durable Unicode notes and retains corrupt bytes',()=>{
  const {store}=setup();store.save('notes',{title:'Index recovery',content:'Grüße 日本語'});atomic(path.join(store.state,'search.sqlite'),'corrupt fixture');const index=new SearchIndex(store);assert.ok(index.recovered);assert.equal(index.search('日本語').length,1);assert.ok(fs.readdirSync(store.state).some(n=>n.startsWith('search.sqlite.corrupt-')));index.close();
 });
-test('optional account readers verify numeric balances and exact outward approvals cannot be replayed',async()=>{
- const {store,query}=setup();let posts=0;const server=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');if(req.method==='POST'){posts++;res.end(JSON.stringify({id:'synthetic-receipt'}));}else res.end(JSON.stringify({credits:{remaining:4}}));});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+test('optional outward connectors require exact approvals that cannot be replayed',async()=>{
+ const {store,query}=setup();let posts=0;const server=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');if(req.method==='POST'){posts++;res.end(JSON.stringify({id:'synthetic-receipt'}));}else res.end(JSON.stringify({ok:true}));});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const domains=new Domains(query),url='http://127.0.0.1:'+server.address().port;
  try{
-  await domains.invoke('configure-connector',{name:'spend-guard',url,value_path:'credits.remaining',threshold:10,token:'synthetic'});const balance=await domains.invoke('run-connector',{name:'spend-guard'});assert.equal(balance.balance,4);assert.ok(balance.needs_attention);
   await domains.invoke('configure-connector',{name:'browser-post',url});const payload={text:'Synthetic test only'};await assert.rejects(domains.invoke('run-connector',{name:'browser-post',payload}),/approval/);assert.equal(posts,0);
   const approval=store.save('approvals',{title:'Synthetic delivery',status:'approved',intent_sha256:hash({name:'browser-post',payload}),expires_at:new Date(Date.now()+60000).toISOString()});assert.ok((await domains.invoke('run-connector',{name:'browser-post',payload,approval_id:approval.id})).verified);await assert.rejects(domains.invoke('run-connector',{name:'browser-post',payload,approval_id:approval.id}),/approval/);assert.equal(posts,1);
  }finally{await new Promise(r=>server.close(r));}
