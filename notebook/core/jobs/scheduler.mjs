@@ -109,7 +109,7 @@ export class Scheduler {
     // sleeps until the first topic is due (a day at most, so an edited topic
     // is found). Until 6 October 2026 one idle topic woke it every minute and
     // left some 4,400 files a day in the synced notebook.
-    if(!recovery&&['watch','domain-watch'].includes(job.kind)&&!job.force_sources){
+    if(!recovery&&job.kind==='watch'&&!job.force_sources){
       const due=watchDue(this.query,job,now);
       if(due!==true){
         const at=new Date(Math.max(now+60000,Math.min(due??Infinity,now+86400000))).toISOString();

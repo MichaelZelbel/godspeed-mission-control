@@ -2305,8 +2305,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Read owner-selected authoritative domain registration endpoints; do not buy domains. Verify the domain-watch result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "notebook/test/domain-watch.test.mjs: add, list, archive and restore through one six-hour sweeper; exact RDAP endpoints and headers; fallback and total failure; baseline, changed and unchanged states; one notification per transition; chat add, list and remove"
+      ],
       "required": true,
       "target_test": "Exercise domain-watch through its installed entry point and check actual results after restart"
     },

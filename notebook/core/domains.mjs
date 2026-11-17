@@ -597,6 +597,7 @@ export class Domains {
       // product as a candidate; a failed lookup leaves it out and the model says it found nothing.
       if(name==='conversation-chat'&&/(?<!\d)\d{8,14}(?!\d)/.test(String(input.message||''))){const {lookupBarcode}=await import('./food-products.mjs');for(const code of new Set(String(input.message).match(/(?<!\d)\d{8,14}(?!\d)/g)))try{await lookupBarcode(this.store.state,code,{fetcher:this.foodFetcher,signal:input.signal});}catch{}}
       const context=await retrievedContext(this.query,input,this.provider,{index:this.index}),notes=context.notes;
+      if(name==='conversation-chat')context.domain_watches=visibleRows(this.query,'domain_watches').map(w=>({domain:w.domain,state:w.state,checked_at:w.checked_at}));
       const attached=chatAttachments(this.mediaRoot,input.files||[],carriedRoot(this.store));context.documents=attached.documents;
       if(name==='conversation-chat'&&input[IDENTITY_PAGE])context.identity_page=input[IDENTITY_PAGE];
       if(input.attachments){
