@@ -93,6 +93,21 @@ function type(editor: any, words: string) {
 const comeBack = () => act(() => { notebook.away = false; window.dispatchEvent(new Event("online")); });
 
 describe("text typed in a note while the notebook does not answer (#29)", () => {
+  it("does not put normal save progress between the title and note text", async () => {
+    const id = await seedNote("Garden plan", "Seeds to buy.");
+    const page = await openPage();
+    render(page.view(await page.read(id)));
+    const editor = await openEditor();
+
+    type(editor, "Water the beans.");
+
+    const title = screen.getByRole("textbox", { name: "Note title" });
+    const statusRow = title.nextElementSibling;
+    expect(statusRow).not.toHaveTextContent("Saving");
+    expect(statusRow).not.toHaveTextContent("Saved");
+    await waitFor(async () => expect((await stored(id)).content).toContain("Water the beans."), { timeout: 15_000 });
+  }, 40_000);
+
   it("survives a failed save while switching notes, and is saved once the notebook answers", async () => {
     const gardenId = await seedNote("Garden plan", "Seeds to buy.");
     const otherId = await seedNote("Reading list", "A book about ferns.");
@@ -131,11 +146,28 @@ describe("text typed in a note while the notebook does not answer (#29)", () => 
     comeBack();
     await waitFor(async () => expect((await stored(id)).content).toContain("Water the beans."), { timeout: 15_000 });
     await waitFor(() => expect(screen.queryByText(/Not saved yet/)).toBeNull());
-    expect(screen.getByText(/^Saved ·/)).toBeInTheDocument();
+    expect(screen.getByText(/^Saved /)).toBeInTheDocument();
     const after = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(after);
     expect(after.defaultPrevented).toBe(false);
   }, 40_000);
+
+  it("shows Save failed after repeated real save failures, then recovers", async () => {
+    const id = await seedNote("Garden plan", "Seeds to buy.");
+    const page = await openPage();
+    render(page.view(await page.read(id)));
+    const editor = await openEditor();
+
+    notebook.away = true;
+    type(editor, "Water the beans.");
+    expect(await screen.findByText(/Not saved yet\. Trying again/, undefined, { timeout: 8_000 })).toBeInTheDocument();
+    expect(await screen.findByText("Save failed", undefined, { timeout: 25_000 })).toBeInTheDocument();
+    expect((await stored(id)).content).not.toContain("Water the beans.");
+
+    comeBack();
+    await waitFor(async () => expect((await stored(id)).content).toContain("Water the beans."), { timeout: 15_000 });
+    await waitFor(() => expect(screen.queryByText("Save failed")).toBeNull());
+  }, 50_000);
 
   it("is restored and saved when the note is opened after a reload", async () => {
     const id = await seedNote("Garden plan", "Seeds to buy.");
