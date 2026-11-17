@@ -152,6 +152,23 @@ describe("text typed in a note while the notebook does not answer (#29)", () => 
     expect(after.defaultPrevented).toBe(false);
   }, 40_000);
 
+  it("shows Save failed after repeated real save failures, then recovers", async () => {
+    const id = await seedNote("Garden plan", "Seeds to buy.");
+    const page = await openPage();
+    render(page.view(await page.read(id)));
+    const editor = await openEditor();
+
+    notebook.away = true;
+    type(editor, "Water the beans.");
+    expect(await screen.findByText(/Not saved yet\. Trying again/, undefined, { timeout: 8_000 })).toBeInTheDocument();
+    expect(await screen.findByText("Save failed", undefined, { timeout: 25_000 })).toBeInTheDocument();
+    expect((await stored(id)).content).not.toContain("Water the beans.");
+
+    comeBack();
+    await waitFor(async () => expect((await stored(id)).content).toContain("Water the beans."), { timeout: 15_000 });
+    await waitFor(() => expect(screen.queryByText("Save failed")).toBeNull());
+  }, 50_000);
+
   it("is restored and saved when the note is opened after a reload", async () => {
     const id = await seedNote("Garden plan", "Seeds to buy.");
     let page = await openPage();

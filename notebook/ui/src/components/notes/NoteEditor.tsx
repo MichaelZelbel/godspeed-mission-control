@@ -625,12 +625,13 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     if (confirmed.title !== undefined && pendingSaveTitleRef.current === confirmed.title) pendingSaveTitleRef.current = null;
   }), []);
 
-  // "Not saved yet. Trying again..." until the notebook takes the text.
+  // Show the retry warning first, then the terminal failure warning after the
+  // keeper has exhausted its growing retry sequence. Either clears on save.
   const unsavedBefore = useRef(unsavedStatus);
   useEffect(() => {
     const before = unsavedBefore.current;
     unsavedBefore.current = unsavedStatus;
-    if (before !== "retrying" || unsavedStatus === "retrying") return;
+    if ((before !== "retrying" && before !== "failed") || unsavedStatus === "retrying" || unsavedStatus === "failed") return;
     if (unsavedStatus === "saved") {
       setSaveStatus("saved");
     } else setSaveStatus("saving");
@@ -1818,7 +1819,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             disabled={note.is_trashed || note.is_external}
           />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 empty:hidden">
-            {!note.is_trashed && !note.is_external && (unsavedStatus === "retrying" || saveStatus === "error") && (
+            {!note.is_trashed && !note.is_external && (unsavedStatus === "retrying" || unsavedStatus === "failed" || saveStatus === "error") && (
               <SaveWarning status={unsavedStatus === "retrying" ? "retrying" : "error"} />
             )}
             {!note.is_trashed && <ProcessingIndicator note={note} credits={credits} />}
