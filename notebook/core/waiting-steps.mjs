@@ -15,6 +15,7 @@ export const ROUTES={telegram:{conversation:'telegram-owner',matches:id=>id==='t
 export const CHATS=Object.keys(ROUTES);
 export const ASKER_KINDS=['routine','addon','job'];
 const CHATS_FILE='waiting-step-chats.json',CLARIFICATION_MS=30*60000;
+const REMINDER_AFTER_MS=6*3600000,REMINDER_BEFORE_MS=7*24*3600000;
 export const chatOf=conversationId=>CHATS.find(chat=>ROUTES[chat].matches(conversationId))??null;
 
 const YES=new Set(['yes','yeah','yep','ja','jep','jo','ok','okay','sure','klar','gerne','passt','einverstanden','do it','ok do it','ok, do it','go ahead','mach','mach es','mach das','machs','approve','approved']);
@@ -61,6 +62,29 @@ const delivered=record=>!record.asked_in||Boolean(record.sent_at);
 const stepTime=record=>record.sent_at||record.asked_at||record.created_at||'';
 export const waitingSteps=(store,at=new Date().toISOString())=>store.list('approvals')
  .filter(r=>r.status==='pending'&&delivered(r)&&!(r.expires_at&&r.expires_at<=at)).sort((a,b)=>stepTime(a).localeCompare(stepTime(b)));
+
+export const reminderText=record=>record.about+' '+record.question+' Please answer yes or no.';
+const reminderDue=(record,now)=>{
+ const sent=Date.parse(record.sent_at),age=now-sent;
+ return record.status==='pending'&&CHATS.includes(record.asked_in)&&Number.isFinite(sent)&&age>REMINDER_AFTER_MS&&age<REMINDER_BEFORE_MS&&
+  !(record.expires_at&&Date.parse(record.expires_at)<=now)&&!record.reminded_at&&!QUIET_KINDS.includes(record.quietly);
+};
+
+// An hourly scheduler pass delivers notebook reminders itself and hands Telegram reminders to the
+// gateway that owns that chat. The hand-off is idempotent; only successful delivery stamps the step.
+export function remindWaitingSteps(store,{at=new Date(),append=appendAssistantMessage}={}){
+ const now=at instanceof Date?at:new Date(at),due=store.list('approvals').filter(record=>reminderDue(record,now.getTime())),queued=[];
+ for(const record of due){
+  const text=reminderText(record);
+  if(record.asked_in==='notebook'){
+   append(store,ROUTES.notebook.conversation.replace(/^notebook:/,''),text);
+   stampReminder(store,record.id);
+  }else{
+   handOffReminder(store,record.id,text,record.expires_at);queued.push(record.id);
+  }
+ }
+ return queued;
+}
 
 // What the system may do by itself without asking, declared by the asking code from this fixed list.
 // The model never judges it, and an outward step (sending, paying, deleting, publishing) is never on it.
@@ -173,6 +197,13 @@ const stamp=(store,id)=>stampAll(store,[id]);
 export const stampDelivered=(store,ids,receipt)=>stampAll(store,ids,{chat:'telegram',receipt});
 // The gateway's card went out: the one message that asked this Telegram step's question.
 export const stampCard=(store,id,receipt)=>store.withLockAsync(()=>stampUnderLock(store,[id],{chat:'telegram',receipt}));
+export const stampReminder=(store,id,receipt)=>store.withLock(()=>{
+ const record=store.get('approvals',id);
+ if(record?.status!=='pending'||record.reminded_at)return false;
+ const changes=[store.prepare('approvals',{reminded_at:deliveryClock(store)},record)],stored=receipt&&store.get('conversation_messages',receipt.id);
+ if(stored)changes.push(store.prepare('conversation_messages',{delivered_at:deliveryClock(store)},stored));
+ store.commit(changes);return true;
+});
 // Resolves once the step's question went out or the step stopped waiting, or after `ms`. A Telegram
 // step's card is sent by the gateway, so `godspeed-step open` waits here for it before the routine ends.
 export async function sentWithin(store,id,ms){
@@ -189,6 +220,7 @@ export async function sentWithin(store,id,ms){
 // gateway is to send. It is written when the step opens and deleted once the question went out (by
 // its card or in words) or the step was answered.
 export const STEP_QUESTIONS='step-questions',STEP_QUESTION_MAX_AGE_MS=24*3600000;
+export const STEP_REMINDERS='step-reminders';
 const STEP_ID=/^step-[0-9a-f-]{36}$/;
 function dropHandOff(store,id){
  if(STEP_ID.test(id))try{fs.rmSync(path.join(store.state,STEP_QUESTIONS,id+'.json'),{force:true});}catch{}
@@ -205,6 +237,12 @@ function handOffButtons(store,ids){
   const record=store.get('approvals',id);
   if(record&&STEP_ID.test(id))atomic(path.join(dir,id+'.json'),JSON.stringify({id,text:record.about+' '+record.question,expires_at:new Date(Date.now()+STEP_QUESTION_MAX_AGE_MS).toISOString()})+'\n');
  }
+}
+function handOffReminder(store,id,text,stepExpiry){
+ if(!STEP_ID.test(id))return;
+ const dir=path.join(store.state,STEP_REMINDERS);fs.mkdirSync(dir,{recursive:true,mode:0o700});
+ const expires=Math.min(Date.now()+STEP_QUESTION_MAX_AGE_MS,Date.parse(stepExpiry)||Infinity);
+ atomic(path.join(dir,id+'.json'),JSON.stringify({id,text,expires_at:new Date(expires).toISOString()})+'\n');
 }
 // The pending, unsent Telegram steps whose questions a routine printed in full, oldest first; a
 // question printed once names one step, however many steps ask the same words.

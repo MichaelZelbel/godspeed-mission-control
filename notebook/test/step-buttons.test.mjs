@@ -6,7 +6,8 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {Store} from '../core/records/store.mjs';
-import {answerStep,openStep,STEP_QUESTIONS} from '../core/waiting-steps.mjs';
+import {cardSent} from '../core/background-reports.mjs';
+import {answerStep,openStep,remindWaitingSteps,STEP_QUESTIONS} from '../core/waiting-steps.mjs';
 
 for(const key of Object.keys(process.env))if(/^GODSPEED_/.test(key))delete process.env[key];
 const here=path.dirname(fileURLToPath(import.meta.url)),stepScript=path.join(here,'..','bin','godspeed-step.mjs');
@@ -47,4 +48,9 @@ test('no Telegram client: no message goes out and the hand-off waits',opts,t=>sc
 test('a failed button send sends no plain copy and keeps the hand-off for the next look',opts,t=>scenario(t,'send_fails',['The bot stopped.']));
 test('while the notebook cannot say whether the step waits, no card goes out and the hand-off stays',opts,t=>scenario(t,'notebook_cannot_say',['The bot stopped.']));
 test('an expired hand-off is dropped and gets no buttons',opts,t=>scenario(t,'expired',['The bot stopped.']));
+test('a Telegram reminder is marked only after its card went out, and its buttons still answer the step',opts,t=>scenario(t,'reminder',['The bot stopped.'],async(store,[id])=>{
+ assert.equal(await cardSent(store,id),true);
+ const step=store.get('approvals',id);store.save('approvals',{...step,sent_at:'2026-11-17T05:50:00.000Z'});
+ remindWaitingSteps(store,{at:new Date('2026-11-17T12:00:00.000Z')});assert.equal(store.get('approvals',id).reminded_at,undefined);
+}));
 test('the installed plugin registers the step buttons with Telegram and closes them on unload',opts,t=>scenario(t,'registered',['The bot stopped.']));

@@ -8,10 +8,10 @@ import {fileURLToPath} from 'node:url';
 import {Store,hash} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
-import {cardSent,recordReport,recordRoutine,delivered} from '../core/background-reports.mjs';
+import {cardSent,reminderSent,recordReport,recordRoutine,delivered} from '../core/background-reports.mjs';
 import {Telegram} from '../core/telegram.mjs';
 import {Scheduler} from '../core/jobs/scheduler.mjs';
-import {openStep,ROUTES,CHATS,chatOf,ASKER_KINDS,answerStep,answerChosen,heard,stampReply,readStep,waitingSteps} from '../core/waiting-steps.mjs';
+import {openStep,ROUTES,CHATS,chatOf,ASKER_KINDS,answerStep,answerChosen,heard,remindWaitingSteps,stampReply,readStep,waitingSteps} from '../core/waiting-steps.mjs';
 
 for(const key of Object.keys(process.env))if(/^GODSPEED_/.test(key))delete process.env[key];
 const script=fileURLToPath(new URL('../bin/godspeed-step.mjs',import.meta.url));
@@ -217,6 +217,36 @@ test('a legacy pending approval is read as a waiting step and offered, never mat
  assert.equal(waitingSteps(store).length,1);
  const result=heard(store,{chat:'telegram',words:'yes'});
  assert.equal(result.kind,'ask');assert.match(result.context,/Send the fictional post/);
+});
+
+test('an unanswered delivered step gets one reminder after six hours, and ineligible steps get none',async t=>{
+ const {root,store}=fixture(t),now=new Date('2026-11-17T12:00:00.000Z');
+ const step=(id,fields={})=>store.save('approvals',{id,status:'pending',about:id,question:'Shall I go on?',asked_by:{kind:'routine',name:'test'},asked_in:'telegram',asked_at:'2026-11-17T00:00:00.000Z',sent_at:'2026-11-17T05:50:00.000Z',...fields});
+ step('step-11111111-1111-1111-1111-111111111111');
+ step('step-22222222-2222-2222-2222-222222222222',{sent_at:'2026-11-17T07:00:00.000Z'});
+ step('step-33333333-3333-3333-3333-333333333333',{sent_at:'2026-11-10T11:59:59.000Z'});
+ step('step-44444444-4444-4444-4444-444444444444',{expires_at:'2026-11-17T11:00:00.000Z'});
+ step('step-55555555-5555-5555-5555-555555555555',{status:'approved',answered_at:'2026-11-17T08:00:00.000Z'});
+ step('step-66666666-6666-6666-6666-666666666666',{asked_in:null});
+ assert.deepEqual(remindWaitingSteps(store,{at:now}),['step-11111111-1111-1111-1111-111111111111']);
+ const file=path.join(root,'.godspeed','step-reminders','step-11111111-1111-1111-1111-111111111111.json');
+ assert.match(JSON.parse(fs.readFileSync(file)).text,/step-11111111.*Shall I go on\? Please answer yes or no\./);
+ assert.ok(store.list('approvals').every(record=>!record.reminded_at),'queuing or a failed send writes no marker');
+ assert.deepEqual(remindWaitingSteps(store,{at:new Date(now.getTime()+3600000)}),['step-11111111-1111-1111-1111-111111111111'],'the next hourly pass retries');
+ assert.equal(await reminderSent(store,'step-11111111-1111-1111-1111-111111111111'),true);
+ assert.ok(store.get('approvals','step-11111111-1111-1111-1111-111111111111').reminded_at);
+ assert.deepEqual(remindWaitingSteps(store,{at:new Date(now.getTime()+2*3600000)}),['step-22222222-2222-2222-2222-222222222222'],'the five-hour step becomes due, but a sent reminder never repeats');
+ assert.equal(await reminderSent(store,'step-11111111-1111-1111-1111-111111111111'),false);
+});
+
+test('a notebook reminder is written before its marker, and a failed write is retried',t=>{
+ const {store}=fixture(t),id='step-77777777-7777-7777-7777-777777777777',now=new Date('2026-11-17T12:00:00.000Z');
+ store.save('approvals',{id,status:'pending',about:'The backup is waiting.',question:'Shall I retry it?',asked_by:{kind:'routine',name:'test'},asked_in:'notebook',asked_at:'2026-11-17T05:00:00.000Z',sent_at:'2026-11-17T05:50:00.000Z'});
+ assert.throws(()=>remindWaitingSteps(store,{at:now,append:()=>{throw Error('chat unavailable');}}),/chat unavailable/);
+ assert.equal(store.get('approvals',id).reminded_at,undefined);
+ remindWaitingSteps(store,{at:new Date(now.getTime()+3600000)});
+ assert.ok(store.get('approvals',id).reminded_at);
+ const chat=store.list('note_conversations')[0];assert.equal(chat.state.messages.at(-1).content,'The backup is waiting. Shall I retry it? Please answer yes or no.');
 });
 
 test('a scheduled run answers for nobody, and a step text holding a code is refused',async t=>{

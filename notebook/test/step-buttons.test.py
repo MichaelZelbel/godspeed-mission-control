@@ -127,6 +127,10 @@ def queue():
     return os.listdir(os.path.join(ROOT, ".godspeed", "step-questions"))
 
 
+def reminder_queue():
+    return os.listdir(os.path.join(ROOT, ".godspeed", "step-reminders"))
+
+
 def one_step():
     buttons, bot = gateway()
     step("heard", "--chat", "telegram", stdin="yes")
@@ -243,6 +247,19 @@ def expired():
         json.dump(item, f)
     buttons.post_waiting()
     assert queue() == [] and bot.sent == []
+
+
+def reminder():
+    buttons, bot = gateway()
+    (sent,) = post(buttons, bot, 1)
+    assert sent[0]["text"] == MESSAGES[0] + " Please answer yes or no."
+    assert reminder_queue() == []
+    records = os.path.join(ROOT, "notebook", "_system", "approvals")
+    with open(os.path.join(records, IDS[0] + ".json"), encoding="utf-8") as f:
+        record = json.load(f)
+    assert step("get", IDS[0])["status"] == "waiting" and record["reminded_at"], record
+    press(buttons, bot, sent, "yes")
+    assert status(IDS[0]) == "yes"
 
 
 def registered():
