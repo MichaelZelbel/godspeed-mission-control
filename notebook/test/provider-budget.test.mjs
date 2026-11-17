@@ -80,7 +80,7 @@ test('a passing 502, 503, 504 or 429 from the provider is tried again, and other
   assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]},'a refused key does not erase the configured model identity');
   answers.push([200,{choices:[{message:{content:'Connected again.'}}]}]);
   assert.equal(await provider({kind:'connection-test'}),'Connected again.');
-  assert.equal(provider.health(),'unreachable');
+  assert.equal(provider.health(),'ready');
   assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]});
  }finally{await new Promise(r=>server.close(r));}
 });
@@ -115,6 +115,19 @@ test('a model provider keeps its last completed refusal while the next response 
   const pending=provider.check();await parsing;
   assert.equal(provider.health(),'refused','a request does not replace the last completed classification');
   releaseJson();await assert.rejects(pending,/no text/);assert.equal(provider.health(),'unreachable');
+ }finally{globalThis.fetch=original;}
+});
+
+test('an older successful probe cannot replace a newer refused chat result',async()=>{
+ const original=globalThis.fetch,provider=modelProvider({url:'http://localhost/fixture',key:'fictional',model:'fictional',retryWaits:[]});let call=0,releaseProbe;
+ try{
+  globalThis.fetch=async()=>{
+   if(call++===0)return {ok:true,status:200,json:async()=>{await new Promise(resolve=>{releaseProbe=resolve;});return {choices:[{message:{content:'Connected.'}}]};}};
+   return new Response('{}',{status:403});
+  };
+  const olderProbe=provider.check();await new Promise(resolve=>setImmediate(resolve));
+  await assert.rejects(provider({kind:'conversation-chat'}),/HTTP 403/);assert.equal(provider.health(),'refused');
+  releaseProbe();await olderProbe;assert.equal(provider.health(),'refused','the newer refusal remains authoritative');
  }finally{globalThis.fetch=original;}
 });
 

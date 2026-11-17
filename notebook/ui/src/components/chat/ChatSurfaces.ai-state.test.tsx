@@ -74,5 +74,6 @@ it('an open note chat with an earlier reply shows a later refused-key state',asy
   options={...options,usable:false,availability:'refused'} as typeof options;
   act(()=>{client.setQueryData(['chat-options'],options);});
   expect(await screen.findByText('Your AI key or sign-in was refused')).toBeInTheDocument();
+  expect(screen.queryByText('Earlier stand-in reply')).not.toBeInTheDocument();
   expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toBeInTheDocument();
 });

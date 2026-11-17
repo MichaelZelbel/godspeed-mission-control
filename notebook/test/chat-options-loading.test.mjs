@@ -102,7 +102,7 @@ test('a pending model response body preserves the last completed refusal in cach
  const {options,readOptions}=await optionsFrom(t,provider);assert.equal(options.availability,'refused');
  const pending=provider({kind:'conversation-chat'});await arrived;
  const cached=await readOptions();assert.equal(cached.availability,'refused');
- releasePending();assert.equal(await pending,'Connected.');assert.equal(provider.health(),'unreachable');
+ releasePending();assert.equal(await pending,'Connected.');assert.equal(provider.health(),'ready');
 });
 for(const status of [401,403])test(`a ${status} refused chat names the refused credential without provider diagnostics`,async t=>{
  const provider=async()=>{throw Error(`Model provider failed with HTTP ${status}: secret provider detail`);};provider.health=()=>status===403?'refused':'unreachable';

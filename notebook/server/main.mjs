@@ -713,7 +713,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         // A real chat request can fail between the five-second probes. Its provider result is newer
         // than the cached probe and must immediately win, or the Dashboard can still say Ready while
         // the chat correctly reports a refused key or outage.
-        const providerHealth=provider?.health?.(),usable=chatAIUsable&&providerHealth!=='refused';
+        const providerHealth=provider?.health?.(),usable=provider?.availabilityHealth?providerHealth==='ready':chatAIUsable&&providerHealth!=='refused';
         const availability=chatAvailability(usable?'ready':providerHealth==='refused'?'refused':'unreachable');
         return send(res,200,{connected:true,usable,availability,...options});
       }

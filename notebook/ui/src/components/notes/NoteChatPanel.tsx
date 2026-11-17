@@ -1,6 +1,6 @@
 import { useDockedChat } from "@/lib/side-chat";
 import ChatComposer, {type ChatFile} from "@/components/chat/ChatComposer";
-import {ChatConnectionEmptyState} from "@/components/chat/ChatConnectionEmptyState";
+import {ChatConnectionEmptyState,chatAIState,useChatOptions} from "@/components/chat/ChatConnectionEmptyState";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -57,6 +57,7 @@ export interface NoteChatPanelProps {
 }
 
 export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelProps) {
+  const liveAIState=chatAIState(useChatOptions().data);
   useDockedChat();
   const { session, user } = useAuth();
   const contextKey = `note:${note.id}`;
@@ -342,7 +343,7 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
             </p>
           </div> : null}/>
 
-        {state.messages.map((msg, i) => (
+        {liveAIState==='ready'&&state.messages.map((msg, i) => (
           <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : ""}`}>
 
             <div
