@@ -69,16 +69,29 @@ test('the saved-brief plan attributes every scenario request to its own replies'
  await new Promise((resolve,reject)=>{isolated.stderr.once('data',resolve);isolated.once('error',reject);isolated.once('exit',code=>reject(Error(`stand-in exited ${code}`)));});
  const request=async input=>fetch(`http://127.0.0.1:${isolatedPort}/v1/chat/completions`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:JSON.stringify(input)}]})});
  const scenarioPlans=['h04-chat-first.json','h05-filtered-surfaces.json','h06-challenge.json','h18-no-challenge.json'];
- const scenarioGoals=new Set(scenarioPlans.map(plan=>{
+ const scenarioGoals=scenarioPlans.map(plan=>{
   const steps=JSON.parse(fs.readFileSync(path.join(planFolder,plan),'utf8'));
   return steps.find(step=>step.path==='/api/setup').body.goal;
- }));
- const responses=JSON.parse(fs.readFileSync(savedBriefPlan,'utf8')).responses.filter(({match})=>{
+ });
+ const scenarioGoalSet=new Set(scenarioGoals);
+ const responses=JSON.parse(fs.readFileSync(savedBriefPlan,'utf8')).responses.filter(({match})=>['morning-brief','brief-verification'].includes(match.kind));
+ const responseShape=({match})=>{
   const goal=match.kind==='morning-brief'
    ? match.context?.goals?.[0]?.title
-   : match.kind==='brief-verification' ? match.context?.sources?.goals?.[0]?.title : undefined;
-  return scenarioGoals.has(goal);
- });
+   : match.context?.sources?.goals?.[0]?.title;
+  assert.ok(scenarioGoalSet.has(goal),`response must belong to a public scenario: ${goal ?? 'missing goal'}`);
+  return {goal,matcher:`${match.kind}:${match.phase ?? match.check}`};
+ };
+ const shapesByGoal=responses.map(responseShape).reduce((groups,shape)=>{
+  (groups[shape.goal]??=[]).push(shape);
+  return groups;
+ },{});
+ const repeatedScenarioShapes=['morning-brief:write','morning-brief:one-rewrite','brief-verification:source-facts','brief-verification:source-facts','brief-verification:plain-words-and-delivery','brief-verification:plain-words-and-delivery'].sort();
+ assert.deepEqual(Object.keys(shapesByGoal).sort(),scenarioGoals.slice().sort());
+ for(const [index,goal] of scenarioGoals.entries()){
+  const expected=index===3 ? ['morning-brief:write','brief-verification:source-facts','brief-verification:plain-words-and-delivery'].sort() : repeatedScenarioShapes;
+  assert.deepEqual(shapesByGoal[goal].map(({matcher})=>matcher).sort(),expected,goal);
+ }
  try{
   for(const {name,match} of responses){
    const response=await request(match);
