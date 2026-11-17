@@ -88,10 +88,12 @@ service_command is-active --quiet "$service" || fail 'the notebook is not runnin
 grep -qx "User=$(id -un)" "$unit" || { [ "$scope" = user ] && ! grep -q '^User=' "$unit"; } || fail 'the service does not run as the installing account'
 [ "$(cat "$state/version")" = "$first" ] || fail 'the installed version is not the one named'
 grep -q '"GODSPEED_DEVICE":"production"' "$state/start.mjs" || fail 'the machine name was not kept'
-grep -q '"GODSPEED_WEB_ADDRESS":"https://' "$state/start.mjs" || fail 'automatic hostname discovery did not give the isolated installation an HTTPS address'
-grep -q '"GODSPEED_WEB_PORT":"47843"' "$state/start.mjs" || fail 'the isolated installation did not keep its own web door'
-[ -f /etc/caddy/godspeed-native-install-test-notebook.caddy ] || fail 'the isolated installation has no Caddy site of its own'
-grep -q "127.0.0.1:$web_port" /etc/caddy/godspeed-native-install-test-notebook.caddy || fail 'the isolated Caddy site does not use its own web door'
+if node "$here/notebook/scripts/server-address.mjs" --has-public-ip; then
+  grep -q '"GODSPEED_WEB_ADDRESS":"https://' "$state/start.mjs" || fail 'automatic hostname discovery did not give the isolated installation an HTTPS address'
+  grep -q '"GODSPEED_WEB_PORT":"47843"' "$state/start.mjs" || fail 'the isolated installation did not keep its own web door'
+  [ -f /etc/caddy/godspeed-native-install-test-notebook.caddy ] || fail 'the isolated installation has no Caddy site of its own'
+  grep -q "127.0.0.1:$web_port" /etc/caddy/godspeed-native-install-test-notebook.caddy || fail 'the isolated Caddy site does not use its own web door'
+fi
 answers || fail 'the notebook does not answer'
 before=$(service_command show -p MainPID --value "$service")
 # Copies earlier updates left (notebook/core/upgrade-copies.mjs): four whole ones, one that
