@@ -179,7 +179,7 @@ answers || fail 'the notebook that ran before does not answer again'
 while IFS= read -r name; do [ -e "$state/backups/$name" ] || fail "the undone update removed $name"; done < "$work/kept"
 
 echo '== a notebook killed from outside comes back'
-service_command kill --kill-whom=main -s KILL "$service"
+service_command kill -s KILL "$service"
 sleep 8
 service_command is-active --quiet "$service" || fail 'systemd did not restart a killed notebook'
 answers || fail 'the restarted notebook does not answer'
