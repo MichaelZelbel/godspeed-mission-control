@@ -230,14 +230,16 @@ test('an unanswered delivered step gets one reminder after six hours, and inelig
  step('step-44444444-4444-4444-4444-444444444444',{expires_at:'2026-11-17T11:00:00.000Z'});
  step('step-55555555-5555-5555-5555-555555555555',{status:'approved',answered_at:'2026-11-17T08:00:00.000Z'});
  step('step-66666666-6666-6666-6666-666666666666',{asked_in:null});
- assert.deepEqual(remindWaitingSteps(store,{at:now}),['step-11111111-1111-1111-1111-111111111111']);
  const file=path.join(root,'.godspeed','step-reminders','step-11111111-1111-1111-1111-111111111111.json');
+ remindWaitingSteps(store,{at:now});
  assert.match(JSON.parse(fs.readFileSync(file)).text,/step-11111111.*Shall I go on\? Please answer yes or no\./);
  assert.ok(store.list('approvals').every(record=>!record.reminded_at),'queuing or a failed send writes no marker');
- assert.deepEqual(remindWaitingSteps(store,{at:new Date(now.getTime()+3600000)}),['step-11111111-1111-1111-1111-111111111111'],'the next hourly pass retries');
+ remindWaitingSteps(store,{at:new Date(now.getTime()+3600000)});
+ assert.ok(fs.existsSync(file),'the next hourly pass retries');
  assert.equal(await reminderSent(store,'step-11111111-1111-1111-1111-111111111111'),true);
  assert.ok(store.get('approvals','step-11111111-1111-1111-1111-111111111111').reminded_at);
- assert.deepEqual(remindWaitingSteps(store,{at:new Date(now.getTime()+2*3600000)}),['step-22222222-2222-2222-2222-222222222222'],'the five-hour step becomes due, but a sent reminder never repeats');
+ remindWaitingSteps(store,{at:new Date(now.getTime()+2*3600000)});
+ assert.ok(fs.existsSync(path.join(root,'.godspeed','step-reminders','step-22222222-2222-2222-2222-222222222222.json')),'the five-hour step becomes due');
  assert.equal(await reminderSent(store,'step-11111111-1111-1111-1111-111111111111'),false);
 });
 

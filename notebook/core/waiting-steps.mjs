@@ -76,20 +76,19 @@ const reminderDue=(record,now)=>{
 // An hourly scheduler pass delivers notebook reminders itself and hands Telegram reminders to the
 // gateway that owns that chat. The hand-off is idempotent; only successful delivery stamps the step.
 export function remindWaitingSteps(store,{at=new Date(),append=appendAssistantMessage,onFailure}={}){
- const now=at instanceof Date?at:new Date(at),due=store.list('approvals').filter(record=>reminderDue(record,now.getTime())),queued=[];
+ const now=at instanceof Date?at:new Date(at),due=store.list('approvals').filter(record=>reminderDue(record,now.getTime()));
  for(const record of due){
-  try{if(ROUTES[record.asked_in].remind(store,record,reminderText(record),now,append))queued.push(record.id);}
+  try{ROUTES[record.asked_in].remind(store,record,reminderText(record),now,append);}
   catch(error){try{onFailure?.(error);}catch{}}
  }
- return queued;
 }
 
 function appendNotebookReminder(store,record,text,_now,append){
  append(store,ROUTES.notebook.conversation.replace(/^notebook:/,''),text);
- stampReminder(store,record.id);return false;
+ stampReminder(store,record.id);
 }
 function handOffTelegramReminder(store,record,text,now){
- handOffReminder(store,record.id,text,record.expires_at,record.sent_at,now);return true;
+ handOffReminder(store,record.id,text,record.expires_at,record.sent_at,now);
 }
 
 // What the system may do by itself without asking, declared by the asking code from this fixed list.
