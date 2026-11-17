@@ -36,11 +36,13 @@ describe("the saved main AI in Settings", () => {
     "backup-ai": () => [200, { ...none, hermes: false }] as [number, unknown],
   };
 
-  it("explains that an installation without an assistant program has no routines choice", async () => {
+  it("lets an installation without an assistant keep a connection notebook-only", async () => {
     serve(supportingRoutes);
     settings();
     expect(await screen.findByText("This installation runs no daily routines and no assistant chat because no assistant program is installed.")).toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: /daily routines and the chat/ })).toBeNull();
+    const choice = screen.getByRole("checkbox", { name: /daily routines and the chat/ });
+    expect(choice).toBeChecked();
+    expect(choice.parentElement).toHaveTextContent("This needs the assistant program");
   });
 
   it("keeps the routines and chat choice and saves it when assistant routines are available", async () => {

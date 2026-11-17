@@ -19,6 +19,14 @@ test('the short health-check budget is accepted only for connection checks',()=>
  assert.equal(providerTimeBudget({kind:'connection-check',timeout_ms:15000}),15000);
  assert.throws(()=>providerTimeBudget({kind:'conversation-chat',timeout_ms:15000}),/supported/);
 });
+test('a connection check reports a provider outage without user-request retry waits',async()=>{
+ let calls=0;const original=globalThis.fetch;
+ globalThis.fetch=async()=>{calls++;return new Response(JSON.stringify({error:{message:'fictional outage'}}),{status:503,headers:{'Content-Type':'application/json'}});};
+ try{
+  const provider=modelProvider({url:'http://localhost/fixture',key:'fictional',model:'fictional',retryWaits:[2000,5000]});
+  await assert.rejects(provider.check(),/HTTP 503/);assert.equal(calls,1);assert.equal(provider.health(),'unreachable');
+ }finally{globalThis.fetch=original;}
+});
 test('the configured model remains visible through the provider wrapper used by the server',async()=>{
  const provider=withBackup(modelProvider({url:'http://localhost/fixture',key:'fictional',model:'configured-super-readable-model'}),()=>null);
  assert.deepEqual(await provider.options(),{current:'configured-super-readable-model',models:[{id:'configured-super-readable-model',efforts:[]}]});

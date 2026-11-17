@@ -695,11 +695,17 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       // With no AI connected (the same test as runtimeConfigured in /api/status), the picker says so instead of naming a "Connected model" (#563).
       if(route==='/api/chat/options'&&req.method==='GET'){
+        // A provider deliberately kept for notebook work is still connected, even when this
+        // checkout has no assistant program. It is not usable for chat, which is the state the
+        // public Settings form created and the person needs to see.
+        if(originalRuntime&&readSavedProvider(providerPath)&&(!routineAI||routineAIStatus(routineAI).source==='none')){
+          const options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
+          return send(res,200,{connected:true,usable:false,availability:chatAvailability('settings-only'),...options});
+        }
         if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,availability:chatAvailability('none'),current:NO_AI_STATUS,models:[{id:'',efforts:[]}]});
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
         // On an integrated install, the Settings endpoint can power notebook-only jobs while the
         // assistant still has no model. Do not present that endpoint as a working chat model.
-        if(originalRuntime&&routineAI&&routineAIStatus(routineAI).source==='none'&&readSavedProvider(providerPath))return send(res,200,{connected:true,usable:false,availability:chatAvailability('settings-only'),...options});
         if(provider?.check&&(chatAICheck||Date.now()-chatAICheckedAt>=5000)){
           if(!chatAICheck){chatAICheckedAt=Date.now();chatAICheck=provider.check().then(()=>{chatAIUsable=true;},error=>{chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}).finally(()=>{chatAICheck=null;});}
           await chatAICheck;
@@ -712,7 +718,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));
         // A chat summary is read-only (Domains.summarizeChat): no message, receipt or retained conversation.
         const isChat=NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode!=='summarize',id=isChat?input.request_id:undefined;
-        if(isChat&&originalRuntime&&routineAI&&routineAIStatus(routineAI).source==='none'&&readSavedProvider(providerPath))throw new Error(SETTINGS_ONLY_AI_STATUS+'. '+SETTINGS_ONLY_AI_HELP);
+        if(isChat&&originalRuntime&&readSavedProvider(providerPath)&&(!routineAI||routineAIStatus(routineAI).source==='none'))throw new Error(SETTINGS_ONLY_AI_STATUS+'. '+SETTINGS_ONLY_AI_HELP);
         if(isChat&&id&&(!/^[a-f0-9-]{36}$/.test(id)||chatRequests.has(id)))throw new Error('Invalid chat request');
         const receiptId=isChat&&id?'chat-request-'+id:null,requestHash=hash({name,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
         if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,{data:previous.result,error:null});throw Error('This interrupted chat request needs review before replay');}
