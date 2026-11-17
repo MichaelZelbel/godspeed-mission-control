@@ -1,5 +1,5 @@
-/** @type {readonly ['none','ready','refused','unreachable']} */
-export const CHAT_AVAILABILITIES=Object.freeze(['none','ready','refused','unreachable']);
+/** @type {readonly ['none','ready','refused','unreachable','settings-only']} */
+export const CHAT_AVAILABILITIES=Object.freeze(['none','ready','refused','unreachable','settings-only']);
 
 export function chatAvailability(value){
   if(!CHAT_AVAILABILITIES.includes(value))throw new Error('Invalid chat availability');

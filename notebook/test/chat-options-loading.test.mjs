@@ -63,7 +63,7 @@ test('AI usability is rechecked every five seconds in both directions',async t=>
  usable=false;now+=5000;
  const unavailable=await readOptions();assert.equal(unavailable.usable,false);assert.equal(unavailable.availability,'unreachable');
  usable=true;now+=5000;
- const ready=await readOptions();assert.equal(ready.usable,true);assert.equal(ready.availability,'ready');assert.deepEqual([...CHAT_AVAILABILITIES],['none','ready','refused','unreachable']);
+ const ready=await readOptions();assert.equal(ready.usable,true);assert.equal(ready.availability,'ready');assert.deepEqual([...CHAT_AVAILABILITIES],['none','ready','refused','unreachable','settings-only']);
 });
 test('overlapping option requests wait for the same failing health check',async t=>{
  let now=100000,checks=0,optionReads=0,rejectCheck,startCheck,secondRequestArrived;
@@ -118,6 +118,21 @@ test('a chat send with no AI keeps the no-AI setup guidance',async t=>{
  t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
  const result=await fetch('http://127.0.0.1:'+service.address.port+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})});
  const body=await result.json();assert.equal(result.status,400);assert.match(body.error,/No AI is connected yet.*Settings, Your AI/);assert.doesNotMatch(body.error,/could not be used/);
+});
+test('an AI connected only to notebook jobs is not presented as ready for assistant chat',async t=>{
+ const endpoint=http.createServer(async(req,res)=>{for await(const chunk of req);res.setHeader('Content-Type','application/json');res.end(JSON.stringify({choices:[{message:{content:'Connected.'}}]}));});
+ await new Promise(resolve=>endpoint.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>endpoint.close(resolve)));
+ const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
+ const base=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-settings-only-')),root=path.join(base,'workspace'),home=path.join(base,'hermes-home'),assistant=path.join(base,'assistant.json');
+ fs.mkdirSync(home,{recursive:true});fs.writeFileSync(assistant,JSON.stringify({verified:true,executable:'hermes',home}));process.env.GODSPEED_ORIGINAL_RUNTIME='on';process.env.GODSPEED_ASSISTANT_CONFIG=assistant;
+ const {createService}=await import('../server/main.mjs');const service=await createService({root,port:0});
+ t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(base,{recursive:true,force:true});});
+ const origin='http://127.0.0.1:'+service.address.port,connected=await fetch(origin+'/api/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'http://127.0.0.1:'+endpoint.address().port,key:'fictional-key',model:'fictional-model',routines:false})});
+ assert.equal(connected.status,200);
+ const options=await loadChatOptions({fetcher:(url,init)=>fetch(origin+url,init)});
+ assert.equal(options.connected,true);assert.equal(options.usable,false);assert.equal(options.availability,'settings-only');assert.equal(options.current,'fictional-model');
+ const reply=await fetch(origin+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})}),answer=await reply.json();
+ assert.equal(reply.status,400);assert.match(answer.error,/connected only to the notebook.*Use it for the daily routines and the chat too.*Settings, Your AI/);assert.doesNotMatch(answer.error,/fictional-key/);
 });
 test('a connected AI without a model list is still shown as the connected model',async t=>{
  const {options}=await optionsFrom(t,async()=>({reply:'ok'}));

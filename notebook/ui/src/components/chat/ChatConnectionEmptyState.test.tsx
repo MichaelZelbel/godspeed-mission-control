@@ -33,6 +33,12 @@ describe.each(surfaces)('%s pre-composer state',surface=>{
     expect(await screen.findByText('Ordinary ready state')).toBeInTheDocument();
     await waitFor(()=>expect(screen.queryByText('Checking AI connection…')).not.toBeInTheDocument());
   });
+  it('explains an AI connected only to the notebook and names the Settings box',async()=>{
+    show({connected:true,usable:false,availability:'settings-only'});
+    expect(await screen.findByText('Your AI is connected only to the notebook')).toBeInTheDocument();
+    expect(screen.getByText(/Use it for the daily routines and the chat too/)).toBeInTheDocument();
+    expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
+  });
 });
 
 it('preserves a ready state when connection checking is unavailable',()=>{

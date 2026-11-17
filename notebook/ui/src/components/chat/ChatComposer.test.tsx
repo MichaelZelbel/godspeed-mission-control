@@ -82,6 +82,7 @@ it.each([
  ['collection chat at 1280 px','Model choices unavailable',null],
  ['full chat at 1280 px','Model: Your AI could not be reached',{connected:true,usable:false,availability:'unreachable',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
  ['pop-out chat at 720 px','Model: Your AI key or sign-in was refused',{connected:true,usable:false,availability:'refused',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
+ ['Settings-only chat at 720 px','Model: Your AI is connected only to the notebook',{connected:true,usable:false,availability:'settings-only',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
  ['floating chat at 375 px','Model: No AI is connected yet',{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
  ['floating chat at 375 px','claude-sonnet-4-5-20250929',{connected:true,current:'claude-sonnet-4-5-20250929',models:[{id:'claude-sonnet-4-5-20250929',efforts:[]}]}],
  ['floating chat at 375 px','Model choices unavailable',null],

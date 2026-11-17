@@ -50,6 +50,7 @@ const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 
 import ChatComposer, {type ChatFile} from "./ChatComposer";
 import {ChatConnectionEmptyState} from "./ChatConnectionEmptyState";
+import {isCurrentAIError,listenForChatOptions} from "@/local/chat-options.mjs";
 import { useChatEntryInView } from "./chat-entry";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { personLabel } from "@/components/timeline/people";
@@ -98,6 +99,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   const [isClearing, setIsClearing] = useState(false);
   const clearingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(()=>listenForChatOptions(options=>{if(options.usable)setError(previous=>isCurrentAIError(previous)?null:previous);}),[]);
   const [sizeMode, setSizeModeState] = useState<SizeMode>(() => embedded ? "docked" : loadSizeMode());
   const scrollRef = useRef<HTMLDivElement>(null);
   const followRef=useRef(true);

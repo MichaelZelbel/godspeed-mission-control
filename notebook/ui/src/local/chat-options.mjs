@@ -13,6 +13,10 @@ export function listenForChatOptions(listener){
  return()=>window.removeEventListener(CHAT_OPTIONS_EVENT,receive);
 }
 
+export function isCurrentAIError(message){
+ return /Your AI (?:key or sign-in was refused|could not be reached|is connected only to the notebook)/.test(String(message||''));
+}
+
 export async function loadChatOptions({fetcher=fetch,signal,timeoutMs=15000}={}){
  const deadline=AbortSignal.timeout(timeoutMs),combined=signal?AbortSignal.any([signal,deadline]):deadline;
  let response;
