@@ -5573,6 +5573,23 @@ refuses "a removal that never reached the first computer" media-travels "$M/remo
 copy "$M/good" "$M/bytes-deleted"; : >"$M/bytes-deleted/a-media-root-after-removal.txt"
 refuses "a removal that deleted the first computer's own bytes" media-travels "$M/bytes-deleted" "lost the picture's bytes"
 
+# ================================================= established daily trust (2.0.0-beta.28, item 2, #279)
+section established-daily-trust
+EDT=$TMP/established-daily-trust
+mkdir -p "$EDT/good"
+printf 'attempted\n' >"$EDT/good/incomplete-status.txt"
+printf 'verified\n' >"$EDT/good/complete-status.txt"
+printf 'UNVERIFIED content review: third candidate: Cedar\n' >"$EDT/good/incomplete-card.txt"
+printf 'the third candidate is absent\n' >"$EDT/good/incomplete-run.txt"
+printf 'all three candidates are present\n' >"$EDT/good/complete-run.txt"
+printf '{}\n' >"$EDT/good/brief-run.json"
+printf 'Atlas proposal and River proposal are waiting.\n' >"$EDT/good/brief-note.txt"
+passes 'an established workspace rejects weak content and briefs only live proposals' established-daily-trust "$EDT/good" 'briefed only the two live proposals'
+copy "$EDT/good" "$EDT/weak-verified"; printf 'verified\n' >"$EDT/weak-verified/incomplete-status.txt"
+refuses 'a shape-only result called verified' established-daily-trust "$EDT/weak-verified" 'incomplete result was called verified'
+copy "$EDT/good" "$EDT/stale-brief"; printf 'Atlas proposal, River proposal, and Old three.\n' >"$EDT/stale-brief/brief-note.txt"
+refuses 'a briefing that repeats a historical proposal' established-daily-trust "$EDT/stale-brief" 'historical approval list'
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 BASH_SCENARIOS=(settings-on-install night-tidy voice local-voice update-keeps-everything
@@ -5580,7 +5597,7 @@ BASH_SCENARIOS=(settings-on-install night-tidy voice local-voice update-keeps-ev
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge
   no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language
   brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check
-  first-day phone-health-days incomplete-day phone-goes-quiet mail-count talk-on-talk-day
+  first-day established-daily-trust phone-health-days incomplete-day phone-goes-quiet mail-count talk-on-talk-day
   chat-tidy-at-night disk-filling missed-routine deadline-closes-itself held-by-a-claim
   workouts-from-hevy day-becomes-facts hermes-update-rollback server-update-keeps-everything)
 for file in scenario-lib.sh numbers-lib.sh server-lib.sh update-keeps-everything-release.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do

@@ -1184,6 +1184,36 @@ jobs:
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) hermes-update-rollback:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL hermes-update-rollback: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
 
+  established-daily-trust:
+    name: an established workspace verifies content and briefs only live decisions
+    needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',established-daily-trust,') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/established-daily-trust.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+      - name: Keep what the scenario saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: established-daily-trust-evidence
+          path: ${{ runner.temp }}/established-daily-trust
+          if-no-files-found: ignore
+      - name: Say so when it stopped before its own verdict
+        if: failure()
+        run: 'grep -qE "^(PASS|FAIL) established-daily-trust:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL established-daily-trust: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+
   first-day:
     name: a fresh Docker server turns a first goal into useful work and a matching Telegram brief
     needs: stage
@@ -1251,7 +1281,7 @@ jobs:
   verdict:
     name: the verdict
     if: always()
-    needs: [stage, pr-image, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, local-voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, media-travels, late-reminder-file, closed-offline-on-both, reminder-from-settings, charm-challenge, no-video-skills-by-default, update-removes-only-unchanged-skills, briefing-breaks-a-rule, windows-old-names-move, telegram-language, brief-asked-in-chat, talk-prep-honest, no-question-he-cannot-judge, plain-yes, what-was-that, connection-check, workouts-from-hevy, day-becomes-facts, hermes-update-rollback, first-day, server-update-keeps-everything]
+    needs: [stage, pr-image, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, local-voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, media-travels, late-reminder-file, closed-offline-on-both, reminder-from-settings, charm-challenge, no-video-skills-by-default, update-removes-only-unchanged-skills, briefing-breaks-a-rule, windows-old-names-move, telegram-language, brief-asked-in-chat, talk-prep-honest, no-question-he-cannot-judge, plain-yes, what-was-that, connection-check, workouts-from-hevy, day-becomes-facts, hermes-update-rollback, established-daily-trust, first-day, server-update-keeps-everything]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -1297,6 +1327,7 @@ jobs:
         workouts-from-hevy=${{ needs.workouts-from-hevy.result }}
         day-becomes-facts=${{ needs.day-becomes-facts.result }}
         hermes-update-rollback=${{ needs.hermes-update-rollback.result }}
+        established-daily-trust=${{ needs.established-daily-trust.result }}
         first-day=${{ needs.first-day.result }}
         server-update-keeps-everything=${{ needs.server-update-keeps-everything.result }}
     steps:
