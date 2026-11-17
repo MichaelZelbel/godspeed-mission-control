@@ -461,8 +461,8 @@ the_run_did_not_fail() { # <record> <what the routine is>
   error=$(printf '%s' "$1" | cut -f3)
   [ "$status" = ok ] || fail "$2 ended its run as \"$status\"${error:+: $error}"
 }
-run_the_morning_brief() { # <run answer file> <seconds>
-  local added=$EVIDENCE/.brief-added.json tables=$EVIDENCE/.brief-tables.json code id before ran
+run_the_morning_brief() { # <run answer file> <seconds> [seconds to wait until the notebook accepts a run]
+  local added=$EVIDENCE/.brief-added.json tables=$EVIDENCE/.brief-tables.json code id before ran ready_wait=${3:-0} waited=0
   code=$(curl -sS -o "$added" -w '%{http_code}' --max-time 300 -X POST \
     -H 'Content-Type: application/json' -d '{"kind":"morning-brief","interval_ms":86400000}' \
     "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/add") ||
@@ -476,10 +476,16 @@ run_the_morning_brief() { # <run answer file> <seconds>
     fail "the notebook's own notes could not be read before the morning brief ran"
   before=$("$NODE" -e "$BRIEF_NOTES_COUNTER" "$tables") ||
     fail "the notebook's own notes could not be counted before the morning brief ran"
-  code=$(curl -sS -o "$1" -w '%{http_code}' --max-time 600 -X POST -H 'Content-Type: application/json' \
-    -d "{\"id\":$("$NODE" -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$id")}" \
-    "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/run") ||
-    fail "the notebook could not be reached to run its morning brief, so the morning brief never ran"
+  while :; do
+    code=$(curl -sS -o "$1" -w '%{http_code}' --max-time 600 -X POST -H 'Content-Type: application/json' \
+      -d "{\"id\":$("$NODE" -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$id")}" \
+      "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/run") ||
+      fail "the notebook could not be reached to run its morning brief, so the morning brief never ran"
+    if [ "$code" != 400 ] || ! grep -q 'updating or another routine is already running' "$1" || [ "$waited" -ge "$ready_wait" ]; then break; fi
+    [ "$waited" -gt 0 ] || say "Waiting up to $ready_wait s: the installed notebook to finish its update or current routine"
+    sleep 5; waited=$((waited + 5))
+  done
+  [ "$waited" -eq 0 ] || say "  it accepted the morning brief after $waited s"
   sed 's/^/  | /' "$1" >&2
   { [ "$code" = 200 ] || [ "$code" = 202 ]; } && grep -qE '"started": *true|"results"' "$1" ||
     fail "the notebook did not run its morning brief (HTTP $code): $(tr -d '\n' <"$1" | cut -c1-200)"

@@ -63,7 +63,7 @@ STANDIN
   post_query decisions "{\"title\":\"Choose Atlas proposal and River proposal\",\"state\":\"selected\",\"created_at\":\"${today}T07:00:00Z\",\"proposals\":[\"Atlas proposal\",\"River proposal\"]}"
   post_query approvals "{\"title\":\"Atlas proposal\",\"status\":\"pending\",\"asked_at\":\"${today}T07:10:00Z\"}"
   post_query approvals "{\"title\":\"River proposal\",\"status\":\"pending\",\"asked_at\":\"${today}T07:20:00Z\"}"
-  run_the_morning_brief "$EVIDENCE/brief-run.json" 600
+  run_the_morning_brief "$EVIDENCE/brief-run.json" 600 300
   curl -fsS -X POST -H 'Content-Type: application/json' -d '{"table":"notes"}' "http://127.0.0.1:$NOTEBOOK_PORT/api/query" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let r=JSON.parse(s);r=(Array.isArray(r)?r:r.data||[]).filter(x=>x.source_app==="morning-brief");process.stdout.write(String(r.at(-1)?.content||""))})' >"$EVIDENCE/brief-note.txt"
   kill "$fixture_pid" 2>/dev/null || true; wait "$fixture_pid" 2>/dev/null || true; fixture_pid=
   find "$EVIDENCE/bin" -type f -delete; rmdir "$EVIDENCE/bin"
