@@ -15,6 +15,42 @@ const freePort=()=>new Promise((resolve,reject)=>{
  import('node:net').then(({createServer})=>{const server=createServer();server.listen(0,'127.0.0.1',()=>{const address=server.address();server.close(()=>resolve(address.port));});server.on('error',reject);});
 });
 
+const scenarioPlans=['h04-chat-first.json','h05-filtered-surfaces.json','h06-challenge.json','h18-no-challenge.json'];
+const scenarioGoals=scenarioPlans.map(plan=>{
+ const steps=JSON.parse(fs.readFileSync(path.join(planFolder,plan),'utf8'));
+ return steps.find(step=>step.path==='/api/setup').body.goal;
+});
+const scenarioGoalSet=new Set(scenarioGoals);
+const responseShape=({match})=>{
+ const goal=match.kind==='morning-brief'
+  ? match.context?.goals?.[0]?.title
+  : match.context?.sources?.goals?.[0]?.title;
+ assert.ok(scenarioGoalSet.has(goal),`response must belong to a public scenario: ${goal ?? 'missing goal'}`);
+ return {goal,matcher:`${match.kind}:${match.phase ?? match.check}`};
+};
+const validateSavedBriefResponses=responses=>{
+ const shapesByGoal=responses.map(responseShape).reduce((groups,shape)=>{
+  (groups[shape.goal]??=[]).push(shape);
+  return groups;
+ },{});
+ const repeatedScenarioShapes=['morning-brief:write','morning-brief:one-rewrite','brief-verification:source-facts','brief-verification:source-facts','brief-verification:plain-words-and-delivery','brief-verification:plain-words-and-delivery'].sort();
+ assert.deepEqual(Object.keys(shapesByGoal).sort(),scenarioGoals.slice().sort());
+ for(const [index,goal] of scenarioGoals.entries()){
+  const expected=index===3 ? ['morning-brief:write','brief-verification:source-facts','brief-verification:plain-words-and-delivery'].sort() : repeatedScenarioShapes;
+  assert.deepEqual(shapesByGoal[goal].map(({matcher})=>matcher).sort(),expected,goal);
+ }
+};
+const withVerifier=async(plan,log,run)=>{
+ const isolatedPort=await freePort();
+ const isolated=spawn(process.execPath,[verifierScript,String(isolatedPort),plan,log],{stdio:['ignore','ignore','pipe']});
+ await new Promise((resolve,reject)=>{isolated.stderr.once('data',resolve);isolated.once('error',reject);isolated.once('exit',code=>reject(Error(`stand-in exited ${code}`)));});
+ try{return await run({isolated,isolatedPort});}
+ finally{
+  isolated.kill();
+  if(isolated.exitCode===null)await new Promise(resolve=>isolated.once('exit',resolve));
+ }
+};
+
 let child,folder,port;
 before(async()=>{
  folder=await mkdtemp(path.join(tmpdir(),'brief-verifier-ai-'));
@@ -63,36 +99,11 @@ test('selects a reply by nested scenario identity instead of response order',asy
 });
 
 test('the saved-brief plan attributes every scenario request to its own replies',async()=>{
- const isolatedPort=await freePort();
  const log=path.join(folder,'saved-brief-requests.jsonl');
- const isolated=spawn(process.execPath,[verifierScript,String(isolatedPort),savedBriefPlan,log],{stdio:['ignore','ignore','pipe']});
- await new Promise((resolve,reject)=>{isolated.stderr.once('data',resolve);isolated.once('error',reject);isolated.once('exit',code=>reject(Error(`stand-in exited ${code}`)));});
- const request=async input=>fetch(`http://127.0.0.1:${isolatedPort}/v1/chat/completions`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:JSON.stringify(input)}]})});
- const scenarioPlans=['h04-chat-first.json','h05-filtered-surfaces.json','h06-challenge.json','h18-no-challenge.json'];
- const scenarioGoals=scenarioPlans.map(plan=>{
-  const steps=JSON.parse(fs.readFileSync(path.join(planFolder,plan),'utf8'));
-  return steps.find(step=>step.path==='/api/setup').body.goal;
- });
- const scenarioGoalSet=new Set(scenarioGoals);
  const responses=JSON.parse(fs.readFileSync(savedBriefPlan,'utf8')).responses.filter(({match})=>['morning-brief','brief-verification'].includes(match.kind));
- const responseShape=({match})=>{
-  const goal=match.kind==='morning-brief'
-   ? match.context?.goals?.[0]?.title
-   : match.context?.sources?.goals?.[0]?.title;
-  assert.ok(scenarioGoalSet.has(goal),`response must belong to a public scenario: ${goal ?? 'missing goal'}`);
-  return {goal,matcher:`${match.kind}:${match.phase ?? match.check}`};
- };
- const shapesByGoal=responses.map(responseShape).reduce((groups,shape)=>{
-  (groups[shape.goal]??=[]).push(shape);
-  return groups;
- },{});
- const repeatedScenarioShapes=['morning-brief:write','morning-brief:one-rewrite','brief-verification:source-facts','brief-verification:source-facts','brief-verification:plain-words-and-delivery','brief-verification:plain-words-and-delivery'].sort();
- assert.deepEqual(Object.keys(shapesByGoal).sort(),scenarioGoals.slice().sort());
- for(const [index,goal] of scenarioGoals.entries()){
-  const expected=index===3 ? ['morning-brief:write','brief-verification:source-facts','brief-verification:plain-words-and-delivery'].sort() : repeatedScenarioShapes;
-  assert.deepEqual(shapesByGoal[goal].map(({matcher})=>matcher).sort(),expected,goal);
- }
- try{
+ await withVerifier(savedBriefPlan,log,async({isolatedPort})=>{
+  validateSavedBriefResponses(responses);
+  const request=async input=>fetch(`http://127.0.0.1:${isolatedPort}/v1/chat/completions`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:JSON.stringify(input)}]})});
   for(const {name,match} of responses){
    const response=await request(match);
    assert.equal(response.status,200,name);
@@ -101,8 +112,19 @@ test('the saved-brief plan attributes every scenario request to its own replies'
   assert.equal(wrong.status,500);
   const matched=fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse).filter(record=>record.matched).map(record=>record.matched);
   assert.deepEqual(matched,responses.map(({name})=>name));
- }finally{
-  isolated.kill();
-  await new Promise(resolve=>isolated.once('exit',resolve));
- }
+ });
+});
+
+test('a malformed saved-brief plan rejects and releases its verifier child',async()=>{
+ const malformed=path.join(folder,'malformed-saved-brief.json');
+ const plan=JSON.parse(fs.readFileSync(savedBriefPlan,'utf8'));
+ plan.responses=plan.responses.filter(({name})=>name!=='H-05 final source check');
+ fs.writeFileSync(malformed,JSON.stringify(plan));
+ let owned,endpoint;
+ await assert.rejects(withVerifier(malformed,path.join(folder,'malformed-requests.jsonl'),async({isolated,isolatedPort})=>{
+  owned=isolated;endpoint=`http://127.0.0.1:${isolatedPort}/v1/chat/completions`;
+  validateSavedBriefResponses(plan.responses.filter(({match})=>['morning-brief','brief-verification'].includes(match.kind)));
+ }),/the saved H-05 goal/);
+ assert.equal(owned.signalCode,'SIGTERM');
+ await assert.rejects(fetch(endpoint),/fetch failed/);
 });
