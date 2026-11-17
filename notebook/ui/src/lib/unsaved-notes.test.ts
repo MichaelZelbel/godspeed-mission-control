@@ -97,6 +97,24 @@ describe("unsaved note text", () => {
     expect(sender.caughtUp).toHaveBeenCalledTimes(1);
   });
 
+  it("reports a failed save after the growing retries and keeps trying", async () => {
+    const notes = keeper();
+    const { sender, sent } = notebook(Array(RETRY_PAUSES.length + 1).fill("away"));
+    notes.start(sender);
+    notes.keep("garden", { content: "Compost in spring." });
+    expect(await notes.flush("garden")).toBe(false);
+
+    for (let i = 0; i < RETRY_PAUSES.length - 1; i++) {
+      await settle(RETRY_PAUSES[i]);
+    }
+
+    expect(sent).toHaveLength(RETRY_PAUSES.length);
+    expect(notes.status("garden")).toBe("failed");
+    await settle(RETRY_PAUSES.at(-1)!);
+    expect(sent).toHaveLength(RETRY_PAUSES.length + 1);
+    expect(notes.get("garden")).toEqual({ content: "Compost in spring." });
+  });
+
   it("sends the newest text at every try", async () => {
     const notes = keeper();
     const { sender, sent } = notebook(["away", "saved"]);
