@@ -38,7 +38,7 @@ function computer(version){
 }
 const spy=(answer=()=>0)=>{const calls=[];const run=async(command,args,options)=>{calls.push({command,args,options});return answer(command,args,options);};return {run,calls};};
 const silent={log:()=>{},product:temporary('checkout')};
-const installer=path.resolve('notebook/scripts/install-native-notebook.sh');
+const installer=new URL('../scripts/install-native-notebook.sh',import.meta.url);
 
 test('versions are ordered the way semantic versioning orders them',()=>{
   const order=['2.0.0-alpha.1','2.0.0-beta.9','2.0.0-beta.10','2.0.0-beta.20','2.0.0-beta.20.commit.abc1234','2.0.0-rc.1','2.0.0','2.0.1','2.1.0','10.0.0'];
