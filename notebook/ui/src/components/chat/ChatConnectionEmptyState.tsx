@@ -21,11 +21,16 @@ async function chatOptions(){
   return response.json() as Promise<ChatOptions>;
 }
 
-/** The shared pre-composer state for floating, note, collection, and pop-out chat. */
-export function ChatConnectionEmptyState({ready}:{ready:React.ReactNode}){
+export function useChatOptions(){
   const queryClient=useQueryClient();
   const options=useQuery({queryKey:['chat-options'],queryFn:chatOptions,refetchInterval:5000,refetchIntervalInBackground:true});
   useEffect(()=>listenForChatOptions((next:ChatOptions)=>queryClient.setQueryData(['chat-options'],next)),[queryClient]);
+  return options;
+}
+
+/** The shared pre-composer state for floating, note, collection, and pop-out chat. */
+export function ChatConnectionEmptyState({ready}:{ready:React.ReactNode}){
+  const options=useChatOptions();
   const state=chatAIState(options.data);
   if(state==='ready')return <>{ready}</>;
   if(state==='checking')return <div className="text-center text-muted-foreground text-sm py-8" role="status">Checking AI connection…</div>;

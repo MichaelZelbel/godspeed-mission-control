@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
@@ -137,6 +137,17 @@ describe("the Godspeed card", () => {
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
     expect(await screen.findByText("Your AI key or sign-in was refused")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
+    expect(screen.queryByText("Ready to chat")).toBeNull();
+  });
+  it("uses a live chat options update instead of keeping a separate ready snapshot", async () => {
+    let options = { connected: true, usable: true, availability: "ready" };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url) === "/api/chat/options" ? options : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("Ready to chat")).toBeInTheDocument();
+    options = { connected: true, usable: false, availability: "refused" };
+    act(() => { client.setQueryData(["chat-options"], options); });
+    expect(await screen.findByText("Your AI key or sign-in was refused")).toBeInTheDocument();
     expect(screen.queryByText("Ready to chat")).toBeNull();
   });
   it("distinguishes an unreachable configured AI from refused credentials", async () => {

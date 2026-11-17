@@ -19,7 +19,7 @@ vi.mock('./ChatMarkdown',()=>({default:({children}:any)=><p>{children}</p>}));
 Object.defineProperty(window,'matchMedia',{writable:true,value:()=>({matches:false,addEventListener(){},removeEventListener(){}})});
 
 const response=(value:unknown)=>new Response(JSON.stringify(value),{status:200,headers:{'Content-Type':'application/json'}});
-const wrap=(node:React.ReactNode,path='/dashboard')=>render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter initialEntries={[path]}>{node}</MemoryRouter></QueryClientProvider>);
+const wrap=(node:React.ReactNode,path='/dashboard')=>{const client=new QueryClient({defaultOptions:{queries:{retry:false}}});return {client,...render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[path]}>{node}</MemoryRouter></QueryClientProvider>)};};
 const surfaces=[
   ['floating',()=>{wrap(<GlobalAIChatFAB/>);fireEvent.click(screen.getByRole('button',{name:'Chat with Godspeed'}));}],
   ['pop-out',()=>wrap(<GlobalAIChatFAB page/>,'/dashboard/chat')],
@@ -65,3 +65,14 @@ for(const [name,show] of surfaces){
     show();expect(await screen.findByTestId('composer')).toBeInTheDocument();expect(screen.queryByText('Your AI could not be reached')).not.toBeInTheDocument();expect(screen.queryByText('No AI is connected yet')).not.toBeInTheDocument();
   });
 }
+
+it('an open note chat with an earlier reply shows a later refused-key state',async()=>{
+  let options={connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]};
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response(options):response({data:[]})));
+  const {client}=wrap(<ChatConnectionEmptyState ready={<div>Earlier stand-in reply</div>}/>);
+  expect(await screen.findByText('Earlier stand-in reply')).toBeInTheDocument();
+  options={...options,usable:false,availability:'refused'} as typeof options;
+  act(()=>{client.setQueryData(['chat-options'],options);});
+  expect(await screen.findByText('Your AI key or sign-in was refused')).toBeInTheDocument();
+  expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toBeInTheDocument();
+});
