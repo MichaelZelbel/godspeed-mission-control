@@ -18,7 +18,7 @@ service=godspeed-native-install-test.service
 port=47841
 state="$root/.godspeed/integrated-runtime"
 scope=system
-service_command() { if [ "$scope" = user ]; then systemctl --user "$@"; else systemctl "$@"; fi; }
+service_command() { if [ "$scope" = user ]; then systemctl --user "$@"; else sudo -n systemctl "$@"; fi; }
 fail() { echo "FAILED: $*" >&2; if [ "$scope" = user ]; then journalctl --user -u "$service" -n 60 --no-pager >&2 || true; else sudo -n journalctl -u "$service" -n 60 --no-pager >&2 || true; fi; exit 1; }
 cleanup() {
   sudo -n systemctl disable --now "$service" >/dev/null 2>&1 || true
