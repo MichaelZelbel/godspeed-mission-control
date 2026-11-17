@@ -85,7 +85,7 @@ export const startupTrace=(event,now=new Date())=>`${now.toISOString()} startup 
 export const startupReadiness=publication=>{
   const state={ready:false,status:503,body:{ready:false}};
   const markReady=()=>{state.ready=true;state.status=200;state.body={ready:true};};
-  publication.then(markReady,markReady);
+  publication.then(markReady,()=>{});
   return state;
 };
 export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
@@ -141,8 +141,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // The store keeps every record in memory and re-reads only the files its
   // watcher names; the index follows the store's changes row by row.
   const store = new Store(root,{device,watch:true}), index = new SearchIndex(store,{background:true}), query = new QueryService(store), sync = new FileSync(store);
-  const readiness=startupReadiness(index.ready);
-  index.ready.then(()=>console.log(startupTrace('index-published')));
+  const readiness=startupReadiness(index.initialPublication);
+  index.initialPublication.then(
+    ()=>console.log(startupTrace('index-published')),
+    error=>console.error(startupTrace('index-publication-failed'),error?.message||error)
+  );
   const stopIndexing=store.onChange(({changed,gone})=>{try{index.update(changed);index.forget(gone);}catch{}});
   // Meaning search, when a service is connected (Settings, or GODSPEED_EMBEDDINGS_*).
   const connectMeaning=config=>{index.meaning?.close();index.meaning=new MeaningIndex(index,{config});};

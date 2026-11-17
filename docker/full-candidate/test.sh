@@ -124,10 +124,17 @@ node docker/full-candidate/test-screens.cjs https://localhost:48443 "$evidence/s
 docker restart "$name" >/dev/null
 node docker/full-candidate/test-browser.cjs "$name" "$evidence" resumed
 docker logs "$name" > "$evidence/container.log" 2>&1
-grep -q 'startup main-door-listening' "$evidence/container.log"
-grep -q 'startup index-published' "$evidence/container.log"
-grep -q 'startup first-authenticated-query' "$evidence/container.log"
-grep -q 'browser-document-request' "$evidence/restart-timing.jsonl"
-grep -q 'browser-first-query-request' "$evidence/restart-timing.jsonl"
-grep -q 'browser-first-query-response' "$evidence/restart-timing.jsonl"
+node - "$evidence/container.log" "$evidence/restart-timing.jsonl" <<'NODE'
+const fs=require('node:fs'),assert=require('node:assert/strict');
+const [,serverFile,browserFile]=process.argv.slice(1),iso='\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z';
+const server=fs.readFileSync(serverFile,'utf8');
+for(const event of ['main-door-listening','index-published','first-authenticated-query'])assert.match(server,new RegExp(`(?:^|\\n)${iso} startup ${event}(?:\\n|$)`));
+const records=fs.readFileSync(browserFile,'utf8').trim().split('\n').map(line=>JSON.parse(line));
+const events=new Map(records.map(record=>[record.event,record]));
+for(const event of ['browser-document-request','browser-first-query-request','browser-first-query-response']){
+  const record=events.get(event);assert.ok(record,`missing ${event}`);assert.equal(new Date(record.at).toISOString(),record.at);
+}
+assert.equal(events.get('browser-document-request').path,'/dashboard/settings/import');
+assert.ok(Number.isInteger(events.get('browser-first-query-response').status));
+NODE
 du -sm "$evidence" > "$evidence/evidence-size.txt"
