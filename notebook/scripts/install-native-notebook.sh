@@ -11,7 +11,7 @@
 set -euo pipefail
 
 NODE_VERSION=22.19.0
-SERVICE=godspeed-integrated-notebook.service
+SERVICE=${GODSPEED_SERVICE:-godspeed-integrated-notebook.service}
 
 # --- Node.js ------------------------------------------------------------------------
 # The notebook needs Node.js 22.19 or newer within 22 (node:sqlite). Stock Ubuntu and
@@ -126,6 +126,15 @@ fetch_version() {
 
 # --- The service --------------------------------------------------------------------
 systemd_here() { [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; }
+
+validate_service_name() {
+  [[ "$SERVICE" =~ ^[A-Za-z0-9_.@-]+\.service$ ]]
+}
+service_unit_paths() {
+  validate_service_name || return 1
+  system_unit="/etc/systemd/system/$SERVICE"
+  user_unit="$HOME/.config/systemd/user/$SERVICE"
+}
 
 # Root for the few steps that write the system's service list: directly when this is
 # root, else through sudo, which asks for the password once if it has to and can.
@@ -538,7 +547,7 @@ fi
 # What this installation ran with until now stays, unless this run names it (previous_setting).
 # Inside the service also its web address, which only the administrator could make again, and
 # the Hermes it used, which a terminal names in its own environment.
-kept="GODSPEED_DEVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT GODSPEED_WEB_PORT GODSPEED_HOST"
+kept="GODSPEED_DEVICE GODSPEED_SERVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT GODSPEED_WEB_PORT GODSPEED_HOST"
 [ -z "$mode" ] || kept="$kept GODSPEED_WEB_ADDRESS HERMES_HOME"
 for setting in $kept; do
   if [ -z "${!setting:-}" ]; then
@@ -546,6 +555,7 @@ for setting in $kept; do
     if [ -n "$value" ]; then export "$setting=$value"; fi
   fi
 done
+SERVICE=${GODSPEED_SERVICE:-godspeed-integrated-notebook.service}
 if [ -z "${GODSPEED_INTEGRATED_BESIDE:-}" ] && [ "$(previous_setting HERMES_HOME)" = "$state/hermes" ]; then GODSPEED_INTEGRATED_BESIDE=1; fi
 export GODSPEED_WORKSPACE="$root" GODSPEED_ORIGINAL_RUNTIME=on
 export GODSPEED_PORT=${GODSPEED_PORT:-47831} GODSPEED_BIND=127.0.0.1
@@ -577,8 +587,7 @@ assistant=$(command -v hermes || true)
 # su or sudo -u, which has no such session, the installer stopped halfway.
 service_user=$(id -un)
 service_group=$(id -gn)
-system_unit="/etc/systemd/system/$SERVICE"
-user_unit="$HOME/.config/systemd/user/$SERVICE"
+service_unit_paths || { echo "GODSPEED_SERVICE must be one systemd .service unit name: $SERVICE" >&2; exit 1; }
 manager=none
 if [ -n "$mode" ]; then
   # The service that runs this notebook, as its files say: asking for root would wait for a password.
@@ -600,7 +609,9 @@ web_host=""
 web_front_kind=""
 web_site=""
 web_problem=""
-if [ -n "$mode" ]; then
+if [ "${GODSPEED_SKIP_WEB_ADDRESS:-}" = 1 ]; then
+  : # This installation deliberately stays on its loopback address.
+elif [ -n "$mode" ]; then
   : # The address it had stays (kept above with the other settings).
 elif [ -n "${GODSPEED_HOST:-}" ]; then
   web_host=$("$node" "$version/notebook/scripts/server-address.mjs" --name "$GODSPEED_HOST") \

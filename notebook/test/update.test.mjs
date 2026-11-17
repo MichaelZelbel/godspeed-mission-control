@@ -149,10 +149,11 @@ test('inside the notebook\'s service the update is prepared and handed to start.
   await new Promise(resolve=>start.stdout.once('data',resolve));
   const ended=new Promise(resolve=>start.on('exit',resolve));
   fs.mkdirSync(update,{recursive:true});fs.writeFileSync(path.join(update,'start.pid'),String(start.pid));
-  const outcome=await runUpdate({...silent,root,fetchImpl,run,env:{GODSPEED_HANDOVER:'1'},platform:'linux'});
+  const outcome=await runUpdate({...silent,root,fetchImpl,run,env:{GODSPEED_HANDOVER:'1',GODSPEED_SERVICE:'do-not-trust-ambient.service'},platform:'linux'});
   assert.equal(await ended,75,'start.mjs was asked to switch');
   assert.equal(outcome.state,'started');
   assert.equal(calls[1].options.env.GODSPEED_UPDATE_MODE,'prepare');
+  assert.equal(calls[1].options.env.GODSPEED_SERVICE,undefined,'the service identity comes from start.mjs, not the ambient command');
   assert.equal(readStatus(root).state,'switching');
 });
 
