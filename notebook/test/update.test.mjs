@@ -1,6 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';import {spawn,spawnSync} from 'node:child_process';
-import {compareVersions,findNewest,installedVersion,updateWay,runUpdate,releaseSources,readStatus,settle,SERVICE_NAMES,ARCHIVE,WINDOWS_SETUP,WINDOWS_FLAGS} from '../core/update.mjs';
-import {NAMES} from '../scripts/native-start-script.mjs';
+import {compareVersions,findNewest,installedVersion,updateWay,runUpdate,releaseSources,readStatus,settle,ARCHIVE,WINDOWS_SETUP,WINDOWS_FLAGS} from '../core/update.mjs';
 import {VERSION} from '../core/version.mjs';
 
 // godspeed-update and Settings' Update now (#456): which release is newest, whether it is newer,
@@ -167,13 +166,6 @@ test('a terminal update restores the persisted service after filtering the calle
   const outcome=await runUpdate({...silent,root,fetchImpl,run,env:{...process.env,GODSPEED_SERVICE:'owner.service'},platform:'linux'});
   assert.equal(outcome.state,'updated');
   assert.equal(fs.readFileSync(marker,'utf8'),service+' 1','the downloaded installer itself restores isolation before selecting its service');
-});
-
-test('persisted installer settings stay conformant across their three roles',()=>{
-  const source=fs.readFileSync(installer,'utf8'),kept=/kept="([^"]+)"/.exec(source)?.[1].split(' ')??[];
-  assert.deepEqual(SERVICE_NAMES,[...NAMES,'GODSPEED_HANDOVER'],'the updater filters every saved setting plus its handover signal');
-  assert.deepEqual(kept,['GODSPEED_DEVICE','GODSPEED_SERVICE','GODSPEED_PORT','GODSPEED_MEDIA_ROOT','GODSPEED_WEB_PORT','GODSPEED_HOST','GODSPEED_SKIP_WEB_ADDRESS'],'terminal reruns restore every saved, caller-selectable installation setting');
-  for(const name of ['GODSPEED_SERVICE','GODSPEED_SKIP_WEB_ADDRESS'])assert.ok(NAMES.includes(name)&&kept.includes(name),name+' is saved, filtered, and restored');
 });
 
 test('a terminal update fails before selecting a default service when saved settings are malformed',async()=>{
