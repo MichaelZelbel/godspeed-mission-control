@@ -122,19 +122,8 @@ node docker/full-candidate/test-browser.cjs "$name" "$evidence"
 # One browser check per screen defect found walking the real notebook (test-screens.cjs).
 node docker/full-candidate/test-screens.cjs https://localhost:48443 "$evidence/session.json" | tee "$evidence/screens.log"
 docker restart "$name" >/dev/null
+restarted_at=$(docker inspect -f '{{.State.StartedAt}}' "$name")
 node docker/full-candidate/test-browser.cjs "$name" "$evidence" resumed
 docker logs "$name" > "$evidence/container.log" 2>&1
-node - "$evidence/container.log" "$evidence/restart-timing.jsonl" <<'NODE'
-const fs=require('node:fs'),assert=require('node:assert/strict');
-const [,serverFile,browserFile]=process.argv.slice(1),iso='\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z';
-const server=fs.readFileSync(serverFile,'utf8');
-for(const event of ['main-door-listening','index-published','first-authenticated-query'])assert.match(server,new RegExp(`(?:^|\\n)${iso} startup ${event}(?:\\n|$)`));
-const records=fs.readFileSync(browserFile,'utf8').trim().split('\n').map(line=>JSON.parse(line));
-const events=new Map(records.map(record=>[record.event,record]));
-for(const event of ['browser-document-request','browser-first-query-request','browser-first-query-response']){
-  const record=events.get(event);assert.ok(record,`missing ${event}`);assert.equal(new Date(record.at).toISOString(),record.at);
-}
-assert.equal(events.get('browser-document-request').path,'/dashboard/settings/import');
-assert.ok(Number.isInteger(events.get('browser-first-query-response').status));
-NODE
+node docker/full-candidate/verify-restart-timing.mjs "$evidence/container.log" "$evidence/restart-timing.jsonl" "$restarted_at"
 du -sm "$evidence" > "$evidence/evidence-size.txt"
