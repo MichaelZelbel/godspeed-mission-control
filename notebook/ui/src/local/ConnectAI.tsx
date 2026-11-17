@@ -13,7 +13,7 @@ import {providerService} from '../../../core/provider-service.mjs';
 // backup each on their own (core/routine-ai.mjs).
 type Check={at:string;ok:boolean;reply?:string;error?:string;backup?:{ok:boolean;error?:string;model?:string}};
 export type RoutineAI={available:boolean;provider?:string|null;model?:string|null;base_url?:string|null;source?:'settings'|'hermes'|'none';key?:boolean|null;check?:Check|null};
-type SavedProvider=|{configured:false;key:false}|{configured:true;url:string;model:string;key:boolean};
+type SavedProvider=|{configured:false;key:false}|{configured:true;url:string;model:string;key:boolean;routines?:boolean};
 async function call(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 export const routineAIStatus=()=>call('routine-ai') as Promise<RoutineAI>;
 function providerResponse(value:unknown):SavedProvider{
@@ -71,7 +71,7 @@ export function ConnectAI(){
   const saved=useQuery({queryKey:['provider'],queryFn:savedProvider});
   const [service,setService]=useState('openrouter'),[address,setAddress]=useState(''),[model,setModel]=useState(''),[key,setKey]=useState('');
   const [routines,setRoutines]=useState<boolean|null>(null),[busy,setBusy]=useState(false),[checking,setChecking]=useState(false),[error,setError]=useState(''),[done,setDone]=useState('');
-  const data=status.data,useForRoutines=routines??(data?.source!=='hermes');
+  const data=status.data,useForRoutines=routines??(saved.data?.configured&&typeof saved.data.routines==='boolean'?saved.data.routines:(data?.source!=='hermes'));
   const filled=useRef(false);
   useEffect(()=>{if(filled.current||!saved.data)return;filled.current=true;if(!saved.data.configured)return;
     const url=saved.data.url,selected=providerService(url);

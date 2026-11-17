@@ -48,6 +48,17 @@ test('a provider that connects and later refuses its key reports only the safe r
  const {options}=await optionsFrom(t,provider);
  assert.equal(options.connected,true);assert.equal(options.usable,false);assert.equal(options.availability,'refused');assert.doesNotMatch(JSON.stringify(options),/401|invalid|secret|fictional-key/);
 });
+test('a chat failure overrides a newer cached successful probe on the next options read',async t=>{
+ let fail=false;
+ const provider=Object.assign(async()=>{if(fail)throw Error('Model provider failed with HTTP 403: private detail');return 'Connected.';},{
+  options:async()=>({current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}),
+  check:async()=>{if(fail)throw Error('Model provider failed with HTTP 403: private detail');},
+  health:()=>fail?'refused':'unreachable'
+ });
+ const {options,readOptions}=await optionsFrom(t,provider);assert.equal(options.availability,'ready');
+ fail=true;await assert.rejects(provider({kind:'conversation-chat'}),/403/);
+ const refused=await readOptions();assert.equal(refused.usable,false);assert.equal(refused.availability,'refused');assert.doesNotMatch(JSON.stringify(refused),/403|private detail/);
+});
 test('a verified Hermes authentication refusal reaches the options contract as refused',async t=>{
  const provider=hermesProvider({home:fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-options-')),cwd:process.cwd(),spawnProcess:()=>{const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',()=>queueMicrotask(()=>{child.stdout.end();child.stderr.end('AuthenticationError: invalid_api_key private-token\n');child.emit('close',1);}));return child;}});
  provider.options=async()=>({current:'hermes-model',models:[{id:'hermes-model',efforts:[]}]});

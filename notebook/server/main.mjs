@@ -84,7 +84,7 @@ import {NO_AI_STATUS,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../cor
 const SAME_SERVICE='That is the service your main AI uses already. A backup steps in when the main AI fails, so it has to be another service.';
 const BACKUP_SERVICE='That is the service your backup AI uses. Remove the backup first, or choose another service for your main AI.';
 export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
-const providerView=config=>({configured:true,url:baseAddress(config.url),model:config.model,key:!!config.key});
+const providerView=config=>({configured:true,url:baseAddress(config.url),model:config.model,key:!!config.key,...(typeof config.routines==='boolean'?{routines:config.routines}:{})});
 const readSavedProvider=file=>{
   let text;try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code==='ENOENT')return null;throw error;}
   const config=JSON.parse(text);
@@ -439,7 +439,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),saved=readSavedProvider(providerPath),submittedKey=typeof input.key==='string'?input.key.trim():input.key;
         const normalizedAddress=!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions';
         const retainedKey=!submittedKey&&saved&&baseAddress(normalizedAddress)===baseAddress(saved.url)?saved.key:submittedKey;
-        const config={url:normalizedAddress,key:retainedKey,model:typeof input.model==='string'?input.model.trim():input.model};
+        const config={url:normalizedAddress,key:retainedKey,model:typeof input.model==='string'?input.model.trim():input.model,routines:input.routines!==false};
         const chosen=modelProvider(config);if(!chosen)throw new Error('Provide a model endpoint, key and model name');
         const routines=routineAI&&input.routines!==false;
         if(routines)hermesSettingsFor(config);
@@ -710,8 +710,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           if(!chatAICheck){chatAICheckedAt=Date.now();chatAICheck=provider.check().then(()=>{chatAIUsable=true;},error=>{chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}).finally(()=>{chatAICheck=null;});}
           await chatAICheck;
         }
-        const availability=chatAvailability(chatAIUsable?'ready':provider?.health?.()==='refused'?'refused':'unreachable');
-        return send(res,200,{connected:true,usable:chatAIUsable,availability,...options});
+        // A real chat request can fail between the five-second probes. Its provider result is newer
+        // than the cached probe and must immediately win, or the Dashboard can still say Ready while
+        // the chat correctly reports a refused key or outage.
+        const providerHealth=provider?.health?.(),usable=chatAIUsable&&providerHealth!=='refused';
+        const availability=chatAvailability(usable?'ready':providerHealth==='refused'?'refused':'unreachable');
+        return send(res,200,{connected:true,usable,availability,...options});
       }
       if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}
       if (route.startsWith('/api/functions/') && req.method === 'POST') {

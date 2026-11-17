@@ -63,7 +63,7 @@ describe("the saved main AI in Settings", () => {
   });
 
   it("reopens an Another service connection without exposing its saved key", async () => {
-    const saved = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true };
+    const saved = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true, routines: false };
     const calls = serve({ ...supportingRoutes, provider: body => [200, body ? { connected: true, provider: saved, routines: { available: false } } : saved] });
     const first = settings();
     await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"));
@@ -75,7 +75,8 @@ describe("the saved main AI in Settings", () => {
     await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"));
     fireEvent.click(screen.getByRole("button", { name: "Test and connect" }));
     await screen.findByText("Connected. The notebook uses it.");
-    expect(calls.find(c => c.body && c.route === "provider")?.body).toEqual({ url: saved.url, key: "", model: saved.model, routines: true });
+    expect(screen.getByRole("checkbox", { name: /daily routines and the chat/ })).not.toBeChecked();
+    expect(calls.find(c => c.body && c.route === "provider")?.body).toEqual({ url: saved.url, key: "", model: saved.model, routines: false });
   });
 
   it("keeps a new form on OpenRouter and requires a key", async () => {
@@ -139,6 +140,7 @@ describe("the saved main AI in Settings", () => {
     expect(screen.getByLabelText(/Its address/)).toHaveValue(address);
     expect(screen.getByLabelText(/Model, written/)).toHaveValue("fictional-model");
     expect(screen.getByLabelText(/leave it empty/)).toHaveValue("");
+    expect(screen.getByRole("checkbox", { name: /daily routines and the chat/ })).not.toBeChecked();
     expect(document.body).not.toHaveTextContent("fictional-secret");
     await reopened.close();await new Promise<void>(resolve => endpoint.close(() => resolve()));fs.rmSync(root, { recursive: true, force: true });
   });
