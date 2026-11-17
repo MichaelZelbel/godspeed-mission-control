@@ -15,7 +15,7 @@ function show(){
 }
 // jsdom has no AbortSignal.timeout or AbortSignal.any, which the model loader uses in browsers; these stand-ins never fire.
 beforeEach(()=>{const S=AbortSignal as any;S.timeout??=()=>new AbortController().signal;S.any??=(signals:AbortSignal[])=>signals[0];});
-afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+afterEach(()=>{cleanup();vi.useRealTimers();vi.unstubAllGlobals();});
 
 it('with no AI connected the model picker says so and both pickers are off',async()=>{
  answer({connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]});show();
@@ -52,14 +52,13 @@ it('clears an already selected model when the connected AI is unusable',async()=
 });
 
 it('refreshes an already-open chat when AI availability changes',async()=>{
- vi.useFakeTimers();let available=false;
+ vi.useFakeTimers({toFake:['setInterval','clearInterval']});let available=false;
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(available?{connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}:{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]}),{headers:{'Content-Type':'application/json'}})));
  const props=show();
  await waitFor(()=>expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('No AI connected'));
- available=true;await act(async()=>{vi.advanceTimersByTime(5000);});
+ available=true;await act(async()=>{await vi.advanceTimersByTimeAsync(5000);});
  await waitFor(()=>expect(props.onModel).toHaveBeenLastCalledWith('fictional-model'));
  expect(screen.getByRole('combobox',{name:'Model'})).toBeEnabled();
- vi.useRealTimers();
 });
 
 it.each([
