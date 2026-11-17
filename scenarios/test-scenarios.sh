@@ -3448,6 +3448,9 @@ talk_good() { # <folder>
   printf 'AREA: health\nTALK: 2026-11-03 19:00\nSTATE: ready\n\n## The opening\n\nA preparation made by the installed job.\n\n## Talk card\n\n- One move.\n' >"$folder/routine-preparation.md"
   printf 'coach/health/prep/2026-11-03.md\n' >"$folder/routine-preparation-source.txt"
   printf 'ready: coach/health/prep/2026-11-03.md, prepared 2026-11-02 21:00\n' >"$folder/routine-preparation-check.txt"
+  printf 'A preparation made by the installed job.\n' >"$folder/routine-opening.txt"
+  printf 'AREA: health\nTALK: health\nDATE: 2026-11-03\nSTATE: opened\n\n## The opening\n\nA preparation made by the installed job.\n' >"$folder/routine-talk.md"
+  printf 'coach/health/talks/2026-11-03.md\n' >"$folder/routine-talk-source.txt"
   printf 'a=2026-11-02\nb=2026-11-03\noffset=+0000\n' >"$folder/days.txt"
   {
     printf 'AREA: health\nSERVES: lower-ldl, sleep-better, visible-abs\n'

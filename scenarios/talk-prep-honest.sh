@@ -136,6 +136,22 @@ run_installed_preparation() {
   printf '%s\n' "${produced#"$ROOT"/}" >"$EVIDENCE/routine-preparation-source.txt"
 }
 
+open_installed_preparation() {
+  local prep=$1 area talk record
+  area=$(sed -n 's/^AREA: *//p' "$prep" | head -n 1)
+  talk=$(sed -n 's/^TALK: *\([0-9-]*\).*/\1/p' "$prep" | head -n 1)
+  [ -n "$area" ] && [ -n "$talk" ] || fail "the installed preparation does not name the talk it prepared"
+  chat_panel_new_conversation "$EVIDENCE/.panel-new-routine.json"
+  chat_panel_says "$ASK" "$EVIDENCE/routine-opening.txt"
+  record=$ROOT/coach/$area/talks/$talk.md
+  [ -s "$record" ] || fail "asking for the talk prepared by Run now created no product talk record at $record"
+  cp "$record" "$EVIDENCE/routine-talk.md"
+  printf '%s\n' "${record#"$ROOT"/}" >"$EVIDENCE/routine-talk-source.txt"
+  section_of "$prep" 'The opening' | tr -s '[:space:]' ' ' >"$EVIDENCE/.routine-prepared-opening"
+  folded "$EVIDENCE/routine-opening.txt" | grep -qF -- "$(sed 's/^ //;s/ $//' "$EVIDENCE/.routine-prepared-opening")" ||
+    fail "the talk opened without the opening accepted from the preparation made by Run now"
+}
+
 if [ "${TALK_PREP_RUN_NOW_TEST_ONLY:-}" = 1 ]; then
   install_paths
   need_node
@@ -301,8 +317,10 @@ act() {
   phase 'a supported coaching-area fixture is prepared through installed Run now'
   write_area
   run_installed_preparation
+  open_installed_preparation "$ROOT/$(cat "$EVIDENCE/routine-preparation-source.txt")"
   rm -f "$ROOT/coach/health/prep/$DAY_A.md" "$ROOT/coach/health/prep/$DAY_A.evidence.json" "$ROOT/coach/health/prep/$DAY_A.review.json"
   rm -f "$ROOT/coach/health/prep/$DAY_B.md" "$ROOT/coach/health/prep/$DAY_B.evidence.json" "$ROOT/coach/health/prep/$DAY_B.review.json"
+  rm -f "$ROOT/$(cat "$EVIDENCE/routine-talk-source.txt")"
   phase 'a fixture person: one health area, three goals, three research domains'
   write_area
   add_research_domains
@@ -352,7 +370,7 @@ claims_research_time() { # <file>: prints the first line that does, and leaves 0
 check() { # <evidence folder>
   local folder=$1 sentence a b opening_b goal route_count label field reply run_id before after
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a talk's preparation"
-  kept_all "$folder" 'the installed preparation job and its public Run now request' prep-run-before.txt prep-run-after.txt prep-run-request.json prep-jobs-after.json routine-preparation.md routine-preparation-source.txt routine-preparation-check.txt
+  kept_all "$folder" 'the installed preparation job, its public Run now request and the talk opened from it' prep-run-before.txt prep-run-after.txt prep-run-request.json prep-jobs-after.json routine-preparation.md routine-preparation-source.txt routine-preparation-check.txt routine-opening.txt routine-talk.md routine-talk-source.txt
   run_id=$(sed -n 's/^id=//p' "$folder/prep-run-before.txt"); before=$(sed -n 's/^before=//p' "$folder/prep-run-before.txt"); after=$(sed -n 's/^after=//p' "$folder/prep-run-after.txt")
   [ -n "$run_id" ] || fail "the retained preparation run names no installed job"
   [ -n "$after" ] && [ "$after" != "$before" ] || fail "the installed preparation job recorded no new completed run"
@@ -364,6 +382,11 @@ check() { # <evidence folder>
   grep -q '^## The opening' "$folder/routine-preparation.md" || fail "the installed run's preparation has no opening to judge"
   grep -q '^## Talk card' "$folder/routine-preparation.md" || fail "the installed run's preparation has no talk card"
   grep -q '^ready' "$folder/routine-preparation-check.txt" || fail "the installed gate did not call the Run now preparation ready"
+  grep -Eq '^coach/[^/]+/talks/[^/]+\.md$' "$folder/routine-talk-source.txt" || fail "the installed run's opened talk has no product-owned source path"
+  grep -q '^STATE: opened$' "$folder/routine-talk.md" || fail "asking for the talk prepared by Run now did not leave an opened talk record"
+  opening_b=$(section_of "$folder/routine-preparation.md" 'The opening' | tr -s '[:space:]' ' ' | sed 's/^ //;s/ $//')
+  section_of "$folder/routine-talk.md" 'The opening' | tr -s '[:space:]' ' ' | grep -qF -- "$opening_b" ||
+    fail "the product talk record did not keep the opening accepted from the preparation made by Run now"
   b=$(sed -n 's/^b=//p' "$folder/days.txt" 2>/dev/null)
   if [ ! -s "$folder/talk-b.md" ]; then
     [ -n "$b" ] || fail "days.txt does not say which two talk days this scenario worked on"
