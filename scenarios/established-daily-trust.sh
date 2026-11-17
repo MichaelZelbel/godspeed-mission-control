@@ -40,7 +40,7 @@ fi
 file=$(grep -m1 '^DONE WHEN:' "$prompt"|grep -oE '[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.md'|head -1)
 mkdir -p "$(dirname "$file")"
 printf '# Candidates\n\n- Atlas\n- River\n' >"$file"
-case "$file" in *complete*) printf '%s\n' '- third candidate: Cedar' >>"$file";; esac
+case "$file" in */established-complete.md) printf '%s\n' '- third candidate: Cedar' >>"$file";; esac
 printf 'RESULT: wrote %s\n' "$file" >"$out"
 STANDIN
   chmod +x "$bin/mc-run"
