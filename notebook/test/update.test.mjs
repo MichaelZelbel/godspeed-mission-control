@@ -138,7 +138,7 @@ test('a terminal update runs install-godspeed.sh out of the checked archive, at 
 
 test('a terminal update restores the persisted service after filtering the caller environment',async()=>{
   const root=computer('2.0.0-beta.20'),runtime=path.join(root,'.godspeed','integrated-runtime'),service='godspeed-native-install-test.service';
-  fs.writeFileSync(path.join(runtime,'start.mjs'),`const settings={"GODSPEED_SERVICE":${JSON.stringify(service)},"GODSPEED_SKIP_WEB_ADDRESS":"1"};`);
+  fs.writeFileSync(path.join(runtime,'start.mjs'),`const settings={"GODSPEED_SERVICE":${JSON.stringify(service)}};`);
   fs.writeFileSync(path.join(root,'AGENTS.md'),'test');fs.mkdirSync(path.join(root,'rules'));
   const installedVersion=path.join(runtime,'versions','a'.repeat(40));
   fs.mkdirSync(path.join(installedVersion,'notebook','bin'),{recursive:true});fs.writeFileSync(path.join(installedVersion,'notebook','bin','godspeed.mjs'),'');
@@ -149,7 +149,7 @@ test('a terminal update restores the persisted service after filtering the calle
   fs.mkdirSync(path.dirname(installedNode),{recursive:true});
   fs.writeFileSync(installedNode,`#!/bin/sh\nif [ "$1" = --version ]; then echo v22.19.0; else exec ${JSON.stringify(process.execPath)} "$@"; fi\n`,{mode:0o755});
   const marker=path.join(root,'selected-service'),bashEnv=path.join(root,'observe-installer');
-  fs.writeFileSync(bashEnv,`service_assignments=0\ntrap 'if [[ "$BASH_COMMAND" == SERVICE=* ]]; then service_assignments=$((service_assignments+1)); if [ "$service_assignments" = 2 ]; then trap - DEBUG; eval "$BASH_COMMAND"; printf "%s %s" "$SERVICE" "${'${GODSPEED_SKIP_WEB_ADDRESS:-}'}" > ${JSON.stringify(marker)}; exit 0; fi; fi' DEBUG\n`);
+  fs.writeFileSync(bashEnv,`service_assignments=0\ntrap 'if [[ "$BASH_COMMAND" == SERVICE=* ]]; then service_assignments=$((service_assignments+1)); if [ "$service_assignments" = 2 ]; then trap - DEBUG; eval "$BASH_COMMAND"; printf "%s" "$SERVICE" > ${JSON.stringify(marker)}; exit 0; fi; fi' DEBUG\n`);
   const {fetchImpl}=github(release());
   const nativeEnv={...process.env};delete nativeEnv.GODSPEED_REVISION;
   const {run}=spy((command,args,options)=>{
@@ -166,7 +166,7 @@ test('a terminal update restores the persisted service after filtering the calle
   });
   const outcome=await runUpdate({...silent,root,fetchImpl,run,env:{...nativeEnv,GODSPEED_SERVICE:'owner.service'},platform:'linux'});
   assert.equal(outcome.state,'updated');
-  assert.equal(fs.readFileSync(marker,'utf8'),service+' 1','the downloaded installer itself restores isolation before selecting its service');
+  assert.equal(fs.readFileSync(marker,'utf8'),service,'the downloaded installer itself restores isolation before selecting its service');
 });
 
 test('a terminal update fails before selecting a default service when saved settings are malformed',async()=>{

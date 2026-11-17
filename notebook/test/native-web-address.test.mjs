@@ -47,6 +47,18 @@ test('the web address runs Caddy as the notebook\'s account, which may open port
     assert.ok(lines.includes(line),line+'\n'+result.out);
 });
 
+test('an isolated user service gives Caddy a user unit and a private high-port site',options,()=>{
+  const dir=scratch('user-unit'),state=dir+'/state';
+  const unit=sh('https_user_unit_text /opt/caddy',{state,HOME:dir});
+  assert.equal(unit.status,0,unit.err);
+  assert.doesNotMatch(unit.out,/^User=|AmbientCapabilities/m);
+  assert.match(unit.out,/WantedBy=default\.target/);
+  const config=sh('ADDON_SITES=$DIR/addons; site_text srv1.example.com:48443 47843 internal',{DIR:dir});
+  assert.equal(config.status,0,config.err);
+  assert.match(config.out,/srv1\.example\.com:48443 \{\n\ttls internal\n/);
+  assert.match(config.out,/reverse_proxy 127\.0\.0\.1:47843/);
+});
+
 test('on the server\'s own Caddy, a name it already serves keeps its site and the notebook gets a port beside it',options,()=>{
   const dir=scratch('site'),site=(host,env={})=>sh('CADDYFILE=$DIR/Caddyfile; caddy_site '+host,{DIR:dir,...env}).out;
   fs.writeFileSync(dir+'/Caddyfile','srv1.example.com {\n\thandle {\n\t\treverse_proxy 127.0.0.1:3100\n\t}\n}\n');

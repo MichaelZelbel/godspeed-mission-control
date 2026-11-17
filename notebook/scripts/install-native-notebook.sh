@@ -345,6 +345,7 @@ install_caddy() {
 site_text() {
   printf '# The Godspeed Mission Control notebook'"'"'s web address. Its installer writes this file.\n'
   printf '%s {\n' "$1"
+  [ "${3:-}" != internal ] || printf '\ttls internal\n'
   printf '\t# Paths add-ons add to this address, before the notebook'"'"'s own pages: one file each, written by the add-on.\n'
   printf '\timport %s/paths/*.caddy\n\treverse_proxy 127.0.0.1:%s\n}\n\n' "$ADDON_SITES" "$2"
   printf '# Add-ons'"'"' own web addresses: one file each, written by the add-on (docs/full-version/addon-model.md).\n'
@@ -355,7 +356,7 @@ site_text() {
 addon_folders() { as_root mkdir -p "$ADDON_SITES/paths" && as_root chmod 755 "$ADDON_SITES" "$ADDON_SITES/paths"; }
 # The whole configuration of the installation's own Caddy. It has no admin endpoint (a
 # change restarts it), so it never holds the port another Caddy's endpoint uses.
-own_caddyfile() { printf '{\n\tadmin off\n}\n\n'; site_text "$1" "$2"; }
+own_caddyfile() { printf '{\n\tadmin off\n}\n\n'; site_text "$1" "$2" "${3:-}"; }
 
 https_unit_text() {
   printf '[Unit]\nDescription=Godspeed Mission Control web address\nWants=network-online.target\nAfter=network-online.target\n'
@@ -363,6 +364,13 @@ https_unit_text() {
   printf 'Environment=%s\n' "$(unit_quoted "HOME=$HOME")" "$(unit_quoted "XDG_DATA_HOME=$state/https")" "$(unit_quoted "XDG_CONFIG_HOME=$state/https")"
   printf 'ExecStart=%s run --config %s --adapter caddyfile\n' "$(unit_word "$1")" "$(unit_word "$state/https/Caddyfile")"
   printf 'AmbientCapabilities=CAP_NET_BIND_SERVICE\nRestart=on-failure\nRestartSec=5\n[Install]\nWantedBy=multi-user.target\n'
+}
+
+https_user_unit_text() {
+  printf '[Unit]\nDescription=Godspeed Mission Control isolated web address\nWants=network-online.target\nAfter=network-online.target\n'
+  printf '[Service]\nEnvironment=%s\n' "$(unit_quoted "HOME=$HOME")" "$(unit_quoted "XDG_DATA_HOME=$state/https")" "$(unit_quoted "XDG_CONFIG_HOME=$state/https")"
+  printf 'ExecStart=%s run --config %s --adapter caddyfile\n' "$(unit_word "$1")" "$(unit_word "$state/https/Caddyfile")"
+  printf 'Restart=on-failure\nRestartSec=5\n[Install]\nWantedBy=default.target\n'
 }
 
 # How the address is made depends on who answers on ports 80 and 443, which a certificate
@@ -426,12 +434,26 @@ start_own_caddy() {
     && { addon_folders || true; }
 }
 
+start_user_caddy() {
+  local caddy unit="$HOME/.config/systemd/user/$HTTPS_SERVICE"
+  caddy=$(install_caddy) || return 1
+  mkdir -p "$state/https" "$(dirname "$unit")/default.target.wants" || return 1
+  site_text "$1" "$GODSPEED_WEB_PORT" internal > "$SITE_FILE" || return 1
+  printf '{\n\tadmin off\n\tauto_https disable_redirects\n}\n\nimport %s\n' "$SITE_FILE" > "$state/https/Caddyfile" || return 1
+  https_user_unit_text "$caddy" > "$unit" || return 1
+  ln -sf "../$HTTPS_SERVICE" "$(dirname "$unit")/default.target.wants/$HTTPS_SERVICE"
+  systemctl --user daemon-reload >/dev/null 2>&1 \
+    && systemctl --user restart "$HTTPS_SERVICE" >/dev/null 2>&1 \
+    && mkdir -p "$ADDON_SITES/paths" && chmod 755 "$ADDON_SITES" "$ADDON_SITES/paths"
+}
+
 # The address answers with the notebook's own /health, over a certificate curl trusts. A
 # new certificate takes Caddy seconds to a minute or two.
 address_answers() {
-  local attempt
+  local attempt trust=()
+  if [ "$web_front_kind" = user ]; then trust=(--noproxy '*' --cacert "$state/https/caddy/pki/authorities/local/root.crt" --resolve "$web_site:127.0.0.1"); fi
   for attempt in $(seq 1 "${1:-30}"); do
-    case "$(curl -fsS -m 8 "$web_address/health" 2>/dev/null)" in *'"ok":true'*) return 0 ;; esac
+    case "$(curl -fsS -m 8 "${trust[@]}" "$web_address/health" 2>/dev/null)" in *'"ok":true'*) return 0 ;; esac
     sleep 4
   done
   return 1
@@ -517,7 +539,7 @@ install_update_command() {
 
 restore_kept_settings() {
   local kept setting value
-  kept="GODSPEED_DEVICE GODSPEED_SERVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT GODSPEED_WEB_PORT GODSPEED_HOST GODSPEED_SKIP_WEB_ADDRESS"
+  kept="GODSPEED_DEVICE GODSPEED_SERVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT GODSPEED_WEB_PORT GODSPEED_HOST"
   [ -z "$mode" ] || kept="$kept GODSPEED_WEB_ADDRESS HERMES_HOME"
   for setting in $kept; do
     if [ -z "${!setting:-}" ]; then
@@ -628,9 +650,7 @@ web_host=""
 web_front_kind=""
 web_site=""
 web_problem=""
-if [ "${GODSPEED_SKIP_WEB_ADDRESS:-}" = 1 ]; then
-  : # This installation deliberately stays on its loopback address.
-elif [ -n "$mode" ]; then
+if [ -n "$mode" ]; then
   : # The address it had stays (kept above with the other settings).
 elif [ -n "${GODSPEED_HOST:-}" ]; then
   web_host=$("$node" "$version/notebook/scripts/server-address.mjs" --name "$GODSPEED_HOST") \
@@ -643,7 +663,12 @@ elif [ "$(uname -s)" = Linux ] && ! desktop_here; then
 fi
 if [ -n "$web_host" ]; then
   export GODSPEED_HOST="$web_host" GODSPEED_WEB_PORT=${GODSPEED_WEB_PORT:-47833}
-  if [ "$manager" != system ]; then
+  if [ "$manager" = user ] && [ "$SERVICE" != godspeed-integrated-notebook.service ]; then
+    web_front_kind=user
+    web_site="$web_host:${GODSPEED_HTTPS_PORT:-48443}"
+    SITE_FILE="$state/https/notebook.caddy"
+    ADDON_SITES="$state/https/addons"
+  elif [ "$manager" != system ]; then
     web_problem="This is a server, and making its web address needs systemd and the administrator's rights once. Run the installer again from an account that may use sudo."
   else
     web_front_kind=$(web_front)
@@ -857,9 +882,14 @@ if [ -n "$started" ]; then
         add_to_caddy "$web_site" \
           || web_problem="This server's Caddy did not take the notebook's web address, so it goes on serving what it served before. What it said is shown by: journalctl -u caddy -n 50"
         ;;
+      user)
+        web_ports="port ${web_site##*:}"
+        start_user_caddy "$web_site" \
+          || web_problem="Caddy, which gives the isolated notebook its web address, could not be set up here. What it said is shown by: journalctl --user -u $HTTPS_SERVICE -n 50"
+        ;;
     esac
     if [ -z "$web_problem" ] && ! address_answers; then
-      if [ "$web_front_kind" = own ]; then logs="journalctl -u $HTTPS_SERVICE -n 50"; else logs="journalctl -u caddy -n 50"; fi
+      if [ "$web_front_kind" = own ]; then logs="journalctl -u $HTTPS_SERVICE -n 50"; elif [ "$web_front_kind" = user ]; then logs="journalctl --user -u $HTTPS_SERVICE -n 50"; else logs="journalctl -u caddy -n 50"; fi
       web_problem="The notebook's web address $web_address does not answer yet. If the hosting provider has a firewall, it must let in $web_ports. What Caddy said is shown by: $logs"
     fi
   fi

@@ -59,12 +59,6 @@ test('an isolated service name selects only its own unit files and unsafe names 
   }
 });
 
-test('the loopback-only install cannot enter automatic web setup',options,()=>{
-  const source=fs.readFileSync(installer,'utf8');
-  assert.match(source,/if \[ "\$\{GODSPEED_SKIP_WEB_ADDRESS:-\}" = 1 \]; then\n  :[^\n]*\nelif \[ -n "\$mode" \]; then/);
-  assert.match(source,/elif \[ -n "\$\{GODSPEED_HOST:-\}" \]; then/,'without the opt-out, an explicit host still follows the existing path');
-});
-
 test('the Node.js check takes 22.19 and newer within 22 only',options,()=>{
   const dir=scratch('node');
   for(const [version,fits] of [['v22.19.0',true],['v22.21.1',true],['v22.18.0',false],['v18.19.1',false],['v23.1.0',false],['v24.0.0',false]]){

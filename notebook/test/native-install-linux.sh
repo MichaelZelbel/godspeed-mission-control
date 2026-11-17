@@ -37,7 +37,9 @@ cleanup() {
   sudo -n rm -f "/etc/systemd/system/$service" >/dev/null 2>&1 || true
   sudo -n systemctl daemon-reload >/dev/null 2>&1 || true
   systemctl --user disable --now "$service" >/dev/null 2>&1 || true
+  systemctl --user disable --now "${service%.service}-https.service" >/dev/null 2>&1 || true
   rm -f "$HOME/.config/systemd/user/$service"
+  rm -f "$HOME/.config/systemd/user/${service%.service}-https.service"
   systemctl --user daemon-reload >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -76,7 +78,7 @@ git -C "$work/product" -c user.name=test -c user.email=test@example.invalid comm
 second=$(git -C "$work/product" rev-parse HEAD)
 git -C "$work/product" config uploadpack.allowAnySHA1InWant true
 git -C "$work/product" config uploadpack.allowFilter true
-install() { GODSPEED_FOOD_TABLE=off GODSPEED_SERVICE="$service" GODSPEED_PORT="$port" GODSPEED_WEB_PORT="$web_port" GODSPEED_HTTPS_PORT="$https_port" GODSPEED_SKIP_WEB_ADDRESS=0 GODSPEED_PRODUCT_REPOSITORY="file://$work/product" GODSPEED_PRODUCT_REF="$1" bash "$here/notebook/scripts/install-native-notebook.sh" "$root"; }
+install() { GODSPEED_FOOD_TABLE=off GODSPEED_SERVICE="$service" GODSPEED_PORT="$port" GODSPEED_WEB_PORT="$web_port" GODSPEED_HTTPS_PORT="$https_port" GODSPEED_PRODUCT_REPOSITORY="file://$work/product" GODSPEED_PRODUCT_REF="$1" bash "$here/notebook/scripts/install-native-notebook.sh" "$root"; }
 answers() { for _ in $(seq 1 30); do curl -fsS "http://127.0.0.1:$port/health" >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
 
 echo '== a first installation, as the server called production'
@@ -91,8 +93,11 @@ grep -q '"GODSPEED_DEVICE":"production"' "$state/start.mjs" || fail 'the machine
 if node "$here/notebook/scripts/server-address.mjs" --has-public-ip; then
   grep -q '"GODSPEED_WEB_ADDRESS":"https://' "$state/start.mjs" || fail 'automatic hostname discovery did not give the isolated installation an HTTPS address'
   grep -q '"GODSPEED_WEB_PORT":"47843"' "$state/start.mjs" || fail 'the isolated installation did not keep its own web door'
-  [ -f /etc/caddy/godspeed-native-install-test-notebook.caddy ] || fail 'the isolated installation has no Caddy site of its own'
-  grep -q "127.0.0.1:$web_port" /etc/caddy/godspeed-native-install-test-notebook.caddy || fail 'the isolated Caddy site does not use its own web door'
+  [ -f "$state/https/notebook.caddy" ] || fail 'the isolated installation has no Caddy site of its own'
+  grep -q "127.0.0.1:$web_port" "$state/https/notebook.caddy" || fail 'the isolated Caddy site does not use its own web door'
+  systemctl --user is-active --quiet "${service%.service}-https.service" || fail 'the isolated HTTPS service is not running'
+  host=$(node "$here/notebook/scripts/server-address.mjs")
+  curl -fsS --noproxy '*' --cacert "$state/https/caddy/pki/authorities/local/root.crt" --resolve "$host:$https_port:127.0.0.1" "https://$host:$https_port/health" >/dev/null || fail 'the isolated HTTPS address does not answer'
 fi
 answers || fail 'the notebook does not answer'
 before=$(service_command show -p MainPID --value "$service")
