@@ -7,6 +7,13 @@ import {asksForTodaysBrief,briefing,savedBriefToday} from './briefing.mjs';
 import {NOTEBOOK_CHAT_FUNCTIONS} from './notebook-chat.mjs';
 
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
+const briefingCreations=new WeakMap();
+async function createBriefingOnce(store,create){
+ const pending=briefingCreations.get(store);if(pending)return pending;
+ const creation=(async()=>{const saved=savedBriefToday(store);if(!saved.note&&!saved.hidden)await create();})();
+ briefingCreations.set(store,creation);
+ try{return await creation;}finally{if(briefingCreations.get(store)===creation)briefingCreations.delete(store);}
+}
 import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
 import {NOTE_TYPES,processNote} from './proposals.mjs';
@@ -290,11 +297,12 @@ export class Domains {
       if(!input.message)input={...input,message:input.messages?.filter(m=>m.role==='user').at(-1)?.content||''};
     }
     if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode!=='summarize'&&asksForTodaysBrief(input.message)){
-      let saved=savedBriefToday(this.store).note;
-      if(name==='conversation-chat'&&!saved&&this.provider){
-        await briefing({id:'brief-chat-'+hash([input.request_id||input.conversation_id||'conversation',new Date().toISOString().slice(0,10)])},{store:this.store,query:this.query,provider:this.provider});
-        saved=savedBriefToday(this.store).note;
+      let today=savedBriefToday(this.store),saved=today.note;
+      if(name==='conversation-chat'&&!saved&&!today.hidden&&this.provider){
+        await createBriefingOnce(this.store,()=>briefing({id:'brief-chat-'+hash([input.request_id||input.conversation_id||'conversation',new Date().toISOString().slice(0,10)])},{store:this.store,query:this.query,provider:this.provider}));
+        today=savedBriefToday(this.store);saved=today.note;
       }
+      if(today.hidden)return {reply:''};
       if(saved){
         const reply=String(saved.content||'');
         await this.store.saveAsync('conversation_messages',{role:'assistant',content:reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'morning-brief'},undefined,{signal:input.signal});

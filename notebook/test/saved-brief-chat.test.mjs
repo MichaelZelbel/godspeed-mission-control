@@ -66,6 +66,30 @@ test('a first conversation brief request creates and reuses the checked saved br
  assert.ok(calls.includes('brief-verification'));assert.equal(calls.includes('conversation-chat'),false);
 });
 
+test('a hidden briefing keeps every chat surface silent without creating a replacement',async t=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hidden-brief-chat-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
+ const hidden=saveBrief(store);store.save('notes',{id:hidden.id,ai_visibility:'hidden'});let calls=0;
+ const domains=new Domains(query,{provider:async()=>{calls++;return saved;}});
+ for(const [name,input] of chatInputs(store))assert.equal((await domains.invoke(name,{...input,message:"today's brief"})).reply,'');
+ assert.equal(calls,0);
+ assert.deepEqual(store.list('notes').filter(note=>note.source_app==='morning-brief').map(note=>note.id),[hidden.id]);
+});
+
+test('concurrent first requests share one checked saved briefing',async t=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-concurrent-brief-chat-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
+ store.save('settings',{id:'installation',timezone:'UTC'});store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ let startedResolve,releaseResolve,writes=0;const started=new Promise(resolve=>{startedResolve=resolve;}),release=new Promise(resolve=>{releaseResolve=resolve;});
+ const drafts=[saved,'Different accepted briefing.\n\nNext: a different step.'];
+ const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fictional briefing checked.'};if(input.phase==='thin-repair')return drafts[0];const draft=drafts[writes++];startedResolve();await release;return draft;};
+ const domains=new Domains(query,{provider}),first=domains.invoke('conversation-chat',{conversation_id:'notebook:first',request_id:'concurrent-one',message:"today's brief"});
+ await started;
+ const second=domains.invoke('conversation-chat',{conversation_id:'notebook:second',request_id:'concurrent-two',message:"today's brief"});
+ await new Promise(resolve=>setImmediate(resolve));releaseResolve();
+ const replies=await Promise.all([first,second]),briefs=store.list('notes').filter(note=>note.source_app==='morning-brief');
+ const jobs=new Set(store.list('job_receipts').filter(receipt=>receipt.kind==='brief-verification').map(receipt=>receipt.job_id));
+ assert.equal(jobs.size,1);assert.equal(briefs.length,1);assert.deepEqual(replies.map(result=>result.reply),[briefs[0].content,briefs[0].content]);
+});
+
 test('candidate Telegram reports a definitely incomplete long saved brief',async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-saved-brief-telegram-partial-')),store=new Store(root),query=new QueryService(store);t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const longSaved='Saved filtered briefing.\n\n'+'.'.repeat(4000)+'\n\nCharm Challenge: exact final line.';
