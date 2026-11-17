@@ -143,7 +143,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const store = new Store(root,{device,watch:true}), index = new SearchIndex(store,{background:true}), query = new QueryService(store), sync = new FileSync(store);
   const readiness=startupReadiness(index.initialPublication);
   index.initialPublication.then(
-    ()=>console.log(startupTrace('index-published')),
+    ()=>console.error(startupTrace('index-published')),
     error=>console.error(startupTrace('index-publication-failed'),error?.message||error)
   );
   const stopIndexing=store.onChange(({changed,gone})=>{try{index.update(changed);index.forget(gone);}catch{}});
@@ -657,7 +657,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // every record and every workspace file to rebuild it, which is what a
       // save used to wait for, cost more than the save; the file watcher still
       // arms a full refresh for whatever other programs write.
-      if (route === '/api/query' && req.method === 'POST') { if(!firstQueryTraced){firstQueryTraced=true;console.log(startupTrace('first-authenticated-query'));} const input=JSON.parse(await body(req)),result=await query.executeAsync(input); if(input.table==='notes'&&Array.isArray(result.data)&&(input.operation==='delete'||[].concat(input.values||[]).some(v=>v?.is_trashed===true||v?.removed_at)))await retireShares(store,result.data.map(n=>n.id)); return send(res, 200, result); }
+      if (route === '/api/query' && req.method === 'POST') { if(!firstQueryTraced){firstQueryTraced=true;console.error(startupTrace('first-authenticated-query'));} const input=JSON.parse(await body(req)),result=await query.executeAsync(input); if(input.table==='notes'&&Array.isArray(result.data)&&(input.operation==='delete'||[].concat(input.values||[]).some(v=>v?.is_trashed===true||v?.removed_at)))await retireShares(store,result.data.map(n=>n.id)); return send(res, 200, result); }
       if(route==='/api/chat-state'&&req.method==='POST'){
         const input=JSON.parse(await body(req));
         return send(res,200,await saveConversationState(store,input,{asyncWriter:true}));
@@ -770,7 +770,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const listen = (server, port, host) => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   const server = http.createServer(handle(remote, auth));
   await listen(server, port, host);
-  console.log(startupTrace('main-door-listening'));
+  console.error(startupTrace('main-door-listening'));
   // The link an assistant gives when asked for the notebook (get_notebook_link), with the port this door really has.
   domains.notebookAddress = () => notebookAddress({ port: server.address().port });
   // The food tracker's table (D-321 step 5): a notebook without it (the Windows set-up and the
