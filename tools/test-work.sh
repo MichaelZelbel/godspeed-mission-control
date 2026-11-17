@@ -52,7 +52,7 @@ OUT="$(hw file --what "Put the guide on the shop shelf" --done-when "the listing
 contains "outward work files blocked, needing authorization" "$OUT" "W-20260913-02: blocked"
 contains "  and says it never runs on its own" "$OUT" "outward: never on its own"
 OUT="$(hw file --what "Post to the feed" --done-when "x" --owner robot --source test 2>&1)"; check "a made-up owner is refused" "$?" "1"
-OUT="$(hw file --what "Fix the cover picture" --done-when "the routing test passes" --check "test -f $TMP/cover-fixed" --key cover --source test 2>&1)"
+OUT="$(hw file --what "Fix the cover picture" --done-when "work/cover-result.md describes the corrected cover" --check "test -f $TMP/cover-fixed" --key cover --source test 2>&1)"
 contains "an item with a mechanical check files" "$OUT" "W-20260913-03: planned"
 OUT="$(hw file --what "Read the replies on the last post" --done-when "the replies are in the log" --needs "capability:browser bridge from this machine" --source test 2>&1)"
 contains "a missing capability files blocked and names it" "$OUT" "blocked (needs capability:browser bridge from this machine)"
@@ -78,9 +78,21 @@ hw attempt W-20260913-03 --runner claude-laptop --ok --result "patched the route
 OUT="$(hw verify W-20260913-03 2>&1)"; check "a failing check keeps the runner's claim unverified (exit 2)" "$?" "2"
 contains "  and says so" "$OUT" "the runner said done, the check says not; stays attempted"
 check "  UNVERIFIED line recorded" "$(grep -c 'UNVERIFIED check failed' "$TMP/work/W-20260913-03.md")" "1"
+printf '%s\n' 'corrected cover' > "$TMP/work/cover-result.md"
 touch "$TMP/cover-fixed"
-OUT="$(hw verify W-20260913-03 2>&1)"
-contains "  once the check passes it verifies" "$OUT" "verified by its check"
+OUT="$(hw verify W-20260913-03 2>&1)"; check "  missing content review exits 2" "$?" "2"
+contains "  a passing shell check is insufficient for a Godspeed-owned file result" "$OUT" "content review found missing work"
+printf '%s\n' '{"passed":false,"reason":"the cover is still wrong","missing":["the corrected cover"]}' > "$TMP/review-fail.json"
+OUT="$(hw verify W-20260913-03 --content-review "$TMP/review-fail.json" 2>&1)"; check "  a failed content review exits 2" "$?" "2"
+contains "  and names the missing content" "$OUT" "the corrected cover"
+printf '%s\n' '{"passed":true,"reason":"the corrected cover is present","missing":[]}' > "$TMP/review-pass.json"
+OUT="$(hw verify W-20260913-03 --content-review "$TMP/review-pass.json" 2>&1)"
+contains "  once both judgments pass it verifies" "$OUT" "verified by its check and content review"
+
+hw file --what "Restart the local counter" --done-when "the counter reads 4" --check "test -f $TMP/counter-four" --key counter --source test >/dev/null
+COUNTER="$(idof counter)"; hw take "$COUNTER" --runner claude-laptop >/dev/null; hw attempt "$COUNTER" --runner claude-laptop --ok --result "counter reads 4" >/dev/null; touch "$TMP/counter-four"
+OUT="$(hw verify "$COUNTER" 2>&1)"
+contains "a non-file result retains shell-check verification" "$OUT" "verified by its check"
 
 # --- failure, retries with a gap, attempts used up ------------------------------------------------------
 hw file --what "Refresh the contact list" --done-when "rows 1 to 15 carry today's date" --key dream --source test >/dev/null
@@ -160,7 +172,8 @@ hw take "$CH5" --runner claude-laptop >/dev/null
 hw attempt "$CH5" --runner claude-laptop --ok --result "we found out it is about forty percent" >/dev/null
 OUT="$(hw verify $CH5 2>&1)"; check "a learn item whose answer was only reported stays attempted" "$?" "2"
 mkdir -p "$TMP/research"; printf '## Answer\nAbout forty percent of readers reach chapter 5, from the reading log.\n' > "$TMP/research/chapter-5.md"
-OUT="$(hw verify $CH5 2>&1)"; contains "  once the answer is written where it was promised, it verifies" "$OUT" "verified by its check"
+printf '%s\n' '{"passed":true,"reason":"the answer and its evidence are in the promised file","missing":[]}' > "$TMP/ch5-review.json"
+OUT="$(hw verify $CH5 --content-review "$TMP/ch5-review.json" 2>&1)"; contains "  once the answer is written and independently reviewed, it verifies" "$OUT" "verified by its check and content review"
 
 # --- a repair mends this machine, and reaches nobody else (2026-10-27) -------------------------------------
 OUT="$(hw file --what "Install the fixed nightly upgrade over the broken copy" --done-when "the upgrade's own check passes again on this machine" --kind repair --key fix-upgrade --source test 2>&1)"
