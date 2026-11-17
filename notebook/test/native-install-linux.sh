@@ -180,7 +180,7 @@ while IFS= read -r name; do [ -e "$state/backups/$name" ] || fail "the undone up
 
 echo '== a notebook killed from outside comes back'
 service_command kill --kill-whom=main -s KILL "$service"
-sleep 15
+sleep 8
 service_command is-active --quiet "$service" || fail 'systemd did not restart a killed notebook'
 answers || fail 'the restarted notebook does not answer'
 echo 'Installed, upgraded with the machine name kept, the note in the folder renamed and only its own copy made before the update, a Hermes that loads kept over one that does not, a failed update undone with every copy kept, an update handed over inside the service and one undone there, and restarted after a kill.'
