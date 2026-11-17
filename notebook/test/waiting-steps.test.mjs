@@ -14,6 +14,7 @@ import {Scheduler} from '../core/jobs/scheduler.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
 import {appendAssistantMessage} from '../core/conversation-state.mjs';
 import {openStep,ROUTES,CHATS,chatOf,ASKER_KINDS,answerStep,answerChosen,heard,remindWaitingSteps,stampReply,readStep,waitingSteps} from '../core/waiting-steps.mjs';
+import {verifyWaitingStepReminders} from '../scripts/waiting-step-verifier.mjs';
 
 for(const key of Object.keys(process.env))if(/^GODSPEED_/.test(key))delete process.env[key];
 const script=fileURLToPath(new URL('../bin/godspeed-step.mjs',import.meta.url));
@@ -275,6 +276,17 @@ test('the native scheduler reports a failed waiting-step reminder and leaves it 
  await scheduler.tick();
  assert.deepEqual(failures,['chat unavailable']);
  assert.equal(store.get('approvals',id).reminded_at,undefined);
+});
+
+test('the H-39 verifier gives a runnable observation of the reminder contract',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-h39-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const result=await verifyWaitingStepReminders(root);
+ assert.deepEqual(result.failures,['verifier chat unavailable']);
+ assert.equal(result.telegram.chat,'telegram');
+ assert.match(result.telegram.text,/Telegram verifier backup.*Should I continue.*Please answer yes or no/);
+ assert.equal(result.second_marked_pass_added_messages,0);
+ assert.deepEqual(Object.entries(result.marked).filter(([,marked])=>marked).map(([name])=>name),['due','retry','telegram','young','outward']);
+ assert.equal(result.statuses.outward,'pending');
 });
 
 test('a scheduled run answers for nobody, and a step text holding a code is refused',async t=>{
