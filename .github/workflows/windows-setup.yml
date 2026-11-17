@@ -12,7 +12,7 @@ name: windows setup
 # proves the build before it is merged.
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
   pull_request:
     paths:
       - .github/workflows/windows-setup.yml

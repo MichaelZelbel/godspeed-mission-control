@@ -33,7 +33,7 @@ stopped. Each line names the kit files that chapter uses.
 - [ ] Chapter 13: Your Notebook: Notes, People and What It Noticed. Kit:
       `starter-godspeed/skills/keep-a-note/`; moving your notes from Menerio:
       `docs/menerio-migration.md`.
-- [ ] Chapter 14: Collections, the Timeline and the World. No kit file;
+- [ ] Chapter 14: Track Anything With One Word. No kit file;
       `starter-godspeed/world/README.md` explains how the world is kept.
 
 ## Part III: Teach AI Repeated Jobs
@@ -83,21 +83,23 @@ stopped. Each line names the kit files that chapter uses.
       `mail/README.md`, `mail/mc-address.md` and `tools/mc-mail.js`, installed as `mc-mail`.
 - [ ] Chapter 32, optional: Let Your Mission Control Read Your Mail. Kit: `mail/README.md`,
       `mc-mail` with `tools/mc-mail-imap.js`, and `starter-godspeed/skills/connect-email/`.
-- [ ] Chapter 33, optional: Use Your Mission Control on Several Devices. Kit: the
+- [ ] Chapter 33, optional: Let Your Mission Control File Your Paperwork. Not in the
+      kit: the Clerk, an add-on at https://github.com/MichaelZelbel/godspeed-clerk.
+- [ ] Chapter 34, optional: Use Your Mission Control on Several Devices. Kit: the
       installer from Chapter 2.
-- [ ] Chapter 34, optional: Look After Your Server. No kit file. `server/` shows how to
+- [ ] Chapter 35, optional: Look After Your Server. No kit file. `server/` shows how to
       build a server by hand, for the curious.
-- [ ] Chapter 35, optional: Let Your Mission Control Make a Phone Call for You. Not in the
+- [ ] Chapter 36, optional: Let Your Mission Control Make a Phone Call for You. Not in the
       kit: the `mc-phone` add-on at https://github.com/MichaelZelbel/mc-phone.
-- [ ] Chapter 36, optional: Let Your Mission Control Finish Your Videos. Not in the kit:
+- [ ] Chapter 37, optional: Let Your Mission Control Finish Your Videos. Not in the kit:
       the `mc-video` add-on at https://github.com/MichaelZelbel/mc-video.
-- [ ] Chapter 37, optional: Try Your Mission Control With Another AI Assistant. Kit:
+- [ ] Chapter 38, optional: Try Your Mission Control With Another AI Assistant. Kit:
       `swap/opencode.json`, `swap/three-questions.md` and `swap/openrouter-notes.md`.
-- [ ] Chapter 38, optional: Reach and Share Your Saved Prompts Online. Kit:
+- [ ] Chapter 39, optional: Reach and Share Your Saved Prompts Online. Kit:
       `living/saved-prompt-card.md` and the README files under `starter-godspeed/prompts/`.
-- [ ] Chapter 39, optional: Coaching in Depth: Areas, Styles and Habits. No kit file:
+- [ ] Chapter 40, optional: Coaching in Depth: Areas, Styles and Habits. No kit file:
       talks and habits are built in.
-- [ ] Chapter 40, optional: Use Your Mission Control for Coding Projects. Kit:
+- [ ] Chapter 41, optional: Use Your Mission Control for Coding Projects. Kit:
       `coding/project-setup.md`, `starter-godspeed/dev/README.md` and
       `starter-godspeed/.gitignore`.
 

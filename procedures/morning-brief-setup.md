@@ -111,7 +111,7 @@ Then read the job's card. Its **Next** line is the machine repeating your
 instruction back. On a laptop the job fires while Hermes is open; a 07:00
 the app was shut for is written once, late, when you next open it (see
 `where-it-runs.md`). For seven every day without thinking about it,
-Chapter 34's server.
+Chapter 35's server.
 
 ## Prove the clock, not just the recipe
 
