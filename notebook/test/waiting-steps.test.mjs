@@ -264,6 +264,17 @@ test('the native scheduler reaches waiting-step reminders hourly and never repea
  now+=31*60000;await scheduler.tick();assert.equal(messages().length,1,'the hourly pass does not repeat a marked reminder');
 });
 
+test('the native scheduler reports a failed waiting-step reminder and leaves it unmarked',async t=>{
+ const {root,store}=fixture(t),id='step-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',failures=[];
+ store.save('approvals',{id,status:'pending',about:'The backup is waiting.',question:'Shall I retry it?',asked_by:{kind:'routine',name:'test'},asked_in:'notebook',asked_at:'2026-11-17T05:00:00.000Z',sent_at:'2026-11-17T05:50:00.000Z'});
+ store.withLock=()=>{throw Error('chat unavailable');};
+ const scheduler=new NativeScheduler(store,{home:path.join(root,'.hermes'),executable:'hermes',now:()=>Date.parse('2026-11-17T12:00:00.000Z'),lifecycle:{acquire:()=>null}});
+ scheduler.onFailure=error=>failures.push(error.message);
+ await scheduler.tick();
+ assert.deepEqual(failures,['chat unavailable']);
+ assert.equal(store.get('approvals',id).reminded_at,undefined);
+});
+
 test('a scheduled run answers for nobody, and a step text holding a code is refused',async t=>{
  const {store}=fixture(t),{id}=await ask(store,'The bot stopped.');
  assert.equal(heard(store,{chat:'telegram',words:'yes',scheduled:true}).kind,'none');
