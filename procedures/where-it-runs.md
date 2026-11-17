@@ -47,7 +47,7 @@ card.
   others", not "it runs while I sleep".
 - **The grown-up answer.** A small server of your own that never sleeps,
   with Hermes' gateway as a system service and its own copy of your
-  folder. That is Chapter 34, and every job you build on your laptop moves
+  folder. That is Chapter 35, and every job you build on your laptop moves
   there unchanged.
 
 ## The desktop screen

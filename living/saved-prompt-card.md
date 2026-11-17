@@ -1,4 +1,4 @@
-# The Saved Prompt Card (Chapters 16 and 38)
+# The Saved Prompt Card (Chapters 16 and 39)
 
 Most of your skills are read by your assistant, out of your `skills/` folder. A few prompts
 are not: the one that makes your book cover, your thumbnail or your diagram goes into a tool

@@ -1,6 +1,6 @@
 # Choose one starter skill
 
-Build and adapt a summary skill in Chapters 15 and 16. Chapter 17 adds the email, day-plan, meeting, update and decision recipes. Ask the assistant to install only the one you need.
+Build and adapt the `check-my-email` skill in Chapters 15 and 16 (`check-my-email.md`, `practice-emails.md` and `check-skill-interview.md`). Chapter 17 adds the email, day-plan, meeting, update and decision recipes. Ask the assistant to install only the one you need.
 
 These recipes are deliberately not part of the installer. Your `skills/` folder arrives holding the recipes your mission control runs by itself, such as `next-action` and `work-item` (Chapter 8), so the first recipe you put there yourself is one you built, in Chapter 15.
 
