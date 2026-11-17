@@ -124,6 +124,21 @@ fetch_version() {
   printf '%s' "$state/versions/$commit"
 }
 
+# The shared bootstrap gets commands from the product repository's default branch. A release's
+# default branch is normally the version being installed, but a pinned candidate or pull-request
+# stage can be newer. Keep the daily-work command and the libraries it loads on the exact product
+# commit named by the stage, just as the notebook itself is. Otherwise an installed candidate can
+# run an older verifier while its notebook reports the candidate version.
+install_pinned_work_tools() {
+  local source=$1 target="$HOME/.local/bin" name
+  mkdir -p "$target" || return 1
+  for name in mc-work mc-work-run work.js run-log-folders.js mc-cards.js unattended-git.cjs; do
+    [ -f "$source/tools/$name" ] || continue
+    cp "$source/tools/$name" "$target/$name" || return 1
+  done
+  chmod 755 "$target/mc-work" "$target/mc-work-run" || return 1
+}
+
 # --- The service --------------------------------------------------------------------
 systemd_here() { [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; }
 
@@ -524,6 +539,7 @@ node_folder=$(dirname "$node")
 export PATH="$node_folder:$PATH"
 
 version=$(fetch_version) || { echo 'The notebook could not be downloaded. Check this computer can reach GitHub, then run the installer again.' >&2; exit 1; }
+install_pinned_work_tools "$version" || { echo 'The daily work commands could not be installed.' >&2; exit 1; }
 # A server nobody browses (a routine runner) can skip building the screens:
 # the build needs more memory than a small server spares.
 if [ "${GODSPEED_SKIP_UI:-}" != 1 ] && [ ! -f "$version/notebook/ui/.godspeed-built" ]; then
