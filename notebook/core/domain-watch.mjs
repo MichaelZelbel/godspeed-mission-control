@@ -4,6 +4,7 @@ import {outboundFetch} from './outbound-fetch.mjs';
 
 const INTERVAL=6*60*60*1000;
 const USER_AGENT='Godspeed-Mission-Control-Domain-Watch';
+const MAX_DELIVERY_LENGTH=4000;
 const advice={
   available:'it can be registered now, at any registrar',
   'pending delete':'it is released in about five days; a backorder service can try to catch it',
@@ -75,7 +76,7 @@ export async function runDomainWatches({store,fetcher}){
     successful.push({snapshot,read});
   }
   await store.waitForWriter();
-  let delivery;
+  let deliveries=[];
   store.withLock(()=>{
     const records=[],transitions=[];
     for(const {snapshot,read} of successful){
@@ -89,12 +90,19 @@ export async function runDomainWatches({store,fetcher}){
       outcomes.push({domain:current.domain,ok:true,state:read.state,changed});
     }
     if(transitions.length){
-      const note=store.prepare('notes',{title:'Domain registration changes',content:transitions.map(change=>change.body).join('\n\n'),source_app:'domain-watch'});
-      records.push(note,...transitions.map(change=>store.prepare('notifications',{...change,status:'ready',record_id:note.id})));
-      delivery=note;
+      const batches=[];
+      for(const transition of transitions){
+        const batch=batches.at(-1),content=batch?[...batch,transition].map(change=>change.body).join('\n\n'):'';
+        if(batch&&content.length<=MAX_DELIVERY_LENGTH)batch.push(transition);else batches.push([transition]);
+      }
+      deliveries=batches.map(batch=>{
+        const note=store.prepare('notes',{title:'Domain registration changes',content:batch.map(change=>change.body).join('\n\n'),source_app:'domain-watch'});
+        records.push(note,...batch.map(change=>store.prepare('notifications',{...change,status:'ready',record_id:note.id})));
+        return note;
+      });
     }
     if(records.length)store.commit(records);
   });
   const failed=outcomes.filter(outcome=>!outcome.ok);
-  return {verified:outcomes.length===0||failed.length<outcomes.length,silent:!delivery,domains:outcomes,...(delivery?{record_id:delivery.id,content_hash:store.get('notes',delivery.id)._hash,delivery:'notebook'}:{})};
+  return {verified:failed.length===0,silent:deliveries.length===0,domains:outcomes,...(deliveries.length?{record_id:deliveries[0].id,record_ids:deliveries.map(note=>note.id),content_hash:store.get('notes',deliveries[0].id)._hash,delivery:'notebook'}:{})};
 }

@@ -138,7 +138,11 @@ export class Scheduler {
       result=await beatWhile(this.executor(job,{settings,store:this.store}),()=>this.onProgress?.(),{limitMs:this.jobLimit,every:this.beatEvery});
       await this.store.waitForWriter();
       if(!result?.verified)throw new Error('The executor returned no verified result');
-      if((this.delivery||settings.delivery)==='telegram'&&!result.silent){if(!this.deliver)throw new Error('Connect Telegram before choosing to get results there');await this.deliver(receipt.id,result);}
+      if((this.delivery||settings.delivery)==='telegram'&&!result.silent){
+        if(!this.deliver)throw new Error('Connect Telegram before choosing to get results there');
+        const recordIds=result.record_ids||[result.record_id];
+        for(const recordId of recordIds)await this.deliver(receipt.id,{...result,record_id:recordId});
+      }
     } catch(e) {
       const retry=(job.retry_count||0)+1,needsReview=e.code==='OUTWARD_UNCERTAIN'||retry>=(job.max_retries||3);
       try{

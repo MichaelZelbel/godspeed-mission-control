@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {Store} from '../core/records/store.mjs';
+import {Store,hash} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
 import {procedure} from '../core/procedures.mjs';
@@ -61,6 +61,29 @@ test('the scheduler delivers a saved transition through Telegram and reports a t
  await scheduler.tick(at+21600000);assert.equal(sent.length,1);
  store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at+43200000).toISOString()});scheduler.executor=job=>procedure(job,{store,query,fetcher:async()=>{throw Error('offline');}});
  await scheduler.tick(at+43200000);assert.equal(store.get('jobs','domain-watch-sweeper').state,'failed');assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'The executor returned no verified result');assert.equal(sent.length,1);
+});
+
+test('the scheduler delivers every bounded message in a large transition batch',async()=>{
+ const {store,query}=setup(),at=Date.parse('2026-11-17T12:00:00Z');store.save('settings',{id:'installation',owner:store.device,timezone:'UTC',delivery:'telegram'});
+ const domains=Array.from({length:45},(_,index)=>'wanted-'+String(index).padStart(2,'0')+'-'+('x'.repeat(45))+'.example');
+ for(const domain of domains)addDomainWatch(store,domain);
+ await procedure({kind:'domain-watch'},{store,query,fetcher:async()=>rdap(['active'])});store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at).toISOString()});
+ const sent=[],telegram=new Telegram({store,domains:null,token:'token',owner:'1',transport:async(_url,input)=>{const body=JSON.parse(String(input.body));sent.push(body.text);return new Response(JSON.stringify({ok:true,result:{message_id:sent.length}}),{status:200,headers:{'Content-Type':'application/json'}});}});
+ const scheduler=new Scheduler(store,{query,delivery:'telegram',executor:job=>procedure(job,{store,query,fetcher:async()=>rdap(['pendingDelete'])})});scheduler.deliver=telegram.deliver.bind(telegram);
+ await scheduler.tick(at);
+ assert.ok(sent.length>1);assert.ok(sent.every(text=>text.length<=4000));
+ for(const domain of domains)assert.equal(sent.filter(text=>text.includes(domain+' is now pending delete')).length,1);
+ assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'verified');
+});
+
+test('a mixed RDAP outage keeps the scheduler failure visible',async()=>{
+ const {store,query}=setup(),at=Date.parse('2026-11-17T12:00:00Z');store.save('settings',{id:'installation',owner:store.device,timezone:'UTC',delivery:'notebook'});addDomainWatch(store,'up.example');addDomainWatch(store,'down.example');
+ store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at).toISOString()});
+ const scheduler=new Scheduler(store,{query,executor:job=>procedure(job,{store,query,fetcher:async url=>{if(String(url).includes('down.example'))throw Error('offline');return rdap(['active']);}})});
+ await scheduler.tick(at);
+ assert.equal(store.get('jobs','domain-watch-sweeper').state,'failed');assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'The executor returned no verified result');
+ assert.equal(store.get('domain_watches','domain-'+hash('up.example').slice(0,24)).state,'registered');
+ assert.equal(listDomainWatches(store).find(w=>w.domain==='down.example').state,null);assert.equal(store.list('job_receipts').length,1);
 });
 
 test('chat authorizes adding, listing and removing a named domain',async()=>{
