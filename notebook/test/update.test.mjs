@@ -179,15 +179,32 @@ test('persisted installer settings stay conformant across their three roles',()=
 test('a terminal update fails before selecting a default service when saved settings are malformed',async()=>{
   const root=computer('2.0.0-beta.20'),runtime=path.join(root,'.godspeed','integrated-runtime');
   fs.writeFileSync(path.join(runtime,'start.mjs'),'const settings={"GODSPEED_SERVICE":"godspeed-native-install-test.service"');
+  fs.writeFileSync(path.join(root,'AGENTS.md'),'test');fs.mkdirSync(path.join(root,'rules'));
+  const installedVersion=path.join(runtime,'versions','a'.repeat(40));
+  fs.mkdirSync(path.join(installedVersion,'notebook','bin'),{recursive:true});fs.writeFileSync(path.join(installedVersion,'notebook','bin','godspeed.mjs'),'');
+  const platform=process.platform==='darwin'?'darwin':process.platform==='linux'?'linux':null;
+  const architecture=process.arch==='arm64'?'arm64':process.arch==='x64'?'x64':null;
+  if(!platform||!architecture)return;
+  const installedNode=path.join(runtime,'runtime',`node-v22.19.0-${platform}-${architecture}`,'bin','node');
+  fs.mkdirSync(path.dirname(installedNode),{recursive:true});
+  fs.writeFileSync(installedNode,`#!/bin/sh\nif [ "$1" = --version ]; then echo v22.19.0; else exec ${JSON.stringify(process.execPath)} "$@"; fi\n`,{mode:0o755});
+  const marker=path.join(root,'selected-service'),bashEnv=path.join(root,'observe-installer');
+  fs.writeFileSync(bashEnv,`service_assignments=0\ntrap 'if [[ "$BASH_COMMAND" == SERVICE=* ]]; then service_assignments=$((service_assignments+1)); if [ "$service_assignments" = 2 ]; then trap - DEBUG; printf "%s" "$BASH_COMMAND" > ${JSON.stringify(marker)}; exit 0; fi; fi' DEBUG\n`);
   const {fetchImpl}=github(release());
   const {run}=spy((command,args,options)=>{
-    if(command!=='bash')return 0;
-    const checked=spawnSync('bash',['-c','set -euo pipefail; GODSPEED_INSTALLER_FUNCTIONS_ONLY=1; . "$1"; state="$2"; node="$3"; mode=""; restore_kept_settings','test',installer,runtime,process.execPath],{encoding:'utf8',env:options.env});
+    if(command==='tar'){
+      const target=path.join(args[args.indexOf('-C')+1],args.at(-1));
+      fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(installer,target+'.native');
+      fs.writeFileSync(target,'#!/bin/sh\nexec bash "$0.native" "$2"\n',{mode:0o755});return 0;
+    }
+    assert.equal(command,'bash');
+    const checked=spawnSync(command,args,{encoding:'utf8',cwd:options.cwd,env:{...options.env,BASH_ENV:bashEnv,GODSPEED_PRODUCT_REF:'a'.repeat(40),GODSPEED_SKIP_UI:'1'}});
     assert.notEqual(checked.status,0);
     assert.match(checked.stderr,/saved installation settings.*cannot be read/);
     return checked.status;
   });
   await assert.rejects(runUpdate({...silent,root,fetchImpl,run,env:{},platform:'linux'}),/stopped before it was finished/);
+  assert.equal(fs.existsSync(marker),false,'the production installer never reaches its fallback service selection');
   assert.equal(readStatus(root).state,'failed');
 });
 
