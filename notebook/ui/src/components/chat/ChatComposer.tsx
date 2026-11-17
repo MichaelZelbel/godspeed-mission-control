@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {Plus,ArrowUp,Square,Mic,Volume2,VolumeX,X,FileText,Loader2} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
-import {loadChatOptions} from '@/local/chat-options.mjs';
+import {listenForChatOptions,loadChatOptions} from '@/local/chat-options.mjs';
 import type {ChatAvailability} from './ChatConnectionEmptyState';
 import {NO_AI_STATUS} from '../../../../core/no-ai.mjs';
 
@@ -20,6 +20,7 @@ export default function ChatComposer(p:Props){
     refresh();const interval=window.setInterval(refresh,5000);
     return()=>{alive=false;window.clearInterval(interval);request?.abort();};
   },[modelAttempt]);
+  useEffect(()=>listenForChatOptions(data=>{setOptions(data);p.onModel(data.current);}),[p.onModel]);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;clearTimeout(recordingTimer.current);audioRequest.current?.abort();if(recorder.current?.state==='recording')recorder.current.stop();recorder.current?.stream.getTracks().forEach(t=>t.stop());window.speechSynthesis?.cancel();};},[]);
   const noAI=options.connected===false,unusable=options.usable===false,efforts=noAI||unusable?[]:options.models.find(m=>m.id===p.model)?.efforts||[];
   const unavailableLabel=noAI?NO_AI_STATUS:options.availability==='refused'?'Your AI key or sign-in was refused':'Your AI could not be reached';

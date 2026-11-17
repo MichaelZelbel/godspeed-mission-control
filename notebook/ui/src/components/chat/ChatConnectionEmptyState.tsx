@@ -1,7 +1,9 @@
-import {useQuery} from '@tanstack/react-query';
+import {useEffect} from 'react';
+import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 import {CHAT_AVAILABILITIES} from '../../../../core/chat-availability.mjs';
 import {NO_AI_STATUS} from '../../../../core/no-ai.mjs';
+import {listenForChatOptions} from '@/local/chat-options.mjs';
 export type ChatAvailability=(typeof CHAT_AVAILABILITIES)[number];
 type ChatOptions={connected?:boolean;usable?:boolean;availability?:ChatAvailability};
 export type ChatAIState='checking'|ChatAvailability;
@@ -21,7 +23,9 @@ async function chatOptions(){
 
 /** The shared pre-composer state for floating, note, collection, and pop-out chat. */
 export function ChatConnectionEmptyState({ready}:{ready:React.ReactNode}){
+  const queryClient=useQueryClient();
   const options=useQuery({queryKey:['chat-options'],queryFn:chatOptions,refetchInterval:5000,refetchIntervalInBackground:true});
+  useEffect(()=>listenForChatOptions((next:ChatOptions)=>queryClient.setQueryData(['chat-options'],next)),[queryClient]);
   const state=chatAIState(options.data);
   if(state==='ready')return <>{ready}</>;
   if(state==='checking')return <div className="text-center text-muted-foreground text-sm py-8" role="status">Checking AI connection…</div>;

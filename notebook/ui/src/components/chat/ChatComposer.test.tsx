@@ -5,6 +5,9 @@ import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import '@testing-library/jest-dom/vitest';
 import ChatComposer from './ChatComposer';
+import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
+import {MemoryRouter} from 'react-router-dom';
+import {ChatConnectionEmptyState} from './ChatConnectionEmptyState';
 
 // Issue #563: with no AI connected the model picker said "Connected model" while the Dashboard and
 // the chat said no AI is connected. The same composer is the global chat's, a note's and a collection's.
@@ -23,6 +26,18 @@ it('refreshes an already-open composer when an AI is connected',async()=>{
  const props=show();await vi.waitFor(()=>expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('Model: No AI is connected yet'));
  connected=true;await act(()=>vi.advanceTimersByTimeAsync(5000));
  expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('fictional-model');expect(props.onModel).toHaveBeenLastCalledWith('fictional-model');
+});
+
+it('keeps an open chat notice and picker on the same state after reconnection',async()=>{
+ vi.useFakeTimers();let ready=false;
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(ready?{connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}:{connected:true,usable:false,availability:'refused',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}),{headers:{'Content-Type':'application/json'}})));
+ const props={value:'',onChange(){},onSend(){},onStop(){},busy:false,files:[],onFiles(){},model:'',effort:'',onModel:vi.fn(),onEffort(){},reply:'',onError(){}};
+ render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter><ChatConnectionEmptyState ready={<p>Ready notice</p>}/><ChatComposer {...props}/></MemoryRouter></QueryClientProvider>);
+ await vi.waitFor(()=>expect(screen.getByText('Your AI key or sign-in was refused')).toBeInTheDocument());
+ expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('Model: Your AI key or sign-in was refused');
+ ready=true;await act(()=>vi.advanceTimersByTimeAsync(5000));
+ await vi.waitFor(()=>expect(screen.getByText('Ready notice')).toBeInTheDocument());
+ expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('fictional-model');
 });
 
 it('with no AI connected the model picker says so and both pickers are off',async()=>{

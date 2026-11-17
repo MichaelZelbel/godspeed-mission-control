@@ -1,5 +1,18 @@
 import {NO_AI_STATUS} from '../../../core/no-ai.mjs';
 
+const CHAT_OPTIONS_EVENT='godspeed:chat-options';
+
+export function publishChatOptions(options){
+ if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent(CHAT_OPTIONS_EVENT,{detail:options}));
+ return options;
+}
+
+export function listenForChatOptions(listener){
+ const receive=event=>listener(event.detail);
+ window.addEventListener(CHAT_OPTIONS_EVENT,receive);
+ return()=>window.removeEventListener(CHAT_OPTIONS_EVENT,receive);
+}
+
 export async function loadChatOptions({fetcher=fetch,signal,timeoutMs=15000}={}){
  const deadline=AbortSignal.timeout(timeoutMs),combined=signal?AbortSignal.any([signal,deadline]):deadline;
  let response;
@@ -10,5 +23,5 @@ export async function loadChatOptions({fetcher=fetch,signal,timeoutMs=15000}={})
  const current=data.models.some(m=>m.id===data.current)?data.current:data.models.length===1&&data.models[0].id===''?'':null;
  if(current===null)throw Error('The configured model is not among the available choices.');
  // connected:false is the server saying no AI is connected at all (#563); any other answer is a connected AI.
- return {current,label:data.connected===false?NO_AI_STATUS:typeof data.current==='string'?data.current:'Connected model',connected:data.connected!==false,usable:data.usable!==false,availability:data.availability,models:data.models};
+ return publishChatOptions({current,label:data.connected===false?NO_AI_STATUS:typeof data.current==='string'?data.current:'Connected model',connected:data.connected!==false,usable:data.usable!==false,availability:data.availability,models:data.models});
 }
