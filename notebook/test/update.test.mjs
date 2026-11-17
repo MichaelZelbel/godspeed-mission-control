@@ -1,5 +1,6 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';import {spawn} from 'node:child_process';
-import {compareVersions,findNewest,installedVersion,updateWay,runUpdate,releaseSources,readStatus,settle,ARCHIVE,WINDOWS_SETUP,WINDOWS_FLAGS} from '../core/update.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';import {spawn,spawnSync} from 'node:child_process';
+import {compareVersions,findNewest,installedVersion,updateWay,runUpdate,releaseSources,readStatus,settle,SERVICE_NAMES,ARCHIVE,WINDOWS_SETUP,WINDOWS_FLAGS} from '../core/update.mjs';
+import {NAMES} from '../scripts/native-start-script.mjs';
 import {VERSION} from '../core/version.mjs';
 
 // godspeed-update and Settings' Update now (#456): which release is newest, whether it is newer,
@@ -38,6 +39,7 @@ function computer(version){
 }
 const spy=(answer=()=>0)=>{const calls=[];const run=async(command,args,options)=>{calls.push({command,args,options});return answer(command,args,options);};return {run,calls};};
 const silent={log:()=>{},product:temporary('checkout')};
+const installer=path.resolve('notebook/scripts/install-native-notebook.sh');
 
 test('versions are ordered the way semantic versioning orders them',()=>{
   const order=['2.0.0-alpha.1','2.0.0-beta.9','2.0.0-beta.10','2.0.0-beta.20','2.0.0-beta.20.commit.abc1234','2.0.0-rc.1','2.0.0','2.0.1','2.1.0','10.0.0'];
@@ -133,6 +135,29 @@ test('a terminal update runs install-godspeed.sh out of the checked archive, at 
   assert.match(said.join('\n'),/matched the checksum its release publishes/);
   assert.equal(readStatus(root).state,'updated');assert.equal(readStatus(root).to,'2.0.0-beta.30');
   assert.ok(!fs.existsSync(folder),'the download is removed afterwards');
+});
+
+test('a terminal update restores the persisted service after filtering the caller environment',async()=>{
+  const root=computer('2.0.0-beta.20'),runtime=path.join(root,'.godspeed','integrated-runtime'),service='godspeed-native-install-test.service';
+  fs.writeFileSync(path.join(runtime,'start.mjs'),`const settings={"GODSPEED_SERVICE":${JSON.stringify(service)}};`);
+  const {fetchImpl}=github(release());
+  const {run}=spy((command,args,options)=>{
+    if(command!=='bash')return 0;
+    assert.equal(options.env.GODSPEED_SERVICE,undefined,'godspeed-update removes the ambient identity');
+    const checked=spawnSync('bash',['-c','set -euo pipefail; GODSPEED_INSTALLER_FUNCTIONS_ONLY=1; . "$1"; state="$2"; node="$3"; mode=""; restore_kept_settings; printf %s "$GODSPEED_SERVICE"','test',installer,runtime,process.execPath],{encoding:'utf8',env:options.env});
+    assert.equal(checked.status,0,checked.stderr);
+    assert.equal(checked.stdout,service,'the installer restores the installation identity from start.mjs');
+    return 0;
+  });
+  const outcome=await runUpdate({...silent,root,fetchImpl,run,env:{GODSPEED_SERVICE:'owner.service'},platform:'linux'});
+  assert.equal(outcome.state,'updated');
+});
+
+test('persisted installer settings stay conformant across their three roles',()=>{
+  const source=fs.readFileSync(installer,'utf8'),kept=/kept="([^"]+)"/.exec(source)?.[1].split(' ')??[];
+  assert.deepEqual(SERVICE_NAMES,[...NAMES,'GODSPEED_HANDOVER'],'the updater filters every saved setting plus its handover signal');
+  assert.deepEqual(kept,['GODSPEED_DEVICE','GODSPEED_SERVICE','GODSPEED_PORT','GODSPEED_MEDIA_ROOT','GODSPEED_WEB_PORT','GODSPEED_HOST'],'terminal reruns restore every saved, caller-selectable installation setting');
+  assert.ok(NAMES.includes('GODSPEED_SERVICE')&&kept.includes('GODSPEED_SERVICE'),'service identity is saved, filtered, and restored');
 });
 
 test('an installer that fails leaves the update failed, in plain words',async()=>{

@@ -501,6 +501,18 @@ install_update_command() {
   } > "$command.new" && chmod 755 "$command.new" && mv "$command.new" "$command"
 }
 
+restore_kept_settings() {
+  local kept setting value
+  kept="GODSPEED_DEVICE GODSPEED_SERVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT GODSPEED_WEB_PORT GODSPEED_HOST"
+  [ -z "$mode" ] || kept="$kept GODSPEED_WEB_ADDRESS HERMES_HOME"
+  for setting in $kept; do
+    if [ -z "${!setting:-}" ]; then
+      value=$(previous_setting "$setting")
+      if [ -n "$value" ]; then export "$setting=$value"; fi
+    fi
+  done
+}
+
 # Lets a test load the functions above without installing anything.
 if [ "${GODSPEED_INSTALLER_FUNCTIONS_ONLY:-}" = 1 ]; then return 0 2>/dev/null || exit 0; fi
 
@@ -547,14 +559,7 @@ fi
 # What this installation ran with until now stays, unless this run names it (previous_setting).
 # Inside the service also its web address, which only the administrator could make again, and
 # the Hermes it used, which a terminal names in its own environment.
-kept="GODSPEED_DEVICE GODSPEED_SERVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT GODSPEED_WEB_PORT GODSPEED_HOST"
-[ -z "$mode" ] || kept="$kept GODSPEED_WEB_ADDRESS HERMES_HOME"
-for setting in $kept; do
-  if [ -z "${!setting:-}" ]; then
-    value=$(previous_setting "$setting")
-    if [ -n "$value" ]; then export "$setting=$value"; fi
-  fi
-done
+restore_kept_settings
 SERVICE=${GODSPEED_SERVICE:-godspeed-integrated-notebook.service}
 if [ -z "${GODSPEED_INTEGRATED_BESIDE:-}" ] && [ "$(previous_setting HERMES_HOME)" = "$state/hermes" ]; then GODSPEED_INTEGRATED_BESIDE=1; fi
 export GODSPEED_WORKSPACE="$root" GODSPEED_ORIGINAL_RUNTIME=on
