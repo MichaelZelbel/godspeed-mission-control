@@ -151,6 +151,7 @@ test('a terminal update restores the persisted service after filtering the calle
   const marker=path.join(root,'selected-service'),bashEnv=path.join(root,'observe-installer');
   fs.writeFileSync(bashEnv,`service_assignments=0\ntrap 'if [[ "$BASH_COMMAND" == SERVICE=* ]]; then service_assignments=$((service_assignments+1)); if [ "$service_assignments" = 2 ]; then trap - DEBUG; eval "$BASH_COMMAND"; printf "%s %s" "$SERVICE" "${'${GODSPEED_SKIP_WEB_ADDRESS:-}'}" > ${JSON.stringify(marker)}; exit 0; fi; fi' DEBUG\n`);
   const {fetchImpl}=github(release());
+  const nativeEnv={...process.env};delete nativeEnv.GODSPEED_REVISION;
   const {run}=spy((command,args,options)=>{
     if(command==='tar'){
       const target=path.join(args[args.indexOf('-C')+1],args.at(-1));
@@ -163,7 +164,7 @@ test('a terminal update restores the persisted service after filtering the calle
     assert.equal(checked.status,0,checked.stderr);
     return checked.status;
   });
-  const outcome=await runUpdate({...silent,root,fetchImpl,run,env:{...process.env,GODSPEED_SERVICE:'owner.service'},platform:'linux'});
+  const outcome=await runUpdate({...silent,root,fetchImpl,run,env:{...nativeEnv,GODSPEED_SERVICE:'owner.service'},platform:'linux'});
   assert.equal(outcome.state,'updated');
   assert.equal(fs.readFileSync(marker,'utf8'),service+' 1','the downloaded installer itself restores isolation before selecting its service');
 });
