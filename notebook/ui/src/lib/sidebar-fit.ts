@@ -24,9 +24,25 @@ export function watchSidebarFit(list: HTMLElement, more: HTMLElement): () => voi
     more.tabIndex = shown ? 0 : -1;
   };
 
+  // A keyboard user tabbing down the list must see the entry that has focus: bring it wholly into
+  // the list's visible part (the shortened one, not the room behind "More below").
+  const reveal = () => {
+    const focused = document.activeElement;
+    if (!(focused instanceof HTMLElement) || focused === list || !list.contains(focused)) return;
+    const target = focused.closest<HTMLElement>('[data-sidebar="menu-item"]') ?? focused;
+    const box = list.getBoundingClientRect();
+    const r = target.getBoundingClientRect();
+    if (r.top < box.top) list.scrollTop -= Math.ceil(box.top - r.top);
+    else if (r.bottom > box.top + list.clientHeight) list.scrollTop += Math.ceil(r.bottom - (box.top + list.clientHeight));
+    showMore();
+  };
+
   const fit = () => {
     if (fitting) return;
     fitting = true;
+    // Measuring lets the list grow to its full room for a moment, which pulls its scroll position
+    // back; put it back afterwards so a refit never moves what the reader (or focus) is looking at.
+    const scrolled = list.scrollTop;
     try {
       // Measure the room the list has on its own.
       list.style.flex = "";
@@ -51,6 +67,8 @@ export function watchSidebarFit(list: HTMLElement, more: HTMLElement): () => voi
       more.style.display = "";
       showMore();
     } finally {
+      list.scrollTop = scrolled;
+      reveal();
       fitting = false;
     }
   };
@@ -67,6 +85,7 @@ export function watchSidebarFit(list: HTMLElement, more: HTMLElement): () => voi
   list.addEventListener("scroll", showMore, { passive: true });
   more.addEventListener("click", onClick);
   more.addEventListener("keydown", onKey);
+  list.addEventListener("focusin", reveal);
   window.addEventListener("resize", fit);
   // The sidebar's own height changes with the window; its entries change with the account (Admin).
   const resized = typeof ResizeObserver === "function" ? new ResizeObserver(() => fit()) : null;
@@ -78,6 +97,7 @@ export function watchSidebarFit(list: HTMLElement, more: HTMLElement): () => voi
     list.removeEventListener("scroll", showMore);
     more.removeEventListener("click", onClick);
     more.removeEventListener("keydown", onKey);
+    list.removeEventListener("focusin", reveal);
     window.removeEventListener("resize", fit);
     resized?.disconnect();
     changed?.disconnect();

@@ -81,6 +81,7 @@ type Measured = {
   entries: Entry[]; listTop: number; listBottom: number; footerTop: number;
   scrolls: boolean; cueShown: boolean; lastAfterScroll: Entry; listBottomAfterScroll: number; cueAfterScroll: boolean;
 };
+type Focused = { name: string; top: number; bottom: number; listTop: number; listBottom: number; underCue: boolean; cueTop: number | null; hit: boolean };
 
 describe("desktop sidebar drawn at laptop sizes", () => {
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -134,8 +135,47 @@ describe("desktop sidebar drawn at laptop sizes", () => {
             listBottomAfterScroll: list.getBoundingClientRect().bottom, cueAfterScroll: cue(),
           };
         });
+        // A keyboard user tabs down the list: the entry with focus must come wholly into view, not
+        // stay below the list's visible edge or under the "More below" sign (#747 review).
+        const focused: Focused[] = [];
+        for (const name of ["Connect AI", "Documentation"]) {
+          await tab.evaluate(() => {
+            const list = document.querySelector<HTMLElement>('[data-sidebar="content"]')!;
+            list.scrollTop = 0;
+            list.dispatchEvent(new Event("scroll"));
+            (document.activeElement as HTMLElement | null)?.blur();
+          });
+          await tab.getByRole("link", { name, exact: true }).or(tab.getByRole("button", { name, exact: true })).first().focus();
+          focused.push(await tab.evaluate(async (wanted) => {
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            // The list fits itself again whenever the window or its entries change; a refit while an
+            // entry has focus must leave that entry in view.
+            window.dispatchEvent(new Event("resize"));
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            const list = document.querySelector<HTMLElement>('[data-sidebar="content"]')!;
+            const el = document.activeElement as HTMLElement;
+            const r = el.getBoundingClientRect();
+            const lr = list.getBoundingClientRect();
+            const more = document.querySelector<HTMLElement>("[data-sidebar-more]");
+            const ms = more ? getComputedStyle(more) : null;
+            const cueShown = !!more && ms!.display !== "none" && ms!.visibility !== "hidden";
+            const cueTop = cueShown ? more!.getBoundingClientRect().top : null;
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return {
+              name: wanted, top: r.top, bottom: r.bottom, listTop: lr.top, listBottom: lr.bottom,
+              underCue: cueTop !== null && r.bottom > cueTop + 0.5, cueTop, hit: !!hit && (el === hit || el.contains(hit)),
+            };
+          }, name));
+        }
         await tab.close();
         const at = `at ${width} x ${height}: ${JSON.stringify(m)}`;
+        for (const f of focused) {
+          const fat = `at ${width} x ${height}: ${JSON.stringify(f)}`;
+          expect(f.top, `"${f.name}" has focus above the list's visible part ${fat}`).toBeGreaterThanOrEqual(f.listTop - 0.5);
+          expect(f.bottom, `"${f.name}" has focus below the list's visible part ${fat}`).toBeLessThanOrEqual(f.listBottom + 0.5);
+          expect(f.underCue, `"${f.name}" has focus under "More below" ${fat}`).toBe(false);
+          expect(f.hit, `"${f.name}" has focus but something else is drawn over it ${fat}`).toBe(true);
+        }
         expect(m.entries.length, at).toBeGreaterThan(10);
         expect(m.listBottom, `the list runs under the footer ${at}`).toBeLessThanOrEqual(m.footerTop + 0.5);
         for (const e of m.entries) {
