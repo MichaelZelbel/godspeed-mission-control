@@ -83,11 +83,12 @@ describe("Media Library with no AI connected", () => {
     expect(screen.getAllByText("holiday.png").length).toBeGreaterThan(0);
   });
 
-  it("does not list a video or audio upload as waiting for analysis, which never comes for them", async () => {
+  it("does not list a video, audio or SVG upload as waiting for analysis, which never comes for them", async () => {
     await open(() => scan(false), { attachments: [
       upload,
       { ...upload, id: "a2", filename: "clip.mp4", storage_path: "owner/clip.mp4", mime_type: "video/mp4" },
       { ...upload, id: "a3", filename: "memo.mp3", storage_path: "owner/memo.mp3", mime_type: "audio/mpeg" },
+      { ...upload, id: "a5", filename: "logo.svg", storage_path: "owner/logo.svg", mime_type: "image/svg+xml" },
       { ...upload, id: "a4", filename: "scan.pdf", storage_path: "owner/scan.pdf", mime_type: null, file_type: "application/pdf" },
     ] });
     await waitFor(() => expect(cardTitles().sort()).toEqual(["holiday.png", "scan.pdf"]));

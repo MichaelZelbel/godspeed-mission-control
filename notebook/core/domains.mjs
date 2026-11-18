@@ -20,6 +20,7 @@ import {noteConnections,linkSuggestions} from './related.mjs';
 import {graphData} from './graph.mjs';
 import { slug, hash } from './records/store.mjs';
 import {carriedRoot,findMedia} from './media-store.mjs';
+import {analyzableMediaType} from '../shared/media-analysis-types.mjs';
 import {DAILY_MEMORY_ORIGIN,dailyMemoryOwns,dailyMemorySubjectId,normalName} from './memory-daily-identity.mjs';
 import {decodeDailyMemoryPlan} from './daily-memory-plan.mjs';
 import fs from 'node:fs';
@@ -448,7 +449,7 @@ export class Domains {
       if(!this.provider)throw new Error('Connect a model with image or PDF support before media analysis');
       const {mapping,file}=this.media(input.storage_path);
       const bytes=fs.readFileSync(file);if(hash(bytes)!==mapping.sha256)throw new Error('Media integrity check failed');
-      if(!/^(image\/(png|jpeg|webp|gif)|application\/pdf)$/.test(mapping.contentType))throw new Error('Analysis supports images and PDF documents');
+      if(!analyzableMediaType(mapping.contentType))throw new Error('Analysis supports images and PDF documents');
       const old=this.query.rows('media_analysis').find(r=>r.storage_path===input.storage_path);
       const row=this.store.save('media_analysis',{id:old?.id,note_id:input.note_id,storage_path:input.storage_path,media_type:input.media_type,original_filename:input.original_filename,analysis_status:'processing',source_sha256:mapping.sha256});
       try{

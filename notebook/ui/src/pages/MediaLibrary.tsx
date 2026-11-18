@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { MEDIA_CARRY_MAX_MB } from "../../../shared/media-limits.mjs";
+import { analyzableMediaType } from "../../../shared/media-analysis-types.mjs";
 import { Link } from "react-router-dom";
 import { SEOHead } from "@/components/SEOHead";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -217,11 +218,6 @@ async function selectInChunks<T>(
     }),
   );
   return parts.flat();
-}
-
-function analyzableMediaType(type: string | null): "image" | "pdf" | null {
-  if (type === "application/pdf") return "pdf";
-  return type?.startsWith("image/") ? "image" : null;
 }
 
 const isPendingStatus = (status: string) => status === "pending" || status === "processing";
@@ -468,7 +464,7 @@ export default function MediaLibrary() {
         .order("created_at", { ascending: false })
         .limit(500);
       if (error) throw error;
-      // Only images and PDFs are ever analysed; a video or audio card would wait for nothing.
+      // Only what analyze-media reads is listed; any other card would wait for nothing.
       const attachments = ((data || []) as { note_id: string | null; storage_path: string | null; filename: string | null; mime_type: string | null; file_type: string | null; created_at: string | null }[])
         .flatMap((item) => {
           const mediaType = analyzableMediaType(item.mime_type || item.file_type);
