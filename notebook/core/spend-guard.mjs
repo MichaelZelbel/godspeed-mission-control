@@ -52,7 +52,7 @@ export async function runSpendGuard({store,hermesHome,fetcher,now=Date.now}={}){
  const keys=spendGuardKeys({state:store.state,hermesHome});if(!keys.length)return {verified:true,silent:true,reason:'No OpenRouter key'};
  let samples;try{samples=await Promise.all(keys.map(key=>sample(key,fetcher)));}catch(error){store.save('spend_guard_runs',{id:'latest',status:'failed',failure:error.message==='invalid-response'?'invalid-response':'request-failed',checked_at:new Date(now()).toISOString(),key_count:keys.length});return {verified:true,silent:true,reason:'OpenRouter could not be read'};}
  const checked=now(),daily_spend=samples.reduce((sum,item)=>sum+item.daily,0),balance=Math.min(...samples.map(item=>item.balance));
- const due=[daily_spend>settings.daily_limit&&['daily-spend',`OpenRouter has spent $${daily_spend.toFixed(2)} today, above your $${settings.daily_limit.toFixed(2)} daily limit.`],balance<settings.low_balance&&['low-balance',`Your lowest remaining OpenRouter balance is $${balance.toFixed(2)}, below your $${settings.low_balance.toFixed(2)} limit.`]].filter(Boolean);
+ const due=[daily_spend>settings.daily_limit&&['daily-spend',`OpenRouter has spent $${daily_spend.toFixed(2)} today, above your $${settings.daily_limit.toFixed(2)} daily limit. Change this limit in Settings under Connect AI.`],balance<settings.low_balance&&['low-balance',`Your lowest remaining OpenRouter balance is $${balance.toFixed(2)}, below your $${settings.low_balance.toFixed(2)} limit. Change this limit in Settings under Connect AI.`]].filter(Boolean);
  store.save('spend_guard_runs',{id:'latest',status:'ok',failure:null,checked_at:new Date(checked).toISOString(),daily_spend,balance,key_count:keys.length});
  const queued=[];
  for(const [kind,text] of due){

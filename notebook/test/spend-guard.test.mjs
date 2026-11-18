@@ -12,8 +12,10 @@ const reply=({daily=2.5,balance=20,fail=false,credits,calls=[]}={})=>async(url,i
 
 test('the contract threshold examples are isolated',async()=>{
  const daily=setup();connect(daily);assert.deepEqual((await runSpendGuard({store:daily,fetcher:reply({daily:2.5,balance:20})})).notices,['daily-spend']);
+ assert.equal(daily.list('notifications')[0].body,'OpenRouter has spent $2.50 today, above your $2.00 daily limit. Change this limit in Settings under Connect AI.');
  const below=setup();connect(below);assert.deepEqual((await runSpendGuard({store:below,fetcher:reply({daily:1,balance:20})})).notices,[]);
  const credit=setup();connect(credit);assert.deepEqual((await runSpendGuard({store:credit,fetcher:reply({daily:1,balance:4})})).notices,['low-balance']);
+ assert.equal(credit.list('notifications')[0].body,'Your lowest remaining OpenRouter balance is $4.00, below your $5.00 limit. Change this limit in Settings under Connect AI.');
 });
 
 test('daily spending and low credit notify once per kind in six hours without retaining the key',async()=>{
