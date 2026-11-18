@@ -94,13 +94,16 @@ test('concurrent requests on adjacent local days create their own briefing',asyn
  t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-11-17T23:59:00Z')});
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-midnight-brief-chat-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
  store.save('settings',{id:'installation',timezone:'UTC'});store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const source=store.save('notes',{title:'Checked contribution',content:'Use this checked contribution.'});
+ store.save('lead_entries',{title:'Checked contribution',content:source.content,note_id:source.id,status:'ready',delivery_day:'2026-11-17'});
  let startedResolve,releaseResolve,writes=0;const started=new Promise(resolve=>{startedResolve=resolve;}),release=new Promise(resolve=>{releaseResolve=resolve;});
  const draft='Adjacent-day briefing.\n\nNext: finish the current step.';
  const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fictional briefing checked.'};if(input.kind!=='morning-brief'||input.phase==='thin-repair')return draft;writes++;if(writes===1){startedResolve();await release;}return draft;};
  const domains=new Domains(query,{provider}),previous=domains.invoke('conversation-chat',{conversation_id:'notebook:previous',request_id:'midnight-previous',message:"today's brief"});
  await started;t.mock.timers.setTime(Date.parse('2026-11-18T00:01:00Z'));
- const current=await domains.invoke('conversation-chat',{conversation_id:'notebook:current',request_id:'midnight-current',message:"today's brief"});
- releaseResolve();const before=await previous,briefs=store.list('notes').filter(note=>note.source_app==='morning-brief');
+ const currentRequest=domains.invoke('conversation-chat',{conversation_id:'notebook:current',request_id:'midnight-current',message:"today's brief"});
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(writes,1);
+ releaseResolve();const [before,current]=await Promise.all([previous,currentRequest]),briefs=store.list('notes').filter(note=>note.source_app==='morning-brief');
  assert.ok(writes>=2);assert.deepEqual(new Set(briefs.map(note=>note.brief_day)),new Set(['2026-11-17','2026-11-18']));
  assert.equal(before.reply,briefs.find(note=>note.brief_day==='2026-11-17').content);assert.equal(current.reply,briefs.find(note=>note.brief_day==='2026-11-18').content);
 });

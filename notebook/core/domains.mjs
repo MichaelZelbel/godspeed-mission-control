@@ -9,11 +9,11 @@ import {NOTEBOOK_CHAT_FUNCTIONS} from './notebook-chat.mjs';
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
 const briefingCreations=new WeakMap();
 async function createBriefingOnce(store,day,requestedAt,create){
- let byDay=briefingCreations.get(store);if(!byDay){byDay=new Map();briefingCreations.set(store,byDay);}
- const pending=byDay.get(day);if(pending)return pending;
- const creation=(async()=>{const saved=savedBriefToday(store,requestedAt);if(!saved.note&&!saved.hidden)await create();})();
- byDay.set(day,creation);
- try{return await creation;}finally{if(byDay.get(day)===creation)byDay.delete(day);if(!byDay.size)briefingCreations.delete(store);}
+ let state=briefingCreations.get(store);if(!state){state={byDay:new Map(),tail:Promise.resolve()};briefingCreations.set(store,state);}
+ const pending=state.byDay.get(day);if(pending)return pending;
+ const creation=state.tail.catch(()=>{}).then(async()=>{const saved=savedBriefToday(store,requestedAt);if(!saved.note&&!saved.hidden)await create();});
+ state.byDay.set(day,creation);state.tail=creation;
+ try{return await creation;}finally{if(state.byDay.get(day)===creation)state.byDay.delete(day);if(!state.byDay.size&&state.tail===creation)briefingCreations.delete(store);}
 }
 import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
