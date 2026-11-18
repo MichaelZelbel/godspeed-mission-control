@@ -219,6 +219,11 @@ async function selectInChunks<T>(
   return parts.flat();
 }
 
+function analyzableMediaType(type: string | null): "image" | "pdf" | null {
+  if (type === "application/pdf") return "pdf";
+  return type?.startsWith("image/") ? "image" : null;
+}
+
 const isPendingStatus = (status: string) => status === "pending" || status === "processing";
 
 /**
@@ -463,15 +468,19 @@ export default function MediaLibrary() {
         .order("created_at", { ascending: false })
         .limit(500);
       if (error) throw error;
+      // Only images and PDFs are ever analysed; a video or audio card would wait for nothing.
       const attachments = ((data || []) as { note_id: string | null; storage_path: string | null; filename: string | null; mime_type: string | null; file_type: string | null; created_at: string | null }[])
-        .filter((item): item is typeof item & { storage_path: string } => !!item.storage_path);
+        .flatMap((item) => {
+          const mediaType = analyzableMediaType(item.mime_type || item.file_type);
+          return item.storage_path && mediaType ? [{ ...item, storage_path: item.storage_path, media_type: mediaType }] : [];
+        });
       const analyzed = await selectInChunks<{ storage_path: string }>([...new Set(attachments.map((item) => item.storage_path))], (slice) =>
         supabase.from("media_analysis").select("storage_path").in("storage_path", slice),
       );
       const analyzedPaths = new Set(analyzed.map((item) => item.storage_path));
       return attachments.filter((item) => !analyzedPaths.has(item.storage_path)).map((item): MediaItem => ({
         id: `not-analyzed:${item.storage_path}`, note_id: item.note_id || "", storage_path: item.storage_path,
-        media_type: (item.mime_type || item.file_type) === "application/pdf" ? "pdf" : "image", page_number: null,
+        media_type: item.media_type, page_number: null,
         original_filename: item.filename || item.storage_path.replace(/^.*[\\/]/, ""), description: null,
         extracted_text: null, topics: [], raw_analysis: null, analysis_status: "not_analyzed",
         created_at: item.created_at || null, updated_at: null,

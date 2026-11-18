@@ -26,11 +26,22 @@ const upload = {
 const scan = (aiConnected: boolean) =>
   new Response(JSON.stringify({ total_media: 1, already_analyzed: 0, unanalyzed_total: 1, unanalyzed_images: 1, unanalyzed_pdfs: 0, ai_connected: aiConnected }));
 
-async function open(backfill: (mode: string) => Response) {
+const analysed = {
+  id: "m1", note_id: null, storage_path: upload.storage_path, media_type: "image", page_number: null, original_filename: "holiday.png",
+  description: "A beach", extracted_text: null, topics: [], raw_analysis: null, analysis_status: "complete",
+  created_at: "2026-11-18T10:01:00Z", updated_at: "2026-11-18T10:01:00Z",
+};
+
+// `listed` answers the library's own media_analysis read; `known` answers the by-path lookup of
+// which attachments have any analysis, which also reaches rows outside the library's newest 500.
+async function open(
+  backfill: (mode: string) => Response,
+  { attachments = [upload] as object[], listed = [] as object[], known = listed } = {},
+) {
   const supa = createFakeSupabase((q) => {
-    if (q.table === "media_analysis") return { data: [] };
+    if (q.table === "media_analysis") return { data: q.columns === "storage_path" ? known : listed };
     if (q.table === "notes") return { data: [] };
-    if (q.table === "note_attachments") return { data: [upload] };
+    if (q.table === "note_attachments") return { data: attachments };
     return undefined;
   });
   fake.current = {
@@ -53,6 +64,9 @@ async function open(backfill: (mode: string) => Response) {
   render(<MemoryRouter><QueryClientProvider client={client}><MediaLibrary /></QueryClientProvider></MemoryRouter>);
 }
 
+const cardTitles = () =>
+  Array.from(document.querySelectorAll('[role="button"] p.font-medium')).map((p) => p.textContent);
+
 async function expectConnectAiNotice() {
   expect(await screen.findByText(/Analysis needs a connected AI/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
@@ -67,6 +81,40 @@ describe("Media Library with no AI connected", () => {
     await open(() => scan(false));
     expect(await screen.findByText("Not analyzed yet")).toBeInTheDocument();
     expect(screen.getAllByText("holiday.png").length).toBeGreaterThan(0);
+  });
+
+  it("does not list a video or audio upload as waiting for analysis, which never comes for them", async () => {
+    await open(() => scan(false), { attachments: [
+      upload,
+      { ...upload, id: "a2", filename: "clip.mp4", storage_path: "owner/clip.mp4", mime_type: "video/mp4" },
+      { ...upload, id: "a3", filename: "memo.mp3", storage_path: "owner/memo.mp3", mime_type: "audio/mpeg" },
+      { ...upload, id: "a4", filename: "scan.pdf", storage_path: "owner/scan.pdf", mime_type: null, file_type: "application/pdf" },
+    ] });
+    await waitFor(() => expect(cardTitles().sort()).toEqual(["holiday.png", "scan.pdf"]));
+  });
+
+  it.each([
+    ["in the library's own rows and in the lookup", { listed: [analysed] }],
+    ["in the library's own rows only", { listed: [analysed], known: [] }],
+  ])("lists an analysed upload once, with its result, when its analysis is %s", async (_, rows) => {
+    await open(() => scan(true), rows);
+    await waitFor(() => expect(cardTitles()).toEqual(["holiday.png"]));
+    expect(screen.queryByText("Not analyzed yet")).toBeNull();
+  });
+
+  it("does not call an upload not analysed when its analysis is older than the library's newest rows", async () => {
+    const fresh = { ...upload, id: "a2", filename: "sunset.png", storage_path: "owner/sunset.png" };
+    await open(() => scan(true), { attachments: [upload, fresh], listed: [], known: [{ storage_path: upload.storage_path }] });
+    await waitFor(() => expect(cardTitles()).toEqual(["sunset.png"]));
+    expect(screen.getAllByText("Not analyzed yet")).toHaveLength(1);
+  });
+
+  it("with an AI connected, offers Start analysis and no connect-an-AI notice", async () => {
+    await open(() => scan(true));
+    fireEvent.click(await screen.findByRole("button", { name: "Scan" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Start analysis" })).toBeEnabled());
+    expect(screen.queryByText(/Analysis needs a connected AI/)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open Settings, Your AI" })).toBeNull();
   });
 
   it("says analysis needs a connected AI before starting", async () => {
