@@ -363,7 +363,10 @@ export class Domains {
       if(name==='backfill-media-analysis'){
         const completed=new Set(this.query.rows('media_analysis').filter(r=>r.analysis_status==='complete').map(r=>r.storage_path));
         const sources=this.query.rows('note_attachments').map(r=>({...r,storage_path:r.storage_path||r.file_path})).filter(r=>r.storage_path),pending=sources.filter(r=>!completed.has(r.storage_path));
-        if(input.mode==='scan')return {total_media:sources.length,already_analyzed:sources.length-pending.length,unanalyzed_total:pending.length,unanalyzed_images:pending.filter(r=>r.file_type!=='application/pdf').length,unanalyzed_pdfs:pending.filter(r=>r.file_type==='application/pdf').length};
+        if(input.mode==='scan')return {total_media:sources.length,already_analyzed:sources.length-pending.length,unanalyzed_total:pending.length,unanalyzed_images:pending.filter(r=>r.file_type!=='application/pdf').length,unanalyzed_pdfs:pending.filter(r=>r.file_type==='application/pdf').length,ai_connected:!!this.provider};
+        // With no AI every item would fail for that one reason, so the run is
+        // refused with it instead of counting failures (#735).
+        if(!this.provider)throw new Error(NO_AI_ANALYSIS);
         let processed=0;const errors=[];for(const source of pending)try{await this.invoke('analyze-media',{...source,note_id:source.note_id,storage_path:source.storage_path,media_type:source.file_type==='application/pdf'?'pdf':'image',original_filename:source.filename});processed++;}catch(e){errors.push({id:source.id,error:e.message});}
         return {processed,total:pending.length,failed:errors.length,errors,message:'Analyzed '+processed+' media items.'};
       }

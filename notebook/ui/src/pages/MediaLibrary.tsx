@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { MEDIA_CARRY_MAX_MB } from "../../../shared/media-limits.mjs";
+import { Link } from "react-router-dom";
 import { SEOHead } from "@/components/SEOHead";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -236,10 +237,12 @@ function BatchAnalysisPanel() {
     unanalyzed_total: number;
     total_media: number;
     already_analyzed: number;
+    ai_connected?: boolean;
   } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ processed: number; total: number; failed: number } | null>(null);
+  const queryClient = useQueryClient();
 
   const handleScan = useCallback(async () => {
     setScanning(true);
@@ -296,12 +299,17 @@ function BatchAnalysisPanel() {
         unanalyzed_pdfs: 0,
         already_analyzed: prev.already_analyzed + (result.processed || 0),
       } : null);
+      void queryClient.invalidateQueries({ queryKey: ["media-library"] });
     } catch (err: unknown) {
+      setProgress(null);
       toast.error(await functionErrorMessage(err, "The analysis could not be run. Try again."));
+      // A run refused because no AI is connected: scanning again shows why and where to connect one.
+      void handleScan();
     } finally {
       setRunning(false);
     }
-  }, [scanResult]);
+  }, [scanResult, queryClient, handleScan]);
+  const needsAi = scanResult?.ai_connected === false;
 
   const estimatedCredits = scanResult
     ? Math.ceil((scanResult.unanalyzed_total * AVG_TOKENS_PER_IMAGE) / TOKENS_PER_CREDIT)
@@ -341,10 +349,19 @@ function BatchAnalysisPanel() {
                 Found <strong>{scanResult.unanalyzed_images}</strong> unanalyzed images
                 {scanResult.unanalyzed_pdfs > 0 && <> and <strong>{scanResult.unanalyzed_pdfs}</strong> PDFs</>}
               </span>
-              <span className="text-muted-foreground">
-                Est. cost: ~{estimatedCredits} credits
-              </span>
+              {!needsAi && (
+                <span className="text-muted-foreground">
+                  Est. cost: ~{estimatedCredits} credits
+                </span>
+              )}
             </div>
+
+            {needsAi && (
+              <div role="status" className="text-xs text-muted-foreground">
+                Analysis needs a connected AI. Connect one in Settings, Your AI, then start the analysis.{" "}
+                <Link to="/dashboard/settings#connect-ai" className="underline text-primary">Open Settings, Your AI</Link>
+              </div>
+            )}
 
             {progress && (
               <div className="space-y-1">
@@ -360,7 +377,7 @@ function BatchAnalysisPanel() {
               {/* The server analyzes every item in one request and cannot be
                   stopped part way, so there is no Stop button: it used to set
                   a flag nothing read while the paid run went on. */}
-              <Button size="sm" onClick={handleRun} disabled={running}>
+              <Button size="sm" onClick={handleRun} disabled={running || needsAi}>
                 {running ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Play className="h-3 w-3 mr-1" />}
                 {running ? "Analyzing…" : "Start analysis"}
               </Button>
@@ -435,10 +452,39 @@ export default function MediaLibrary() {
     },
     enabled: !!user,
   });
+  // Every upload has an attachment record, but only analysis creates a
+  // media_analysis row: without this an upload with no AI never showed (#735).
+  const { data: notAnalyzedItems = [] } = useQuery({
+    queryKey: [...mediaQueryKey, "not-analyzed"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("note_attachments")
+        .select("note_id, storage_path, filename, mime_type, file_type, created_at")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      const attachments = ((data || []) as { note_id: string | null; storage_path: string | null; filename: string | null; mime_type: string | null; file_type: string | null; created_at: string | null }[])
+        .filter((item): item is typeof item & { storage_path: string } => !!item.storage_path);
+      const analyzed = await selectInChunks<{ storage_path: string }>([...new Set(attachments.map((item) => item.storage_path))], (slice) =>
+        supabase.from("media_analysis").select("storage_path").in("storage_path", slice),
+      );
+      const analyzedPaths = new Set(analyzed.map((item) => item.storage_path));
+      return attachments.filter((item) => !analyzedPaths.has(item.storage_path)).map((item): MediaItem => ({
+        id: `not-analyzed:${item.storage_path}`, note_id: item.note_id || "", storage_path: item.storage_path,
+        media_type: (item.mime_type || item.file_type) === "application/pdf" ? "pdf" : "image", page_number: null,
+        original_filename: item.filename || item.storage_path.replace(/^.*[\\/]/, ""), description: null,
+        extracted_text: null, topics: [], raw_analysis: null, analysis_status: "not_analyzed",
+        created_at: item.created_at || null, updated_at: null,
+      }));
+    },
+    enabled: !!user,
+  });
   const mediaItems = useMemo(() => {
-    const localPaths = new Set((mediaData ?? []).map((item) => item.storage_path));
-    return [...(mediaData ?? []), ...remoteOnlyItems.filter((item) => !localPaths.has(item.storage_path))];
-  }, [mediaData, remoteOnlyItems]);
+    const listed = new Set((mediaData ?? []).map((item) => item.storage_path));
+    const keptElsewhere = remoteOnlyItems.filter((item) => !listed.has(item.storage_path));
+    keptElsewhere.forEach((item) => listed.add(item.storage_path));
+    return [...(mediaData ?? []), ...keptElsewhere, ...notAnalyzedItems.filter((item) => !listed.has(item.storage_path))];
+  }, [mediaData, remoteOnlyItems, notAnalyzedItems]);
 
   // While anything is being analyzed, poll only those rows' status (a few
   // bytes each). A row still in progress that changed is read in full and
@@ -792,7 +838,7 @@ export default function MediaLibrary() {
               const hasBrokenPreview = Boolean(brokenPreviews[group.storage_path]);
               const status = isRetrying ? "processing" : group.analysis_status;
               const notHere = missingHere.has(group.storage_path);
-              const canRetry = !notHere && !isRetrying && (status === "failed" || status === "complete" || hasBrokenPreview);
+              const canRetry = !notHere && !isRetrying && status !== "not_analyzed" && (status === "failed" || status === "complete" || hasBrokenPreview);
 
               const openDocument = () =>
                 setOpenItem({
@@ -907,6 +953,11 @@ export default function MediaLibrary() {
                           <span className="flex items-center gap-1 bg-background/90 text-muted-foreground text-[9px] px-1.5 py-0.5 rounded-full">
                             <Loader2 className="h-2.5 w-2.5 animate-spin" />
                             {isRetrying ? "Retrying…" : "Analyzing…"}
+                          </span>
+                        )}
+                        {status === "not_analyzed" && (
+                          <span className="bg-background/90 text-muted-foreground text-[9px] px-1.5 py-0.5 rounded-full">
+                            Not analyzed yet
                           </span>
                         )}
                         {canRetry && (
