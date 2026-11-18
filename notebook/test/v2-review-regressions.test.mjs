@@ -50,6 +50,13 @@ test('coaching excludes hidden observations and does not reopen a closed same-da
  const {store,query}=fixture(),calls=[];store.save('health_observations',{metric:'Secret fictional metric',value:999,ai_visibility:'hidden',observed_at:new Date().toISOString()});const run=jobExecutor(async i=>{calls.push(i);return 'How was your week?';},query);
  const result=await run({kind:'coaching'},{store,settings:{}});assert.ok(!JSON.stringify(calls).includes('Secret fictional metric'));const domains=new Domains(query);await domains.invoke('personal-operation',{type:'coach-close',id:result.talk_id});const count=store.list('notes').length;assert.equal((await run({kind:'coaching'},{store,settings:{}})).silent,true);assert.equal(calls.length,1);assert.equal(store.list('notes').length,count);await assert.rejects(domains.invoke('personal-operation',{type:'coach-open',area:'health',question:'New question?'}),/already closed/);
 });
+
+test('public coach preparation Run now leaves a lasting talk in a clean checkout',async()=>{
+ const {store,query}=fixture(),calls=[];
+ const result=await jobExecutor(async input=>{calls.push(input);return 'What would make the fictional run feel ready?';},query)({id:'coach-prep',kind:'coach-prep'},{store,settings:{timezone:'UTC'}});
+ assert.equal(calls.length,1);assert.equal(calls[0].kind,'coaching');
+ assert.equal(result.talk_id,query.rows('coach_talks')[0].id);assert.equal(query.rows('coach_talks')[0].status,'open');
+});
 test('habit observation cannot fabricate completion when no explicit answer is supplied',async()=>{
  const {store,query}=fixture(),domains=new Domains(query),talk=await domains.invoke('personal-operation',{type:'coach-open',area:'health',question:'Breaks?'}),habit=await domains.invoke('personal-operation',{type:'habit-agree',talk_id:talk.id,title:'Fictional break',agreement:'I agree to try',check_at:'2026-10-10T09:00:00Z'});
  await assert.rejects(domains.invoke('personal-operation',{type:'habit-observe',id:habit.id,observation:'I did not take the break'}),/explicit/);assert.equal(query.rows('habits')[0].observations.length,0);await domains.invoke('personal-operation',{type:'habit-observe',id:habit.id,observation:'I did not take the break',answer:'no'});assert.equal(query.rows('habits')[0].observations[0].answer,'no');

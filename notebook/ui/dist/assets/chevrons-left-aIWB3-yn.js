@@ -1,0 +1,1 @@
+import{bo as e}from"./index-Bruf8MSz.js";const a=e("ChevronsLeft",[["path",{d:"m11 17-5-5 5-5",key:"13zhaf"}],["path",{d:"m18 17-5-5 5-5",key:"h8a8et"}]]);export{a as default};

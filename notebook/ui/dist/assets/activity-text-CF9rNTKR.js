@@ -1,0 +1,1 @@
+const n=l=>/^[aeiou]/i.test(String(l||""))?"an":"a";function r(l,e,o){return{create:`Created ${n(e)} ${e}`,update:`Updated ${n(e)} ${e}`,delete:`Deleted ${n(e)} ${e}`,login:"Signed in",profile_update:"Updated profile",role_change:o?.new_role?`Role changed to ${o.new_role}`:"Role changed"}[l]||`${l} ${e}`}export{r as f};

@@ -1,0 +1,1 @@
+function a(r){return Array.isArray(r)?r:[]}function t(r){return(r||"?").split(" ").map(e=>e[0]).join("").slice(0,2).toUpperCase()}function n(r){const e=Math.floor((Date.now()-new Date(r).getTime())/864e5);return e<=0?"today":e===1?"1 day ago":`${e} days ago`}function i(r){return(r||"").replace(/_/g," ").replace(/\b\w/g,e=>e.toUpperCase())}export{i as a,t as i,a as p,n as r};

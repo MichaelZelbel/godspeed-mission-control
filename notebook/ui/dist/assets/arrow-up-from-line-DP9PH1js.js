@@ -1,0 +1,1 @@
+import{bo as e}from"./index-Bruf8MSz.js";const r=e("ArrowUpFromLine",[["path",{d:"m18 9-6-6-6 6",key:"kcunyi"}],["path",{d:"M12 3v14",key:"7cf3v8"}],["path",{d:"M5 21h14",key:"11awu3"}]]);export{r as default};

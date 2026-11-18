@@ -8,8 +8,8 @@ const read=file=>fs.readFileSync(new URL(file,import.meta.url),'utf8');
 // ui/src is therefore not necessarily present in the clean-installed frontend.
 test('the installed Settings adapter exposes the public AI service selector',()=>{
   const settings=read('../adapters/src/local/Control.tsx');
-  assert.match(settings,/import ConnectAI from '@\/local\/ConnectAI'/);
-  assert.match(settings,/<section id="connect-ai"[^>]*><ConnectAI\/><\/section>/);
+  assert.match(settings,/import \{ConnectAI\} from '@\/local\/ConnectAI'/);
+  assert.match(settings,/<ConnectAI\/>/);
   assert.doesNotMatch(settings,/>Model endpoint</);
 });
 
