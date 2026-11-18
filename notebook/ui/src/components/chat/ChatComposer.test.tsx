@@ -8,6 +8,7 @@ import ChatComposer from './ChatComposer';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {MemoryRouter} from 'react-router-dom';
 import {ChatConnectionEmptyState} from './ChatConnectionEmptyState';
+import {loadChatOptions} from '@/local/chat-options.mjs';
 
 // Issue #563: with no AI connected the model picker said "Connected model" while the Dashboard and
 // the chat said no AI is connected. The same composer is the global chat's, a note's and a collection's.
@@ -19,6 +20,14 @@ function show(){
 // jsdom has no AbortSignal.timeout or AbortSignal.any, which the model loader uses in browsers; these stand-ins never fire.
 beforeEach(()=>{const S=AbortSignal as any;S.timeout??=()=>new AbortController().signal;S.any??=(signals:AbortSignal[])=>signals[0];});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();vi.useRealTimers();});
+
+it('does not let an older options response overwrite a newer live state',async()=>{
+ let finishOlder:(value:Response)=>void=()=>{};
+ const older=loadChatOptions({fetcher:()=>new Promise(resolve=>{finishOlder=resolve;})});
+ const refused=await loadChatOptions({fetcher:async()=>new Response(JSON.stringify({connected:true,usable:false,availability:'refused',current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}),{headers:{'Content-Type':'application/json'}})});
+ finishOlder(new Response(JSON.stringify({connected:true,usable:true,availability:'ready',current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}),{headers:{'Content-Type':'application/json'}}));
+ expect(await older).toEqual(refused);
+});
 
 it('refreshes an already-open composer when an AI is connected',async()=>{
  vi.useFakeTimers();let connected=false;

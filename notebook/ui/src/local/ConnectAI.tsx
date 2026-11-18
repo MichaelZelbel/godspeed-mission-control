@@ -71,7 +71,7 @@ export function ConnectAI(){
   const saved=useQuery({queryKey:['provider'],queryFn:savedProvider});
   const [service,setService]=useState('openrouter'),[address,setAddress]=useState(''),[model,setModel]=useState(''),[key,setKey]=useState('');
   const [routines,setRoutines]=useState<boolean|null>(null),[busy,setBusy]=useState(false),[checking,setChecking]=useState(false),[error,setError]=useState(''),[done,setDone]=useState('');
-  const data=status.data,useForRoutines=routines??(saved.data?.configured&&typeof saved.data.routines==='boolean'?saved.data.routines:(data?.source!=='hermes'));
+  const data=status.data,useForRoutines=routines??(saved.data?.configured&&typeof saved.data.routines==='boolean'?saved.data.routines:!!data?.available&&data.source!=='hermes');
   const filled=useRef(false);
   useEffect(()=>{if(filled.current||!saved.data)return;filled.current=true;if(!saved.data.configured)return;
     const url=saved.data.url,selected=providerService(url);
@@ -105,7 +105,7 @@ export function ConnectAI(){
         <Input required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></label>
       <label className="block">{canRetainKey?'Key (leave it empty to keep the saved one)':'Key'}
         <Input required={!canRetainKey} type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></label>
-      <label className="flex gap-2 items-start"><input type="checkbox" className="mt-1" checked={useForRoutines} onChange={e=>setRoutines(e.target.checked)}/><span>Use it for the daily routines and the chat too{data?.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':data?.available?'.':'. This needs the assistant program.'}</span></label>
+      <label className="flex gap-2 items-start"><input type="checkbox" className="mt-1" checked={useForRoutines} disabled={!data?.available} onChange={e=>setRoutines(e.target.checked)}/><span>Use it for the daily routines and the chat too{data?.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':data?.available?'.':'. Install the assistant program to turn this on. Without it, Test and connect keeps this AI for notebook work only.'}</span></label>
       <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect'}</Button></>}
       {done&&<p role="status">{done}</p>}
       {error&&<p role="alert" className="text-red-500">{error}</p>}
