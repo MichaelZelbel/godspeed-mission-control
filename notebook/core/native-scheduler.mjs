@@ -795,12 +795,26 @@ export class NativeScheduler{
    this.requireOwner('Add the routine');
    const known=enableKind(input.kind),skill=known?.skill||skills[input.kind]||input.kind;
    if(!/^[a-z0-9-]+$/.test(skill)||!fs.existsSync(path.join(this.store.root,'skills',skill,'SKILL.md')))throw Error('This mission control does not have the recipe for that routine');
+   const starting=STARTING_ROUTINES.find(routine=>routine.key===input.kind)||null;
+   const installed=starting&&installedRoutine(this.home,this.store.root,starting);
+   if(installed)throw Error('"'+starting.name+'" already runs this. Change its time under Routine times, or pause it under Routines.');
    const running=hermesJobs(this.home).find(j=>!pausedJob(j)&&(input.kind==='morning-brief'?isBriefJob(j):[j.skill,...(Array.isArray(j.skills)?j.skills:[])].includes(skill)));
    if(running)throw Error('"'+(running.name||skill)+'" already runs this. Change its time under Routine times, or pause it under Routines.');
    const daily=dailyTime(input.at);
    if(!daily&&(!Number.isFinite(input.interval_ms)||input.interval_ms<60000))throw Error('Choose a daily time or a routine interval of at least a minute');
    if(input.kind==='morning-brief'){const id=await this.makeBrief(daily?daily.minute+' '+daily.hour+' * * *':Math.ceil(input.interval_ms/60000)+'m',input.title);const rows=nativeJobs(this.home,this.device);return rows.find(j=>j.id===id)||rows.at(-1);}
    const delivery=deliveryFor(this.store.get('settings','installation'),{telegram:telegramInHermes(this.home)}),before=new Set(hermesJobs(this.home).map(j=>j.id));
+   if(starting){
+    const timezone=this.store.get('settings','installation')?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+    writeRoutineFiles(this.home,this.workoutsFiles({root:this.store.root,timezone}));
+    const schedule=daily?daily.minute+' '+daily.hour+' * * *':Math.ceil(input.interval_ms/60000)+'m';
+    await this.command(['create',schedule,'--no-agent','--name',starting.name,'--script',starting.script,'--deliver',delivery,'--failure-deliver','local','--workdir',this.store.root]);
+    const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===starting.name&&j.script===starting.script);
+    if(!made)throw Error('Hermes did not keep the routine "'+starting.name+'"');
+    rememberNotebookRoutine(this.store,{id:made.id,key:starting.key,name:starting.name,what:starting.what});
+    this.writePromise({kind:starting.key,name:starting.name,what:starting.what,schedule});
+    return nativeJobs(this.home,this.device).find(j=>j.id===made.id);
+   }
    await this.command(['create',daily?daily.minute+' '+daily.hour+' * * *':Math.ceil(input.interval_ms/60000)+'m','Follow the '+skill+' recipe for this mission control.','--name',input.title||known?.label||skill,'--skill',skill,'--workdir',this.store.root,'--deliver',delivery]);
    const made=hermesJobs(this.home).find(j=>!before.has(j.id));
    if(made)rememberNotebookRoutine(this.store,{id:made.id,key:input.kind,name:made.name||input.title||known?.label||skill,skill,what:known?.what||null});
