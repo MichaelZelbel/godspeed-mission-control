@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';import {spawn} from 'node:child_process';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';import {spawn,spawnSync} from 'node:child_process';
 import {compareVersions,findNewest,installedVersion,updateWay,runUpdate,releaseSources,readStatus,settle,ARCHIVE,WINDOWS_SETUP,WINDOWS_FLAGS} from '../core/update.mjs';
 import {VERSION} from '../core/version.mjs';
 
@@ -38,6 +38,7 @@ function computer(version){
 }
 const spy=(answer=()=>0)=>{const calls=[];const run=async(command,args,options)=>{calls.push({command,args,options});return answer(command,args,options);};return {run,calls};};
 const silent={log:()=>{},product:temporary('checkout')};
+const installer=new URL('../scripts/install-native-notebook.sh',import.meta.url);
 
 test('versions are ordered the way semantic versioning orders them',()=>{
   const order=['2.0.0-alpha.1','2.0.0-beta.9','2.0.0-beta.10','2.0.0-beta.20','2.0.0-beta.20.commit.abc1234','2.0.0-rc.1','2.0.0','2.0.1','2.1.0','10.0.0'];
@@ -135,6 +136,71 @@ test('a terminal update runs install-godspeed.sh out of the checked archive, at 
   assert.ok(!fs.existsSync(folder),'the download is removed afterwards');
 });
 
+test('a terminal update restores the persisted service after filtering the caller environment',async()=>{
+  const root=computer('2.0.0-beta.20'),runtime=path.join(root,'.godspeed','integrated-runtime'),service='godspeed-native-install-test.service';
+  fs.writeFileSync(path.join(runtime,'start.mjs'),`const settings={"GODSPEED_SERVICE":${JSON.stringify(service)}};`);
+  fs.writeFileSync(path.join(root,'AGENTS.md'),'test');fs.mkdirSync(path.join(root,'rules'));
+  const installedVersion=path.join(runtime,'versions','a'.repeat(40));
+  fs.mkdirSync(path.join(installedVersion,'notebook','bin'),{recursive:true});fs.writeFileSync(path.join(installedVersion,'notebook','bin','godspeed.mjs'),'');
+  const platform=process.platform==='darwin'?'darwin':process.platform==='linux'?'linux':null;
+  const architecture=process.arch==='arm64'?'arm64':process.arch==='x64'?'x64':null;
+  if(!platform||!architecture)return;
+  const installedNode=path.join(runtime,'runtime',`node-v22.19.0-${platform}-${architecture}`,'bin','node');
+  fs.mkdirSync(path.dirname(installedNode),{recursive:true});
+  fs.writeFileSync(installedNode,`#!/bin/sh\nif [ "$1" = --version ]; then echo v22.19.0; else exec ${JSON.stringify(process.execPath)} "$@"; fi\n`,{mode:0o755});
+  const marker=path.join(root,'selected-service'),bashEnv=path.join(root,'observe-installer');
+  fs.writeFileSync(bashEnv,`service_assignments=0\ntrap 'if [[ "$BASH_COMMAND" == SERVICE=* ]]; then service_assignments=$((service_assignments+1)); if [ "$service_assignments" = 2 ]; then trap - DEBUG; eval "$BASH_COMMAND"; printf "%s" "$SERVICE" > ${JSON.stringify(marker)}; exit 0; fi; fi' DEBUG\n`);
+  const {fetchImpl}=github(release());
+  const nativeEnv={...process.env};delete nativeEnv.GODSPEED_REVISION;
+  const {run}=spy((command,args,options)=>{
+    if(command==='tar'){
+      const target=path.join(args[args.indexOf('-C')+1],args.at(-1));
+      fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(installer,target+'.native');
+      fs.writeFileSync(target,'#!/bin/sh\nexec bash "$0.native" "$2"\n',{mode:0o755});return 0;
+    }
+    assert.equal(command,'bash');
+    assert.equal(options.env.GODSPEED_SERVICE,undefined,'godspeed-update removes the ambient identity');
+    const checked=spawnSync(command,args,{encoding:'utf8',cwd:options.cwd,env:{...options.env,BASH_ENV:bashEnv,GODSPEED_PRODUCT_REF:'a'.repeat(40),GODSPEED_SKIP_UI:'1'}});
+    assert.equal(checked.status,0,checked.stderr);
+    return checked.status;
+  });
+  const outcome=await runUpdate({...silent,root,fetchImpl,run,env:{...nativeEnv,GODSPEED_SERVICE:'owner.service'},platform:'linux'});
+  assert.equal(outcome.state,'updated');
+  assert.equal(fs.readFileSync(marker,'utf8'),service,'the downloaded installer itself restores isolation before selecting its service');
+});
+
+test('a terminal update fails before selecting a default service when saved settings are malformed',async()=>{
+  const root=computer('2.0.0-beta.20'),runtime=path.join(root,'.godspeed','integrated-runtime');
+  fs.writeFileSync(path.join(runtime,'start.mjs'),'const settings={"GODSPEED_SERVICE":"godspeed-native-install-test.service"');
+  fs.writeFileSync(path.join(root,'AGENTS.md'),'test');fs.mkdirSync(path.join(root,'rules'));
+  const installedVersion=path.join(runtime,'versions','a'.repeat(40));
+  fs.mkdirSync(path.join(installedVersion,'notebook','bin'),{recursive:true});fs.writeFileSync(path.join(installedVersion,'notebook','bin','godspeed.mjs'),'');
+  const platform=process.platform==='darwin'?'darwin':process.platform==='linux'?'linux':null;
+  const architecture=process.arch==='arm64'?'arm64':process.arch==='x64'?'x64':null;
+  if(!platform||!architecture)return;
+  const installedNode=path.join(runtime,'runtime',`node-v22.19.0-${platform}-${architecture}`,'bin','node');
+  fs.mkdirSync(path.dirname(installedNode),{recursive:true});
+  fs.writeFileSync(installedNode,`#!/bin/sh\nif [ "$1" = --version ]; then echo v22.19.0; else exec ${JSON.stringify(process.execPath)} "$@"; fi\n`,{mode:0o755});
+  const marker=path.join(root,'selected-service'),bashEnv=path.join(root,'observe-installer');
+  fs.writeFileSync(bashEnv,`service_assignments=0\ntrap 'if [[ "$BASH_COMMAND" == SERVICE=* ]]; then service_assignments=$((service_assignments+1)); if [ "$service_assignments" = 2 ]; then trap - DEBUG; printf "%s" "$BASH_COMMAND" > ${JSON.stringify(marker)}; exit 0; fi; fi' DEBUG\n`);
+  const {fetchImpl}=github(release());
+  const {run}=spy((command,args,options)=>{
+    if(command==='tar'){
+      const target=path.join(args[args.indexOf('-C')+1],args.at(-1));
+      fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(installer,target+'.native');
+      fs.writeFileSync(target,'#!/bin/sh\nexec bash "$0.native" "$2"\n',{mode:0o755});return 0;
+    }
+    assert.equal(command,'bash');
+    const checked=spawnSync(command,args,{encoding:'utf8',cwd:options.cwd,env:{...options.env,BASH_ENV:bashEnv,GODSPEED_PRODUCT_REF:'a'.repeat(40),GODSPEED_SKIP_UI:'1'}});
+    assert.notEqual(checked.status,0);
+    assert.match(checked.stderr,/saved installation settings.*cannot be read/);
+    return checked.status;
+  });
+  await assert.rejects(runUpdate({...silent,root,fetchImpl,run,env:{},platform:'linux'}),/stopped before it was finished/);
+  assert.equal(fs.existsSync(marker),false,'the production installer never reaches its fallback service selection');
+  assert.equal(readStatus(root).state,'failed');
+});
+
 test('an installer that fails leaves the update failed, in plain words',async()=>{
   const root=computer('2.0.0-beta.20'),{fetchImpl}=github(release()),{run}=spy(command=>command==='bash'?1:0);
   await assert.rejects(runUpdate({...silent,root,fetchImpl,run,env:{}}),/The update to 2.0.0-beta.30 stopped before it was finished. The version you have keeps running./);
@@ -149,10 +215,11 @@ test('inside the notebook\'s service the update is prepared and handed to start.
   await new Promise(resolve=>start.stdout.once('data',resolve));
   const ended=new Promise(resolve=>start.on('exit',resolve));
   fs.mkdirSync(update,{recursive:true});fs.writeFileSync(path.join(update,'start.pid'),String(start.pid));
-  const outcome=await runUpdate({...silent,root,fetchImpl,run,env:{GODSPEED_HANDOVER:'1'},platform:'linux'});
+  const outcome=await runUpdate({...silent,root,fetchImpl,run,env:{GODSPEED_HANDOVER:'1',GODSPEED_SERVICE:'do-not-trust-ambient.service'},platform:'linux'});
   assert.equal(await ended,75,'start.mjs was asked to switch');
   assert.equal(outcome.state,'started');
   assert.equal(calls[1].options.env.GODSPEED_UPDATE_MODE,'prepare');
+  assert.equal(calls[1].options.env.GODSPEED_SERVICE,undefined,'the service identity comes from start.mjs, not the ambient command');
   assert.equal(readStatus(root).state,'switching');
 });
 

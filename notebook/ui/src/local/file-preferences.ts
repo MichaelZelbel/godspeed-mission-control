@@ -1,4 +1,5 @@
 import {toast} from 'sonner';
+import {startupRequest} from './startup-request';
 // Storage is a disposable UI cache. Durable preferences are loaded from the file service first.
 let installed=false,values:Record<string,string>={},version:string|undefined,timer:any,writing=false,dirty=false;
 const durable=(key:string)=>/^(menerio|godspeed|collection|notes|people|world|sidebar|view|theme)/i.test(key)&&!/token|api[-_]key|supabase|session|auth|password/i.test(key);
@@ -11,9 +12,7 @@ async function persist(){
 export async function hydrateFilePreferences(){
  if(installed)return;
  // Also behind the sign-in gate: see the note in file-chat.ts.
- let response:Response;
- try { response=await fetch('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'settings',filters:[['eq','id','ui-preferences']]}),signal:AbortSignal.timeout(15000)}); }
- catch { throw new Error('Your server is busy saving and did not answer in time. Try again in a moment.'); }
+ const response=await startupRequest(signal=>fetch('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'settings',filters:[['eq','id','ui-preferences']]}),signal}));
  if(!response.ok)throw new Error('Could not load your saved preferences');
  const record=(await response.json()).data[0];values=record?.preferences||{};version=record?._hash;
  const set=Storage.prototype.setItem,remove=Storage.prototype.removeItem;

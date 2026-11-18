@@ -33,6 +33,16 @@ const ImportMenerio=lazy(()=>import('./local/ImportMenerio'));
 const ConnectTelegram=lazy(()=>import('./local/ConnectTelegram'));
 const Home=lazy(()=>import('./local/Home'));
 const SharedNote=lazy(()=>import('./pages/SharedNote'));
+// The pages that live under /dashboard also open from their short address (#736): /timeline goes to
+// /dashboard/timeline, with any further path, query and # section kept.
+export const SHORT_ADDRESSES=['notes','graph','people','world','groups','timeline','media','review','review-queue','activity','actions','goals','profile','brain','identity','settings','chat','telegram'] as const;
+function Unavailable(){return <div role="alert"><p>This page is unavailable.</p><p><Link to="/dashboard" className="text-primary underline underline-offset-4">Go to the Dashboard</Link></p></div>;}
+function ShortAddress(){
+  const {pathname,search,hash}=useLocation();
+  const [,name,...rest]=pathname.split('/');
+  if(!(SHORT_ADDRESSES as readonly string[]).includes(name))return <Unavailable/>;
+  return <Navigate to={['/dashboard',name,...rest].join('/')+search+hash} replace/>;
+}
 function Layout(){
   const {user,loading,authError,refreshSession}=useAuth();
   if(loading)return <AuthShell><h2>Opening Godspeed Mission Control</h2><p role="status">Checking your sign-in…</p></AuthShell>;
@@ -40,10 +50,11 @@ function Layout(){
   if(!user)return <AuthScreen/>;
   return <><KeepUnsavedNotes/><DashboardLayout/></>;
 }
-export default function App(){return <ThemeProvider attribute="class" defaultTheme="dark"><TooltipProvider><Toaster/><Sonner/><BrowserRouter><AuthProvider><Routes><Route path="/setup" element={<AuthScreen/>}/><Route path="/shared/:token" element={<Suspense fallback={<p>Opening...</p>}><SharedNote/></Suspense>}/><Route element={<Layout/>}>
+// The notebook's addresses; App puts them in the browser's router, the tests in a memory router.
+export function AppRoutes(){return <Routes><Route path="/setup" element={<AuthScreen/>}/><Route path="/shared/:token" element={<Suspense fallback={<p>Opening...</p>}><SharedNote/></Suspense>}/><Route element={<Layout/>}>
   <Route path="/" element={<Navigate to="/dashboard" replace/>}/><Route path="/dashboard" element={<Home/>}/>
-  <Route path="/dashboard/chat" element={<GlobalAIChatFAB page/>}/><Route path="/chat" element={<Navigate to="/dashboard/chat" replace/>}/><Route path="/dashboard/control" element={<Navigate to="/dashboard" replace/>}/><Route path="/dashboard/notes/*" element={<Notes/>}/>
-  <Route path="/dashboard/goals" element={<Goals/>}/><Route path="/goals" element={<Navigate to="/dashboard/goals" replace/>}/>
+  <Route path="/dashboard/chat" element={<GlobalAIChatFAB page/>}/><Route path="/dashboard/control" element={<Navigate to="/dashboard" replace/>}/><Route path="/dashboard/notes/*" element={<Notes/>}/>
+  <Route path="/dashboard/goals" element={<Goals/>}/>
   <Route path="/dashboard/settings" element={<Control/>}/><Route path="/settings" element={<Control/>}/>
   <Route path="/dashboard/settings/import" element={<ImportMenerio/>}/>
   <Route path="/dashboard/telegram" element={<ConnectTelegram/>}/>
@@ -56,5 +67,6 @@ export default function App(){return <ThemeProvider attribute="class" defaultThe
   <Route path="/collections" element={<Collections/>}/><Route path="/collections/templates" element={<CollectionTemplates/>}/>
   <Route path="/collections/:slug/schema" element={<CollectionSchema/>}/><Route path="/collections/:slug/:itemId" element={<CollectionDetail/>}/><Route path="/collections/:slug" element={<CollectionDetail/>}/><Route path="/trackers/habits/:id" element={<HabitTracker/>}/>
   <Route path="/dashboard/graph" element={<KnowledgeGraph/>}/>
-  <Route path="*" element={<p>This page is unavailable.</p>}/>
-</Route></Routes></AuthProvider></BrowserRouter></TooltipProvider></ThemeProvider>;}
+  <Route path="/:name/*" element={<ShortAddress/>}/><Route path="*" element={<Unavailable/>}/>
+</Route></Routes>;}
+export default function App(){return <ThemeProvider attribute="class" defaultTheme="dark"><TooltipProvider><Toaster/><Sonner/><BrowserRouter><AuthProvider><AppRoutes/></AuthProvider></BrowserRouter></TooltipProvider></ThemeProvider>;}

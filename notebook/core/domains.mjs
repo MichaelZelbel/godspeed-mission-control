@@ -32,7 +32,7 @@ import {assertAssistantRecord} from './assistant-mutations.mjs';
 import { fileContext } from './context.mjs';
 import {Connectors} from './connectors.mjs';
 import {visibleRows,knowledgeContext} from './visibility.mjs';
-import {chatContext,chatAttachments,retrievedContext,collectionWriteSnapshot,noteWriteSnapshot} from './chat-context.mjs';
+import {chatContext,chatBarcodes,chatAttachments,retrievedContext,collectionWriteSnapshot,noteWriteSnapshot} from './chat-context.mjs';
 import {addonDeadlines} from './addon-deadlines.mjs';
 import {personalOperation,conversationOperations,validateConversationOperations,operationContract,requestIdentity} from './personal-operations.mjs';
 import {TRACKER_OPERATIONS} from './tracker-operations.mjs';
@@ -593,9 +593,11 @@ export class Domains {
     if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode==='summarize')return this.summarizeChat(input);
     if (NOTEBOOK_CHAT_FUNCTIONS.includes(name)||['weekly-review','generate_collection_schema'].includes(name)) {
       if (!this.provider) throw new Error(NO_AI_CHAT);
-      // A barcode in her message is looked up first (Open Food Facts, cached), so the model is given the
-      // product as a candidate; a failed lookup leaves it out and the model says it found nothing.
-      if(name==='conversation-chat'&&/(?<!\d)\d{8,14}(?!\d)/.test(String(input.message||''))){const {lookupBarcode}=await import('./food-products.mjs');for(const code of new Set(String(input.message).match(/(?<!\d)\d{8,14}(?!\d)/g)))try{await lookupBarcode(this.store.state,code,{fetcher:this.foodFetcher,signal:input.signal});}catch{}}
+      // A barcode in a message about food is looked up first (Open Food Facts, cached), so the model is
+      // given the product as a candidate; a failed lookup leaves it out and the model says it found
+      // nothing. A number in a message about anything else is never sent (chatBarcodes, #729).
+      const barcodes=name==='conversation-chat'?chatBarcodes(this.query,input.message):[];
+      if(barcodes.length){const {lookupBarcode}=await import('./food-products.mjs');for(const code of barcodes)try{await lookupBarcode(this.store.state,code,{fetcher:this.foodFetcher,signal:input.signal});}catch{}}
       const context=await retrievedContext(this.query,input,this.provider,{index:this.index}),notes=context.notes;
       if(name==='conversation-chat')context.domain_watches=visibleRows(this.query,'domain_watches').map(w=>({domain:w.domain,state:w.state,checked_at:w.checked_at}));
       const attached=chatAttachments(this.mediaRoot,input.files||[],carriedRoot(this.store));context.documents=attached.documents;
