@@ -4,18 +4,21 @@ import {installStarter} from '../core/starter-workspace.mjs';import {runCommand}
 import {readPrep,prepProblem} from '../../third-party/addons/godspeed-coach/lib/prep.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 
 // THE COACHING TALK PREPARATION ON AN INSTALLED MISSION CONTROL, AT THE BOUNDARY A PERSON USES (#670,
-// 18 November 2026). Until then the routine's script ran mc-coach-prep and stopped: a preparation the
-// coach accepted stayed a file, the talk never opened from it, and a run where one talk could not be
-// prepared hid the ones that were. These tests install the starter the way a first goal does, pick
-// "Coaching talk preparation" from the routines Settings lists and press Run now (NativeScheduler
-// startRun). The Hermes stand-in only does what Hermes does with a script job: it runs the installed
-// wrapper from its scripts folder. Everything after that is the product: godspeed_routines.py,
-// tools/mc-coach-prep with its unchanged prep-check gate, and the coach's own `talk open --from-prep`.
+// 18 November 2026). Until then a clean install had no coach-prep recipe, so the routine "Coaching
+// talk preparation" was neither installed by the first goal nor offered by the routine selector, and
+// the writer's prompt let an unknown fact turn a usable preparation into a draft. These tests install
+// the starter the way a first goal does, pick "Coaching talk preparation" from the routines Settings
+// lists and press Run now (NativeScheduler startRun). The Hermes stand-in only does what Hermes does
+// with a script job: it runs the installed wrapper from its scripts folder. Everything after that is
+// the product: godspeed_routines.py, tools/mc-coach-prep with its unchanged prep-check gate, and, at
+// the talk's own time, the coach's gate, whose brief the talk job follows (`talk open --from-prep`).
 // The one thing stood in for is the model that writes the preparation (`hermes chat`), which follows
 // the shipped coach-prep recipe in the small way below: it grounds the opening and the talk card in
 // the goal the area serves, and writes a draft naming the missing fact when the area serves none.
 const python=process.env.GODSPEED_TEST_PYTHON||(process.platform==='win32'?'python':'python3');
 const usable=process.platform!=='win32'&&spawnSync(python,['--version']).status===0&&spawnSync('bash',['--version']).status===0;
+// A Berlin wall-clock time as the UTC instant the coach's clock (GODSPEED_NOW) takes.
+const berlin=(day,time)=>{const zone=new Date(day+'T12:00:00Z').toLocaleString('en-US',{timeZone:'Europe/Berlin',timeZoneName:'longOffset'}).split('GMT')[1]||'+00:00';return new Date(day+'T'+time+':00'+zone).toISOString();};
 const coach=fileURLToPath(new URL('../../third-party/addons/godspeed-coach/bin/godspeed-coach.mjs',import.meta.url));
 
 // The writer. mc-run hands it the prompt on stdin (`hermes chat --query-file -`).
@@ -24,7 +27,7 @@ const fs=require('fs'),path=require('path');
 const args=process.argv.slice(2);if(!args.includes('chat')){process.exit(0);}
 const prompt=fs.readFileSync(0,'utf8');
 const file=(prompt.match(/and write (coach\\/[a-z0-9-]+\\/prep\\/\\d{4}-\\d{2}-\\d{2}\\.md)\\./)||[])[1];
-const now=(prompt.match(/Its PREPARED field must be exactly (\\S+?),/)||[])[1];
+const now=(prompt.match(/Now: (\\S+) \\(UTC\\)/)||[])[1];
 if(!file||!now){console.log('No talk was named.');process.exit(1);}
 const root=process.env.GODSPEED_ROOT,[,area,,day]=file.replace(/\\.md$/,'').split('/');
 const head=fs.readFileSync(path.join(root,'coach',area,'area.md'),'utf8');
@@ -78,13 +81,21 @@ async function installed(t){
   return {status,summary:fs.readFileSync(path.join(root,'routines','coach-prep',day,'summary.txt'),'utf8')};
  };
  const talk=area=>path.join(root,'coach',area,'talks',tomorrow+'.md');
- return {root,home,store,scheduler,ran,tomorrow,coachCli,runNow,talk};
+ // The talk's own time: the installed talk job runs the coach's gate, and its model runs the open
+ // command the brief names, exactly as written there (the coach recipe, "Opening a talk").
+ const app=path.join(root,'.coach-app'),at=time=>berlin(tomorrow,time);
+ const gateAt=time=>execFileSync(process.execPath,[coach,'gate','--godspeed',root],{encoding:'utf8',stdio:['ignore','pipe','pipe'],env:{...process.env,GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_COACH_APP:app,GODSPEED_NOW:at(time)}});
+ const openAsBriefed=(brief,time)=>{
+  const line=brief.match(/godspeed-coach talk open ([a-z0-9-]+) --godspeed "([^"]+)" --from-prep "([^"]+)"/);
+  assert.ok(line,'the brief opens the talk from its preparation');
+  return execFileSync(process.execPath,[coach,'talk','open',line[1],'--godspeed',line[2],'--from-prep',line[3]],{encoding:'utf8',stdio:['ignore','pipe','pipe'],env:{...process.env,GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_NOW:at(time),GODSPEED_SCHEDULED_RUN:'1'}});
+ };
+ return {root,home,store,scheduler,ran,tomorrow,coachCli,runNow,talk,gateAt,openAsBriefed};
 }
 
-test('Run now on the installed Coaching talk preparation makes a ready preparation and opens its talk from it',{skip:!usable&&'needs Python and bash on Linux or macOS'},async t=>{
- const {root,ran,tomorrow,runNow,talk,coachCli}=await installed(t);
+test('Run now on the installed Coaching talk preparation makes a ready preparation, and the talk opens from it',{skip:!usable&&'needs Python and bash on Linux or macOS'},async t=>{
+ const {root,ran,tomorrow,runNow,talk,coachCli,gateAt,openAsBriefed}=await installed(t);
  assert.ok(enableKinds(root).some(k=>k.kind==='coach-prep'),'the routine selector offers Coaching talk preparation on a clean install');
- assert.ok(!fs.existsSync(talk('weekly-check-in')),'no talk before the run');
  const {status,summary}=await runNow();
  assert.deepEqual(ran,['Coaching talk preparation'],'Run now ran the installed routine');
  assert.equal(status.failed,null,summary);
@@ -95,16 +106,18 @@ test('Run now on the installed Coaching talk preparation makes a ready preparati
  assert.match(prep.card,/goals\/research\/run-a-fictional-10k\/brief\.md/,'the talk card names the goal\'s research');
  assert.match(coachCli('prep-check','weekly-check-in','--date',tomorrow),/^ready: /);
  assert.match(summary,new RegExp(`weekly-check-in ${tomorrow}: prepared \\(${prepRel}\\)`));
+ assert.ok(!fs.existsSync(talk('weekly-check-in')),'the preparation waits for its talk: nothing is opened or sent ahead');
+ // Tomorrow at 18:00 the talk job's gate wakes for it, and its brief opens it from the preparation.
+ assert.equal(gateAt('17:59').trim(),'{"wakeAgent": false}');
+ const said=openAsBriefed(gateAt('18:01'),'18:01');
  const opened=fs.readFileSync(talk('weekly-check-in'),'utf8');
  assert.match(opened,new RegExp(`PREP: ${prepRel}`),'the talk opened from the preparation');
- assert.ok(opened.includes(prep.opening),'with its prepared opening');
- // A second Run now the same night keeps the one talk it opened.
- const again=await runNow();
- assert.equal(again.status.failed,null,again.summary);assert.equal(fs.readFileSync(talk('weekly-check-in'),'utf8'),opened);
+ assert.ok(opened.includes(prep.opening)&&said.includes(prep.opening),'with its prepared opening, which is what the person is sent');
+ assert.ok(opened.includes(prep.card.split('\n')[0]),'and its talk card');
 });
 
-test('Run now keeps an insufficient preparation a draft that says why, and still opens the talk that qualified',{skip:!usable&&'needs Python and bash on Linux or macOS'},async t=>{
- const {root,tomorrow,runNow,talk,coachCli}=await installed(t);
+test('Run now keeps an insufficient preparation a draft that says why, and the talk that qualified still opens from its own',{skip:!usable&&'needs Python and bash on Linux or macOS'},async t=>{
+ const {root,tomorrow,runNow,talk,coachCli,gateAt,openAsBriefed}=await installed(t);
  // An area that serves no adopted goal: there is nothing to ground its talk in.
  coachCli('area','add','health','--title','Health','--rhythm','daily','--time','19:00');
  const {status,summary}=await runNow();
@@ -113,7 +126,15 @@ test('Run now keeps an insufficient preparation a draft that says why, and still
  assert.match(draft.text,/## Gaps\nThis area serves no adopted goal/,'and the draft says why');
  assert.match(summary,new RegExp(`health ${tomorrow}: NOT PREPARED \\(.*draft`),'the run\'s summary names it and why');
  assert.match(status.failed,/could not be prepared ahead/,'Settings > Routines shows the run as failed');
- assert.ok(!fs.existsSync(talk('health')),'no talk opened from the draft');
- assert.throws(()=>coachCli('talk','open','health','--date',tomorrow,'--from-prep',`coach/health/prep/${tomorrow}.md`),/STATE is draft/,'and the coach refuses to open one from it');
- assert.match(fs.readFileSync(talk('weekly-check-in'),'utf8'),new RegExp(`PREP: coach/weekly-check-in/prep/${tomorrow}\\.md`),'the qualifying preparation of the same run opened its talk');
+ assert.equal(readPrep(path.join(root,'coach','weekly-check-in','prep',tomorrow+'.md')).state,'ready','the other talk of the same run was prepared');
+ assert.throws(()=>coachCli('talk','open','health','--date',tomorrow,'--from-prep',`coach/health/prep/${tomorrow}.md`),/STATE is draft/,'the coach refuses to open a talk from the draft');
+ // The qualifying talk opens from its preparation at 18:00; the health talk at 19:00 opens from its brief.
+ openAsBriefed(gateAt('18:01'),'18:01');
+ assert.match(fs.readFileSync(talk('weekly-check-in'),'utf8'),new RegExp(`PREP: coach/weekly-check-in/prep/${tomorrow}\\.md`),'the qualifying preparation opened its talk');
+ const health=gateAt('19:01');
+ const record=(health.match(/^Record: coach\/health\/talks\/.*$/m)||[''])[0];
+ assert.ok(record,'the health talk is due');
+ assert.doesNotMatch(record,/--from-prep/,'it is never opened from the draft');
+ assert.match(health,/^## Not prepared\nThe preparation for this talk is not ready/m,'and its opening says the preparation is not ready');
+ assert.ok(!fs.existsSync(talk('health')));
 });

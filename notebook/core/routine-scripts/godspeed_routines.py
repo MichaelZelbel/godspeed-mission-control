@@ -543,25 +543,6 @@ def register_fields(c, env, item):
 PREP_MINUTES = 120
 
 
-PREPARED_LINE = re.compile(r"^([a-z0-9][a-z0-9-]*) (\d{4}-\d{2}-\d{2}): prepared \((coach/[^\r\n()]+/prep/\2\.md)\)")
-
-
-def open_prepared_talks(c, env, day):
-    """Opens the talk of each preparation this run accepted (its summary line). None when every
-    accepted one opened, or the routine's failure when one could not."""
-    try:
-        with open(os.path.join(c["root"], "routines", "coach-prep", day, "summary.txt"), encoding="utf-8") as f:
-            prepared = [m.groups() for m in (PREPARED_LINE.match(line) for line in f) if m]
-    except OSError:
-        return None
-    for area, talk, prep in prepared:
-        r = run([c["node"], c["coach"], "talk", "open", area, "--date", talk, "--from-prep", prep,
-                 "--godspeed", c["root"]], c, env, timeout=120)
-        if r.returncode != 0:
-            return went_wrong(c, "coach-prep", day, "The " + area + " talk of " + talk + " was prepared, but its talk could not be opened from the preparation.", r)
-    return None
-
-
 def coach_prep(c):
     """The coaching talk preparation: mc-coach-prep prepares each talk of today or tomorrow that has
     no ready preparation, with the coach-prep recipe, within two hours. It only reads and writes
@@ -581,15 +562,6 @@ def coach_prep(c):
     # 2 and 3 mean it never started.
     if r.returncode in (2, 3):
         return went_wrong(c, "coach-prep", day, "The coaching talk preparation could not start tonight.", r)
-    # Since 18 November 2026 (#670): every preparation this run's mc-coach-prep accepted (its
-    # summary line says "prepared (<file>)", written only after prep-check and, where the area has
-    # research, the independent review passed) becomes the waiting talk, through the coach's own
-    # guarded opener (`talk open --from-prep`, which refuses a draft and keeps a talk already open).
-    # A run where another talk could not be prepared still opens the ones that were: exit status 1
-    # below only reports the rest.
-    opened = open_prepared_talks(c, env, day)
-    if opened is not None:
-        return opened
     # 1 is a talk that could not be prepared or did not fit the time: shown as failed in the
     # Routines list, with one plain sentence, and nothing is printed to the person.
     if r.returncode != 0:

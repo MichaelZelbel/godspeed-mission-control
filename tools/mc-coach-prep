@@ -243,9 +243,6 @@ fi
 
 RUNDIR="$GODSPEED/routines/coach-prep/$TODAY"; mkdir -p "$RUNDIR"
 SUMMARY="$RUNDIR/summary.txt"
-# This run's lines only: the routine opens a talk for each "prepared" line (godspeed_routines.py,
-# coach_prep), so an earlier run's lines must not speak for this one.
-: > "$SUMMARY"
 # The answer's last paragraph, at most 300 characters, for the summary.
 last_paragraph() {
   "$NODE" -e 'const fs=require("fs");let t="";try{t=fs.readFileSync(process.argv[1],"utf8")}catch(e){}
