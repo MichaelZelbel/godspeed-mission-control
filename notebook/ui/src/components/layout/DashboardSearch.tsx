@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Search, FileText, Loader2, Sparkles, Image } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useIlikeSearch, useSemanticSearch, type SemanticSearchResult } from "@/hooks/useNotes";
 import { extractSearchTerms, isTitleHit } from "@/lib/search-terms";
 
@@ -65,6 +66,9 @@ export function DashboardSearch() {
   const isSearching = status === "pending" || status === "running";
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  // On a phone the box sits between the sidebar toggle and New Note and has room for about one
+  // word: "Search notes…" showed as "Search nc" (#733). The box's name stays "Search notes".
+  const isMobile = useIsMobile();
 
   // Freeze updates while the pointer is inside the dropdown so the row under
   // the cursor can never change identity mid-click.
@@ -196,7 +200,7 @@ export function DashboardSearch() {
           value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => { if (query.trim()) setOpen(true); }}
-          placeholder="Search notes…"
+          placeholder={isMobile ? "Search" : "Search notes…"}
           className="pl-9 pr-8 h-9 text-sm bg-muted/50 border-transparent focus-visible:border-input"
         />
         {isSearching && (
