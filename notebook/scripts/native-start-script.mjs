@@ -13,7 +13,8 @@ import {fileURLToPath} from 'node:url';
 // address has, which a later installation keeps (install-native-notebook.sh).
 // GODSPEED_WEB_ADDRESS is that whole address, which the notebook gives an assistant asked
 // for the link to it (core/notebook-address.mjs).
-export const NAMES=['GODSPEED_WORKSPACE','GODSPEED_ORIGINAL_RUNTIME','GODSPEED_PORT','GODSPEED_BIND','HERMES_HOME','GODSPEED_DEVICE','GODSPEED_MEDIA_ROOT','GODSPEED_WEB_PORT','GODSPEED_HOST','GODSPEED_WEB_ADDRESS'];
+// GODSPEED_SERVICE keeps an installation with an alternate unit on that unit during handover.
+export const NAMES=['GODSPEED_WORKSPACE','GODSPEED_ORIGINAL_RUNTIME','GODSPEED_SERVICE','GODSPEED_PORT','GODSPEED_BIND','HERMES_HOME','GODSPEED_DEVICE','GODSPEED_MEDIA_ROOT','GODSPEED_WEB_PORT','GODSPEED_HOST','GODSPEED_WEB_ADDRESS'];
 
 // The Update now button (core/update.mjs) cannot stop and start the service it runs in: that needs
 // the administrator, and the service's stop ends every program the notebook started. So start.mjs
@@ -40,7 +41,7 @@ if(handover){
   fs.rmSync(at('switch.json'),{force:true});
   if(commit.test(handover.commit||'')){
     const out=log();
-    spawnSync('bash',[path.join(runtime,'versions',handover.commit,'notebook','scripts','install-native-notebook.sh'),root],{stdio:['ignore',out,out],env:{...process.env,...handover.env,GODSPEED_UPDATE_MODE:'switch',GODSPEED_PRODUCT_REF:handover.commit}});
+    spawnSync('bash',[path.join(runtime,'versions',handover.commit,'notebook','scripts','install-native-notebook.sh'),root],{stdio:['ignore',out,out],env:{...process.env,...settings,...handover.env,GODSPEED_UPDATE_MODE:'switch',GODSPEED_PRODUCT_REF:handover.commit}});
     fs.closeSync(out);
   }
   if(read('trial.json'))process.exit(${SWITCH});

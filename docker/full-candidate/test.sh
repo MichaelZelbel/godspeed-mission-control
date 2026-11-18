@@ -122,5 +122,8 @@ node docker/full-candidate/test-browser.cjs "$name" "$evidence"
 # One browser check per screen defect found walking the real notebook (test-screens.cjs).
 node docker/full-candidate/test-screens.cjs https://localhost:48443 "$evidence/session.json" | tee "$evidence/screens.log"
 docker restart "$name" >/dev/null
+restarted_at=$(docker inspect -f '{{.State.StartedAt}}' "$name")
 node docker/full-candidate/test-browser.cjs "$name" "$evidence" resumed
+docker logs "$name" > "$evidence/container.log" 2>&1
+node docker/full-candidate/verify-restart-timing.mjs "$evidence/container.log" "$evidence/restart-timing.jsonl" "$restarted_at"
 du -sm "$evidence" > "$evidence/evidence-size.txt"
