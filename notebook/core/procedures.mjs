@@ -14,8 +14,9 @@ import {prepareRadarWork,applyRadarWork} from './radar-work.mjs';
 import {missingRuns} from './missing-runs.mjs';
 import {outboundFetch} from './outbound-fetch.mjs';
 import {runSpendGuard} from './spend-guard.mjs';
+import {runDomainWatches} from './domain-watch.mjs';
 export {procedureKinds} from './jobs/kinds.mjs';
-export async function procedure(job,{store,query,provider}){
+export async function procedure(job,{store,query,provider,fetcher}){
   const kind=job.kind;let result;
   if(kind==='spend-guard')return runSpendGuard({store,hermesHome:query.nativeHermesHome});
   if(kind==='radar-prepare')return prepareRadarWork(job,{store,query,provider});
@@ -67,7 +68,8 @@ export async function procedure(job,{store,query,provider}){
     for(const repair of query.rows('work_items').filter(w=>w.kind==='repair'&&w.state!=='verified')){const failure=repair.failure_id&&store.get('job_receipts',repair.failure_id),passed=repair.missing_receipt_id?store.get('job_receipts',repair.missing_receipt_id):query.rows('job_receipts').find(r=>r.job_id===repair.job_id&&r.state==='verified'&&r.started_at>failure?.started_at);if(passed?.state==='verified')store.save('work_items',{id:repair.id,state:'verified',evidence:passed.id});}
     if(!added.length&&!result.problems.length&&!result.overdue.length)return {verified:true,silent:true,repair_items:0};
   }
-  else if(kind==='portfolio'||kind==='watch'||kind==='domain-watch'){
+  else if(kind==='domain-watch')return runDomainWatches({store,fetcher});
+  else if(kind==='portfolio'||kind==='watch'){
     const topics=kind==='portfolio'?visibleRows(query,'collections').filter(c=>c.name==='Links').flatMap(c=>visibleRows(query,'collection_items').filter(i=>i.collection_id===c.id).map(i=>({id:i.id,url:i.data.url}))):visibleRows(query,'watch_topics').filter(t=>!t.paused&&(!job.topic_ids||job.topic_ids.includes(t.id)));result=[];
     for(const topic of topics){
      if(kind!=='portfolio'&&topic.next_run_at&&Date.parse(topic.next_run_at)>Date.now()&&!job.force_sources)continue;

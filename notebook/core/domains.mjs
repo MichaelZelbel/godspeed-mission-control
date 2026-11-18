@@ -605,6 +605,7 @@ export class Domains {
       const barcodes=name==='conversation-chat'?chatBarcodes(this.query,input.message):[];
       if(barcodes.length){const {lookupBarcode}=await import('./food-products.mjs');for(const code of barcodes)try{await lookupBarcode(this.store.state,code,{fetcher:this.foodFetcher,signal:input.signal});}catch{}}
       const context=await retrievedContext(this.query,input,this.provider,{index:this.index}),notes=context.notes;
+      if(name==='conversation-chat')context.domain_watches=visibleRows(this.query,'domain_watches').map(w=>({domain:w.domain,state:w.state,checked_at:w.checked_at}));
       const attached=chatAttachments(this.mediaRoot,input.files||[],carriedRoot(this.store));context.documents=attached.documents;
       if(name==='conversation-chat'&&input[IDENTITY_PAGE])context.identity_page=input[IDENTITY_PAGE];
       if(input.attachments){
