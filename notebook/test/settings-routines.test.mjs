@@ -4,7 +4,7 @@ import {installStarter} from '../core/starter-workspace.mjs';import {readMachine
 import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX,ROUTINES_LABEL} from '../core/connection-names.mjs';
 import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,writeNotebookRoutines,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor,CONNECTION_JOB,CONNECTION_WHAT} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
-import {acceptUpload} from '../core/phone-health.mjs';
+import {acceptUpload} from '../core/phone-health.mjs';import {readConfigValue,godspeedHermesSettings} from '../core/hermes-config.mjs';
 import {stateDir,statePaths} from '../../third-party/addons/godspeed-workouts/lib/paths.mjs';import {saveKey} from '../../third-party/addons/godspeed-workouts/lib/keys.mjs';
 
 // THE SETTINGS CONTROLS FOR HERMES' ROUTINES, 18 October 2026. Routine times was refused for every
@@ -948,4 +948,79 @@ test('both languages write the same not_sent object: exactly a reason and an ISO
  queueNotice(store,{id:'python-1',text:'Two.'});runScript('godspeed-notices.py');
  const py=readNotices(store).find(n=>n.id==='python-1');shape(py);
  assert.equal(py.not_sent.reason,fromNode.not_sent.reason);
+});
+
+// WHICH ROUTINE'S STOP HINT A NOTICE CARRIES (18 November 2026, #712). Hermes frames whatever a routine
+// prints with the routine's name and a stop hint for it, unless cron.wrap_response is false: a stand-in
+// for cron/scheduler_delivery.py _deliver_result in Hermes v0.23.1, whose default is true.
+const hermesDelivers=(configText,job,out)=>{
+ if(!out)return null;
+ const wrap=readConfigValue(configText,['cron','wrap_response']),name=job.name||job.id;
+ if(wrap!==null&&['false','0','no','off'].includes(String(wrap).trim().toLowerCase()))return out;
+ return `Cronjob Response: ${name}\n(job_id: ${job.id})\n-------------\n\n${out}\n\nTo stop or manage this job, send me a new message (e.g. "stop reminder ${name}").`;
+};
+const COACH_JOB='Coach reminders and habit check',NOTICE_JOB='Godspeed notices';
+const journalBin=fileURLToPath(new URL('../../third-party/addons/godspeed-journal/bin/godspeed-journal.mjs',import.meta.url));
+const journalEnv={...process.env,GODSPEED_JOURNAL_GIT_SYNC:'off'};
+// An adopted mission control with the journal's check-ins and the coach's reminders switched on, after
+// the notice sender's first start: the owner's config.yaml is left as it is, so Hermes wraps.
+async function adoptedWithCheckIns(t){
+ const fixture=await adoptedFixture(t),{setRoutineSwitch}=await import('../core/routine-switches.mjs');
+ execFileSync(process.execPath,[journalBin,'config','set','nudge.enabled','on','--godspeed',fixture.root],{env:journalEnv,windowsHide:true});
+ await fixture.tick();await setRoutineSwitch(fixture.store,{key:'journal-tick',on:true});await setRoutineSwitch(fixture.store,{key:'coach-tick',on:true});await fixture.tick();
+ assert.ok(fixture.job(JOURNAL_JOB)&&fixture.job(COACH_JOB)&&fixture.job(NOTICE_JOB),'all three routines are made');
+ assert.equal(fixture.runScript('godspeed-notices.py'),'','the sender\'s first start');
+ return {...fixture,config:fs.readFileSync(path.join(fixture.home,'config.yaml'),'utf8')};
+}
+
+test('a queued notice is said by the notice sender on an adopted mission control, and with no stop hint on a starter-born one',{skip:!havePython&&'needs Python'},async t=>{
+ const {store,job,runScript,config}=await adoptedWithCheckIns(t),{queueNotice}=await import('../core/notices.mjs');
+ const words='The release driver used its AI allowance.';
+ queueNotice(store,{id:'release-1',text:words});
+ assert.equal(runScript('godspeed-journal-checkins.py'),'','the journal leaves it');
+ assert.equal(runScript('godspeed-coach-reminders.py'),'','and so does the coach');
+ const out=runScript('godspeed-notices.py');assert.equal(out,words);
+ const delivered=hermesDelivers(config,job(NOTICE_JOB),out);
+ assert.ok(delivered.endsWith(`stop reminder ${NOTICE_JOB}").`),delivered);
+ assert.ok(!delivered.includes(JOURNAL_JOB)&&!delivered.includes(COACH_JOB),delivered);
+ // A starter-born install: wire-assistant.mjs switches Hermes' wrapper off, so the journal says it bare.
+ const born=await withGoal(t);
+ execFileSync(process.execPath,[journalBin,'config','set','nudge.enabled','on','--godspeed',born.root],{env:journalEnv,windowsHide:true});
+ await born.scheduler.followJournal();
+ queueNotice(born.store,{id:'release-1',text:words});
+ const python=['python3','python'].find(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}});
+ const said=execFileSync(python,[path.join(born.home,'scripts','godspeed-journal-checkins.py')],{cwd:path.join(born.home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'},windowsHide:true}).trim();
+ const bornConfig=godspeedHermesSettings(fs.readFileSync(path.join(born.home,'config.yaml'),'utf8'));
+ assert.equal(hermesDelivers(bornConfig,born.job(JOURNAL_JOB),said),words,'its own words, no stop hint');
+});
+
+test('a journal check-in on an adopted mission control keeps its own stop hint and leaves the queued notice to the sender',{skip:!havePython&&'needs Python'},async t=>{
+ const {root,home,store,job,runScript,config}=await adoptedWithCheckIns(t),{queueNotice}=await import('../core/notices.mjs');
+ queueNotice(store,{id:'backup-1',text:'Last night\'s backup failed.'});
+ execFileSync(process.execPath,[journalBin,'start','Edit video','--godspeed',root],{env:{...journalEnv,GODSPEED_NOW:'2026-09-22T08:40:00Z'},windowsHide:true});
+ const python=['python3','python'].find(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}});
+ const checkin=execFileSync(python,[path.join(home,'scripts','godspeed-journal-checkins.py')],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8',GODSPEED_JOURNAL_GIT_SYNC:'off',GODSPEED_NOW:'2026-09-22T11:45:00Z'},windowsHide:true}).trim();
+ assert.match(checkin,/^From your journal: today at 10:40 you started "Edit video"/);
+ const delivered=hermesDelivers(config,job(JOURNAL_JOB),checkin);
+ assert.ok(delivered.endsWith(`stop reminder ${JOURNAL_JOB}").`),delivered);
+ assert.ok(!delivered.includes('backup failed'),'the notice is not in it');
+ assert.equal(runScript('godspeed-notices.py'),'Last night\'s backup failed.','the sender still says it');
+});
+
+test('on an adopted mission control each queued notice is said exactly once, by the notice sender, while all three routines run at once',{skip:!havePython&&'needs Python'},async t=>{
+ const {home,store,runScript}=await adoptedWithCheckIns(t),{queueNotice}=await import('../core/notices.mjs');
+ // More notices than sender runs at once, so a journal or coach run would find one left to say.
+ const words=['Last night\'s backup failed.','The disk is nearly full.','Telegram refused your bot key.','The phone has been quiet for a day.'];
+ words.forEach((text,i)=>queueNotice(store,{id:'notice-'+i,text}));
+ const python=['python3','python'].find(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}});
+ const scripts=['godspeed-journal-checkins.py','godspeed-coach-reminders.py','godspeed-notices.py'];
+ const start=name=>new Promise(resolve=>{const child=spawn(python,[path.join(home,'scripts',name)],{cwd:path.join(home,'scripts'),env:{...process.env,PYTHONIOENCODING:'utf-8'},windowsHide:true});let out='';child.stdout.on('data',d=>out+=d);child.on('close',code=>resolve({name,code,out:out.trim()}));});
+ const runs=await Promise.all([...scripts,...scripts].map(start));
+ assert.deepEqual(runs.map(r=>r.code),runs.map(()=>0));
+ for(let i=0;i<words.length+1;i++)for(const name of scripts)runs.push({name,out:runScript(name)});
+ const said=runs.filter(r=>r.out);
+ assert.deepEqual(said.map(r=>r.out).sort(),[...words].sort(),'each once');
+ assert.deepEqual([...new Set(said.map(r=>r.name))],['godspeed-notices.py'],'only by the sender');
+ assert.equal(store.list('conversation_messages').filter(m=>m.source_app==='background').length,words.length,'and recorded once each');
+ assert.deepEqual(fs.readdirSync(home).filter(f=>f.endsWith('.claim')),[],'no claim left behind');
 });
