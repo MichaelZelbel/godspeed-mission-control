@@ -284,7 +284,7 @@ test('the H-39 verifier gives a runnable observation of the reminder contract',a
  assert.deepEqual(result.failures,['verifier chat unavailable']);
  assert.equal(result.telegram.chat,'telegram');
  assert.match(result.telegram.text,/Telegram verifier backup.*Should I continue.*Please answer yes or no/);
- assert.equal(result.second_marked_pass_added_messages,0);
+ assert.equal(result.second_marked_pass_added_messages,0);assert.equal(result.path,'NativeScheduler.tick');
  assert.deepEqual(Object.entries(result.marked).filter(([,marked])=>marked).map(([name])=>name),['due','retry','telegram','young','outward']);
  assert.equal(result.statuses.outward,'pending');
 });

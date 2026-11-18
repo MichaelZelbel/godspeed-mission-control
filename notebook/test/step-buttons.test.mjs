@@ -50,8 +50,9 @@ test('while the notebook cannot say whether the step waits, no card goes out and
 test('an expired hand-off is dropped and gets no buttons',opts,t=>scenario(t,'expired',['The bot stopped.']));
 test('a Telegram reminder is marked only after its card went out, and its buttons still answer the step',opts,t=>scenario(t,'reminder',['The bot stopped.'],async(store,[id])=>{
  assert.equal(await cardSent(store,id),true);
- const step=store.get('approvals',id);store.save('approvals',{...step,sent_at:'2026-11-17T05:50:00.000Z'});
- remindWaitingSteps(store,{at:new Date('2026-11-17T12:00:00.000Z')});assert.equal(store.get('approvals',id).reminded_at,undefined);
+ // Six hours ten minutes after the question, as of now: the gateway reads the hand-off's expiry against the real clock.
+ const now=new Date(),step=store.get('approvals',id);store.save('approvals',{...step,sent_at:new Date(now.getTime()-(6*60+10)*60000).toISOString()});
+ remindWaitingSteps(store,{at:now});assert.equal(store.get('approvals',id).reminded_at,undefined);
 }));
 test('a queued reminder expires at seven days and the delayed gateway discards it',opts,t=>scenario(t,'expired_reminder',['The bot stopped.'],async(store,[id])=>{
  assert.equal(await cardSent(store,id),true);
