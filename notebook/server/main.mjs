@@ -467,7 +467,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         catch(error){if(error.backupService)throw error;}
         await chosen({kind:'connection-test',contract:'Reply with Connected.'});
         const kept=guarded(chosen);
-        atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);ensureSpendGuard();provider=kept;domains.provider=kept;scheduler.executor=jobExecutor(kept,query);
+        atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);provider=kept;domains.provider=kept;scheduler.executor=jobExecutor(kept,query);
+        ensureSpendGuard();
         if(!routines)return send(res,200,{connected:true,provider:providerView(config),routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
         connectRoutineAI({...routineAI,config});
         return send(res,200,{connected:true,provider:providerView(config),routines:{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})}});
@@ -486,6 +487,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       const backupHome=routineAI?.home||null;
       if(route==='/api/backup-ai'&&req.method==='GET')return send(res,200,{hermes:!!backupHome,...backupStatus({home:backupHome,state:store.state})});
       if(route==='/api/backup-ai'&&req.method==='POST'){
+        // Once the backup is saved, an OpenRouter backup key starts the hourly spending check (#704).
+        res.once('finish',()=>{try{ensureSpendGuard();}catch{}});
         const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),config={url:!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions',key:typeof input.key==='string'?input.key.trim():input.key,model:typeof input.model==='string'?input.model.trim():input.model};
         const candidate=modelProvider(config);if(!candidate)throw new Error('Provide a model endpoint, key and model name');
         const entry=backupEntryFor(config);
@@ -496,8 +499,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const hermesMain=backupHome?routineAIStatus(routineAI):null;
         if(sameService(entry,main)||sameService(entry,hermesMain))throw new Error(SAME_SERVICE);
         await candidate({kind:'connection-test',contract:'Reply with Connected.'});
-        const connected=connectBackupAI({home:backupHome,state:store.state,config});ensureSpendGuard();
-        return send(res,200,{connected:true,hermes:!!backupHome,...connected});
+        return send(res,200,{connected:true,hermes:!!backupHome,...connectBackupAI({home:backupHome,state:store.state,config})});
       }
       // The ChatGPT plan sign-in (planSignIn above): its state, start it for the main AI or the
       // backup, cancel it. The plan cannot be both: Hermes counts a plan behind itself as no backup.

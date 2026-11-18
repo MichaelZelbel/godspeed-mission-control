@@ -64,3 +64,26 @@ test('two held keys for the same OpenRouter model are both checked',async()=>{
  assert.deepEqual(spendGuardKeys({state:store.state,hermesHome:home}),['first-key','second-key']);
  await runSpendGuard({store,hermesHome:home,fetcher:reply({daily:1,balance:20,calls})});assert.equal(calls.length,4);
 });
+
+// The server starts the hourly check once an OpenRouter key is saved, as the main AI or the
+// backup (server/main.mjs), and not before. OpenRouter itself is stubbed; nothing leaves the machine.
+test('connecting an OpenRouter key in Settings starts the hourly check, and nothing before',async t=>{
+ const http=await import('node:http'),realFetch=globalThis.fetch;
+ const previous=process.env.GODSPEED_ORIGINAL_RUNTIME;delete process.env.GODSPEED_ORIGINAL_RUNTIME;
+ globalThis.fetch=(url,init)=>String(url).startsWith('https://openrouter.ai/')?Promise.resolve(new Response(JSON.stringify({choices:[{message:{content:'Connected'}}]}),{status:200,headers:{'content-type':'application/json'}})):realFetch(url,init);
+ t.after(()=>{globalThis.fetch=realFetch;if(previous!==undefined)process.env.GODSPEED_ORIGINAL_RUNTIME=previous;});
+ const other=await new Promise(resolve=>{const server=http.createServer(async(req,res)=>{for await(const _ of req);res.setHeader('content-type','application/json');res.end(JSON.stringify({choices:[{message:{content:'Connected'}}]}));});server.listen(0,'127.0.0.1',()=>{t.after(()=>new Promise(r=>server.close(r)));resolve('http://127.0.0.1:'+server.address().port+'/v1');});});
+ const {createService}=await import('../server/main.mjs');
+ const open=async()=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-spend-server-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const service=await createService({root,port:0}),base='http://127.0.0.1:'+service.address.port;t.after(()=>service.close());
+  return {service,call:async(route,body)=>{const r=await realFetch(base+'/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()};}};};
+ const backup=await open();
+ assert.equal((await backup.call('provider',{url:other,key:'other-key',model:'m'})).status,200);
+ assert.equal(backup.service.store.get('jobs','spend-guard'),undefined,'no OpenRouter key, no check');
+ assert.equal((await backup.call('spend-guard')).data.openrouter_connected,false);
+ const added=await backup.call('backup-ai',{url:'https://openrouter.ai/api/v1',key:'sk-or-backup-secret',model:'x/y'});assert.equal(added.status,200,JSON.stringify(added.data));
+ const job=backup.service.store.get('jobs','spend-guard');assert.deepEqual([job?.kind,job?.interval_ms,job?.paused],['spend-guard',3600000,false]);
+ assert.equal((await backup.call('spend-guard')).data.openrouter_connected,true);assert.equal(JSON.stringify(job).includes('sk-or-backup-secret'),false);
+ const main=await open();
+ assert.equal((await main.call('provider',{url:'https://openrouter.ai/api/v1',key:'sk-or-main-secret',model:'x/y'})).status,200);
+ assert.equal(main.service.store.get('jobs','spend-guard')?.kind,'spend-guard');
+});
