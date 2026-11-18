@@ -32,7 +32,12 @@ test('RDAP fallback and total failure preserve the latest successful state',asyn
  await procedure({kind:'domain-watch'},{store,query,fetcher:async url=>{called.push(String(url));if(called.length===1)throw Error('offline');return rdap(['redemptionPeriod']);}});
  assert.deepEqual(called,['https://rdap.org/domain/wanted.org','https://www.rdap.net/domain/wanted.org']);
  const before=store.list('domain_watch_observations').length,result=await procedure({kind:'domain-watch'},{store,query,fetcher:async()=>{throw Error('offline');}});
- assert.equal(result.verified,false);assert.equal(result.domains[0].ok,false);assert.equal(store.list('domain_watch_observations').length,before);assert.equal(store.list('domain_watches')[0].state,'redemption');assert.equal(store.list('notifications').length,0);
+ // A total failure is not a state change: the run stays verified, names the failure, and keeps the last state.
+ assert.equal(result.verified,true);assert.equal(result.silent,true);assert.equal(result.domains[0].ok,false);assert.deepEqual(result.lookup_failures.map(f=>f.domain),['wanted.org']);assert.match(result.outcome,/No registry answered for wanted\.org; it keeps its last state and is looked up again at the next run/);
+ assert.equal(store.list('domain_watch_observations').length,before);assert.equal(store.list('domain_watches')[0].state,'redemption');assert.equal(store.list('domain_watches')[0].last_lookup_error,'offline');assert.equal(store.list('notifications').length,0);
+ // The next successful lookup clears the failure and, the state being the same, sends nothing.
+ await procedure({kind:'domain-watch'},{store,query,fetcher:async()=>rdap(['redemptionPeriod'])});
+ assert.equal(store.list('domain_watches')[0].last_lookup_error,null);assert.equal(store.list('notifications').length,0);
 });
 
 test('.net uses Verisign and domain lifecycle uses one six-hour sweeper',async()=>{
@@ -51,7 +56,7 @@ test('the scheduler runs domain watches without page-topic due rules and schedul
  await scheduler.tick(at);assert.equal(store.list('domain_watch_observations').length,1);assert.equal(Date.parse(store.get('jobs','domain-watch-sweeper').next_run),at+21600000);
 });
 
-test('the scheduler delivers a saved transition through Telegram and reports a total outage as failed',async()=>{
+test('the scheduler delivers a saved transition through Telegram and reports a total outage in the run without failing it',async()=>{
  const {store,query}=setup(),at=Date.parse('2026-11-17T12:00:00Z');store.save('settings',{id:'installation',owner:store.device,timezone:'UTC',delivery:'telegram'});addDomainWatch(store,'delivery.test');
  await procedure({kind:'domain-watch'},{store,query,fetcher:async()=>rdap(['active'])});store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at).toISOString()});
  const sent=[],telegram=new Telegram({store,domains:null,token:'token',owner:'1',transport:async(_url,input)=>{sent.push(JSON.parse(String(input.body)));return new Response(JSON.stringify({ok:true,result:{message_id:7}}),{status:200,headers:{'Content-Type':'application/json'}});}});
@@ -60,7 +65,8 @@ test('the scheduler delivers a saved transition through Telegram and reports a t
  store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at+21600000).toISOString()});scheduler.executor=job=>procedure(job,{store,query,fetcher:async()=>rdap(['pendingDelete'])});
  await scheduler.tick(at+21600000);assert.equal(sent.length,1);
  store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at+43200000).toISOString()});scheduler.executor=job=>procedure(job,{store,query,fetcher:async()=>{throw Error('offline');}});
- await scheduler.tick(at+43200000);assert.equal(store.get('jobs','domain-watch-sweeper').state,'failed');assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'The executor returned no verified result');assert.equal(sent.length,1);
+ await scheduler.tick(at+43200000);const after=store.get('jobs','domain-watch-sweeper');assert.equal(after.state,'pending');assert.equal(after.paused,false);assert.equal(Date.parse(after.next_run),at+64800000);assert.equal(sent.length,1);
+ const outage=store.list('job_receipts').find(r=>r.job_id==='domain-watch-sweeper'&&r.started_at===new Date(at+43200000).toISOString());assert.equal(outage.state,'verified');assert.match(outage.result.outcome,/No registry answered for delivery\.test/);
 });
 
 test('the scheduler delivers every bounded message in a large transition batch',async()=>{
@@ -111,14 +117,57 @@ test('after one batch is delivered and the next is uncertain, the next run deliv
  await scheduler.tick(later+21600000);assert.deepEqual(attempted,[]);assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'verified');
 });
 
-test('a mixed RDAP outage keeps the scheduler failure visible',async()=>{
- const {store,query}=setup(),at=Date.parse('2026-11-17T12:00:00Z');store.save('settings',{id:'installation',owner:store.device,timezone:'UTC',delivery:'notebook'});addDomainWatch(store,'up.example');addDomainWatch(store,'down.example');
+// Runs the sweeper the way the app does: the real scheduler tick at each slot it names.
+const sweeper=store=>store.get('jobs','domain-watch-sweeper');
+const telegramFor=(store,sent)=>new Telegram({store,domains:null,token:'token',owner:'1',transport:async(_url,input)=>{sent.push(JSON.parse(String(input.body)).text);return new Response(JSON.stringify({ok:true,result:{message_id:sent.length}}),{status:200,headers:{'Content-Type':'application/json'}});}});
+
+test('an RDAP outage longer than the retries never pauses the sweeper, and a change after it gives one notice',async()=>{
+ const {store,query}=setup(),at=Date.parse('2026-11-17T12:00:00Z');store.save('settings',{id:'installation',owner:store.device,timezone:'UTC',delivery:'telegram'});
+ addDomainWatch(store,'outage.com');addDomainWatch(store,'outage.org');
+ let answer='up',urls=[];const fetcher=async url=>{urls.push(String(url));if(answer==='down')throw Error('offline');return answer==='free'?new Response(null,{status:404}):rdap(['active']);};
+ const sent=[],telegram=telegramFor(store,sent),scheduler=new Scheduler(store,{query,delivery:'telegram',executor:job=>procedure(job,{store,query,fetcher})});scheduler.deliver=telegram.deliver.bind(telegram);
  store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at).toISOString()});
- const scheduler=new Scheduler(store,{query,executor:job=>procedure(job,{store,query,fetcher:async url=>{if(String(url).includes('down.example'))throw Error('offline');return rdap(['active']);}})});
- await scheduler.tick(at);
- assert.equal(store.get('jobs','domain-watch-sweeper').state,'failed');assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'The executor returned no verified result');
- assert.equal(store.get('domain_watches','domain-'+hash('up.example').slice(0,24)).state,'registered');
- assert.equal(listDomainWatches(store).find(w=>w.domain==='down.example').state,null);assert.equal(store.list('job_receipts').length,1);
+ await scheduler.tick(at);assert.equal(sweeper(store).last_outcome,'verified');assert.deepEqual(listDomainWatches(store).map(w=>w.state),['registered','registered']);
+ // Every server fails for more runs than max_retries (3), each at the sweeper's own next slot.
+ answer='down';const outages=(sweeper(store).max_retries||3)+2;let slot=at;
+ for(let run=0;run<outages;run++){
+  slot=Date.parse(sweeper(store).next_run);assert.equal(slot,at+(run+1)*21600000,'run '+run+' is at its six-hour slot');
+  urls=[];const result=await scheduler.tick(slot);
+  assert.deepEqual(result.map(r=>r.state),['verified']);
+  // .com asks Verisign only; the other name tries rdap.org, then rdap.net.
+  assert.deepEqual(urls.sort(),['https://rdap.org/domain/outage.org','https://rdap.verisign.com/com/v1/domain/outage.com','https://www.rdap.net/domain/outage.org']);
+  const job=sweeper(store);assert.equal(job.paused,false);assert.notEqual(job.state,'needs_review');assert.equal(job.retry_count,0);assert.equal(Date.parse(job.next_run),slot+21600000);
+  assert.deepEqual(listDomainWatches(store).map(w=>w.state),['registered','registered']);
+ }
+ const reports=store.list('job_receipts').filter(r=>r.job_id==='domain-watch-sweeper'&&r.result?.lookup_failures);assert.equal(reports.length,outages);
+ assert.ok(reports.every(r=>r.state==='verified'&&/No registry answered for outage\.com, outage\.org/.test(r.result.outcome)));
+ assert.equal(sent.length,0);assert.equal(store.list('notifications').length,0);
+ // RDAP comes back and outage.com is free: the next slot runs and sends exactly one notice.
+ answer='free';const recovered=Date.parse(sweeper(store).next_run);assert.equal(recovered,slot+21600000);
+ await scheduler.tick(recovered-60000);assert.equal(sent.length,0);
+ await scheduler.tick(recovered);
+ assert.equal(sent.length,1);assert.match(sent[0],/outage\.com is now available: it can be registered now, at any registrar\./);assert.match(sent[0],/outage\.org is now available/);
+ assert.equal(sweeper(store).last_outcome,'verified');assert.ok(listDomainWatches(store).every(w=>w.state==='available'&&w.last_lookup_error===null));
+ await scheduler.tick(recovered+21600000);assert.equal(sent.length,1);
+});
+
+test('a domain that always fails sits next to a healthy one that keeps being checked and noticed',async()=>{
+ const {store,query}=setup(),at=Date.parse('2026-11-17T12:00:00Z');store.save('settings',{id:'installation',owner:store.device,timezone:'UTC',delivery:'telegram'});
+ addDomainWatch(store,'up.example');addDomainWatch(store,'down.example');
+ let healthy=['active'],checks=0;const fetcher=async url=>{if(String(url).includes('down.example'))throw Error('offline');checks++;return healthy?rdap(healthy):new Response(null,{status:404});};
+ const sent=[],telegram=telegramFor(store,sent),scheduler=new Scheduler(store,{query,delivery:'telegram',executor:job=>procedure(job,{store,query,fetcher})});scheduler.deliver=telegram.deliver.bind(telegram);
+ store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at).toISOString()});
+ const down=()=>listDomainWatches(store).find(w=>w.domain==='down.example'),up=()=>listDomainWatches(store).find(w=>w.domain==='up.example');
+ const lifecycle=[['active'],['active'],['pendingDelete'],['pendingDelete'],null,null,['active']];
+ for(const [run,answer] of lifecycle.entries()){
+  healthy=answer;const slot=Date.parse(sweeper(store).next_run);assert.equal(slot,at+run*21600000);
+  await scheduler.tick(slot);
+  const job=sweeper(store);assert.equal(job.paused,false);assert.equal(job.state,'pending');assert.equal(job.last_outcome,'verified');
+  assert.equal(checks,run+1);assert.equal(down().state,null);assert.equal(down().last_lookup_error,'offline');
+ }
+ assert.equal(up().state,'registered');
+ assert.deepEqual(sent.map(text=>text.split(':')[0]),['up.example is now pending delete','up.example is now available','up.example is now registered']);
+ assert.ok(sent.every(text=>!text.includes('down.example')));
 });
 
 test('chat authorizes adding, listing and removing a named domain',async()=>{

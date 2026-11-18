@@ -88,22 +88,33 @@ export function pendingDeliveries(store,jobId='domain-watch-sweeper'){
 }
 
 export async function runDomainWatches({store,fetcher}){
-  const outcomes=[],successful=[];
+  const outcomes=[],successful=[],failures=[];
   for(const snapshot of active(store)){
-    let read;try{read=await lookup(snapshot.domain,fetcher);}catch(error){outcomes.push({domain:snapshot.domain,ok:false,error:error.message});continue;}
+    let read;try{read=await lookup(snapshot.domain,fetcher);}catch(error){failures.push({snapshot,error:String(error?.message||error)});continue;}
     successful.push({snapshot,read});
   }
   await store.waitForWriter();
   let deliveries=[];
   store.withLock(()=>{
     const records=[],transitions=[];
+    // A lookup that failed on every server is not a state change: the domain keeps its last
+    // state and is looked up again at the next six-hour run. The failure is kept on the watch,
+    // where Settings shows it, and in the run's outcome; it does not make the run unverified,
+    // so one unreachable registry never pauses the sweeper for the other domains (owner
+    // decision on #706, 18 November 2026).
+    for(const {snapshot,error} of failures){
+      const at=new Date().toISOString(),current=store.get('domain_watches',snapshot.id);
+      if(!current||current.removed_at){outcomes.push({domain:snapshot.domain,ok:false,removed:true});continue;}
+      records.push(store.prepare('domain_watches',{last_lookup_error:error,last_lookup_failed_at:at},current));
+      outcomes.push({domain:current.domain,ok:false,lookup_failed:true,error,state:current.state??null});
+    }
     for(const {snapshot,read} of successful){
       const at=new Date().toISOString();
       const current=store.get('domain_watches',snapshot.id);
       if(!current||current.removed_at){outcomes.push({domain:snapshot.domain,ok:false,removed:true});continue;}
       const changed=!!current.state&&current.state!==read.state,transition=changed?hash([current.id,current.state,read.state,current._hash]):null;
       const observation=store.prepare('domain_watch_observations',{watch_id:current.id,domain:current.domain,state:read.state,observed_at:at,endpoint:read.endpoint,http_status:read.http_status,statuses:read.statuses,changed});
-      records.push(observation,store.prepare('domain_watches',{state:read.state,checked_at:at,last_observation_id:observation.id},current));
+      records.push(observation,store.prepare('domain_watches',{state:read.state,checked_at:at,last_observation_id:observation.id,...(current.last_lookup_error?{last_lookup_error:null}:{})},current));
       if(changed)transitions.push({id:'domain-watch-'+transition,domain:current.domain,watch_id:current.id,observation_id:observation.id,body:current.domain+' is now '+read.state+': '+advice[read.state]+'.'});
       outcomes.push({domain:current.domain,ok:true,state:read.state,changed});
     }
@@ -121,6 +132,7 @@ export async function runDomainWatches({store,fetcher}){
     }
     if(records.length)store.commit(records);
   });
-  const failed=outcomes.filter(outcome=>!outcome.ok),recordIds=[...pendingDeliveries(store).filter(id=>!deliveries.some(note=>note.id===id)),...deliveries.map(note=>note.id)];
-  return {verified:failed.length===0,silent:recordIds.length===0,domains:outcomes,...(recordIds.length?{record_id:recordIds[0],record_ids:recordIds,content_hash:store.get('notes',recordIds[0])._hash,delivery:'notebook'}:{})};
+  const failed=outcomes.filter(outcome=>outcome.lookup_failed),recordIds=[...pendingDeliveries(store).filter(id=>!deliveries.some(note=>note.id===id)),...deliveries.map(note=>note.id)];
+  const outcome=failed.length?'Checked '+(outcomes.filter(o=>o.ok).length)+' of '+(outcomes.filter(o=>!o.removed).length)+' domains. No registry answered for '+failed.map(o=>o.domain).join(', ')+'; '+(failed.length===1?'it keeps its':'they keep their')+' last state and '+(failed.length===1?'is':'are')+' looked up again at the next run.':'Checked '+outcomes.filter(o=>o.ok).length+' domains.';
+  return {verified:true,silent:recordIds.length===0,domains:outcomes,outcome,...(failed.length?{lookup_failures:failed.map(o=>({domain:o.domain,error:o.error}))}:{}),...(recordIds.length?{record_id:recordIds[0],record_ids:recordIds,content_hash:store.get('notes',recordIds[0])._hash,delivery:'notebook'}:{})};
 }

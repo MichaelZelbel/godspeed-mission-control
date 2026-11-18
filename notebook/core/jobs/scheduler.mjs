@@ -186,6 +186,10 @@ export class Scheduler {
     // A read that found nothing to say leaves no receipt: the job's next run
     // records that it ran. After a failure the next success keeps its receipt,
     // the evidence a repair waits for.
+    // A run that worked around a problem (a domain sweep where no registry answered for a
+    // domain, domain-watch.mjs) keeps its receipt, the run's outcome that names the problem,
+    // even when it had nothing to send.
+    if(Array.isArray(result?.lookup_failures)&&result.lookup_failures.length)result={...result,silent:false};
     const quiet=quietReads.has(job.kind)&&!job.outward&&!recovery&&result.silent&&!result.record_id&&!(job.retry_count>0)&&(job.last_outcome===undefined||job.last_outcome==='verified');
     let next,invalid=null;
     await this.store.withLockAsync(()=>{

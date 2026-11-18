@@ -7,7 +7,7 @@ import '@testing-library/jest-dom/vitest';
 import {PersonalControl} from './PersonalControl';
 
 const personal={deadlines:[],talks:[],journal:[],health:[],habits:[],forecasts:[],watch:[],jobs:[]};
-const watched={domains:[{id:'domain-one',domain:'wanted.test',state:'available',checked_at:'2026-11-17T10:00:00Z'}]};
+const watched={domains:[{id:'domain-one',domain:'wanted.test',state:'available',checked_at:'2026-11-17T10:00:00Z'},{id:'domain-two',domain:'quiet.test',state:'registered',checked_at:'2026-11-17T04:00:00Z',last_lookup_error:'offline',last_lookup_failed_at:'2026-11-17T10:00:00Z'}]};
 
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 
@@ -27,7 +27,9 @@ describe('domain watches in Settings',()=>{
   fireEvent.change(within(section).getByLabelText('Domain'),{target:{value:'New.Example'}});
   fireEvent.click(within(section).getByRole('button',{name:'Watch this domain'}));
   await waitFor(()=>expect(posts).toContainEqual({type:'domain-watch-add',domain:'New.Example'}));
-  fireEvent.click(within(section).getByRole('button',{name:'Stop watching'}));
+  expect(within(section).getByText(/quiet\.test: registered/)).toBeInTheDocument();
+  expect(within(section).getAllByText(/No registry answered on .*looked up again at the next check/)).toHaveLength(1);
+  fireEvent.click(within(section).getAllByRole('button',{name:'Stop watching'})[0]);
   await waitFor(()=>expect(posts).toContainEqual({type:'domain-watch-remove',domain:'wanted.test'}));
  });
 });
