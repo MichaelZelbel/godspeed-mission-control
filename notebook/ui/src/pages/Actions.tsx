@@ -297,18 +297,19 @@ export default function Actions() {
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>What needs to be done?</Label>
+                  <Label htmlFor="new-action-content">What needs to be done?</Label>
                   <Input
+                    id="new-action-content"
                     value={form.content}
                     onChange={(e) => setForm((p) => ({ ...p, content: e.target.value }))}
-                    placeholder="Follow up with Sarah about the proposal"
+                    placeholder="Follow up with Sarah"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <Label>Priority</Label>
+                    <Label htmlFor="new-action-priority">Priority</Label>
                     <Select value={form.priority} onValueChange={(v) => setForm((p) => ({ ...p, priority: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger id="new-action-priority"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {PRIORITIES.map((p) => (
                           <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
@@ -317,8 +318,9 @@ export default function Actions() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Due Date <span className="text-muted-foreground">(optional)</span></Label>
+                    <Label htmlFor="new-action-due">Due Date <span className="text-muted-foreground">(optional)</span></Label>
                     <Input
+                      id="new-action-due"
                       type="date"
                       value={form.due_date}
                       onChange={(e) => setForm((p) => ({ ...p, due_date: e.target.value }))}

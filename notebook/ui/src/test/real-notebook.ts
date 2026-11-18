@@ -25,9 +25,11 @@ export interface RealNotebook {
 
 const helper = fileURLToPath(new globalThis.URL("../../../test/screen-test-notebook.mjs", import.meta.url).href);
 
-export async function startNotebook(): Promise<RealNotebook> {
+/** `uiRoot`: a built UI for the notebook to serve, for tests that drive the whole app in a browser. */
+export async function startNotebook({ uiRoot }: { uiRoot?: string } = {}): Promise<RealNotebook> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed-screen-"));
-  const child: ChildProcess = spawn(process.execPath, [helper, root], { stdio: ["ignore", "pipe", "pipe"] });
+  const args = uiRoot ? [helper, root, uiRoot] : [helper, root];
+  const child: ChildProcess = spawn(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"] });
   const port = await new Promise<number>((resolve, reject) => {
     let out = "";
     let err = "";
