@@ -4,7 +4,7 @@ import path from 'node:path';
 import {Store} from '../core/records/store.mjs';
 import {machineDevice} from '../core/device-id.mjs';
 import {openStep,pressStep,ASKER_KINDS,answerChosen,heard,quietMessage,readStep,sentWithin,CHATS} from '../core/waiting-steps.mjs';
-import {cardSent} from '../core/background-reports.mjs';
+import {cardSent,reminderSent} from '../core/background-reports.mjs';
 
 // The one way to ask the owner for a yes (core/waiting-steps.mjs). A refusal reads as one plain line.
 const fail=error=>{process.stderr.write('Error: '+(error?.message||String(error))+'\n'+(process.env.GODSPEED_DEBUG?String(error?.stack||'')+'\n':''));process.exit(1);};
@@ -32,6 +32,8 @@ const HELP=`godspeed-step: ask your owner for a yes, and read the answer.
       Only the Telegram buttons use this: a press on a waiting step's own message.
   sent <id>
       Only the Telegram buttons use this, once a step's question went out with its buttons.
+  reminded <id>
+      Only the Telegram buttons use this, once a step's one reminder went out with its buttons.
 `;
 const args=process.argv.slice(2),option=name=>{const at=args.indexOf(name);return at<0?undefined:args[at+1];};
 const root=option('--godspeed')||process.env.GODSPEED_WORKSPACE,verb=args[0];
@@ -70,4 +72,7 @@ if(verb==='open'){
 }else if(verb==='sent'){
  if(scheduled)throw Error('A scheduled run cannot say a question went out.');
  print({sent:await cardSent(store,args[1])});
+}else if(verb==='reminded'){
+ if(scheduled)throw Error('A scheduled run cannot say a reminder went out.');
+ print({reminded:await reminderSent(store,args[1])});
 }else throw Error('Unknown verb. '+HELP);
