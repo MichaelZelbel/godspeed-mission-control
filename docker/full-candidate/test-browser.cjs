@@ -13,7 +13,20 @@ const origin=process.env.GODSPEED_VERIFY_ORIGIN||'https://localhost:48443';
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  try{
   if(mode==='resumed'){
+   const startupEvidence=path.join(evidence,'restart-timing.jsonl');
+   let firstQueryRecorded=false,responseRecorded=false;
+   page.on('request',request=>{
+    if(!firstQueryRecorded&&new URL(request.url()).pathname==='/api/query'){
+     firstQueryRecorded=true;fs.appendFileSync(startupEvidence,JSON.stringify({at:new Date().toISOString(),event:'browser-first-query-request'})+'\n');
+    }
+   });
+   page.on('response',response=>{
+    if(firstQueryRecorded&&!responseRecorded&&new URL(response.url()).pathname==='/api/query'){
+     responseRecorded=true;fs.appendFileSync(startupEvidence,JSON.stringify({at:new Date().toISOString(),event:'browser-first-query-response',status:response.status()})+'\n');
+    }
+   });
    for(let n=0;n<60;n++){try{const r=await context.request.get(origin+'/health');if(r.ok())break;}catch{}await page.waitForTimeout(1000);}
+   fs.appendFileSync(startupEvidence,JSON.stringify({at:new Date().toISOString(),event:'browser-document-request',path:'/dashboard/settings/import'})+'\n');
    await page.goto(origin+'/dashboard/settings/import');
    // This wait failed now and then after the restart (6 October 2026); the log
    // then says what the page showed instead.

@@ -24,6 +24,12 @@ const site=(address,port,folder='/etc/caddy/godspeed-addons')=>'# The Godspeed M
   +'\treverse_proxy 127.0.0.1:'+port+'\n}\n\n'
   +'# Add-ons\' own web addresses: one file each, written by the add-on (docs/full-version/addon-model.md).\nimport '+folder+'/*.caddy\n';
 
+test('an alternate notebook service gets web resources of its own while the default keeps its established names',options,()=>{
+  const names=service=>sh('SERVICE='+service+'; web_resource_names; printf "%s\\n%s\\n%s\\n" "$HTTPS_SERVICE" "$SITE_FILE" "$ADDON_SITES"');
+  assert.equal(names('godspeed-integrated-notebook.service').out,'godspeed-https.service\n/etc/caddy/godspeed-notebook.caddy\n/etc/caddy/godspeed-addons\n');
+  assert.equal(names('godspeed-native-install-test.service').out,'godspeed-native-install-test-https.service\n/etc/caddy/godspeed-native-install-test-notebook.caddy\n/etc/caddy/godspeed-native-install-test-addons\n');
+});
+
 test('the site hands every visit to the web door, and the installation\'s own Caddy has no admin endpoint',options,()=>{
   const result=sh('own_caddyfile srv1.example.com 47833');
   assert.equal(result.status,0,result.err);
@@ -39,6 +45,18 @@ test('the web address runs Caddy as the notebook\'s account, which may open port
     'ExecStart="/srv/my 100%% folder/.godspeed/integrated-runtime/runtime/caddy-2.11.4/caddy" run --config "/srv/my 100%% folder/.godspeed/integrated-runtime/https/Caddyfile" --adapter caddyfile',
     'AmbientCapabilities=CAP_NET_BIND_SERVICE','Restart=on-failure','WantedBy=multi-user.target'])
     assert.ok(lines.includes(line),line+'\n'+result.out);
+});
+
+test('an isolated user service gives Caddy a user unit and a private high-port site',options,()=>{
+  const dir=scratch('user-unit'),state=dir+'/state';
+  const unit=sh('https_user_unit_text /opt/caddy',{state,HOME:dir});
+  assert.equal(unit.status,0,unit.err);
+  assert.doesNotMatch(unit.out,/^User=|AmbientCapabilities/m);
+  assert.match(unit.out,/WantedBy=default\.target/);
+  const config=sh('ADDON_SITES=$DIR/addons; site_text srv1.example.com:48443 47843 internal',{DIR:dir});
+  assert.equal(config.status,0,config.err);
+  assert.match(config.out,/srv1\.example\.com:48443 \{\n\ttls internal\n/);
+  assert.match(config.out,/reverse_proxy 127\.0\.0\.1:47843/);
 });
 
 test('on the server\'s own Caddy, a name it already serves keeps its site and the notebook gets a port beside it',options,()=>{

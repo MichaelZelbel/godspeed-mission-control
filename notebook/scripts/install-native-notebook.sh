@@ -11,7 +11,7 @@
 set -euo pipefail
 
 NODE_VERSION=22.19.0
-SERVICE=godspeed-integrated-notebook.service
+SERVICE=${GODSPEED_SERVICE:-godspeed-integrated-notebook.service}
 
 # --- Node.js ------------------------------------------------------------------------
 # The notebook needs Node.js 22.19 or newer within 22 (node:sqlite). Stock Ubuntu and
@@ -126,6 +126,15 @@ fetch_version() {
 
 # --- The service --------------------------------------------------------------------
 systemd_here() { [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; }
+
+validate_service_name() {
+  [[ "$SERVICE" =~ ^[A-Za-z0-9_.@-]+\.service$ ]]
+}
+service_unit_paths() {
+  validate_service_name || return 1
+  system_unit="/etc/systemd/system/$SERVICE"
+  user_unit="$HOME/.config/systemd/user/$SERVICE"
+}
 
 # Root for the few steps that write the system's service list: directly when this is
 # root, else through sudo, which asks for the password once if it has to and can.
@@ -250,7 +259,11 @@ fetch("http://127.0.0.1:"+port+"/health").then(r=>r.ok?r.json():Promise.reject()
 # "production" to "local", and every routine it owned stopped running.
 previous_setting() {
   [ -f "$state/start.mjs" ] || return 0
-  "$node" -e 'const t=require("fs").readFileSync(process.argv[1],"utf8"),m=t.match(new RegExp("\""+process.argv[2]+"\":(\"(?:[^\"\\\\]|\\\\.)*\")"));if(m)process.stdout.write(JSON.parse(m[1]))' "$state/start.mjs" "$1" 2>/dev/null || true
+  "$node" --check "$state/start.mjs" >/dev/null 2>&1 || {
+    echo "The saved installation settings in $state/start.mjs cannot be read, so the installer stopped before choosing a service." >&2
+    return 1
+  }
+  "$node" -e 'const t=require("fs").readFileSync(process.argv[1],"utf8"),m=t.match(new RegExp("\""+process.argv[2]+"\":(\"(?:[^\"\\\\]|\\\\.)*\")"));if(m)process.stdout.write(JSON.parse(m[1]))' "$state/start.mjs" "$1"
 }
 
 # --- The web address, on a server ---------------------------------------------------
@@ -263,15 +276,25 @@ previous_setting() {
 # (server-address.mjs finds its provider name or the checked sslip.io fallback),
 # or one named in GODSPEED_HOST.
 CADDY_VERSION=2.11.4
-HTTPS_SERVICE=godspeed-https.service
+web_resource_names() {
+  if [ "$SERVICE" = godspeed-integrated-notebook.service ]; then
+    HTTPS_SERVICE=godspeed-https.service
+    SITE_FILE=/etc/caddy/godspeed-notebook.caddy
+    ADDON_SITES=/etc/caddy/godspeed-addons
+  else
+    local web_identity=${SERVICE%.service}
+    HTTPS_SERVICE=$web_identity-https.service
+    SITE_FILE=/etc/caddy/$web_identity-notebook.caddy
+    ADDON_SITES=/etc/caddy/$web_identity-addons
+  fi
+}
+web_resource_names
 CADDYFILE=/etc/caddy/Caddyfile
-SITE_FILE=/etc/caddy/godspeed-notebook.caddy
 # Add-ons' web addresses, whichever Caddy gives the notebook its address: each add-on that needs one
 # writes a file of its own here, a site of its own, or in paths/ paths on the notebook's own
 # address (docs/full-version/addon-model.md, "A web address for an add-on"). The installer makes the
 # folder once Caddy reads it and never writes in it. Until 24 October 2026 an add-on edited the
 # Caddyfile this installer writes, and on Godspeed's own Caddy every update took its line out.
-ADDON_SITES=/etc/caddy/godspeed-addons
 
 desktop_here() { systemd_here && systemctl is-active --quiet display-manager 2>/dev/null; }
 
@@ -322,6 +345,7 @@ install_caddy() {
 site_text() {
   printf '# The Godspeed Mission Control notebook'"'"'s web address. Its installer writes this file.\n'
   printf '%s {\n' "$1"
+  [ "${3:-}" != internal ] || printf '\ttls internal\n'
   printf '\t# Paths add-ons add to this address, before the notebook'"'"'s own pages: one file each, written by the add-on.\n'
   printf '\timport %s/paths/*.caddy\n\treverse_proxy 127.0.0.1:%s\n}\n\n' "$ADDON_SITES" "$2"
   printf '# Add-ons'"'"' own web addresses: one file each, written by the add-on (docs/full-version/addon-model.md).\n'
@@ -332,7 +356,7 @@ site_text() {
 addon_folders() { as_root mkdir -p "$ADDON_SITES/paths" && as_root chmod 755 "$ADDON_SITES" "$ADDON_SITES/paths"; }
 # The whole configuration of the installation's own Caddy. It has no admin endpoint (a
 # change restarts it), so it never holds the port another Caddy's endpoint uses.
-own_caddyfile() { printf '{\n\tadmin off\n}\n\n'; site_text "$1" "$2"; }
+own_caddyfile() { printf '{\n\tadmin off\n}\n\n'; site_text "$1" "$2" "${3:-}"; }
 
 https_unit_text() {
   printf '[Unit]\nDescription=Godspeed Mission Control web address\nWants=network-online.target\nAfter=network-online.target\n'
@@ -340,6 +364,13 @@ https_unit_text() {
   printf 'Environment=%s\n' "$(unit_quoted "HOME=$HOME")" "$(unit_quoted "XDG_DATA_HOME=$state/https")" "$(unit_quoted "XDG_CONFIG_HOME=$state/https")"
   printf 'ExecStart=%s run --config %s --adapter caddyfile\n' "$(unit_word "$1")" "$(unit_word "$state/https/Caddyfile")"
   printf 'AmbientCapabilities=CAP_NET_BIND_SERVICE\nRestart=on-failure\nRestartSec=5\n[Install]\nWantedBy=multi-user.target\n'
+}
+
+https_user_unit_text() {
+  printf '[Unit]\nDescription=Godspeed Mission Control isolated web address\nWants=network-online.target\nAfter=network-online.target\n'
+  printf '[Service]\nEnvironment=%s\n' "$(unit_quoted "HOME=$HOME")" "$(unit_quoted "XDG_DATA_HOME=$state/https")" "$(unit_quoted "XDG_CONFIG_HOME=$state/https")"
+  printf 'ExecStart=%s run --config %s --adapter caddyfile\n' "$(unit_word "$1")" "$(unit_word "$state/https/Caddyfile")"
+  printf 'Restart=on-failure\nRestartSec=5\n[Install]\nWantedBy=default.target\n'
 }
 
 # How the address is made depends on who answers on ports 80 and 443, which a certificate
@@ -403,12 +434,26 @@ start_own_caddy() {
     && { addon_folders || true; }
 }
 
+start_user_caddy() {
+  local caddy unit="$HOME/.config/systemd/user/$HTTPS_SERVICE"
+  caddy=$(install_caddy) || return 1
+  mkdir -p "$state/https" "$(dirname "$unit")/default.target.wants" || return 1
+  site_text "$1" "$GODSPEED_WEB_PORT" internal > "$SITE_FILE" || return 1
+  printf '{\n\tadmin off\n\tauto_https disable_redirects\n}\n\nimport %s\n' "$SITE_FILE" > "$state/https/Caddyfile" || return 1
+  https_user_unit_text "$caddy" > "$unit" || return 1
+  ln -sf "../$HTTPS_SERVICE" "$(dirname "$unit")/default.target.wants/$HTTPS_SERVICE"
+  systemctl --user daemon-reload >/dev/null 2>&1 \
+    && systemctl --user restart "$HTTPS_SERVICE" >/dev/null 2>&1 \
+    && mkdir -p "$ADDON_SITES/paths" && chmod 755 "$ADDON_SITES" "$ADDON_SITES/paths"
+}
+
 # The address answers with the notebook's own /health, over a certificate curl trusts. A
 # new certificate takes Caddy seconds to a minute or two.
 address_answers() {
-  local attempt
+  local attempt trust=()
+  if [ "$web_front_kind" = user ]; then trust=(--noproxy '*' --cacert "$state/https/caddy/pki/authorities/local/root.crt" --resolve "$web_site:127.0.0.1"); fi
   for attempt in $(seq 1 "${1:-30}"); do
-    case "$(curl -fsS -m 8 "$web_address/health" 2>/dev/null)" in *'"ok":true'*) return 0 ;; esac
+    case "$(curl -fsS -m 8 "${trust[@]}" "$web_address/health" 2>/dev/null)" in *'"ok":true'*) return 0 ;; esac
     sleep 4
   done
   return 1
@@ -492,6 +537,18 @@ install_update_command() {
   } > "$command.new" && chmod 755 "$command.new" && mv "$command.new" "$command"
 }
 
+restore_kept_settings() {
+  local kept setting value
+  kept="GODSPEED_DEVICE GODSPEED_SERVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT GODSPEED_WEB_PORT GODSPEED_HOST"
+  [ -z "$mode" ] || kept="$kept GODSPEED_WEB_ADDRESS HERMES_HOME"
+  for setting in $kept; do
+    if [ -z "${!setting:-}" ]; then
+      value=$(previous_setting "$setting")
+      if [ -n "$value" ]; then export "$setting=$value"; fi
+    fi
+  done
+}
+
 # Lets a test load the functions above without installing anything.
 if [ "${GODSPEED_INSTALLER_FUNCTIONS_ONLY:-}" = 1 ]; then return 0 2>/dev/null || exit 0; fi
 
@@ -538,14 +595,8 @@ fi
 # What this installation ran with until now stays, unless this run names it (previous_setting).
 # Inside the service also its web address, which only the administrator could make again, and
 # the Hermes it used, which a terminal names in its own environment.
-kept="GODSPEED_DEVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT GODSPEED_WEB_PORT GODSPEED_HOST"
-[ -z "$mode" ] || kept="$kept GODSPEED_WEB_ADDRESS HERMES_HOME"
-for setting in $kept; do
-  if [ -z "${!setting:-}" ]; then
-    value=$(previous_setting "$setting")
-    if [ -n "$value" ]; then export "$setting=$value"; fi
-  fi
-done
+restore_kept_settings
+SERVICE=${GODSPEED_SERVICE:-godspeed-integrated-notebook.service}
 if [ -z "${GODSPEED_INTEGRATED_BESIDE:-}" ] && [ "$(previous_setting HERMES_HOME)" = "$state/hermes" ]; then GODSPEED_INTEGRATED_BESIDE=1; fi
 export GODSPEED_WORKSPACE="$root" GODSPEED_ORIGINAL_RUNTIME=on
 export GODSPEED_PORT=${GODSPEED_PORT:-47831} GODSPEED_BIND=127.0.0.1
@@ -577,8 +628,7 @@ assistant=$(command -v hermes || true)
 # su or sudo -u, which has no such session, the installer stopped halfway.
 service_user=$(id -un)
 service_group=$(id -gn)
-system_unit="/etc/systemd/system/$SERVICE"
-user_unit="$HOME/.config/systemd/user/$SERVICE"
+service_unit_paths || { echo "GODSPEED_SERVICE must be one systemd .service unit name: $SERVICE" >&2; exit 1; }
 manager=none
 if [ -n "$mode" ]; then
   # The service that runs this notebook, as its files say: asking for root would wait for a password.
@@ -613,7 +663,12 @@ elif [ "$(uname -s)" = Linux ] && ! desktop_here; then
 fi
 if [ -n "$web_host" ]; then
   export GODSPEED_HOST="$web_host" GODSPEED_WEB_PORT=${GODSPEED_WEB_PORT:-47833}
-  if [ "$manager" != system ]; then
+  if [ "$manager" = user ] && [ "$SERVICE" != godspeed-integrated-notebook.service ]; then
+    web_front_kind=user
+    web_site="$web_host:${GODSPEED_HTTPS_PORT:-48443}"
+    SITE_FILE="$state/https/notebook.caddy"
+    ADDON_SITES="$state/https/addons"
+  elif [ "$manager" != system ]; then
     web_problem="This is a server, and making its web address needs systemd and the administrator's rights once. Run the installer again from an account that may use sudo."
   else
     web_front_kind=$(web_front)
@@ -827,9 +882,14 @@ if [ -n "$started" ]; then
         add_to_caddy "$web_site" \
           || web_problem="This server's Caddy did not take the notebook's web address, so it goes on serving what it served before. What it said is shown by: journalctl -u caddy -n 50"
         ;;
+      user)
+        web_ports="port ${web_site##*:}"
+        start_user_caddy "$web_site" \
+          || web_problem="Caddy, which gives the isolated notebook its web address, could not be set up here. What it said is shown by: journalctl --user -u $HTTPS_SERVICE -n 50"
+        ;;
     esac
     if [ -z "$web_problem" ] && ! address_answers; then
-      if [ "$web_front_kind" = own ]; then logs="journalctl -u $HTTPS_SERVICE -n 50"; else logs="journalctl -u caddy -n 50"; fi
+      if [ "$web_front_kind" = own ]; then logs="journalctl -u $HTTPS_SERVICE -n 50"; elif [ "$web_front_kind" = user ]; then logs="journalctl --user -u $HTTPS_SERVICE -n 50"; else logs="journalctl -u caddy -n 50"; fi
       web_problem="The notebook's web address $web_address does not answer yet. If the hosting provider has a firewall, it must let in $web_ports. What Caddy said is shown by: $logs"
     fi
   fi

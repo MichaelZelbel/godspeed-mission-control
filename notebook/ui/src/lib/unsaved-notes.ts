@@ -19,7 +19,7 @@
 // only, for as long as the page is open.
 
 export type NoteText = { content?: string; title?: string };
-export type UnsavedStatus = "saved" | "pending" | "retrying";
+export type UnsavedStatus = "saved" | "pending" | "retrying" | "failed";
 
 /** What one send did: the text it carried, the note's new version, or that the note no longer exists. */
 export interface SendOutcome {
@@ -380,7 +380,12 @@ export function createUnsavedNotes({
   function status(id: string): UnsavedStatus {
     load();
     if (!has(id)) return "saved";
-    return failures.has(id) ? "retrying" : "pending";
+    const failure = failures.get(id);
+    if (!failure) return "pending";
+    // Once every growing pause has been tried, say plainly that saving failed.
+    // The last pause still repeats in the background so the kept text can
+    // recover without the person having to type it again.
+    return failure.count >= RETRY_PAUSES.length ? "failed" : "retrying";
   }
 
   function hasUnsaved() {

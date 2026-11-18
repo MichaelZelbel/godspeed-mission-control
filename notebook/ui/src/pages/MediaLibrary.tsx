@@ -874,13 +874,15 @@ export default function MediaLibrary() {
                       />
                     )}
                     {/* One row: the badge on the left, the status (unchanged) on the right, so a
-                        long badge wraps beside the status instead of running under it. */}
-                    <div className="absolute top-1.5 inset-x-1.5 z-10 flex items-start gap-1">
+                        long badge wraps beside the status instead of running under it. The badge
+                        never shrinks below two lines' width: on a narrow card (a phone) the status
+                        moves down under it instead, so its words never run under the status (#728). */}
+                    <div className="absolute top-1.5 inset-x-1.5 z-10 flex flex-wrap items-start gap-1">
                       {keptHere.has(group.storage_path) && (
                         <Badge
                           variant="secondary"
                           title={`Over ${MEDIA_CARRY_MAX_MB} MB, so it is not in your private GitHub copy. It stays on this computer and in its backups.`}
-                          className="min-w-0 text-[9px]"
+                          className="min-w-[6.5rem] max-w-full text-[9px]"
                         >
                           Kept on this computer only
                         </Badge>
@@ -889,7 +891,7 @@ export default function MediaLibrary() {
                         <Badge
                           variant="secondary"
                           title={`Its file is not on this computer. Files over ${MEDIA_CARRY_MAX_MB} MB stay on the computer they were added on, so open it there.`}
-                          className="min-w-0 text-[9px]"
+                          className="min-w-[6.5rem] max-w-full text-[9px]"
                         >
                           Kept on another computer
                         </Badge>

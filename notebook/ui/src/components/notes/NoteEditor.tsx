@@ -245,24 +245,7 @@ export function editorShowsContent(
 }
 
 
-function formatRelativeSaved(ts: number): string {
-  const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (diffSec < 5) return "just now";
-  if (diffSec < 60) return `${diffSec}s ago`;
-  const m = Math.floor(diffSec / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  return `${h}h ago`;
-}
-
-interface SaveIndicatorProps {
-  status: "idle" | "saving" | "saved" | "error" | "retrying";
-  lastSavedAt: number | null;
-  tick: number;
-}
-
-function SaveIndicator({ status, lastSavedAt }: SaveIndicatorProps) {
-  if (status === "idle" && !lastSavedAt) return null;
+function SaveWarning({ status }: { status: "error" | "retrying" }) {
   // The notebook did not answer: the text is kept on this device and sent
   // again (lib/unsaved-notes.ts, #29). It stays on screen until it is saved.
   if (status === "retrying") {
@@ -277,31 +260,12 @@ function SaveIndicator({ status, lastSavedAt }: SaveIndicatorProps) {
       </span>
     );
   }
-  if (status === "saving") {
-    return (
-      <span className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0">
-        <Loader2 className="h-3 w-3 animate-spin" />
-        Saving…
-      </span>
-    );
-  }
-  if (status === "error") {
-    return (
-      <span className="flex items-center gap-1 text-[11px] font-medium text-destructive shrink-0 px-1.5 py-0.5 rounded bg-destructive/10">
-        <AlertCircle className="h-3 w-3" />
-        Save failed
-      </span>
-    );
-  }
-  if (lastSavedAt) {
-    return (
-      <span className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0">
-        <CheckCircle2 className="h-3 w-3 text-success" />
-        Saved · {formatRelativeSaved(lastSavedAt)}
-      </span>
-    );
-  }
-  return null;
+  return (
+    <span className="flex items-center gap-1 text-[11px] font-medium text-destructive shrink-0 px-1.5 py-0.5 rounded bg-destructive/10">
+      <AlertCircle className="h-3 w-3" />
+      Save failed
+    </span>
+  );
 }
 
 /** Per-note AI indexing state. Silence was the actual bug: users could not tell
@@ -557,17 +521,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   }, []);
 
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error" | "retrying">("idle");
-  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
-  const [savedTick, setSavedTick] = useState(0);
-  useEffect(() => {
-    if (saveStatus !== "saved" || !lastSavedAt) return;
-    const id = setInterval(() => setSavedTick((t) => t + 1), 15000);
-    return () => clearInterval(id);
-  }, [saveStatus, lastSavedAt]);
   // Reset save status when switching to a different note
   useEffect(() => {
     setSaveStatus("idle");
-    setLastSavedAt(null);
   }, [note.id]);
 
   const triggerGitHubSync = useCallback((noteId: string) => {
@@ -613,7 +569,6 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             if (ts > lastSavedUpdatedAtRef.current) lastSavedUpdatedAtRef.current = ts;
             if (pendingSaveContentRef.current === md) pendingSaveContentRef.current = null;
             setSaveStatus("saved");
-            setLastSavedAt(Date.now());
             const queued = queuedContentRef.current;
             queuedContentRef.current = null;
             if (queued !== null && queued !== md) saveContentNow(queued);
@@ -652,7 +607,6 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       void unsavedNotes.flush(noteId).then((saved) => {
         if (!saved || activeNoteIdRef.current !== noteId) return;
         setSaveStatus("saved");
-        setLastSavedAt(Date.now());
       });
     }
     return release;
@@ -671,15 +625,15 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     if (confirmed.title !== undefined && pendingSaveTitleRef.current === confirmed.title) pendingSaveTitleRef.current = null;
   }), []);
 
-  // "Not saved yet. Trying again..." until the notebook takes the text.
+  // Show the retry warning first, then the terminal failure warning after the
+  // keeper has exhausted its growing retry sequence. Either clears on save.
   const unsavedBefore = useRef(unsavedStatus);
   useEffect(() => {
     const before = unsavedBefore.current;
     unsavedBefore.current = unsavedStatus;
-    if (before !== "retrying" || unsavedStatus === "retrying") return;
+    if ((before !== "retrying" && before !== "failed") || unsavedStatus === "retrying" || unsavedStatus === "failed") return;
     if (unsavedStatus === "saved") {
       setSaveStatus("saved");
-      setLastSavedAt(Date.now());
     } else setSaveStatus("saving");
   }, [unsavedStatus]);
 
@@ -927,13 +881,11 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
         void unsavedNotes.flush(noteId).then((saved) => {
           if (!saved || activeNoteIdRef.current !== noteId) return;
           setSaveStatus("saved");
-          setLastSavedAt(Date.now());
         });
       } else if (pendingContent !== null) {
         // Already saved; only the debounce timer was left.
         pendingSaveContentRef.current = null;
         setSaveStatus("saved");
-        setLastSavedAt(Date.now());
       }
       if (contentSaveTimer.current) clearTimeout(contentSaveTimer.current);
       if (titleSaveTimer.current) clearTimeout(titleSaveTimer.current);
@@ -1075,7 +1027,6 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             const ts = saved?.updated_at ? new Date(saved.updated_at).getTime() : Date.now();
             if (ts > lastSavedUpdatedAtRef.current) lastSavedUpdatedAtRef.current = ts;
             setSaveStatus("saved");
-            setLastSavedAt(Date.now());
             respond(
               saved?.updated_at ?? new Date(lastSavedUpdatedAtRef.current).toISOString(),
               pending,
@@ -1158,7 +1109,6 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             editor.commands.focus(Math.min(caret, Math.max(0, max - 1)));
           }
           setSaveStatus("saved");
-          setLastSavedAt(Date.now());
         }
         // Verify what the editor is actually showing now - the whole point of
         // the acknowledgement is that "we called setContent" is not proof.
@@ -1253,7 +1203,6 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           onSuccess: () => {
             if (pendingSaveTitleRef.current === val) pendingSaveTitleRef.current = null;
             setSaveStatus("saved");
-            setLastSavedAt(Date.now());
           },
           // A failed title stays pending, like text: the keeper sends it again (#29).
           onError: () => setSaveStatus("error"),
@@ -1338,7 +1287,6 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
         if (pendingSaveTitleRef.current === pendingTitle) pendingSaveTitleRef.current = null;
         if (saved?.updated_at) lastSavedUpdatedAtRef.current = Math.max(lastSavedUpdatedAtRef.current, new Date(saved.updated_at).getTime());
         setSaveStatus("saved");
-        setLastSavedAt(Date.now());
       }
       processNote.mutate(note.id);
     } catch {
@@ -1871,8 +1819,8 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             disabled={note.is_trashed || note.is_external}
           />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 empty:hidden">
-            {!note.is_trashed && !note.is_external && (
-              <SaveIndicator status={unsavedStatus === "retrying" ? "retrying" : saveStatus} lastSavedAt={lastSavedAt} tick={savedTick} />
+            {!note.is_trashed && !note.is_external && (unsavedStatus === "retrying" || unsavedStatus === "failed" || saveStatus === "error") && (
+              <SaveWarning status={unsavedStatus === "retrying" ? "retrying" : "error"} />
             )}
             {!note.is_trashed && <ProcessingIndicator note={note} credits={credits} />}
             {note.entity_type && (

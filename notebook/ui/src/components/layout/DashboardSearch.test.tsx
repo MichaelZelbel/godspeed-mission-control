@@ -6,6 +6,7 @@ import {MemoryRouter} from 'react-router-dom';
 import {DashboardSearch} from './DashboardSearch';
 
 const hooks=vi.hoisted(()=>({words:vi.fn(),meaning:vi.fn()}));
+vi.mock('@/hooks/use-mobile',()=>({useIsMobile:()=>false}));
 vi.mock('@/hooks/useNotes',()=>({useIlikeSearch:()=>({mutateAsync:hooks.words}),useSemanticSearch:()=>({mutateAsync:hooks.meaning})}));
 const deferred=()=>{let resolve!:(value:any)=>void;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};};
 const row=(id:string,title:string)=>({id,title,updated_at:'2026-10-21T12:00:00Z',similarity:null});

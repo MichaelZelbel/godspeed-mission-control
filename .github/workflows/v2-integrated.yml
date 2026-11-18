@@ -23,7 +23,7 @@ name: Integrated Godspeed v2
 # same pull request cancels the older run.
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
     paths: [.github/workflows/v2-integrated.yml, 'notebook/**', 'third-party/addons/godspeed-coach/**', 'third-party/addons/godspeed-charm/**', 'docker/full-candidate/**', 'docker/rootfs/**', 'docker/test/**', install-godspeed.sh, install-godspeed-dev.sh]
   pull_request:
   workflow_dispatch:
@@ -58,7 +58,7 @@ jobs:
       id-token: write   # the keyless signature
     env:
       IMAGE: ghcr.io/michaelzelbel/godspeed-mission-control
-      PUBLISH: ${{ github.ref == 'refs/heads/main' }}
+      PUBLISH: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') }}
     steps:
       - uses: actions/checkout@v4
         with:

@@ -48,6 +48,17 @@ test('the unit names the account, the folder and the commands exactly as systemd
   assert.match(user,/^WantedBy=default\.target$/m);
 });
 
+test('an isolated service name selects only its own unit files and unsafe names are refused',options,()=>{
+  const selected=sh('service_unit_paths && printf "%s\n%s\n" "$system_unit" "$user_unit"',{GODSPEED_SERVICE:'godspeed-native-install-test.service',HOME:'/home/factory'});
+  assert.equal(selected.status,0,selected.err);
+  assert.equal(selected.out,'/etc/systemd/system/godspeed-native-install-test.service\n/home/factory/.config/systemd/user/godspeed-native-install-test.service\n');
+  assert.doesNotMatch(selected.out,/integrated-notebook/);
+  for(const name of ['../owner.service','owner service.service','owner;stop.service','owner.socket','owner.service --now']){
+    const refused=sh('service_unit_paths',{GODSPEED_SERVICE:name,HOME:'/home/factory'});
+    assert.notEqual(refused.status,0,name);
+  }
+});
+
 test('the Node.js check takes 22.19 and newer within 22 only',options,()=>{
   const dir=scratch('node');
   for(const [version,fits] of [['v22.19.0',true],['v22.21.1',true],['v22.18.0',false],['v18.19.1',false],['v23.1.0',false],['v24.0.0',false]]){
@@ -140,6 +151,14 @@ test('a re-run keeps the machine name and settings the last installation ran wit
   assert.equal(read.status,0,read.err);
   assert.equal(read.out,`GODSPEED_DEVICE=[production]\nGODSPEED_PORT=[47900]\nGODSPEED_MEDIA_ROOT=[/srv/media "x"]\nHERMES_HOME=[${state}/hermes]\nGODSPEED_MISSING=[]\n`);
   assert.equal(sh('previous_setting GODSPEED_DEVICE',{state:scratch('fresh'),node}).out,'','a first installation has nothing to keep');
+});
+
+test('an unreadable saved start script stops settings restoration',options,()=>{
+  const state=scratch('broken-settings'),node=slash(process.execPath);
+  fs.writeFileSync(path.join(state,'start.mjs'),'const settings={"GODSPEED_SERVICE":"isolated.service"');
+  const read=sh('mode=""; restore_kept_settings',{state,node});
+  assert.notEqual(read.status,0);
+  assert.match(read.err,/saved installation settings.*cannot be read/);
 });
 
 // The copies made before updates (core/upgrade-copies.mjs): until 15 October 2026 every update
