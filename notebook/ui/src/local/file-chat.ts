@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import {startupRequest} from './startup-request';
 const states = new Map<string,any>();
 const queues = new Map<string,Promise<any>>();
 const resets=typeof BroadcastChannel==='function'?new BroadcastChannel('godspeed:chat-resets'):null;
@@ -10,9 +11,7 @@ export async function hydrateFileChats(){
   // The sign-in gate waits for this, so whatever goes wrong here is the whole
   // screen. A timed-out signal threw its own wording ("signal is timed out")
   // straight at the person, who had asked for a dashboard, not a stopwatch.
-  let r:Response;
-  try { r=await fetch('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'note_conversations'}),signal:AbortSignal.timeout(15000)}); }
-  catch { throw new Error('Your server is busy saving and did not answer in time. Try again in a moment.'); }
+  const r=await startupRequest(signal=>fetch('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'note_conversations'}),signal}));
   if(!r.ok)throw new Error('Conversation history could not be loaded');
   const result=await r.json();for(const row of result.data||[])states.set(row.context_key,row.state);
 }

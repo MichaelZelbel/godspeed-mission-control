@@ -24,9 +24,11 @@ interface PeopleMultiSelectProps {
   /** Names typed in the picker that are not in People yet; they are created when the moment is saved. */
   newNames?: string[];
   onNewNamesChange?: (names: string[]) => void;
+  /** The id of the button that opens the picker, so a visible label can name it. */
+  id?: string;
 }
 
-export default function PeopleMultiSelect({ people, value, onChange, newNames = [], onNewNamesChange }: PeopleMultiSelectProps) {
+export default function PeopleMultiSelect({ people, value, onChange, newNames = [], onNewNamesChange, id }: PeopleMultiSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   // Offered only when the typed name is nobody in People (without case) and not already added.
@@ -101,6 +103,7 @@ export default function PeopleMultiSelect({ people, value, onChange, newNames = 
             type="button"
             variant="outline"
             size="sm"
+            id={id}
             role="combobox"
             aria-label="People"
             aria-expanded={open}

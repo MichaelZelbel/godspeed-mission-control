@@ -7,17 +7,24 @@ const writer=fileURLToPath(new URL('../scripts/native-start-script.mjs',import.m
 function fixture(body){
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-start-')),supervise=path.join(dir,'supervise.mjs'),start=path.join(dir,'start.mjs');
   fs.writeFileSync(supervise,body);
-  spawnSync(process.execPath,[writer,start,supervise],{env:{...process.env,GODSPEED_WORKSPACE:dir,GODSPEED_PORT:'41995'},stdio:'inherit'});
+  spawnSync(process.execPath,[writer,start,supervise],{env:{...process.env,GODSPEED_WORKSPACE:dir,GODSPEED_SERVICE:'godspeed-native-install-test.service',GODSPEED_PORT:'41995'},stdio:'inherit'});
   return {dir,start};
 }
 const run=start=>spawnSync(process.execPath,[start],{encoding:'utf8',env:{...process.env,GODSPEED_PORT:'1'}});
 
 test('the notebook\'s own exit code comes back, with the installed settings',()=>{
-  const {dir,start}=fixture("console.log(process.env.GODSPEED_WORKSPACE+' '+process.env.GODSPEED_PORT);process.exit(3);");
+  const {dir,start}=fixture("console.log(process.env.GODSPEED_WORKSPACE+' '+process.env.GODSPEED_PORT+' '+process.env.GODSPEED_SERVICE);process.exit(3);");
   const result=run(start);
   assert.equal(result.status,3);
-  assert.equal(result.stdout.trim(),dir+' 41995','the settings written at install win over the caller\'s');
+  assert.equal(result.stdout.trim(),dir+' 41995 godspeed-native-install-test.service','the settings written at install win over the caller\'s');
   assert.equal(run(fixture('process.exit(0);').start).status,0);
+});
+
+test('the default installation does not add a service override',()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-start-default-')),start=path.join(dir,'start.mjs'),supervise=path.join(dir,'supervise.mjs');
+  fs.writeFileSync(supervise,'process.exit(0);');
+  spawnSync(process.execPath,[writer,start,supervise],{env:{...process.env,GODSPEED_WORKSPACE:dir,GODSPEED_SERVICE:undefined}});
+  assert.doesNotMatch(fs.readFileSync(start,'utf8'),/GODSPEED_SERVICE/);
 });
 
 const posix={skip:process.platform==='win32'&&'signals are POSIX'};
@@ -78,14 +85,14 @@ test('a switch that leaves a trial ends with 75, and a new notebook that dies in
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-start-trial-'));
   // The new version's installer in switch mode: the new start.mjs, the version file and the trial.
   versions(dir,{installer:[
-    '[ "$GODSPEED_UPDATE_MODE" = switch ] && [ "$GODSPEED_PRODUCT_REF" = '+B+' ] || exit 1',
+    '[ "$GODSPEED_UPDATE_MODE" = switch ] && [ "$GODSPEED_PRODUCT_REF" = '+B+' ] && [ "$GODSPEED_SERVICE" = godspeed-native-install-test.service ] || exit 1',
     'state="$1/.godspeed/integrated-runtime"',
     `GODSPEED_WORKSPACE="$1" GODSPEED_PORT=1 "${process.execPath}" "$state/versions/${B}/notebook/scripts/native-start-script.mjs" "$state/start.mjs" "$state/versions/${B}/notebook/scripts/supervise.mjs"`,
     'echo '+B+' > "$state/version"',
     `printf '{"from":"${A}","to":"${B}","backup":"/backups/one"}' > "$1/.godspeed/update/trial.json"`,'',
   ].join('\n')});
   const start=path.join(runtime(dir),'start.mjs');
-  spawnSync(process.execPath,[writer,start,path.join(runtime(dir),'versions',A,'notebook','scripts','supervise.mjs')],{env:{...process.env,GODSPEED_WORKSPACE:dir,GODSPEED_PORT:'1'}});
+  spawnSync(process.execPath,[writer,start,path.join(runtime(dir),'versions',A,'notebook','scripts','supervise.mjs')],{env:{...process.env,GODSPEED_WORKSPACE:dir,GODSPEED_SERVICE:'godspeed-native-install-test.service',GODSPEED_PORT:'1'}});
   fs.mkdirSync(update(dir),{recursive:true});fs.writeFileSync(path.join(update(dir),'switch.json'),JSON.stringify({commit:B,env:{}}));
   assert.equal(spawnSync(process.execPath,[start],{encoding:'utf8'}).status,75,'the switched folder is started afresh');
   assert.match(fs.readFileSync(start,'utf8'),new RegExp('versions/'+B+'/'),'the new start.mjs starts the new version');

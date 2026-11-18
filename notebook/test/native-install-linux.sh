@@ -14,10 +14,34 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(mktemp -d)
 root="$HOME/godspeed-native-test"
-service=godspeed-integrated-notebook.service
+service=godspeed-native-install-test.service
+port=47841
+web_port=47843
+https_port=48443
 state="$root/.godspeed/integrated-runtime"
-fail() { echo "FAILED: $*" >&2; sudo journalctl -u "$service" -n 60 --no-pager >&2 || true; exit 1; }
-cleanup() { sudo systemctl disable --now "$service" >/dev/null 2>&1 || true; sudo rm -f "/etc/systemd/system/$service"; sudo systemctl daemon-reload || true; }
+scope=system
+service_command() { if [ "$scope" = user ]; then systemctl --user "$@"; else sudo -n systemctl "$@"; fi; }
+kill_service() {
+  if [ "$scope" = user ]; then
+    local group pids
+    group=$(service_command show -p ControlGroup --value "$service")
+    mapfile -t pids < "/sys/fs/cgroup$group/cgroup.procs"
+    kill -KILL "${pids[@]}"
+  else
+    service_command kill -s KILL "$service"
+  fi
+}
+fail() { echo "FAILED: $*" >&2; if [ "$scope" = user ]; then journalctl --user -u "$service" -n 60 --no-pager >&2 || true; else sudo -n journalctl -u "$service" -n 60 --no-pager >&2 || true; fi; exit 1; }
+cleanup() {
+  sudo -n systemctl disable --now "$service" >/dev/null 2>&1 || true
+  sudo -n rm -f "/etc/systemd/system/$service" >/dev/null 2>&1 || true
+  sudo -n systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl --user disable --now "$service" >/dev/null 2>&1 || true
+  systemctl --user disable --now "${service%.service}-https.service" >/dev/null 2>&1 || true
+  rm -f "$HOME/.config/systemd/user/$service"
+  rm -f "$HOME/.config/systemd/user/${service%.service}-https.service"
+  systemctl --user daemon-reload >/dev/null 2>&1 || true
+}
 trap cleanup EXIT
 
 # What the original installer leaves behind, as far as this step reads it: the folder
@@ -54,18 +78,29 @@ git -C "$work/product" -c user.name=test -c user.email=test@example.invalid comm
 second=$(git -C "$work/product" rev-parse HEAD)
 git -C "$work/product" config uploadpack.allowAnySHA1InWant true
 git -C "$work/product" config uploadpack.allowFilter true
-install() { GODSPEED_FOOD_TABLE=off GODSPEED_PRODUCT_REPOSITORY="file://$work/product" GODSPEED_PRODUCT_REF="$1" bash "$here/notebook/scripts/install-native-notebook.sh" "$root"; }
-answers() { for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:47831/health >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
+install() { GODSPEED_FOOD_TABLE=off GODSPEED_SERVICE="$service" GODSPEED_PORT="$port" GODSPEED_WEB_PORT="$web_port" GODSPEED_HTTPS_PORT="$https_port" GODSPEED_PRODUCT_REPOSITORY="file://$work/product" GODSPEED_PRODUCT_REF="$1" bash "$here/notebook/scripts/install-native-notebook.sh" "$root"; }
+answers() { for _ in $(seq 1 30); do curl -fsS "http://127.0.0.1:$port/health" >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
 
 echo '== a first installation, as the server called production'
 GODSPEED_DEVICE=production install "$first" 2>&1 | tee "$work/first.log"
 ! grep -q 'does not load for this account' "$work/first.log" || fail 'a Hermes that loads was reported as one that does not'
-systemctl is-active --quiet "$service" || fail 'the notebook is not running after installation'
-grep -qx "User=$(id -un)" "/etc/systemd/system/$service" || fail 'the service does not run as the installing account'
+unit="/etc/systemd/system/$service"
+if [ ! -f "$unit" ]; then scope=user; unit="$HOME/.config/systemd/user/$service"; fi
+service_command is-active --quiet "$service" || fail 'the notebook is not running after installation'
+grep -qx "User=$(id -un)" "$unit" || { [ "$scope" = user ] && ! grep -q '^User=' "$unit"; } || fail 'the service does not run as the installing account'
 [ "$(cat "$state/version")" = "$first" ] || fail 'the installed version is not the one named'
 grep -q '"GODSPEED_DEVICE":"production"' "$state/start.mjs" || fail 'the machine name was not kept'
+if node "$here/notebook/scripts/server-address.mjs" --has-public-ip; then
+  grep -q '"GODSPEED_WEB_ADDRESS":"https://' "$state/start.mjs" || fail 'automatic hostname discovery did not give the isolated installation an HTTPS address'
+  grep -q '"GODSPEED_WEB_PORT":"47843"' "$state/start.mjs" || fail 'the isolated installation did not keep its own web door'
+  [ -f "$state/https/notebook.caddy" ] || fail 'the isolated installation has no Caddy site of its own'
+  grep -q "127.0.0.1:$web_port" "$state/https/notebook.caddy" || fail 'the isolated Caddy site does not use its own web door'
+  systemctl --user is-active --quiet "${service%.service}-https.service" || fail 'the isolated HTTPS service is not running'
+  host=$(node "$here/notebook/scripts/server-address.mjs")
+  curl -fsS --noproxy '*' --cacert "$state/https/caddy/pki/authorities/local/root.crt" --resolve "$host:$https_port:127.0.0.1" "https://$host:$https_port/health" >/dev/null || fail 'the isolated HTTPS address does not answer'
+fi
 answers || fail 'the notebook does not answer'
-before=$(systemctl show -p MainPID --value "$service")
+before=$(service_command show -p MainPID --value "$service")
 # Copies earlier updates left (notebook/core/upgrade-copies.mjs): four whole ones, one that
 # stopped part-way, and a folder of the owner's own that no installer made.
 plant() { mkdir -p "$state/backups/$1" && echo '{"format":1,"files":[]}' > "$state/backups/$1/backup.json"; }
@@ -84,7 +119,7 @@ GODSPEED_SKIP_UI=1 install "$second"
 [ "$(cat "$state/previous-version")" = "$first" ] || fail 'the version before was not kept as the previous one'
 grep -q "versions/$second/" "$state/start.mjs" || fail 'the service still starts the old version'
 grep -q '"GODSPEED_DEVICE":"production"' "$state/start.mjs" || fail 'the upgrade renamed the machine'
-[ "$(systemctl show -p MainPID --value "$service")" != "$before" ] || fail 'the notebook was not restarted'
+[ "$(service_command show -p MainPID --value "$service")" != "$before" ] || fail 'the notebook was not restarted'
 answers || fail 'the upgraded notebook does not answer'
 [ -d "$state/versions/$first" ] || fail 'the previous version was removed'
 made=$(cd "$state/backups" && ls -d 2*-"$first" | sort | tail -1)
@@ -138,9 +173,9 @@ fourth=$(git -C "$work/product" rev-parse HEAD)
 status() { "$(ls -d "$state"/runtime/node-v*/bin/node | head -1)" -e 'try{process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).state)}catch{}' "$root/.godspeed/update/status.json"; }
 wait_for() { for _ in $(seq 1 120); do [ "$(status)" = "$1" ] && return 0; sleep 2; done; return 1; }
 handed_over() { GODSPEED_UPDATE_MODE=prepare GODSPEED_SKIP_UI=1 install "$1" || fail "the update to $1 was not prepared"; }
-running=$(systemctl show -p MainPID --value "$service")
+running=$(service_command show -p MainPID --value "$service")
 handed_over "$fourth"
-[ "$(systemctl show -p MainPID --value "$service")" = "$running" ] || fail 'preparing the update stopped the notebook'
+[ "$(service_command show -p MainPID --value "$service")" = "$running" ] || fail 'preparing the update stopped the notebook'
 [ "$(cat "$state/version")" = "$second" ] || fail 'preparing the update switched the version'
 [ -f "$root/.godspeed/update/switch.json" ] || fail 'the prepared update left nothing for start.mjs to take over'
 kill -USR2 "$(cat "$root/.godspeed/update/start.pid")"
@@ -167,8 +202,8 @@ answers || fail 'the notebook that ran before does not answer again'
 while IFS= read -r name; do [ -e "$state/backups/$name" ] || fail "the undone update removed $name"; done < "$work/kept"
 
 echo '== a notebook killed from outside comes back'
-sudo systemctl kill -s KILL "$service"
+kill_service
 sleep 8
-systemctl is-active --quiet "$service" || fail 'systemd did not restart a killed notebook'
+service_command is-active --quiet "$service" || fail 'systemd did not restart a killed notebook'
 answers || fail 'the restarted notebook does not answer'
 echo 'Installed, upgraded with the machine name kept, the note in the folder renamed and only its own copy made before the update, a Hermes that loads kept over one that does not, a failed update undone with every copy kept, an update handed over inside the service and one undone there, and restarted after a kill.'
