@@ -41,11 +41,9 @@ const ROUTES: RouteCheck[] = [
   { pattern: "/", urls: () => ["/"], redirectsTo: "/dashboard" },
   { pattern: "/dashboard", urls: () => ["/dashboard"] },
   { pattern: "/dashboard/chat", urls: () => ["/dashboard/chat"] },
-  { pattern: "/chat", urls: () => ["/chat"], redirectsTo: "/dashboard/chat" },
   { pattern: "/dashboard/control", urls: () => ["/dashboard/control"], redirectsTo: "/dashboard" },
   { pattern: "/dashboard/notes/*", urls: (s) => (s ? ["/dashboard/notes", `/dashboard/notes/${s.note}`] : ["/dashboard/notes"]) },
   { pattern: "/dashboard/goals", urls: () => ["/dashboard/goals"] },
-  { pattern: "/goals", urls: () => ["/goals"], redirectsTo: "/dashboard/goals" },
   { pattern: "/dashboard/settings", urls: () => ["/dashboard/settings"] },
   { pattern: "/settings", urls: () => ["/settings"] },
   { pattern: "/dashboard/settings/import", urls: () => ["/dashboard/settings/import"] },
@@ -72,6 +70,7 @@ const ROUTES: RouteCheck[] = [
   { pattern: "/collections/:slug", urls: () => [`/collections/${MISSING}`] },
   { pattern: "/trackers/habits/:id", urls: () => [`/trackers/habits/${MISSING}`] },
   { pattern: "/dashboard/graph", urls: () => ["/dashboard/graph"] },
+  { pattern: "/:name/*", urls: () => ["/timeline"], redirectsTo: "/dashboard/timeline" },
   { pattern: "*", urls: () => ["/no-such-page"] },
 ];
 
@@ -262,6 +261,21 @@ describe("the audit's rules on pages built for them", () => {
   it("reports a word spilling out of a narrow pill", async () => {
     expect(await audit(`<div style="display:inline-block;width:40px;white-space:nowrap">Kept on this computer only</div>`))
       .toEqual(['clipped: div "Kept on this computer only"']);
+  });
+
+  it("reports a label cut off by a narrower box around it", async () => {
+    expect(await audit(`<div style="width:80px;overflow:hidden"><span style="white-space:nowrap">Kept on this computer only</span></div>`))
+      .toEqual(['clipped: span "Kept on this computer only"']);
+  });
+
+  it("reports a label running past the edge of the window", async () => {
+    expect(await audit(`<span style="white-space:nowrap;font-size:40px">Kept on this computer only</span>`))
+      .toEqual(['clipped: span "Kept on this computer only"']);
+  });
+
+  it("reports a label running past the side of the page's main area", async () => {
+    expect(await audit(`<main style="width:200px"><span style="white-space:nowrap;font-size:24px">Kept on this computer only</span></main>`))
+      .toEqual(['clipped: span "Kept on this computer only"']);
   });
 
   it("reports an input whose placeholder does not fit", async () => {

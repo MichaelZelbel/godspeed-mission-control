@@ -650,7 +650,7 @@ export default function KnowledgeGraph() {
 
                 {/* Min strength */}
                 <div>
-                  <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  <h3 id="graph-min-strength" className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                     Min Strength: {filters.minStrength.toFixed(1)}
                   </h3>
                   <Slider
@@ -659,6 +659,7 @@ export default function KnowledgeGraph() {
                     max={1}
                     step={0.1}
                     onValueChange={([v]) => setFilters((f) => ({ ...f, minStrength: v }))}
+                    thumbProps={{ "aria-labelledby": "graph-min-strength" }}
                     className="w-full"
                   />
                 </div>
