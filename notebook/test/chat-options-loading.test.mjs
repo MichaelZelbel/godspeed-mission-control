@@ -52,16 +52,31 @@ test('AI usability is rechecked every five seconds in both directions',async t=>
  assert.equal((await readOptions()).usable,true);
  assert.equal((await readStatus()).runtimeConfigured,true);
 });
-test('overlapping availability reads share a failed health check result',async t=>{
- let rejectCheck,checkStarted;const started=new Promise(resolve=>{checkStarted=resolve;});
- const provider=Object.assign(async()=>({reply:'ok'}),{check:()=>{checkStarted();return new Promise((resolve,reject)=>{rejectCheck=reject;});}});
+test('overlapping availability reads share a failed health check result over a cached ready one, and a newer passing check restores ready',async t=>{
+ let now=100000,checks=0,optionReads=0,failNext=false,rejectCheck,checkStarted,secondArrived;
+ t.mock.method(Date,'now',()=>now);
+ const started=new Promise(resolve=>{checkStarted=resolve;}),arrived=new Promise(resolve=>{secondArrived=resolve;});
+ const provider=Object.assign(async()=>({reply:'ok'}),{
+  options:async()=>{optionReads++;if(failNext&&optionReads===3)secondArrived();return {current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]};},
+  check:()=>{checks++;if(!failNext)return Promise.resolve();checkStarted();return new Promise((resolve,reject)=>{rejectCheck=reject;});}});
  const {readOptions,readStatus}=await optionsFrom(t,provider,{defer:true});
+ // A passing check reports ready at once and is cached for the next five seconds.
+ assert.equal((await readOptions()).usable,true);assert.equal((await readStatus()).runtimeConfigured,true);assert.equal(checks,1);
+ // Five seconds later one shared check is held in flight while a second reader overlaps it, then the check fails.
+ failNext=true;now+=5000;
  const first=readOptions();await started;
- const second=readOptions();rejectCheck(new Error('Fictional private provider failure'));
+ const second=readOptions();await arrived;await new Promise(resolve=>setImmediate(resolve));
+ rejectCheck(new Error('Fictional private provider failure'));
  const results=await Promise.all([first,second]);
  assert.deepEqual(results.map(result=>result.usable),[false,false]);
+ assert.equal(checks,2,'the overlapping readers share one provider check');
+ assert.equal((await readOptions()).usable,false,'a later cached read keeps the failure');
  assert.equal((await readStatus()).runtimeConfigured,false);
+ assert.equal(checks,2);
  assert.doesNotMatch(JSON.stringify(results),/Fictional private provider failure/);
+ // Only a newer passing check restores ready.
+ failNext=false;now+=5000;
+ assert.equal((await readOptions()).usable,true);assert.equal((await readStatus()).runtimeConfigured,true);assert.equal(checks,3);
 });
 test('a refused chat returns plain guidance instead of provider diagnostics',async t=>{
  const provider=async()=>{throw Error('Model provider failed with HTTP 401: secret provider detail');};
