@@ -49,6 +49,7 @@ PREFIX = "gss1:"
 FOLDER = "step-buttons"
 CALLBACK = "waiting-step"
 QUEUE = "step-questions"
+REMINDERS = "step-reminders"
 EVERY = 1            # seconds between looks at the hand-off folder
 SENT_WITHIN = 60     # seconds to wait for the scheduled send before keeping the file for the next look
 STEP_ID = re.compile(r"^step-[0-9a-f-]{36}$")
@@ -118,17 +119,19 @@ class StepButtons(buttons.YesNoButtons):
     def post_waiting(self):
         """Posts the buttons for every question the notebook handed over; a file stays until it is posted."""
         root = self.root()
-        folder = os.path.join(root, ".godspeed", QUEUE) if root else None
-        if not folder or not os.path.isdir(folder):
-            return
+        folders = [(os.path.join(root, ".godspeed", QUEUE), "sent"),
+                   (os.path.join(root, ".godspeed", REMINDERS), "reminded")] if root else []
         files = []
-        for name in os.listdir(folder):
-            file = os.path.join(folder, name)
-            try:
-                files.append((os.path.getmtime(file), file))
-            except OSError:
+        for folder, verb in folders:
+            if not os.path.isdir(folder):
                 continue
-        for _, file in sorted(files):
+            for name in os.listdir(folder):
+                file = os.path.join(folder, name)
+                try:
+                    files.append((os.path.getmtime(file), file, verb))
+                except OSError:
+                    continue
+        for _, file, verb in sorted(files):
             try:
                 with open(file, encoding="utf-8") as f:
                     item = json.load(f)
@@ -144,7 +147,7 @@ class StepButtons(buttons.YesNoButtons):
                     elif waiting and self.post(item["id"], item["text"]):
                         # The file goes even if the notebook cannot be told: an unanswerable step is
                         # better than its question asked twice.
-                        self.sent(item["id"])
+                        self.sent(item["id"], verb)
                         os.remove(file)
             except Exception:
                 continue
@@ -166,15 +169,16 @@ class StepButtons(buttons.YesNoButtons):
         except Exception:
             return None
 
-    def sent(self, step_id):
+    def sent(self, step_id, verb="sent"):
         try:
-            run = self.run("sent", step_id)
+            run = self.run(verb, step_id)
             failed = run is None or run.returncode != 0
         except Exception:
             failed = True
         if failed:
             logging.getLogger(__name__).warning("Step %s: its question went out, but the notebook was not told; "
                                                 "a yes or no to it changes nothing.", step_id)
+        return not failed
 
     def factory(self, native, adapter):
         super().factory(native, adapter)

@@ -6,7 +6,8 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {Store} from '../core/records/store.mjs';
-import {answerStep,openStep,STEP_QUESTIONS} from '../core/waiting-steps.mjs';
+import {cardSent} from '../core/background-reports.mjs';
+import {answerStep,openStep,remindWaitingSteps,STEP_QUESTIONS} from '../core/waiting-steps.mjs';
 
 for(const key of Object.keys(process.env))if(/^GODSPEED_/.test(key))delete process.env[key];
 const here=path.dirname(fileURLToPath(import.meta.url)),stepScript=path.join(here,'..','bin','godspeed-step.mjs');
@@ -47,4 +48,17 @@ test('no Telegram client: no message goes out and the hand-off waits',opts,t=>sc
 test('a failed button send sends no plain copy and keeps the hand-off for the next look',opts,t=>scenario(t,'send_fails',['The bot stopped.']));
 test('while the notebook cannot say whether the step waits, no card goes out and the hand-off stays',opts,t=>scenario(t,'notebook_cannot_say',['The bot stopped.']));
 test('an expired hand-off is dropped and gets no buttons',opts,t=>scenario(t,'expired',['The bot stopped.']));
+test('a Telegram reminder is marked only after its card went out, and its buttons still answer the step',opts,t=>scenario(t,'reminder',['The bot stopped.'],async(store,[id])=>{
+ assert.equal(await cardSent(store,id),true);
+ // Six hours ten minutes after the question, as of now: the gateway reads the hand-off's expiry against the real clock.
+ const now=new Date(),step=store.get('approvals',id);store.save('approvals',{...step,sent_at:new Date(now.getTime()-(6*60+10)*60000).toISOString()});
+ remindWaitingSteps(store,{at:now});assert.equal(store.get('approvals',id).reminded_at,undefined);
+}));
+test('a queued reminder expires at seven days and the delayed gateway discards it',opts,t=>scenario(t,'expired_reminder',['The bot stopped.'],async(store,[id])=>{
+ assert.equal(await cardSent(store,id),true);
+ const now=new Date(),sent=new Date(now.getTime()-7*24*3600000+60000),step=store.get('approvals',id);store.save('approvals',{...step,sent_at:sent.toISOString()});
+ remindWaitingSteps(store,{at:now});
+ const item=JSON.parse(fs.readFileSync(path.join(store.state,'step-reminders',id+'.json')));
+ assert.equal(item.expires_at,new Date(sent.getTime()+7*24*3600000).toISOString());
+}));
 test('the installed plugin registers the step buttons with Telegram and closes them on unload',opts,t=>scenario(t,'registered',['The bot stopped.']));

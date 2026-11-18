@@ -15,6 +15,7 @@ import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkA
 import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,CHAT_TIDY_SCHEDULE,CHAT_TIDY_WHAT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,MAIL_COUNT_JOB,MAIL_COUNT_SCRIPT,MAIL_COUNT_WHAT,WORKOUTS_JOB,WORKOUTS_SCRIPT,WORKOUTS_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
 import {holdQueuedNotices} from './notices.mjs';
 import {certifyRoutineRuns} from './background-reports.mjs';
+import {remindWaitingSteps} from './waiting-steps.mjs';
 import {writeRoutinePromise} from './routine-promises.mjs';
 import {switchable,switchedOn,setRoutineSwitch,switchId} from './routine-switches.mjs';
 import {connectionCheckWanted} from './connection-check.mjs';
@@ -724,6 +725,7 @@ export class NativeScheduler{
   // A setup asking inside a running tick or the cooldown still hears whether the connection check could be made.
   if(this.ticking){if(raise){await this.current?.catch(()=>null);await this.followConnectionCheck();}return records;}
   const now=this.now();if(now-(this.lastTick||0)<60000){this.onProgress?.();if(raise)await this.followConnectionCheck();return records;}
+  if(now-(this.lastReminderSweep||0)>=3600000){try{remindWaitingSteps(this.store,{at:new Date(now),onFailure:error=>this.onFailure?.(error)});}catch(error){try{this.onFailure?.(error);}catch{}}this.lastReminderSweep=now;}
   if(this.updater)await beatWhile(this.updater.tick(this.store.get('settings','installation')?.timezone),()=>this.onProgress?.(),{limitMs:this.updateLimit,every:this.beatEvery}).catch(error=>console.error('Godspeed Mission Control: the Hermes update could not be checked: '+String(error?.message||error)));
   if(this.chatHealth)await beatWhile(this.chatHealth.tick(),()=>this.onProgress?.(),{limitMs:CHAT_CHECK_LIMIT,every:this.beatEvery}).catch(error=>console.error('Godspeed Mission Control: the chat check could not run: '+String(error?.message||error)));
   const release=this.lifecycle.acquire('routine tick');if(!release)return records;
