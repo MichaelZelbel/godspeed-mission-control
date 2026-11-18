@@ -7,7 +7,7 @@ import {ruleRefusals} from './briefing-cut.mjs';
 import {queueNotice} from './notices.mjs';
 import {deliveryFor} from './notebook-routines.mjs';
 import {finalReply,telegramInHermes} from './starting-routines.mjs';
-import {asksForCode,stampCard,stampDelivered,stepsForWords,STEP_QUESTION_MAX_AGE_MS} from './waiting-steps.mjs';
+import {asksForCode,reminderText,stampCard,stampDelivered,stampReminder,stepsForWords,STEP_QUESTION_MAX_AGE_MS} from './waiting-steps.mjs';
 
 // BACKGROUND WORK TELLS THE OWNER IN THE CHAT'S VOICE, AND THE CHAT KNOWS IT (4 November 2026, #198).
 //
@@ -95,6 +95,14 @@ export async function cardSent(store,id){
  const asker=step.asked_by?.name||null;
  const receipt=await recordReport(store,{text:step.about+' '+step.question,about:asker||'',steps:[id],routine:asker,written:'routine',delivery:'telegram'});
  return (await stampCard(store,id,receipt)).length>0;
+}
+
+// The gateway delivered the one follow-up card for an already delivered question.
+export async function reminderSent(store,id){
+ const step=store.get('approvals',id);
+ if(step?.asked_in!=='telegram'||step.status!=='pending'||!step.sent_at||step.reminded_at)return false;
+ const receipt=await recordReport(store,{text:reminderText(step),about:step.asked_by?.name||'',steps:[id],routine:step.asked_by?.name||null,written:'routine',delivery:'telegram'});
+ return stampReminder(store,id,receipt);
 }
 
 // A ROUTINE THE NOTEBOOK RUNS ITSELF CERTIFIES ITS QUESTIONS TOO (11 November 2026, #262, #372).

@@ -201,19 +201,21 @@ export function MediaDetailDialog({ item, noteTitle, missingHere = false, presen
           </div>
 
           <div className="px-4 py-3 border-t border-border flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => {
-                onClose();
-                navigate(`/dashboard/notes/${item.note_id}`);
-              }}
-            >
-              <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-              Open note
-            </Button>
-            {!missingHere && (item.analysis_status === "failed" || item.analysis_status === "complete" || previewFailed) && (
+            {item.note_id && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => {
+                  onClose();
+                  navigate(`/dashboard/notes/${item.note_id}`);
+                }}
+              >
+                <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                Open note
+              </Button>
+            )}
+            {!missingHere && item.analysis_status !== "not_analyzed" && (item.analysis_status === "failed" || item.analysis_status === "complete" || previewFailed) && (
               <Button variant="secondary" size="sm" disabled={isPending} onClick={handleRetry}>
                 {isPending ? (
                   <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -244,6 +246,9 @@ function StatusBadge({ status }: { status: string }) {
         <Loader2 className="h-3 w-3 animate-spin" /> processing
       </span>
     );
+  }
+  if (status === "not_analyzed") {
+    return <span className="text-muted-foreground">not analyzed yet</span>;
   }
   if (status === "failed") {
     return (
