@@ -46,7 +46,7 @@
   },
   {
     "name": "godspeed-coach",
-    "commit": "b134abffccb7fe7b33f4d971c802db8d1ff4f00f",
+    "commit": "7d25fb0db5d57f8db82f79f4392b093267c17015",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -70,6 +70,8 @@
       "lib/prep-receipts.mjs",
       "lib/prep.mjs",
       "lib/progress.mjs",
+      "lib/questions.mjs",
+      "lib/rhythm-change.mjs",
       "lib/settings.mjs",
       "lib/setup.mjs",
       "lib/sync.mjs",
@@ -95,6 +97,7 @@
       "test/prep.test.mjs",
       "test/prepared.test.mjs",
       "test/progress.test.mjs",
+      "test/questions.test.mjs",
       "test/readers.test.mjs",
       "test/setup.test.mjs",
       "test/sync-burst.test.mjs",
