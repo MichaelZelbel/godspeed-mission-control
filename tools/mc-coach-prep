@@ -74,7 +74,7 @@
 # coach, Node.js or mc-run is missing.
 set -uo pipefail
 
-GODSPEED=""; TODAY=""; BUDGET=120; TIMEOUT=2700; REVIEW_TIMEOUT=900; MAXTRIES=3; DRY=0; AREA=""; TALK=""
+GODSPEED=""; TODAY=""; BUDGET=120; TIMEOUT=2700; REVIEW_TIMEOUT=900; MAXTRIES=3; DRY=0; OPEN_TALK=0; AREA=""; TALK=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --godspeed) GODSPEED="${2:-}"; shift 2 ;;
@@ -86,6 +86,7 @@ while [ $# -gt 0 ]; do
     --area) AREA="${2:-}"; shift 2 ;;
     --talk) TALK="${2:-}"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
+    --open-talk) OPEN_TALK=1; shift ;;
     -h|--help) sed -n '2,68p' "$0"; exit 0 ;;
     *) echo "mc-coach-prep: I do not know the argument $1" >&2; exit 2 ;;
   esac
@@ -428,7 +429,14 @@ while IFS=$'\t' read -r AT A TI D TM ZONE F PR NOTE <&3; do
   if [ "$OK" -eq 1 ]; then
     rm -f "${ASIDE:?}.md" "${ASIDE:?}.evidence.json" "${ASIDE:?}.review.json"; WROTE+=("$F")
     [ -n "$RESEARCH" ] && WROTE+=("${F%.md}.evidence.json" "${F%.md}.review.json")
-    echo "$A $D: prepared ($F)${RESEARCH:+, its review passed on try $TRY}: $(last_paragraph "$ANSWER")" >> "$SUMMARY"
+    # The installed Run-now wrapper asks for the product-owned waiting record here instead of
+    # interpreting summary.txt afterwards. The guarded opener is idempotent on retry.
+    if [ "$OPEN_TALK" -eq 0 ] || OPENED="$(coach talk open "$A" --date "$D" --from-prep "$F" 2>&1)"; then
+      echo "$A $D: prepared ($F)${RESEARCH:+, its review passed on try $TRY}: $(last_paragraph "$ANSWER")" >> "$SUMMARY"
+    else
+      echo "$A $D: prepared, but its talk record could not be opened ($(printf '%s' "$OPENED" | tr '\n' ' ' | cut -c1-240))" >> "$SUMMARY"
+      BAD=$((BAD+1))
+    fi
   else
     [ -n "$RESEARCH" ] || WHY="$(coach prep-check "$A" --date "$D" 2>&1 | tr -d '\r' | tail -1)"
     if [ -n "$BEFORE" ]; then

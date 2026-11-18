@@ -556,7 +556,7 @@ def coach_prep(c):
         return went_wrong(c, "coach-prep", day, "The coaching talk preparation needs Git Bash on this computer, and it was not found, so no talk was prepared tonight.")
     try:
         r = run([shell, posix(os.path.join(c["tools"], "mc-coach-prep")), "--godspeed", posix(c["root"]), "--date", day,
-                 "--budget-minutes", str(PREP_MINUTES)], c, env, timeout=PREP_MINUTES * 60 + 900)
+                 "--budget-minutes", str(PREP_MINUTES), "--open-talk"], c, env, timeout=PREP_MINUTES * 60 + 900)
     except subprocess.TimeoutExpired:
         return went_wrong(c, "coach-prep", day, "Tonight's coaching talk preparation took longer than its time and was stopped.")
     # 2 and 3 mean it never started.
