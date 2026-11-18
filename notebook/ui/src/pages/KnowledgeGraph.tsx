@@ -567,15 +567,15 @@ export default function KnowledgeGraph() {
       <SEOHead title="Note Graph - Godspeed Mission Control" noIndex />
 
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-background shrink-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-border bg-background shrink-0">
         <div>
           <h1 className="text-lg font-display font-bold">Note Graph</h1>
           <p className="text-xs text-muted-foreground">
             {processedGraph.nodes.length} nodes · {processedGraph.links.length} edges
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative w-56">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-56">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input aria-label="Search nodes"
               value={filters.searchTerm}
@@ -634,12 +634,13 @@ export default function KnowledgeGraph() {
                     ].map(({ key, label, color }) => (
                       <div key={key} className="flex items-center gap-2">
                         <Switch
+                          id={`graph-${key}`}
                           checked={(filters as any)[key]}
                           onCheckedChange={(v) => setFilters((f) => ({ ...f, [key]: v }))}
                           className="scale-75"
                         />
                         <div className="h-2 w-4 rounded-full" style={{ background: color }} />
-                        <Label className="text-[11px]">{label}</Label>
+                        <Label htmlFor={`graph-${key}`} className="text-[11px]">{label}</Label>
                       </div>
                     ))}
                   </div>
@@ -701,45 +702,49 @@ export default function KnowledgeGraph() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Switch
+                        id="graph-showOrphans"
                         checked={filters.showOrphans}
                         onCheckedChange={(v) => setFilters((f) => ({ ...f, showOrphans: v }))}
                         className="scale-75"
                       />
-                      <Label className="text-[11px]">Show orphan notes</Label>
+                      <Label htmlFor="graph-showOrphans" className="text-[11px]">Show orphan notes</Label>
                     </div>
                     <div className="flex items-center gap-2">
                       <Switch
+                        id="graph-sizeMode"
                         checked={filters.sizeMode === "connections"}
                         onCheckedChange={(v) =>
                           setFilters((f) => ({ ...f, sizeMode: v ? "connections" : "uniform" }))
                         }
                         className="scale-75"
                       />
-                      <Label className="text-[11px]">Size by connections</Label>
+                      <Label htmlFor="graph-sizeMode" className="text-[11px]">Size by connections</Label>
                     </div>
                     <div className="flex items-center gap-2">
                       <Switch
+                        id="graph-showHiddenFromAi"
                         checked={filters.showHiddenFromAi}
                         onCheckedChange={(v) => setFilters((f) => ({ ...f, showHiddenFromAi: v }))}
                         className="scale-75"
                       />
-                      <Label className="text-[11px]" title="Include notes you've hidden from AI features">
+                      <Label htmlFor="graph-showHiddenFromAi" className="text-[11px]" title="Include notes you've hidden from AI features">
                         Show hidden from AI
                       </Label>
                     </div>
                     <div className="flex items-center gap-2">
                       <Switch
+                        id="graph-showMissionControl"
                         checked={filters.showMissionControl}
                         onCheckedChange={(v) => setFilters((f) => ({ ...f, showMissionControl: v }))}
                         className="scale-75"
                       />
-                      <Label className="text-[11px]" title="Include files copied in from a connected Mission Control">
+                      <Label htmlFor="graph-showMissionControl" className="text-[11px]" title="Include files copied in from a connected Mission Control">
                         Show Mission Control files
                       </Label>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[11px]">Labels</Label>
-                      <div className="flex gap-1">
+                      <p id="graph-label-mode" className="text-[11px] font-medium leading-none">Labels</p>
+                      <div role="group" aria-labelledby="graph-label-mode" className="flex gap-1">
                         {(["auto", "hover", "always", "never"] as const).map((mode) => (
                           <button
                             key={mode}

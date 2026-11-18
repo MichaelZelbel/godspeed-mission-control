@@ -131,7 +131,7 @@ export function SelfRecognitionSection() {
           </div>
           <div className="flex gap-2">
             <Input
-              placeholder="Add nickname or alias (e.g. Mike)"
+              placeholder="Add a nickname"
               value={newAlias}
               onChange={(e) => setNewAlias(e.target.value)}
               onKeyDown={(e) => {

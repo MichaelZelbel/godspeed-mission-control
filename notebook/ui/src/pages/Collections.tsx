@@ -254,8 +254,8 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
           </div>
 
           <div className="space-y-2">
-            <Label>Icon</Label>
-            <div className="flex flex-wrap gap-2">
+            <p id="collection-icon-label" className="text-sm font-medium leading-none">Icon</p>
+            <div role="group" aria-labelledby="collection-icon-label" className="flex flex-wrap gap-2">
               {emojiOptions.map((emoji) => (
                 <button key={emoji} type="button" className={cn("flex h-9 w-9 items-center justify-center rounded-md border text-lg transition-colors hover:bg-accent", values.icon === emoji && "border-primary bg-primary/10")} onClick={() => updateValue("icon", emoji)}>
                   {emoji}
@@ -273,8 +273,8 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
           </div>
 
           <div className="space-y-2">
-            <Label>Visibility</Label>
-            <RadioGroup value={values.visibility} onValueChange={(value) => updateValue("visibility", value as "private" | "personal")}>
+            <p id="collection-visibility-label" className="text-sm font-medium leading-none">Visibility</p>
+            <RadioGroup aria-labelledby="collection-visibility-label" value={values.visibility} onValueChange={(value) => updateValue("visibility", value as "private" | "personal")}>
               <Label className="flex items-center gap-2 rounded-md border p-3"><RadioGroupItem value="private" /> Private (only me)</Label>
               <Label className="flex items-center gap-2 rounded-md border p-3"><RadioGroupItem value="personal" /> Personal (visible to my AI agents)</Label>
             </RadioGroup>
