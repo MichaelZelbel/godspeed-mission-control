@@ -99,7 +99,10 @@ export class SearchIndex {
       for (const suffix of ['', '-wal', '-shm']) if (fs.existsSync(this.file + suffix)) fs.renameSync(this.file + suffix, this.file + '.corrupt-' + at + suffix);
       start(); this.recovered = true; this.fresh = true;
     }
-    if (background) this.ready = this.rebuildBackground().catch(() => false);
+    if (background) {
+      this.initialPublication = this.rebuildBackground();
+      this.ready = this.initialPublication.catch(() => false);
+    }
     else this.rebuild();
   }
   statements() {

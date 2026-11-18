@@ -83,6 +83,13 @@ import {NO_AI_STATUS,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../cor
 // behind itself as no backup (core/backup-ai.mjs).
 const SAME_SERVICE='That is the service your main AI uses already. A backup steps in when the main AI fails, so it has to be another service.';
 const BACKUP_SERVICE='That is the service your backup AI uses. Remove the backup first, or choose another service for your main AI.';
+export const startupTrace=(event,now=new Date())=>`${now.toISOString()} startup ${event}`;
+export const startupReadiness=publication=>{
+  const state={status:503,body:{ready:false}};
+  const markReady=()=>{state.status=200;state.body={ready:true};};
+  publication.then(markReady,()=>{});
+  return state;
+};
 export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
 const providerView=config=>({configured:true,url:baseAddress(config.url),model:config.model,key:!!config.key,...(typeof config.routines==='boolean'?{routines:config.routines}:{})});
 const readSavedProvider=file=>{
@@ -136,6 +143,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // The store keeps every record in memory and re-reads only the files its
   // watcher names; the index follows the store's changes row by row.
   const store = new Store(root,{device,watch:true}), index = new SearchIndex(store,{background:true}), query = new QueryService(store), sync = new FileSync(store);
+  const readiness=startupReadiness(index.initialPublication);
+  index.initialPublication.then(
+    ()=>console.error(startupTrace('index-published')),
+    error=>console.error(startupTrace('index-publication-failed'),error?.message||error)
+  );
   const stopIndexing=store.onChange(({changed,gone})=>{try{index.update(changed);index.forget(gone);}catch{}});
   // Meaning search, when a service is connected (Settings, or GODSPEED_EMBEDDINGS_*).
   const connectMeaning=config=>{index.meaning?.close();index.meaning=new MeaningIndex(index,{config});};
@@ -306,6 +318,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         pairCodes.delete(input.code);const key=randomBytes(32).toString('hex');pairKeys.push({id:randomBytes(8).toString('hex'),hash:hash(key),created_at:new Date().toISOString()});savePairKeys();return send(res,200,{key,device});
       }
       if (route === '/health') return send(res, 200, { ok: true, format: 1, version: VERSION,instance,scheduler_heartbeat:schedulerHeartbeat,chat:chatStatus(store) });
+      if (route === '/ready') return send(res,readiness.status,readiness.body);
       // The token in this address is the phone's credential, so nothing on this path reaches the
       // generic catch below, which logs the address; no line here carries the token, a health
       // value or the sender's address.
@@ -646,7 +659,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // every record and every workspace file to rebuild it, which is what a
       // save used to wait for, cost more than the save; the file watcher still
       // arms a full refresh for whatever other programs write.
-      if (route === '/api/query' && req.method === 'POST') { const input=JSON.parse(await body(req)),result=await query.executeAsync(input); if(input.table==='notes'&&Array.isArray(result.data)&&(input.operation==='delete'||[].concat(input.values||[]).some(v=>v?.is_trashed===true||v?.removed_at)))await retireShares(store,result.data.map(n=>n.id)); return send(res, 200, result); }
+      if (route === '/api/query' && req.method === 'POST') { if(!firstQueryTraced){firstQueryTraced=true;console.error(startupTrace('first-authenticated-query'));} const input=JSON.parse(await body(req)),result=await query.executeAsync(input); if(input.table==='notes'&&Array.isArray(result.data)&&(input.operation==='delete'||[].concat(input.values||[]).some(v=>v?.is_trashed===true||v?.removed_at)))await retireShares(store,result.data.map(n=>n.id)); return send(res, 200, result); }
       if(route==='/api/chat-state'&&req.method==='POST'){
         const input=JSON.parse(await body(req));
         return send(res,200,await saveConversationState(store,input,{asyncWriter:true}));
@@ -777,9 +790,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: shown || 'Something went wrong on the server. The details are in its log.', ...(shown && e.code ? { code: e.code } : {}) });
     }
   };
+  let firstQueryTraced=false;
   const listen = (server, port, host) => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   const server = http.createServer(handle(remote, auth));
   await listen(server, port, host);
+  console.error(startupTrace('main-door-listening'));
   // The link an assistant gives when asked for the notebook (get_notebook_link), with the port this door really has.
   domains.notebookAddress = () => notebookAddress({ port: server.address().port });
   // The food tracker's table (D-321 step 5): a notebook without it (the Windows set-up and the

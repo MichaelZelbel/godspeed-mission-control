@@ -6,9 +6,53 @@ import path from 'node:path';
 import {performance} from 'node:perf_hooks';
 import {Store,encode} from '../core/records/store.mjs';
 import {SearchIndex} from '../core/index/search.mjs';
-import {createService} from '../server/main.mjs';
+import {createService,startupReadiness,startupTrace} from '../server/main.mjs';
 
 const temporary=()=>fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-background-index-'));
+test('startup readiness follows initial publication and traces contain only time and event',async()=>{
+  let publish;const publication=new Promise(resolve=>{publish=resolve;}),readiness=startupReadiness(publication);
+  assert.deepEqual({status:readiness.status,body:readiness.body},{status:503,body:{ready:false}});
+  publish();await publication;await Promise.resolve();
+  assert.deepEqual({status:readiness.status,body:readiness.body},{status:200,body:{ready:true}});
+  assert.equal(startupTrace('index-published',new Date('2026-11-17T12:34:56.789Z')),'2026-11-17T12:34:56.789Z startup index-published');
+  let fail;const failed=new Promise((resolve,reject)=>{fail=reject;}),failedReadiness=startupReadiness(failed);
+  fail(new Error('fictional publication failure'));await failed.catch(()=>{});await Promise.resolve();
+  assert.deepEqual({status:failedReadiness.status,body:failedReadiness.body},{status:503,body:{ready:false}});
+});
+
+test('service readiness stays pending until its initial index publication completes',async()=>{
+  const original=SearchIndex.prototype.readBackground;let entered,release;
+  const started=new Promise(resolve=>{entered=resolve;}),held=new Promise(resolve=>{release=resolve;});
+  SearchIndex.prototype.readBackground=async function(){entered();await held;return original.call(this);};
+  const root=temporary();let service;
+  try{
+    service=await createService({root,port:0});await started;
+    const url=`http://127.0.0.1:${service.address.port}`;
+    const pending=await fetch(url+'/ready');assert.equal(pending.status,503);assert.deepEqual(await pending.json(),{ready:false});
+    release();await service.index.initialPublication;
+    const ready=await fetch(url+'/ready');assert.equal(ready.status,200);assert.deepEqual(await ready.json(),{ready:true});
+  }finally{
+    SearchIndex.prototype.readBackground=original;release?.();
+    if(service)await service.close();fs.rmSync(root,{recursive:true,force:true});
+  }
+});
+
+test('failed initial index publication stays unready and has a failure trace',async()=>{
+  const original=SearchIndex.prototype.readBackground,originalError=console.error,logs=[];
+  SearchIndex.prototype.readBackground=async()=>{throw new Error('fictional index read failure');};
+  console.error=(...parts)=>logs.push(parts.join(' '));
+  const root=temporary();let service;
+  try{
+    service=await createService({root,port:0});await service.index.ready;await Promise.resolve();
+    const response=await fetch(`http://127.0.0.1:${service.address.port}/ready`);
+    assert.equal(response.status,503);assert.deepEqual(await response.json(),{ready:false});
+    assert.ok(logs.some(line=>/^\d{4}-\d{2}-\d{2}T.*Z startup index-publication-failed fictional index read failure$/.test(line)));
+    assert.equal(logs.some(line=>line.includes('startup index-published')),false);
+  }finally{
+    SearchIndex.prototype.readBackground=original;console.error=originalError;
+    if(service)await service.close();fs.rmSync(root,{recursive:true,force:true});
+  }
+});
 test('background refresh reads changed bytes with restored timestamps, skips unchanged writes and retains exclusions',async()=>{
   const root=temporary(),store=new Store(root),note=store.save('notes',{id:'fictional-note',title:'Fictional',content:'Alpha'}),index=new SearchIndex(store);
   try{
@@ -55,6 +99,8 @@ test('actual file indexing leaves static and authentication requests responsive'
     await refresh;
     t.diagnostic(`1500 real files: unchanged synchronous refresh ${syncMs.toFixed(1)}ms, queued auth request ${syncRequestMs.toFixed(1)}ms; changed background ${ (performance.now()-start).toFixed(1)}ms; maximum static/auth/health request group ${maxMs.toFixed(1)}ms; ${whileReading} groups served during disk reads`);
     assert.equal(service.index.search('changed-background-marker').length,1);
+    assert.equal((await fetch(url+'/health')).status,200);await service.index.ready;
+    const ready=await fetch(url+'/ready');assert.equal(ready.status,200);assert.deepEqual(await ready.json(),{ready:true});
     assert.ok(whileReading>=2,'requests must complete while actual disk indexing is still in progress');assert.ok(maxMs<1200,`request group stalled for ${maxMs}ms`);
   }finally{await service.close();fs.rmSync(root,{recursive:true,force:true});}
 });
