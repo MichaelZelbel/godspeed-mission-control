@@ -47,6 +47,16 @@ it('refreshes an open chat in the background when AI availability changes',async
   expect(screen.getByText('Your AI could not be used')).toBeInTheDocument();
 });
 
+it('replaces stale unavailable guidance when an open composer recovers the AI',async()=>{
+  let options={connected:true,usable:false};
+  vi.stubGlobal('fetch',vi.fn(async()=>response(options)));
+  wrap(<ChatConnectionEmptyState ready={<div>Ready to chat</div>}/>);
+  await vi.waitFor(()=>expect(screen.getByText('Your AI could not be used')).toBeInTheDocument());
+  options={connected:true,usable:true};
+  await act(async()=>window.dispatchEvent(new Event('chat-ai-options-changed')));
+  await vi.waitFor(()=>expect(screen.getByText('Ready to chat')).toBeInTheDocument());
+});
+
 for(const [name,show] of surfaces){
   it(`${name} shows setup guidance with no AI`,async()=>{
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}):response({data:[]})));

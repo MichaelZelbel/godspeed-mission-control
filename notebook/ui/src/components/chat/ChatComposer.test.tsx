@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import '@testing-library/jest-dom/vitest';
@@ -15,7 +15,7 @@ function show(){
 }
 // jsdom has no AbortSignal.timeout or AbortSignal.any, which the model loader uses in browsers; these stand-ins never fire.
 beforeEach(()=>{const S=AbortSignal as any;S.timeout??=()=>new AbortController().signal;S.any??=(signals:AbortSignal[])=>signals[0];});
-afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+afterEach(()=>{cleanup();vi.useRealTimers();vi.unstubAllGlobals();});
 
 it('with no AI connected the model picker says so and both pickers are off',async()=>{
  answer({connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]});show();
@@ -37,6 +37,27 @@ it('a connected AI keeps its model and effort choices',async()=>{
  const props=show();
  await waitFor(()=>expect(props.onModel).toHaveBeenCalledWith('fictional-model'));
  expect(screen.getByRole('option',{name:'fictional-model'})).toBeInTheDocument();expect(screen.getByRole('option',{name:'other-model'})).toBeInTheDocument();
+ expect(screen.getByRole('combobox',{name:'Model'})).toBeEnabled();
+});
+
+it('clears an already selected model when the connected AI is unusable',async()=>{
+ answer({connected:true,usable:false,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]});
+ const props={value:'',onChange(){},onSend(){},onStop(){},busy:false,files:[],onFiles(){},model:'fictional-model',effort:'high',onModel:vi.fn(),onEffort:vi.fn(),reply:'',onError(){}};
+ const {rerender}=render(<ChatComposer {...props}/>);
+ await waitFor(()=>expect(props.onModel).toHaveBeenCalledWith(''));
+ expect(props.onEffort).toHaveBeenCalledWith('');
+ rerender(<ChatComposer {...props} model="" effort=""/>);
+ expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('AI unavailable');
+ expect(screen.getByRole('combobox',{name:'Model'})).toBeDisabled();
+});
+
+it('refreshes an already-open chat when AI availability changes',async()=>{
+ vi.useFakeTimers({toFake:['setInterval','clearInterval']});let available=false;
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(available?{connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}:{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]}),{headers:{'Content-Type':'application/json'}})));
+ const props=show();
+ await waitFor(()=>expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('No AI connected'));
+ available=true;await act(async()=>{await vi.advanceTimersByTimeAsync(5000);});
+ await waitFor(()=>expect(props.onModel).toHaveBeenLastCalledWith('fictional-model'));
  expect(screen.getByRole('combobox',{name:'Model'})).toBeEnabled();
 });
 
