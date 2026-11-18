@@ -186,7 +186,7 @@ export class Scheduler {
     // A read that found nothing to say leaves no receipt: the job's next run
     // records that it ran. After a failure the next success keeps its receipt,
     // the evidence a repair waits for.
-    const quiet=quietReads.has(job.kind)&&!job.outward&&!recovery&&result.silent&&!result.record_id&&!(job.retry_count>0)&&(job.last_outcome===undefined||job.last_outcome==='verified');
+    const quiet=quietReads.has(job.kind)&&!job.outward&&!recovery&&result.silent&&!result.record_id&&!result.domains?.some(domain=>domain.ok===false)&&!(job.retry_count>0)&&(job.last_outcome===undefined||job.last_outcome==='verified');
     let next,invalid=null;
     await this.store.withLockAsync(()=>{
       const current=this.store.get('jobs',job.id),records=[],removeKeys=[];

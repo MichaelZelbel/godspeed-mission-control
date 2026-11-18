@@ -32,7 +32,7 @@ test('RDAP fallback and total failure preserve the latest successful state',asyn
  await procedure({kind:'domain-watch'},{store,query,fetcher:async url=>{called.push(String(url));if(called.length===1)throw Error('offline');return rdap(['redemptionPeriod']);}});
  assert.deepEqual(called,['https://rdap.org/domain/wanted.org','https://www.rdap.net/domain/wanted.org']);
  const before=store.list('domain_watch_observations').length,result=await procedure({kind:'domain-watch'},{store,query,fetcher:async()=>{throw Error('offline');}});
- assert.equal(result.verified,false);assert.equal(result.domains[0].ok,false);assert.equal(store.list('domain_watch_observations').length,before);assert.equal(store.list('domain_watches')[0].state,'redemption');assert.equal(store.list('notifications').length,0);
+ assert.equal(result.verified,true);assert.equal(result.domains[0].ok,false);assert.equal(store.list('domain_watch_observations').length,before);assert.equal(store.list('domain_watches')[0].state,'redemption');assert.equal(store.list('notifications').length,0);
 });
 
 test('.net uses Verisign and domain lifecycle uses one six-hour sweeper',async()=>{
@@ -51,7 +51,7 @@ test('the scheduler runs domain watches without page-topic due rules and schedul
  await scheduler.tick(at);assert.equal(store.list('domain_watch_observations').length,1);assert.equal(Date.parse(store.get('jobs','domain-watch-sweeper').next_run),at+21600000);
 });
 
-test('the scheduler delivers a saved transition through Telegram and reports a total outage as failed',async()=>{
+test('the scheduler delivers a saved transition through Telegram and retries a total outage next slot',async()=>{
  const {store,query}=setup(),at=Date.parse('2026-11-17T12:00:00Z');store.save('settings',{id:'installation',owner:store.device,timezone:'UTC',delivery:'telegram'});addDomainWatch(store,'delivery.test');
  await procedure({kind:'domain-watch'},{store,query,fetcher:async()=>rdap(['active'])});store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at).toISOString()});
  const sent=[],telegram=new Telegram({store,domains:null,token:'token',owner:'1',transport:async(_url,input)=>{sent.push(JSON.parse(String(input.body)));return new Response(JSON.stringify({ok:true,result:{message_id:7}}),{status:200,headers:{'Content-Type':'application/json'}});}});
@@ -60,7 +60,7 @@ test('the scheduler delivers a saved transition through Telegram and reports a t
  store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at+21600000).toISOString()});scheduler.executor=job=>procedure(job,{store,query,fetcher:async()=>rdap(['pendingDelete'])});
  await scheduler.tick(at+21600000);assert.equal(sent.length,1);
  store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at+43200000).toISOString()});scheduler.executor=job=>procedure(job,{store,query,fetcher:async()=>{throw Error('offline');}});
- await scheduler.tick(at+43200000);assert.equal(store.get('jobs','domain-watch-sweeper').state,'failed');assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'The executor returned no verified result');assert.equal(sent.length,1);
+ await scheduler.tick(at+43200000);assert.equal(store.get('jobs','domain-watch-sweeper').state,'pending');assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'verified');assert.equal(Date.parse(store.get('jobs','domain-watch-sweeper').next_run),at+64800000);assert.equal(sent.length,1);
 });
 
 test('the scheduler delivers every bounded message in a large transition batch',async()=>{
@@ -111,14 +111,19 @@ test('after one batch is delivered and the next is uncertain, the next run deliv
  await scheduler.tick(later+21600000);assert.deepEqual(attempted,[]);assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'verified');
 });
 
-test('a mixed RDAP outage keeps the scheduler failure visible',async()=>{
+test('one RDAP outage never pauses the sweeper and a healthy domain keeps changing',async()=>{
  const {store,query}=setup(),at=Date.parse('2026-11-17T12:00:00Z');store.save('settings',{id:'installation',owner:store.device,timezone:'UTC',delivery:'notebook'});addDomainWatch(store,'up.example');addDomainWatch(store,'down.example');
  store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at).toISOString()});
- const scheduler=new Scheduler(store,{query,executor:job=>procedure(job,{store,query,fetcher:async url=>{if(String(url).includes('down.example'))throw Error('offline');return rdap(['active']);}})});
- await scheduler.tick(at);
- assert.equal(store.get('jobs','domain-watch-sweeper').state,'failed');assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'The executor returned no verified result');
- assert.equal(store.get('domain_watches','domain-'+hash('up.example').slice(0,24)).state,'registered');
- assert.equal(listDomainWatches(store).find(w=>w.domain==='down.example').state,null);assert.equal(store.list('job_receipts').length,1);
+ let healthy=['active'],down=true;const scheduler=new Scheduler(store,{query,executor:job=>procedure(job,{store,query,fetcher:async url=>{if(String(url).includes('down.example')&&down)throw Error('offline');return rdap(String(url).includes('up.example')?healthy:['active']);}})});
+ for(let run=0;run<5;run++){
+  const slot=at+run*21600000;await scheduler.tick(slot);
+  const job=store.get('jobs','domain-watch-sweeper');assert.equal(job.paused,false);assert.equal(job.state,'pending');assert.equal(job.retry_count,0);assert.equal(Date.parse(job.next_run),slot+21600000);
+ }
+ const failedRuns=store.list('job_receipts').filter(receipt=>receipt.job_id==='domain-watch-sweeper');assert.equal(failedRuns.length,5);assert.ok(failedRuns.every(receipt=>receipt.result.domains.some(domain=>domain.domain==='down.example'&&domain.ok===false&&domain.error==='offline')));
+ healthy=['pendingDelete'];down=false;await scheduler.tick(at+5*21600000);
+ assert.equal(store.get('jobs','domain-watch-sweeper').paused,false);assert.equal(store.get('jobs','domain-watch-sweeper').state,'pending');
+ assert.equal(store.get('domain_watches','domain-'+hash('up.example').slice(0,24)).state,'pending delete');assert.equal(store.get('domain_watches','domain-'+hash('down.example').slice(0,24)).state,'registered');
+ assert.equal(store.list('notifications').filter(note=>note.domain==='up.example').length,1);
 });
 
 test('chat authorizes adding, listing and removing a named domain',async()=>{

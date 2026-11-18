@@ -121,6 +121,9 @@ export async function runDomainWatches({store,fetcher}){
     }
     if(records.length)store.commit(records);
   });
-  const failed=outcomes.filter(outcome=>!outcome.ok),recordIds=[...pendingDeliveries(store).filter(id=>!deliveries.some(note=>note.id===id)),...deliveries.map(note=>note.id)];
-  return {verified:failed.length===0,silent:recordIds.length===0,domains:outcomes,...(recordIds.length?{record_id:recordIds[0],record_ids:recordIds,content_hash:store.get('notes',recordIds[0])._hash,delivery:'notebook'}:{})};
+  const recordIds=[...pendingDeliveries(store).filter(id=>!deliveries.some(note=>note.id===id)),...deliveries.map(note=>note.id)];
+  // A registry outage belongs to the affected domain, not to the sweeper. Its
+  // failed outcome remains visible here and its saved state stays unchanged;
+  // verifying the sweep lets the scheduler keep the next six-hour slot.
+  return {verified:true,silent:recordIds.length===0,domains:outcomes,...(recordIds.length?{record_id:recordIds[0],record_ids:recordIds,content_hash:store.get('notes',recordIds[0])._hash,delivery:'notebook'}:{})};
 }
