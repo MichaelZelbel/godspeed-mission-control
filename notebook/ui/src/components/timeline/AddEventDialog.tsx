@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import PeopleMultiSelect from "./PeopleMultiSelect";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Label, LabelAside, RequiredMark } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
@@ -319,7 +319,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
     <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
       <DialogHeader><DialogTitle>{isEditMode ? "Edit Moment" : "Add Moment"}</DialogTitle></DialogHeader>
       <div className="space-y-4">
-        <Textarea value={description} onChange={(e) => { setDescription(e.target.value); if (suggestionApplied) setSuggestionApplied(false); }} placeholder="Describe what happened…" rows={4} />
+        <Textarea value={description} onChange={(e) => { setDescription(e.target.value); if (suggestionApplied) setSuggestionApplied(false); }} placeholder="Describe what happened…" aria-label="Describe what happened" rows={4} />
         <div className="space-y-1.5">
           <Button type="button" variant="outline" size="sm" onClick={handleAiSuggest} disabled={aiLoading || !description.trim()} className="w-full">
             {aiLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
@@ -327,9 +327,9 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
           </Button>
           {suggestionApplied && <p className="text-xs text-muted-foreground">{suggestionFilled > 0 ? "Suggestions applied - review and edit below." : "The suggestion left every field as it was."}</p>}
         </div>
-        <div className="space-y-2"><Label htmlFor={ids.title} onClick={focusOnly(ids.title)}>Title *</Label><Input id={ids.title} value={title} onChange={(e) => { setTitle(e.target.value); markFilled("title"); }} placeholder="Short title for this moment" /></div>
+        <div className="space-y-2"><div><Label htmlFor={ids.title} onClick={focusOnly(ids.title)}>Title</Label> <RequiredMark /></div><Input id={ids.title} aria-required="true" value={title} onChange={(e) => { setTitle(e.target.value); markFilled("title"); }} placeholder="Short title for this moment" /></div>
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2"><Label htmlFor={ids.dateStart} onClick={focusOnly(ids.dateStart)}>Start Date *</Label><Input id={ids.dateStart} type="date" value={dateStart} onChange={(e) => { setDateStart(e.target.value); markFilled("dateStart"); }} /></div>
+          <div className="space-y-2"><div><Label htmlFor={ids.dateStart} onClick={focusOnly(ids.dateStart)}>Start Date</Label> <RequiredMark /></div><Input id={ids.dateStart} aria-required="true" type="date" value={dateStart} onChange={(e) => { setDateStart(e.target.value); markFilled("dateStart"); }} /></div>
           <div className="space-y-2"><Label htmlFor={ids.dateEnd} onClick={focusOnly(ids.dateEnd)}>End Date</Label><Input id={ids.dateEnd} type="date" value={dateEnd} onChange={(e) => { setDateEnd(e.target.value); markFilled("dateEnd"); }} /></div>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -342,10 +342,10 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2"><Label id={ids.confDateLabel} onClick={focusOnly(ids.confDate)}>Confidence (Date): {confDate}</Label><Slider value={[confDate]} onValueChange={([v]) => { setConfDate(v); markFilled("confDate"); }} min={0} max={10} step={1} thumbProps={{ id: ids.confDate, "aria-labelledby": ids.confDateLabel }} /></div>
+          <div className="space-y-2"><div><Label id={ids.confDateLabel} onClick={focusOnly(ids.confDate)}>Confidence (Date)</Label><LabelAside>: {confDate}</LabelAside></div><Slider value={[confDate]} onValueChange={([v]) => { setConfDate(v); markFilled("confDate"); }} min={0} max={10} step={1} thumbProps={{ id: ids.confDate, "aria-labelledby": ids.confDateLabel, "aria-valuetext": String(confDate) }} /></div>
         </div>
         <ImportanceSlider value={impactLevel} onChange={(v) => { setImpactLevel(v); markFilled("impactLevel"); }} />
-        <div className="space-y-2"><Label id={ids.confTruthLabel} onClick={focusOnly(ids.confTruth)}>Confidence (Truth): {confTruth}</Label><Slider value={[confTruth]} onValueChange={([v]) => { setConfTruth(v); markFilled("confTruth"); }} min={0} max={10} step={1} thumbProps={{ id: ids.confTruth, "aria-labelledby": ids.confTruthLabel }} /></div>
+        <div className="space-y-2"><div><Label id={ids.confTruthLabel} onClick={focusOnly(ids.confTruth)}>Confidence (Truth)</Label><LabelAside>: {confTruth}</LabelAside></div><Slider value={[confTruth]} onValueChange={([v]) => { setConfTruth(v); markFilled("confTruth"); }} min={0} max={10} step={1} thumbProps={{ id: ids.confTruth, "aria-labelledby": ids.confTruthLabel, "aria-valuetext": String(confTruth) }} /></div>
         <div className="space-y-2"><Label htmlFor={peopleFieldId} onClick={focusOnly(peopleFieldId)} className="text-xs">People</Label><PeopleMultiSelect id={peopleFieldId} people={people} value={matchedPeople} onChange={setMatchedPeople} newNames={typedNewPeople} onNewNamesChange={setTypedNewPeople} /></div>
         {suggestedNewPeople.length > 0 && <div className="space-y-2"><p id={ids.newPeopleLabel} className="text-xs font-medium leading-none text-muted-foreground">Add new people (not yet in your list)</p><div role="group" aria-labelledby={ids.newPeopleLabel} className="space-y-1.5">{suggestedNewPeople.map((name) => <label key={name} className="flex items-center gap-2 cursor-pointer"><Checkbox checked={selectedNewPeople.includes(name)} onCheckedChange={(checked) => setSelectedNewPeople((prev) => checked ? [...prev, name] : prev.filter((n) => n !== name))} /><span className="text-sm">{name}</span></label>)}</div></div>}
       </div>

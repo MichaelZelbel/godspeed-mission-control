@@ -254,7 +254,7 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
           </div>
 
           <div className="space-y-2">
-            <Label>Icon</Label>
+            <Label htmlFor="collection-icon">Icon</Label>
             <div className="flex flex-wrap gap-2">
               {emojiOptions.map((emoji) => (
                 <button key={emoji} type="button" className={cn("flex h-9 w-9 items-center justify-center rounded-md border text-lg transition-colors hover:bg-accent", values.icon === emoji && "border-primary bg-primary/10")} onClick={() => updateValue("icon", emoji)}>
@@ -262,7 +262,7 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
                 </button>
               ))}
             </div>
-            <Input value={values.icon} maxLength={4} onChange={(event) => updateValue("icon", event.target.value)} onBlur={validate} className="w-24" aria-label="Custom emoji" />
+            <Input value={values.icon} maxLength={4} onChange={(event) => updateValue("icon", event.target.value)} onBlur={validate} className="w-24" id="collection-icon" />
             {errors.icon && <p className="text-xs text-destructive">{errors.icon}</p>}
           </div>
 
@@ -273,8 +273,8 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
           </div>
 
           <div className="space-y-2">
-            <Label>Visibility</Label>
-            <RadioGroup value={values.visibility} onValueChange={(value) => updateValue("visibility", value as "private" | "personal")}>
+            <p id="collection-visibility-label" className="text-sm font-medium leading-none">Visibility</p>
+            <RadioGroup aria-labelledby="collection-visibility-label" value={values.visibility} onValueChange={(value) => updateValue("visibility", value as "private" | "personal")}>
               <Label className="flex items-center gap-2 rounded-md border p-3"><RadioGroupItem value="private" /> Private (only me)</Label>
               <Label className="flex items-center gap-2 rounded-md border p-3"><RadioGroupItem value="personal" /> Personal (visible to my AI agents)</Label>
             </RadioGroup>
