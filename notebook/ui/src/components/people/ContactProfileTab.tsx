@@ -117,8 +117,9 @@ export function ContactProfileTab({
               and the importer's HTML marker comments stay out of sight. */}
           {isEditingNotes ? (
             <div className="space-y-2">
-              <Label>Notes</Label>
+              <Label htmlFor={`person-notes-${contactId}`}>Notes</Label>
               <Textarea
+                id={`person-notes-${contactId}`}
                 value={notes ?? ""}
                 onChange={(e) => onChangeNotes?.(e.target.value)}
                 placeholder="Add private notes about this person..."
