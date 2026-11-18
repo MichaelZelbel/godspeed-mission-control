@@ -20,6 +20,7 @@ import {noteConnections,linkSuggestions} from './related.mjs';
 import {graphData} from './graph.mjs';
 import { slug, hash } from './records/store.mjs';
 import {carriedRoot,findMedia} from './media-store.mjs';
+import {analyzableMediaType} from '../shared/media-analysis-types.mjs';
 import {DAILY_MEMORY_ORIGIN,dailyMemoryOwns,dailyMemorySubjectId,normalName} from './memory-daily-identity.mjs';
 import {decodeDailyMemoryPlan} from './daily-memory-plan.mjs';
 import fs from 'node:fs';
@@ -362,9 +363,14 @@ export class Domains {
     if(['backfill-profile-extraction','backfill-moment-profile-extraction','backfill-metadata','backfill-media-analysis'].includes(name)){
       if(name==='backfill-media-analysis'){
         const completed=new Set(this.query.rows('media_analysis').filter(r=>r.analysis_status==='complete').map(r=>r.storage_path));
-        const sources=this.query.rows('note_attachments').map(r=>({...r,storage_path:r.storage_path||r.file_path})).filter(r=>r.storage_path),pending=sources.filter(r=>!completed.has(r.storage_path));
-        if(input.mode==='scan')return {total_media:sources.length,already_analyzed:sources.length-pending.length,unanalyzed_total:pending.length,unanalyzed_images:pending.filter(r=>r.file_type!=='application/pdf').length,unanalyzed_pdfs:pending.filter(r=>r.file_type==='application/pdf').length};
-        let processed=0;const errors=[];for(const source of pending)try{await this.invoke('analyze-media',{...source,note_id:source.note_id,storage_path:source.storage_path,media_type:source.file_type==='application/pdf'?'pdf':'image',original_filename:source.filename});processed++;}catch(e){errors.push({id:source.id,error:e.message});}
+        // Only the types analysis reads, as the Media Library lists them: an MP3
+        // or an SVG is never waiting, so it is neither counted nor run (#735).
+        const sources=this.query.rows('note_attachments').map(r=>({...r,storage_path:r.storage_path||r.file_path,media_type:analyzableMediaType(r.mime_type||r.file_type)})).filter(r=>r.storage_path&&r.media_type),pending=sources.filter(r=>!completed.has(r.storage_path));
+        if(input.mode==='scan')return {total_media:sources.length,already_analyzed:sources.length-pending.length,unanalyzed_total:pending.length,unanalyzed_images:pending.filter(r=>r.media_type==='image').length,unanalyzed_pdfs:pending.filter(r=>r.media_type==='pdf').length,ai_connected:!!this.provider};
+        // With no AI every item would fail for that one reason, so the run is
+        // refused with it instead of counting failures (#735).
+        if(!this.provider&&pending.length)throw new Error(NO_AI_ANALYSIS);
+        let processed=0;const errors=[];for(const source of pending)try{await this.invoke('analyze-media',{...source,note_id:source.note_id,storage_path:source.storage_path,media_type:source.media_type,original_filename:source.filename});processed++;}catch(e){errors.push({id:source.id,error:e.message});}
         return {processed,total:pending.length,failed:errors.length,errors,message:'Analyzed '+processed+' media items.'};
       }
       // Classify (backfill-metadata), a person's Enrich and the import's
@@ -445,7 +451,7 @@ export class Domains {
       if(!this.provider)throw new Error('Connect a model with image or PDF support before media analysis');
       const {mapping,file}=this.media(input.storage_path);
       const bytes=fs.readFileSync(file);if(hash(bytes)!==mapping.sha256)throw new Error('Media integrity check failed');
-      if(!/^(image\/(png|jpeg|webp|gif)|application\/pdf)$/.test(mapping.contentType))throw new Error('Analysis supports images and PDF documents');
+      if(!analyzableMediaType(mapping.contentType))throw new Error('Analysis supports images and PDF documents');
       const old=this.query.rows('media_analysis').find(r=>r.storage_path===input.storage_path);
       const row=this.store.save('media_analysis',{id:old?.id,note_id:input.note_id,storage_path:input.storage_path,media_type:input.media_type,original_filename:input.original_filename,analysis_status:'processing',source_sha256:mapping.sha256});
       try{
