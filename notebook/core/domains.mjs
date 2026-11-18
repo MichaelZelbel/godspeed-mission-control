@@ -8,12 +8,11 @@ import {NOTEBOOK_CHAT_FUNCTIONS} from './notebook-chat.mjs';
 
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
 const briefingCreations=new WeakMap();
-async function createBriefingOnce(store,day,requestedAt,create){
- let state=briefingCreations.get(store);if(!state){state={byDay:new Map(),tail:Promise.resolve()};briefingCreations.set(store,state);}
- const pending=state.byDay.get(day);if(pending)return pending;
- const creation=state.tail.catch(()=>{}).then(async()=>{const saved=savedBriefToday(store,requestedAt);if(!saved.note&&!saved.hidden)await create();});
- state.byDay.set(day,creation);state.tail=creation;
- try{return await creation;}finally{if(state.byDay.get(day)===creation)state.byDay.delete(day);if(!state.byDay.size&&state.tail===creation)briefingCreations.delete(store);}
+async function createBriefingOnce(store,requestedAt,create){
+ const prior=briefingCreations.get(store)||Promise.resolve();
+ const creation=prior.catch(()=>{}).then(async()=>{const saved=savedBriefToday(store,requestedAt);if(!saved.note&&!saved.hidden)await create();});
+ briefingCreations.set(store,creation);
+ try{return await creation;}finally{if(briefingCreations.get(store)===creation)briefingCreations.delete(store);}
 }
 import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
@@ -301,7 +300,7 @@ export class Domains {
       const requestedAt=new Date(),day=briefingDay(this.store,requestedAt);
       let today=savedBriefToday(this.store,requestedAt),saved=today.note;
       if(name==='conversation-chat'&&!saved&&!today.hidden&&this.provider){
-        await createBriefingOnce(this.store,day,requestedAt,()=>briefing({id:'brief-chat-'+hash([input.request_id||input.conversation_id||'conversation',day])},{store:this.store,query:this.query,provider:this.provider,now:requestedAt}));
+        await createBriefingOnce(this.store,requestedAt,()=>briefing({id:'brief-chat-'+hash([input.request_id||input.conversation_id||'conversation',day])},{store:this.store,query:this.query,provider:this.provider,now:requestedAt}));
         today=savedBriefToday(this.store,requestedAt);saved=today.note;
       }
       if(today.hidden)return {reply:''};
