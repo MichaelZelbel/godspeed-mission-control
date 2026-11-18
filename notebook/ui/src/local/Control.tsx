@@ -41,7 +41,7 @@ function NewRulesSetting(){
   const mode=setting.data?.new_rules==='ask-first'?'ask-first':'automatic';
   const choose=async(new_rules:string)=>{setError('');try{await call('identity/rules-setting',{new_rules});await qc.invalidateQueries({queryKey:['rules-setting']});}catch(e:any){setError(e.message);}};
   return <section id="new-rules" className="border rounded p-4 space-y-2"><h2 className="text-xl">New rules</h2>
-    <p className="text-balance">When you tell your assistant something like "never do this", it can add it as a rule straight away, or show it to you first.</p>
+    <p>When you tell your assistant something like "never do this", it can add that as a rule straight away, or show it to you first.</p>
     {[['automatic','Add automatically'],['ask-first','Ask first']].map(([value,label])=><label key={value} className="flex gap-2 items-center"><input type="radio" name="new-rules" value={value} checked={mode===value} disabled={setting.isLoading} onChange={()=>choose(value)}/>{label}</label>)}
     <p className="text-sm text-muted-foreground">You can also say "ask me before adding rules" in chat.</p>
     {error&&<p role="alert" className="text-red-400">{error}</p>}</section>;
