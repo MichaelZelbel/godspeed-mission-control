@@ -562,11 +562,10 @@ def coach_prep(c):
     # 2 and 3 mean it never started.
     if r.returncode in (2, 3):
         return went_wrong(c, "coach-prep", day, "The coaching talk preparation could not start tonight.", r)
-    # 1 is a talk that could not be prepared or did not fit the time: shown as failed in the
-    # Routines list, with one plain sentence, and nothing is printed to the person.
-    if r.returncode != 0:
-        remember(c, "coach-prep", "A coaching talk could not be prepared ahead, so it opens from its brief; routines/coach-prep/" + day + "/summary.txt says which.")
-        return ""
+    # 1 says at least one talk could not be prepared.  It must still open every other
+    # preparation that did pass: a mixed nightly run is not an all-or-nothing delivery.
+    # Codes 2 and 3, handled above, are the only start failures.
+    incomplete = r.returncode != 0
     # Run now is the public preparation boundary. A preparation that passed the unchanged coach
     # gate becomes the canonical waiting talk here, through the coach's ordinary guarded opener.
     # The summary is written by mc-coach-prep only after prep-check (and the independent review,
@@ -584,7 +583,10 @@ def coach_prep(c):
                       "--from-prep", prep, "--godspeed", c["root"]], c, env, timeout=120)
         if opened.returncode != 0:
             return went_wrong(c, "coach-prep", day, "The coaching talk was prepared, but its talk record could not be opened.", opened)
-    remember(c, "coach-prep")
+    if incomplete:
+        remember(c, "coach-prep", "A coaching talk could not be prepared ahead, so it opens from its brief; routines/coach-prep/" + day + "/summary.txt says which.")
+    else:
+        remember(c, "coach-prep")
     return ""
 
 
