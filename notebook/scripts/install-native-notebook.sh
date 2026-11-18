@@ -135,8 +135,8 @@ install_pinned_work_tools() {
   for name in mc-work mc-work-run work.js run-log-folders.js mc-cards.js unattended-git.cjs; do
     [ -f "$source/tools/$name" ] || continue
     cp "$source/tools/$name" "$target/$name" || return 1
+    case $name in mc-work|mc-work-run) chmod 755 "$target/$name" || return 1 ;; esac
   done
-  chmod 755 "$target/mc-work" "$target/mc-work-run" || return 1
 }
 
 # --- The service --------------------------------------------------------------------
@@ -596,7 +596,6 @@ node_folder=$(dirname "$node")
 export PATH="$node_folder:$PATH"
 
 version=$(fetch_version) || { echo 'The notebook could not be downloaded. Check this computer can reach GitHub, then run the installer again.' >&2; exit 1; }
-install_pinned_work_tools "$version" || { echo 'The daily work commands could not be installed.' >&2; exit 1; }
 # A server nobody browses (a routine runner) can skip building the screens:
 # the build needs more memory than a small server spares.
 if [ "${GODSPEED_SKIP_UI:-}" != 1 ] && [ ! -f "$version/notebook/ui/.godspeed-built" ]; then
@@ -612,6 +611,8 @@ fi
 # Inside the service also its web address, which only the administrator could make again, and
 # the Hermes it used, which a terminal names in its own environment.
 restore_kept_settings
+# After the saved settings are read, so a settings file that cannot be read stops the installer first.
+install_pinned_work_tools "$version" || { echo 'The daily work commands could not be installed.' >&2; exit 1; }
 SERVICE=${GODSPEED_SERVICE:-godspeed-integrated-notebook.service}
 if [ -z "${GODSPEED_INTEGRATED_BESIDE:-}" ] && [ "$(previous_setting HERMES_HOME)" = "$state/hermes" ]; then GODSPEED_INTEGRATED_BESIDE=1; fi
 export GODSPEED_WORKSPACE="$root" GODSPEED_ORIGINAL_RUNTIME=on
