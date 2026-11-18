@@ -35,11 +35,20 @@ export function isBarcode(code){
  const d=[...code].map(Number),check=d.pop();
  return (10-d.reverse().reduce((n,x,i)=>n+x*(i%2?1:3),0)%10)%10===check;
 }
-// The message itself is about food: a food word, "track", or a barcode said to be one.
-const foodMessage=question=>FOOD_WORDS.test(question)||/(?<!\p{L})track/iu.test(question)||/(?<!\p{L})(?:barcode|ean|gtin|strichcode)(?!\p{L})/iu.test(question);
+// The message is a barcode she pasted or scanned: one or more real barcodes standing as words of their
+// own, with at most a product or brand name beside them ("4008400401621", "Nutella 4008400401621",
+// "Ritter Sport 4000417025005") and nothing else, so no other topic and no other number.
+const barcodeMessage=question=>{
+ const words=String(question||'').trim().split(/\s+/).filter(Boolean).map(w=>w.replace(/^[("'„“‚‘]+|[)"'“”‘’.,;:!?]+$/gu,''));
+ const codes=words.filter(isBarcode),rest=words.filter(w=>w&&!isBarcode(w));
+ return codes.length>0&&rest.length<=3&&rest.every(w=>/^[\p{L}][\p{L}&'’.-]*$/u.test(w));
+};
+// The message itself is about food: a food word, "track", a barcode said to be one, or a bare barcode.
+const foodMessage=question=>FOOD_WORDS.test(question)||/(?<!\p{L})track/iu.test(question)||/(?<!\p{L})(?:barcode|ean|gtin|strichcode)(?!\p{L})/iu.test(question)||barcodeMessage(question);
 const readerOf=query=>({root:query.store.root,list:type=>query.rows(type).filter(r=>!r.removed_at),get:(type,id)=>query.rows(type).find(r=>r.id===id)||null});
 // The barcodes the chat looks up at Open Food Facts before the model answers (domains.mjs): only in a
-// message about food or while a food question waits for its answer. A number in a message about
+// message about food (a bare or branded barcode counts) or while a food question waits for its answer.
+// Every such message also opens the food context in chatContext, so the product reaches the model. A number in a message about
 // anything else (a spending limit, a domain, a date) never reaches the network (issue #729: run on
 // 2.0.0-beta.28 contacted Open Food Facts after messages about AI spending and domain watches).
 export function chatBarcodes(query,message){
