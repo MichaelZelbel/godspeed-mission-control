@@ -1249,7 +1249,3 @@ no_code_in() { # <run.json> [approvals snapshot...]
 outbox_between() { # <run.json> <label>[,<label>...] [accepted]
   "$NODE" "$HERE/telegram-judge.mjs" messages "$@"
 }
-
-first_file_newer_than() { # <folder> <path pattern> <reference file>
-  find "$1" -path "$2" -type f -newer "$3" -print -quit 2>/dev/null
-}

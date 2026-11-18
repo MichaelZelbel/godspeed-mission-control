@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {CONNECTION_NAMES,ROUTINES_LABEL} from './connection-names.mjs';
 import {atomic} from './records/store.mjs';
 import {loadSettings as journalSettings,saveSettings as saveJournal,DEFAULTS as JOURNAL_DEFAULTS} from '../../third-party/addons/godspeed-journal/lib/settings.mjs';
@@ -32,8 +31,7 @@ export const ENABLE_KINDS=[
  {kind:'lead',skill:'lead',label:'Public contributions',what:'Prepares one contribution you could post or send, from what really happened; you post it yourself.'},
  {kind:'audit',skill:'audit',label:'Mission control audit',what:'Audits your mission control and names the three changes that would help most.'},
 ];
-export const bundledEnableRecipe=kind=>kind==='coach-prep'?fileURLToPath(new URL('../recipes/coach-prep/',import.meta.url)):null;
-export const enableKinds=root=>ENABLE_KINDS.filter(k=>fs.existsSync(path.join(root,'skills',k.skill,'SKILL.md'))||!!bundledEnableRecipe(k.kind)).map(({kind,label})=>({kind,label}));
+export const enableKinds=root=>ENABLE_KINDS.filter(k=>fs.existsSync(path.join(root,'skills',k.skill,'SKILL.md'))).map(({kind,label})=>({kind,label}));
 export const enableKind=kind=>ENABLE_KINDS.find(k=>k.kind===kind)||null;
 
 // WHERE THE ROUTINES OF THIS MACHINE DELIVER. Until 18 October 2026 this was decided once, when the

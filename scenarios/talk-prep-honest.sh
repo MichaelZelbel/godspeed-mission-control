@@ -77,89 +77,6 @@ settings_connects_the_model() {
   say "The chat thinks with $AI_MODEL at $AI_URL"
 }
 
-run_installed_preparation() {
-  local jobs=$EVIDENCE/.prep-jobs.json id before after code produced attempt=0 answer summary status enable=$EVIDENCE/prep-enable-request.json
-  installed_preparation_is_listed() {
-    curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{"table":"jobs"}' "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$jobs" 2>/dev/null || return 1
-    id=$("$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>x.name==="Coaching talk preparation"||x.title==="Coaching talk preparation"||x.kind==="coach-prep");if(j)process.stdout.write(String(j.id))' "$jobs")
-    [ -n "$id" ]
-  }
-  if ! installed_preparation_is_listed; then
-    code=$(curl -sS -o "$enable" -w '%{http_code}' --max-time 60 -X POST -H 'Content-Type: application/json' \
-      -d '{"kind":"coach-prep","at":"03:00"}' "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/add") ||
-      fail "the public routine selector could not request Coaching talk preparation"
-    { [ "$code" = 200 ] || [ "$code" = 201 ]; } ||
-      fail "the public routine selector refused Coaching talk preparation with HTTP $code: $(tr -d '\n' <"$enable" | cut -c1-200)"
-  fi
-  wait_for 90 "the public selector to list Coaching talk preparation" installed_preparation_is_listed ||
-    fail "the public routine selector created no Coaching talk preparation job"
-  before=$("$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>String(x.id)===process.argv[2]);process.stdout.write(String(j?.last_run_at||"never"))' "$jobs" "$id")
-  printf 'id=%s\nbefore=%s\n' "$id" "$before" >"$EVIDENCE/prep-run-before.txt"
-  while [ "$attempt" -lt 18 ]; do
-    attempt=$((attempt + 1)); answer=$EVIDENCE/.prep-run-request-$attempt.json
-    code=$(curl -sS -o "$answer" -w '%{http_code}' --max-time 60 -X POST -H 'Content-Type: application/json' -d "{\"id\":$(quoted_json "$id")}" "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/run") || fail "the installed preparation job could not be requested"
-    printf 'attempt=%s http=%s response=%s\n' "$attempt" "$code" "$(tr -d '\n' <"$answer")" >>"$EVIDENCE/prep-run-requests.txt"
-    if { [ "$code" = 200 ] || [ "$code" = 202 ]; } && grep -qE '"started": *true|"results"' "$answer"; then
-      cp "$answer" "$EVIDENCE/prep-run-request.json"
-      break
-    fi
-    grep -q 'The assistant is updating or another routine is already running' "$answer" ||
-      fail "the installed preparation job was refused with HTTP $code: $(tr -d '\n' <"$answer" | cut -c1-200)"
-    sleep 5
-  done
-  [ -s "$EVIDENCE/prep-run-request.json" ] || fail "the installed preparation job stayed busy and refused every Run now request"
-  prep_run_finished() {
-    curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{"table":"jobs"}' "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$jobs" 2>/dev/null || return 1
-    after=$("$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>String(x.id)===process.argv[2]);process.stdout.write([j?.last_run_at||"",j?.last_status||"",j?.last_error||""].join("\t"))' "$jobs" "$id")
-    [ "$(printf '%s' "$after" | cut -f1)" != "$before" ] && [ -n "$(printf '%s' "$after" | cut -f2)" ]
-  }
-  wait_for 600 "the installed Coaching talk preparation job to finish" prep_run_finished || fail "the installed preparation job recorded no new completed run"
-  status=$(printf '%s' "$after" | cut -f2)
-  printf 'id=%s\nafter=%s\nstatus=%s\n' "$id" "$(printf '%s' "$after" | cut -f1)" "$status" >"$EVIDENCE/prep-run-after.txt"
-  cp "$jobs" "$EVIDENCE/prep-jobs-after.json"
-  summary=$(find "$ROOT/routines/coach-prep" -type f -name summary.txt -print 2>/dev/null | sort | tail -n 1)
-  [ -z "$summary" ] || cp "$summary" "$EVIDENCE/prep-run-summary.txt"
-  [ "$status" = ok ] || fail "the installed preparation job failed: $(printf '%s' "$after" | cut -f3); retained summary: $(tr '\n' ' ' <"${summary:-/dev/null}" | cut -c1-300)"
-  produced=$(first_file_newer_than "$ROOT/coach" '*/prep/*.md' "$EVIDENCE/prep-run-request.json")
-  [ -n "$produced" ] || fail "the successful installed preparation run produced no preparation attributable to that run"
-  "$NODE" -e 'const fs=require("fs"),text=fs.readFileSync(process.argv[1],"utf8");if(!/^STATE: ready$/m.test(text)||!/^## The opening\s*$/m.test(text)||!/^## Talk card\s*$/m.test(text))process.exit(1)' "$produced" ||
-    fail "the successful installed preparation run did not produce a ready, usable preparation"
-  if [ "${TALK_PREP_RUN_NOW_TEST_ONLY:-}" != 1 ]; then
-    local area talk
-    area=$(sed -n 's/^AREA: *//p' "$produced" | head -n 1)
-    talk=$(sed -n 's/^TALK: *\([0-9-]*\).*/\1/p' "$produced" | head -n 1)
-    coach prep-check "$area" --date "$talk" >"$EVIDENCE/routine-preparation-check.txt" 2>&1 ||
-      fail "the installed coach did not accept the preparation produced by Run now: $(tr '\n' ' ' <"$EVIDENCE/routine-preparation-check.txt" | cut -c1-240)"
-    grep -q '^ready' "$EVIDENCE/routine-preparation-check.txt" || fail "the installed coach did not call the preparation produced by Run now ready"
-  fi
-  cp "$produced" "$EVIDENCE/routine-preparation.md"
-  printf '%s\n' "${produced#"$ROOT"/}" >"$EVIDENCE/routine-preparation-source.txt"
-}
-
-open_installed_preparation() {
-  local prep=$1 area talk record
-  area=$(sed -n 's/^AREA: *//p' "$prep" | head -n 1)
-  talk=$(sed -n 's/^TALK: *\([0-9-]*\).*/\1/p' "$prep" | head -n 1)
-  [ -n "$area" ] && [ -n "$talk" ] || fail "the installed preparation does not name the talk it prepared"
-  chat_panel_new_conversation "$EVIDENCE/.panel-new-routine.json"
-  chat_panel_says "$ASK" "$EVIDENCE/routine-opening.txt"
-  record=$ROOT/coach/$area/talks/$talk.md
-  [ -s "$record" ] || fail "asking for the talk prepared by Run now created no product talk record at $record"
-  cp "$record" "$EVIDENCE/routine-talk.md"
-  printf '%s\n' "${record#"$ROOT"/}" >"$EVIDENCE/routine-talk-source.txt"
-  section_of "$prep" 'The opening' | tr -s '[:space:]' ' ' >"$EVIDENCE/.routine-prepared-opening"
-  folded "$EVIDENCE/routine-opening.txt" | grep -qF -- "$(sed 's/^ //;s/ $//' "$EVIDENCE/.routine-prepared-opening")" ||
-    fail "the talk opened without the opening accepted from the preparation made by Run now"
-}
-
-if [ "${TALK_PREP_RUN_NOW_TEST_ONLY:-}" = 1 ]; then
-  install_paths
-  need_node
-  mkdir -p "$EVIDENCE"
-  run_installed_preparation
-  exit 0
-fi
-
 # ---------------------------------------------------------------------------------- the fixtures
 # A run record the way Claude Code keeps one: a JSON line per message, the prompt naming the run's
 # marker, and for each page a WebFetch call and its successful result, all inside the run's time.
@@ -180,23 +97,18 @@ random_marker() { printf '%s-%s' "$1" "$(od -An -N8 -tx1 /dev/urandom | tr -d ' 
 
 write_area() {
   mkdir -p "$ROOT/coach/health" "$ROOT/goals"
-  printf 'ID: lower-ldl\nGOAL: lower-ldl\nTITLE: Lower my LDL cholesterol\nSTATUS: adopted\n\n## Outcome\nLower LDL from 155 mg/dL, measured 2026-10-30, after the next clinician-ordered test.\n' >"$ROOT/goals/lower-ldl.md"
-  printf 'ID: sleep-better\nGOAL: sleep-better\nTITLE: Sleep seven hours most nights\nSTATUS: adopted\n\n## Outcome\nIncrease the current five and a half hours on work nights to seven hours by 2027-01-31.\n' >"$ROOT/goals/sleep-better.md"
-  printf 'ID: visible-abs\nGOAL: visible-abs\nTITLE: Visible abs by the summer\nSTATUS: adopted\n\n## Outcome\nReduce the current 22 percent body-fat estimate gradually by 2027-06-01 without sacrificing sleep.\n' >"$ROOT/goals/visible-abs.md"
+  printf 'GOAL: lower-ldl\nTITLE: Lower my LDL cholesterol\nSTATUS: adopted\n' >"$ROOT/goals/lower-ldl.md"
+  printf 'GOAL: sleep-better\nTITLE: Sleep seven hours most nights\nSTATUS: adopted\n' >"$ROOT/goals/sleep-better.md"
+  printf 'GOAL: visible-abs\nTITLE: Visible abs by the summer\nSTATUS: adopted\n' >"$ROOT/goals/visible-abs.md"
   {
     printf 'AREA: health\nTITLE: Health\nRHYTHM: daily\nTIME: 19:00\nSTARTS: %s\nSTATUS: on\nSTYLE: compass\nTONE: gentle\n' "$(day_in -2)"
     printf 'SERVES: lower-ldl, sleep-better, visible-abs\n'
     printf 'LIMIT: never diagnose and never tell them to buy or book anything\n'
+    printf 'RESEARCH DOMAIN: blood-lipids | LDL and the routes that lower it: food, movement, supplements, medicines they could ask about\n'
+    printf 'RESEARCH DOMAIN: sleep | How much sleep helps, what extends it, and what only feels like it\n'
+    printf 'RESEARCH DOMAIN: body-composition | Fat loss and muscle, including what makes abs visible\n'
     printf '\n## Preparation\n\nRead the goals, the health data and the last talk, then prepare the talk.\n'
   } >"$ROOT/coach/health/area.md"
-}
-
-add_research_domains() {
-  "$NODE" - "$ROOT/coach/health/area.md" <<'NODE'
-const fs=require('fs'),file=process.argv[2],text=fs.readFileSync(file,'utf8');
-const domains='RESEARCH DOMAIN: blood-lipids | LDL and the routes that lower it: food, movement, supplements, medicines they could ask about\nRESEARCH DOMAIN: sleep | How much sleep helps, what extends it, and what only feels like it\nRESEARCH DOMAIN: body-composition | Fat loss and muscle, including what makes abs visible\n';
-fs.writeFileSync(file,text.replace('\n## Preparation','\n'+domains+'\n## Preparation'));
-NODE
 }
 
 # A preparation of the coach's shape. <file> <talk day> <prepared at> <routes: 2 or 3> <opening text>
@@ -314,16 +226,8 @@ act() {
   DAY_B=$(day_in +1)
   { printf 'a=%s\nb=%s\noffset=%s\n' "$DAY_A" "$DAY_B" "$(date +%z)"; } >"$EVIDENCE/days.txt"
 
-  phase 'a supported coaching-area fixture is prepared through installed Run now'
-  write_area
-  run_installed_preparation
-  open_installed_preparation "$ROOT/$(cat "$EVIDENCE/routine-preparation-source.txt")"
-  rm -f "$ROOT/coach/health/prep/$DAY_A.md" "$ROOT/coach/health/prep/$DAY_A.evidence.json" "$ROOT/coach/health/prep/$DAY_A.review.json"
-  rm -f "$ROOT/coach/health/prep/$DAY_B.md" "$ROOT/coach/health/prep/$DAY_B.evidence.json" "$ROOT/coach/health/prep/$DAY_B.review.json"
-  rm -f "$ROOT/$(cat "$EVIDENCE/routine-talk-source.txt")"
   phase 'a fixture person: one health area, three goals, three research domains'
   write_area
-  add_research_domains
   cp "$ROOT/coach/health/area.md" "$EVIDENCE/area.md"
 
   phase 'a: a preparation whose review leaves one goal uncovered'
@@ -368,25 +272,8 @@ claims_research_time() { # <file>: prints the first line that does, and leaves 0
   grep -Eiv '^$' "$1" | grep -Ei -- "$CLAIM" | head -n 1 | grep .
 }
 check() { # <evidence folder>
-  local folder=$1 sentence a b opening_b goal route_count label field reply run_id before after
+  local folder=$1 sentence a b opening_b goal route_count label field reply
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a talk's preparation"
-  kept_all "$folder" 'the installed preparation job, its public Run now request and the talk opened from it' prep-run-before.txt prep-run-after.txt prep-run-request.json prep-jobs-after.json routine-preparation.md routine-preparation-source.txt routine-preparation-check.txt routine-opening.txt routine-talk.md routine-talk-source.txt
-  run_id=$(sed -n 's/^id=//p' "$folder/prep-run-before.txt"); before=$(sed -n 's/^before=//p' "$folder/prep-run-before.txt"); after=$(sed -n 's/^after=//p' "$folder/prep-run-after.txt")
-  [ -n "$run_id" ] || fail "the retained preparation run names no installed job"
-  [ -n "$after" ] && [ "$after" != "$before" ] || fail "the installed preparation job recorded no new completed run"
-  grep -qx 'status=ok' "$folder/prep-run-after.txt" || fail "the installed preparation job did not finish successfully"
-  grep -Eq '"started"[[:space:]]*:[[:space:]]*true|"results"' "$folder/prep-run-request.json" || fail "the public Run now request did not start the preparation job"
-  "$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>String(x.id)===process.argv[2]);process.exit(j&&(j.name==="Coaching talk preparation"||j.title==="Coaching talk preparation"||j.kind==="coach-prep")&&j.last_status==="ok"?0:1)' "$folder/prep-jobs-after.json" "$run_id" || fail "the successful run is not attributable to the installed Coaching talk preparation job"
-  grep -Eq '^coach/[^/]+/prep/[^/]+\.md$' "$folder/routine-preparation-source.txt" || fail "the installed run's preparation has no product-owned source path"
-  grep -q '^STATE: ready$' "$folder/routine-preparation.md" || fail "the installed run's preparation is not ready"
-  grep -q '^## The opening' "$folder/routine-preparation.md" || fail "the installed run's preparation has no opening to judge"
-  grep -q '^## Talk card' "$folder/routine-preparation.md" || fail "the installed run's preparation has no talk card"
-  grep -q '^ready' "$folder/routine-preparation-check.txt" || fail "the installed gate did not call the Run now preparation ready"
-  grep -Eq '^coach/[^/]+/talks/[^/]+\.md$' "$folder/routine-talk-source.txt" || fail "the installed run's opened talk has no product-owned source path"
-  grep -q '^STATE: opened$' "$folder/routine-talk.md" || fail "asking for the talk prepared by Run now did not leave an opened talk record"
-  opening_b=$(section_of "$folder/routine-preparation.md" 'The opening' | tr -s '[:space:]' ' ' | sed 's/^ //;s/ $//')
-  section_of "$folder/routine-talk.md" 'The opening' | tr -s '[:space:]' ' ' | grep -qF -- "$opening_b" ||
-    fail "the product talk record did not keep the opening accepted from the preparation made by Run now"
   b=$(sed -n 's/^b=//p' "$folder/days.txt" 2>/dev/null)
   if [ ! -s "$folder/talk-b.md" ]; then
     [ -n "$b" ] || fail "days.txt does not say which two talk days this scenario worked on"

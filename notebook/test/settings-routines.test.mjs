@@ -108,16 +108,6 @@ test('every selectable starting routine keeps its canonical script route',async 
  assert.equal(made.script,routine.script);assert.equal(made.skill,null);assert.equal(made.no_agent,true);
  assert.match(fs.readFileSync(path.join(home,'scripts',routine.script),'utf8'),/main\("future-starting"\)/);
 });
-test('a clean installed selector restores its bundled coaching preparation recipe before creating the canonical routine',async t=>{
- const {root,home,hermes,scheduler}=await withGoal(t),recipe=path.join(root,'skills','coach-prep');
- const installed=hermes.jobs().find(j=>j.name==='Coaching talk preparation');
- hermes.write(hermes.jobs().filter(j=>j.id!==installed.id));fs.rmSync(recipe,{recursive:true,force:true});
- assert.ok(enableKinds(root).some(row=>row.kind==='coach-prep'),'the public selector keeps the bundled product routine available');
- const row=await scheduler.control({kind:'coach-prep',at:'03:30'},{enable:true}),made=hermes.jobs().find(j=>j.id===row.id);
- assert.ok(fs.existsSync(path.join(recipe,'SKILL.md')),'the public boundary installed the bundled recipe');
- assert.equal(made.script,'godspeed-coach-prep.py');assert.equal(made.skill,null);assert.equal(made.no_agent,true);
- assert.match(fs.readFileSync(path.join(home,'scripts',made.script),'utf8'),/main\("coach-prep"\)/);
-});
 test('a routine Hermes holds paused in any of its three forms is shown paused and can be resumed through enable',async t=>{
  const {hermes,scheduler}=await withGoal(t);
  const row=await scheduler.control({kind:'review',at:'17:00'},{enable:true});

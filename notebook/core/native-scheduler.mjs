@@ -12,8 +12,7 @@ import {starterBorn,adoptedMissionControl} from './starter-workspace.mjs';
 import {setHermesTimezone} from './hermes-config.mjs';
 import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,chatAppInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
-import {readNotebookRoutines,rememberNotebookRoutine,enableKind,bundledEnableRecipe,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,CHAT_TIDY_SCHEDULE,CHAT_TIDY_WHAT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,MAIL_COUNT_JOB,MAIL_COUNT_SCRIPT,MAIL_COUNT_WHAT,WORKOUTS_JOB,WORKOUTS_SCRIPT,WORKOUTS_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
-import {installSkillTree} from './packaged-skills.mjs';
+import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,CHAT_TIDY_SCHEDULE,CHAT_TIDY_WHAT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,MAIL_COUNT_JOB,MAIL_COUNT_SCRIPT,MAIL_COUNT_WHAT,WORKOUTS_JOB,WORKOUTS_SCRIPT,WORKOUTS_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
 import {holdQueuedNotices} from './notices.mjs';
 import {certifyRoutineRuns} from './background-reports.mjs';
 import {writeRoutinePromise} from './routine-promises.mjs';
@@ -791,8 +790,6 @@ export class NativeScheduler{
   if(enable){
    this.requireOwner('Add the routine');
    const known=enableKind(input.kind),skill=known?.skill||skills[input.kind]||input.kind;
-   const bundled=known&&bundledEnableRecipe(input.kind);
-   if(bundled&&!fs.existsSync(path.join(this.store.root,'skills',skill,'SKILL.md')))installSkillTree(this.store,bundled,path.join(this.store.root,'skills',skill),{adopted:adoptedMissionControl(this.store.root)});
    if(!/^[a-z0-9-]+$/.test(skill)||!fs.existsSync(path.join(this.store.root,'skills',skill,'SKILL.md')))throw Error('This mission control does not have the recipe for that routine');
    const starting=STARTING_ROUTINES.find(routine=>routine.key===input.kind)||null;
    const installed=starting&&installedRoutine(this.home,this.store.root,starting);

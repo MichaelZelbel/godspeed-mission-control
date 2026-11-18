@@ -1,1 +1,0 @@
-import{t as s}from"./claims-CmnKleGd.js";const r=/^(\d{4})-(\d{2})-(\d{2})/;function a(t){return t.slice(0,10)}function u(t){if(!t)return null;const e=r.exec(t);if(e)return new Date(Number(e[1]),Number(e[2])-1,Number(e[3]));const n=new Date(t);return Number.isNaN(n.getTime())?null:n}function f(t,e=new Date){return!t||!r.test(t)?!1:a(t)<s(e)}export{f as i,u as p};

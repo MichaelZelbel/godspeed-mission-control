@@ -243,7 +243,7 @@ contains "  and the receipts and the review step" "$OUT" "then its receipts (coa
 contains "  and the tries and the repair item" "$OUT" "after three failed tries in a row, one repair item goes to your work list"
 
 : > "$ST/forge"
-OUT="$(rrun --open-talk)"; check "a researched talk whose review passes exits 0" "$?" "0"
+OUT="$(rrun)"; check "a researched talk whose review passes exits 0" "$?" "0"
 check "  the writer ran, then the reviewer" "$(cat "$ST/calls")" "2"
 contains "  the writer's prompt carries its marker" "$(cat "$ST/prompt.1")" "RUN MARKER: gs-prep-"
 contains "  and asks for Routes, from pages read" "$(cat "$ST/prompt.1")" "write Routes, Rejected routes and Research coverage"
@@ -265,7 +265,6 @@ check "  the evidence names the writer's marker" "$("$NODE" -e 'console.log(JSON
 check "  and only the page read successfully inside the run" "$("$NODE" -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).sources.map(s=>s.url+" "+s.tool).join("|"))' "$EVF")" "https://example.org/report WebFetch"
 check "  the review is the reviewer's session, not the writer's" "$("$NODE" -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log(r.reviewer.token.slice(0,10)+" "+r.verdict+" "+r.coverage.map(c=>c.id).join(","))' "$RVF")" "gs-review- pass income,run-10k"
 contains "  the summary says it passed its review" "$(cat "$R4/summary.txt")" "work 2026-11-15: prepared (coach/work/prep/2026-11-15.md), its review passed on try 1"
-contains "  Run now creates its canonical waiting talk" "$(cat "$G4/coach/work/talks/2026-11-15.md")" "PREP: coach/work/prep/2026-11-15.md"
 check "  the try is recorded as passed" "$(cut -f1 "$R4/work-2026-11-15.tries")" "pass"
 IN="$(git -C "$G4" show --name-only --format= HEAD)"
 contains "  the commit holds the evidence" "$IN" "coach/work/prep/2026-11-15.evidence.json"

@@ -8,7 +8,7 @@ import {beatWhile,HEARTBEAT_EVERY} from '../supervisor-health.mjs';
 import {LEGACY_DEVICE} from '../device-id.mjs';
 // No goal-decision or goal-work (18 October 2026): a goal's loop is the original assistant's
 // (mc-research, mc-decide, mc-work-run, run by Hermes' routines), the one every installation runs.
-export const kinds = ['habit-check', 'coaching', 'coach-prep', 'deadline-reminder', 'profiling', 'review', 'morning-brief', 'audit', 'memory-review', 'watch',...procedureKinds];
+export const kinds = ['habit-check', 'coaching', 'deadline-reminder', 'profiling', 'review', 'morning-brief', 'audit', 'memory-review', 'watch',...procedureKinds];
 const restartableReads=new Set(['disk-check','health-summary','watch','domain-watch','portfolio','connection-check','audit','selftest','job-check']);
 // Checks that usually find nothing: a run of one that says nothing leaves no receipt (finish below).
 const quietReads=new Set([...restartableReads,'coach-tick','journal-tick','coach-cycle','deadline-reminder']);

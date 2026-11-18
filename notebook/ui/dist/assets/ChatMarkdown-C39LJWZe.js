@@ -1,1 +1,0 @@
-import{j as r}from"./index-Bruf8MSz.js";import{c as t,a}from"./chat-markdown-BoYQ55H0.js";import{M as n}from"./index-B5FjeGWy.js";import"./safe-url-vTOGZhhg.js";import"./index-CNNSG-f8.js";function u({children:o}){return r.jsx(n,{remarkPlugins:a,components:t,children:o})}export{u as default};

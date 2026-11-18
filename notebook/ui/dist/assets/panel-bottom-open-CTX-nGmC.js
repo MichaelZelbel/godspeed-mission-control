@@ -1,1 +1,0 @@
-import{bo as t}from"./index-Bruf8MSz.js";const o=t("PanelBottomOpen",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 15h18",key:"5xshup"}],["path",{d:"m9 10 3-3 3 3",key:"11gsxs"}]]);export{o as default};

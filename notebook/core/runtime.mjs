@@ -229,12 +229,6 @@ export function jobExecutor(configuredProvider,query) {
       const area=dueCoachAreas(store)[0];if(!area)return {verified:true,silent:true};
       return jobExecutor(provider,query)({...job,kind:'coaching',area},{settings,store});
     }
-    if(job.kind==='coach-prep'){
-      // A clean checkout has no Hermes routine runner. Run now still crosses the public
-      // scheduler boundary, so it must leave the same lasting talk that the installed
-      // preparation routine opens instead of saving an unrelated scheduler note.
-      return jobExecutor(provider,query)({...job,kind:'coaching',area:job.area||'health'},{settings,store});
-    }
     if(job.kind==='deadline-reminder')return remind(job,loop);
     if(job.kind==='morning-brief')return briefing(job,loop);
     if(job.kind==='brief-rehearsal')return briefing({...job,rehearsal:true},loop);

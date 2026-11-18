@@ -3441,16 +3441,6 @@ talk_good() { # <folder>
   local folder=$1 goal
   rm -rf "$folder"
   mkdir -p "$folder"
-  printf 'id=prep-job\nbefore=2026-11-01T10:00:00Z\n' >"$folder/prep-run-before.txt"
-  printf 'id=prep-job\nafter=2026-11-01T10:01:00Z\nstatus=ok\n' >"$folder/prep-run-after.txt"
-  printf '{"started":true}\n' >"$folder/prep-run-request.json"
-  printf '[{"id":"prep-job","name":"Coaching talk preparation","last_status":"ok","last_run_at":"2026-11-01T10:01:00Z"}]\n' >"$folder/prep-jobs-after.json"
-  printf 'AREA: health\nTALK: 2026-11-03 19:00\nSTATE: ready\n\n## The opening\n\nA preparation made by the installed job.\n\n## Talk card\n\n- One move.\n' >"$folder/routine-preparation.md"
-  printf 'coach/health/prep/2026-11-03.md\n' >"$folder/routine-preparation-source.txt"
-  printf 'ready: coach/health/prep/2026-11-03.md, prepared 2026-11-02 21:00\n' >"$folder/routine-preparation-check.txt"
-  printf 'A preparation made by the installed job.\n' >"$folder/routine-opening.txt"
-  printf 'AREA: health\nTALK: health\nDATE: 2026-11-03\nSTATE: opened\n\n## The opening\n\nA preparation made by the installed job.\n' >"$folder/routine-talk.md"
-  printf 'coach/health/talks/2026-11-03.md\n' >"$folder/routine-talk-source.txt"
   printf 'a=2026-11-02\nb=2026-11-03\noffset=+0000\n' >"$folder/days.txt"
   {
     printf 'AREA: health\nSERVES: lower-ldl, sleep-better, visible-abs\n'
@@ -3483,33 +3473,6 @@ talk_good() { # <folder>
 }
 section talk-prep-honest
 T=$TMP/talk
-
-if node --test "$ROOT/scenarios/test-talk-prep-run-now.mjs" >"$TMP/talk-prep-run-now.log" 2>&1; then
-  ok 'the public Run now caller attributes only fresh preparation output'
-else
-  bad "the public Run now caller regression failed: $(tr '\n' ' ' <"$TMP/talk-prep-run-now.log" | cut -c1-400)"
-fi
-
-mkdir -p "$T/freshness/coach/health/prep"
-printf 'old\n' >"$T/freshness/coach/health/prep/old.md"
-touch -d '2026-11-01 09:00:00 UTC' "$T/freshness/coach/health/prep/old.md"
-printf 'request\n' >"$T/freshness/request.json"
-touch -d '2026-11-01 10:00:00 UTC' "$T/freshness/request.json"
-FRESH_PREP=$(SCENARIO=freshness-test bash -c '. "$1/scenarios/scenario-lib.sh"; first_file_newer_than "$2/coach" "*/prep/*.md" "$2/request.json"' _ "$ROOT" "$T/freshness")
-if [ -z "$FRESH_PREP" ]; then
-  ok 'Run now freshness refuses a preparation older than its request'
-else
-  bad "Run now freshness accepted an older preparation: $FRESH_PREP"
-fi
-printf 'new\n' >"$T/freshness/coach/health/prep/new.md"
-touch -d '2026-11-01 11:00:00 UTC' "$T/freshness/coach/health/prep/new.md"
-FRESH_PREP=$(SCENARIO=freshness-test bash -c '. "$1/scenarios/scenario-lib.sh"; first_file_newer_than "$2/coach" "*/prep/*.md" "$2/request.json"' _ "$ROOT" "$T/freshness")
-if [ "$FRESH_PREP" = "$T/freshness/coach/health/prep/new.md" ]; then
-  ok 'Run now freshness retains a preparation newer than its request'
-else
-  bad "Run now freshness did not retain the newer preparation: $FRESH_PREP"
-fi
-
 talk_good "$T/good"
 passes 'a talk opened unprepared saying so, then one opened from a sealed preparation of all three goals' \
   talk-prep-honest "$T/good" 'opened from the preparation'"'"'s own opening'
@@ -3518,22 +3481,6 @@ copy "$T/good" "$T/empty-block"
 : >"$T/empty-block/block-b.txt"
 passes 'a day B whose scheduled context is empty, which is clean' \
   talk-prep-honest "$T/empty-block" 'opened from the preparation'"'"'s own opening'
-
-copy "$T/good" "$T/no-prep-job"
-printf '[]\n' >"$T/no-prep-job/prep-jobs-after.json"
-refuses 'no installed preparation job' talk-prep-honest "$T/no-prep-job" 'not attributable'
-
-copy "$T/good" "$T/no-new-prep-run"
-printf 'id=prep-job\nafter=2026-11-01T10:00:00Z\nstatus=ok\n' >"$T/no-new-prep-run/prep-run-after.txt"
-refuses 'no new completed preparation run' talk-prep-honest "$T/no-new-prep-run" 'no new completed run'
-
-copy "$T/good" "$T/failed-prep-run"
-sed -i 's/status=ok/status=failed/' "$T/failed-prep-run/prep-run-after.txt"
-refuses 'a failed installed preparation run' talk-prep-honest "$T/failed-prep-run" 'did not finish successfully'
-
-copy "$T/good" "$T/not-attributed"
-printf '[{"id":"another-job","name":"Coaching talk preparation","last_status":"ok"}]\n' >"$T/not-attributed/prep-jobs-after.json"
-refuses 'output not attributable to the installed preparation run' talk-prep-honest "$T/not-attributed" 'not attributable'
 
 copy "$T/good" "$T/a-still-open"
 printf '# Scheduled\n\n- Open talk: Health, since 2026-11-02\n' >"$T/a-still-open/block-b.txt"

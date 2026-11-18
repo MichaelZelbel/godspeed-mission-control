@@ -11,4 +11,3 @@ installers export-ignore
 # with Unix line endings most of the time, and "most of the time" is not what a reader
 # should get from the one command a chapter asks them to type.
 *.cmd text eol=crlf
-notebook/ui/dist/** whitespace=-trailing-space

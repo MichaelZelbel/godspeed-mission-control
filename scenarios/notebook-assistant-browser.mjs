@@ -12,6 +12,8 @@ if(!base||!evidence)throw Error('usage: notebook-assistant-browser.mjs --base UR
 fs.mkdirSync(path.join(evidence,'screenshots'),{recursive:true});
 const actions=[],consoleRows=[],network=[];
 const write=(name,value)=>fs.writeFileSync(path.join(evidence,name),typeof value==='string'?value:JSON.stringify(value,null,2)+'\n');
+const chrome=process.env.CHROME_PATH||['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(fs.existsSync);
+if(!chrome)throw Error('Chromium is not installed at a documented executable name; set CHROME_PATH');
 const profile=path.join(evidence,'.chromium-profile'),port=48764;
 let browser,fixture,ws,browserOut,browserErr;
 let browserExited;
@@ -103,11 +105,6 @@ const sendFrom=async(page,message)=>{
 };
 const saveProvider=async(url,key)=>{await go(base+'/dashboard/settings#connect-ai');await fill('Your AI service','other');await pause(100);await fill('Its address',url);await fill('Model, written','standin-model-1');await fill('Key',key);await click('Test and connect');await pause(1200);};
 try{
-  const chrome=process.env.CHROME_PATH||process.env.CHROME_BIN||process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH||[
-    '/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/opt/google/chrome/chrome',
-    '/usr/bin/chromium','/usr/bin/chromium-browser'
-  ].find(fs.existsSync);
-  if(!chrome)throw Error('Chromium is not installed at a documented executable name; set CHROME_PATH');
   browserOut=fs.openSync(path.join(evidence,'browser.stdout.log'),'a');
   browserErr=fs.openSync(path.join(evidence,'browser.stderr.log'),'a');
   browser=spawn(chrome,[`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'--headless=new','--no-sandbox','--no-first-run','--disable-gpu','about:blank'],{stdio:['ignore',browserOut,browserErr],detached:true});
@@ -130,17 +127,13 @@ try{
   await cdp('Page.enable');await cdp('Runtime.enable');await cdp('Network.enable');
   // The exact visible interaction sequence is implemented in the page so the retained action list
   // cannot be produced by direct API writes. input/change/click are the same DOM events a person causes.
-  const visible=expression=>js(`(()=>{const e=${expression};if(!e)return false;const r=e.getBoundingClientRect();return !e.disabled&&r.width>0&&r.height>0})()`);
-  const waitVisible=async(expression,description)=>{const until=Date.now()+deadline;while(Date.now()<until){if(await visible(expression))return;await pause(100);}throw Error('visible control not found: '+description);};
-  const click=async text=>{const expression=`[...document.querySelectorAll('button,a')].find(x=>x.textContent.trim()===${JSON.stringify(text)})`;await waitVisible(expression,text);await js(`(()=>{const e=${expression};e.click();return true})()`);await pause(700);};
+  const click=async text=>{const ok=await js(`(()=>{const e=[...document.querySelectorAll('button,a')].find(x=>x.textContent.trim()===${JSON.stringify(text)});if(!e)return false;e.click();return true})()`);if(!ok)throw Error('visible action not found: '+text);await pause(700);};
   const openMoment=async title=>{const ok=await js(`(()=>{const title=[...document.querySelectorAll('button p')].find(x=>x.textContent.trim()===${JSON.stringify(title)});const button=title?.closest('button');if(!button)return false;button.click();return true})()`);if(!ok)throw Error('visible Timeline moment not found: '+title);await pause(700);};
-  const controlFor=label=>`(()=>{const l=[...document.querySelectorAll('label')].find(x=>x.textContent.includes(${JSON.stringify(label)}));return l&&(l.htmlFor?document.getElementById(l.htmlFor):l.querySelector('input,select,textarea')||l.parentElement?.querySelector('input,select,textarea'))})()`;
-  const fill=async(label,value)=>{const expression=controlFor(label);await waitVisible(expression,label);await js(`(()=>{const e=${expression};const d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e),'value');d.set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);};
-  const chooseNewPerson=async name=>{await action('person-chosen-'+name.toLowerCase().replaceAll(' ','-'),async()=>{const picker=`document.querySelector('button[role="combobox"][aria-label="People"]')`;await waitVisible(picker,'People');await js(`(()=>{const e=${picker};e.click();return true})()`);const input=`document.querySelector('input[placeholder^="Search or type a new name"]')`;await waitVisible(input,'People name');await js(`(()=>{const e=${input};const d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e),'value');d.set.call(e,${JSON.stringify(name)});e.dispatchEvent(new Event('input',{bubbles:true}));return true})()`);const option=`[...document.querySelectorAll('[role="option"]')].find(x=>x.textContent.includes(${JSON.stringify('Add "'+name+'" as a new person')}))`;await waitVisible(option,'Add '+name+' as a new person');await js(`(()=>{const e=${option};e.click();return true})()`);});};
+  const fill=async(label,value)=>{const ok=await js(`(()=>{const l=[...document.querySelectorAll('label')].find(x=>x.textContent.includes(${JSON.stringify(label)}));const e=l&&(l.htmlFor?document.getElementById(l.htmlFor):l.parentElement?.querySelector('input,select,textarea'));if(!e)return false;const d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e),'value');d.set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);if(!ok)throw Error('visible control not found: '+label);};
   const screenshot=async name=>{const x=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(evidence,'screenshots',name+'.png'),Buffer.from(x.data,'base64'));};
-  const moment=async(name,title,edit,person)=>{globalThis.momentOperation=edit?'edit':'save';await action(name,async()=>{if(edit){await openMoment(title);await click('Edit Moment');await fill('Title',title+' edited');await click('Save Changes');}else{await click('Add Moment');await fill('Title',title);await fill('Start Date',new Date().toISOString().slice(0,10));if(person)await chooseNewPerson(person);await click('Create Moment');}await pause(800);});};
+  const moment=async(name,title,edit)=>{globalThis.momentOperation=edit?'edit':'save';await action(name,async()=>{if(edit){await openMoment(title);await click('Edit Moment');await fill('Title',title+' edited');await click('Save Changes');}else{await click('Add Moment');await fill('Title',title);await click('Create Moment');}await pause(800);});};
   await go(base+'/dashboard/timeline');globalThis.phase='without-ai';
-  await moment('moment-saved-without-ai','No AI fixture moment',false,'No AI Fixture Person');
+  await moment('moment-saved-without-ai','No AI fixture moment',false);
   await moment('moment-edited-without-ai','No AI fixture moment',true);
   await action('collection-ready',async()=>{await go(base+'/collections');const exists=await js(`!!document.querySelector('a[href^="/collections/"]:not([href="/collections/templates"])')`);if(!exists){await click('or create a blank collection');await fill('Name','Scenario observations');await click('Create');await pause(900);await go(base+'/collections');}if(!await js(`!!document.querySelector('a[href^="/collections/"]:not([href="/collections/templates"])')`))throw Error('the visible collection setup made no collection card');});
   const routes={dashboard:'/dashboard', 'global-chat':'/dashboard', 'full-chat':'/dashboard/chat', 'note-chat':'/dashboard/notes', 'collection-chat':'/collections', 'popout-chat':'/dashboard'};
@@ -162,9 +155,9 @@ try{
   await action('notebook-restarted',async()=>{const oldPid=await systemctl('show','--property=MainPID','--value',service);await systemctl('restart',service);let healthy=false;for(let n=0;n<80;n++){try{if((await fetch(base+'/health')).ok){healthy=true;break;}}catch{}await pause(250);}const newPid=await systemctl('show','--property=MainPID','--value',service);if(!healthy||!+oldPid||!+newPid||oldPid===newPid)throw Error('the notebook did not return under a new service process');write('restart.txt',`old_pid=${oldPid} new_pid=${newPid} healthy=yes\n`);});
   await action('provider-after-restart',async()=>{await go(base+'/dashboard/settings#connect-ai');await observeProvider('provider-restart.json');await screenshot('provider-after-restart');});
   await go(base+'/dashboard/timeline');globalThis.phase='with-ai';
-  await moment('moment-saved-with-ai','AI fixture moment',false,'AI Fixture Person');
+  await moment('moment-saved-with-ai','AI fixture moment',false);
   await moment('moment-edited-with-ai','AI fixture moment',true);await screenshot('moments');
-  write('moments.json',{'without-ai':{saved:true,edited:true,person:true},'with-ai':{saved:true,edited:true,person:true}});
+  write('moments.json',{'without-ai':{saved:true,edited:true},'with-ai':{saved:true,edited:true}});
   const transition=async(phase,url,key)=>{globalThis.phase=phase;globalThis.providerMode='connected';await saveProvider(url,key);globalThis.providerMode=phase==='recovered'?'connected':phase;for(const {surface,page} of observationPages){const sent=surface==='dashboard'?{}:await sendFrom(page,`${phase} old-tab observation`);await observeSurface(page,phase,surface,1280,{withoutReload:true,...sent});}};
   await transition('connected','http://127.0.0.1:48763/v1','scenario-connected-key');
   const connectedStatus=await fetch(base+'/api/status').then(r=>r.json());snapshots.push({phase:'connected-http',surface:'http-status',width:1280,state:'connected',httpAgreement:connectedStatus.runtimeConfigured===true});
