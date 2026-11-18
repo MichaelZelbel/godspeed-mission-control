@@ -170,6 +170,21 @@ test('a domain that always fails sits next to a healthy one that keeps being che
  assert.ok(sent.every(text=>!text.includes('down.example')));
 });
 
+test('one RDAP outage never pauses the sweeper and a healthy domain keeps changing',async()=>{
+ const {store,query}=setup(),at=Date.parse('2026-11-17T12:00:00Z');store.save('settings',{id:'installation',owner:store.device,timezone:'UTC',delivery:'notebook'});addDomainWatch(store,'up.example');addDomainWatch(store,'down.example');
+ store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at).toISOString()});
+ let healthy=['active'],down=true;const scheduler=new Scheduler(store,{query,executor:job=>procedure(job,{store,query,fetcher:async url=>{if(String(url).includes('down.example')&&down)throw Error('offline');return rdap(String(url).includes('up.example')?healthy:['active']);}})});
+ for(let run=0;run<5;run++){
+  const slot=at+run*21600000;await scheduler.tick(slot);
+  const job=store.get('jobs','domain-watch-sweeper');assert.equal(job.paused,false);assert.equal(job.state,'pending');assert.equal(job.retry_count,0);assert.equal(Date.parse(job.next_run),slot+21600000);
+ }
+ const failedRuns=store.list('job_receipts').filter(receipt=>receipt.job_id==='domain-watch-sweeper');assert.equal(failedRuns.length,5);assert.ok(failedRuns.every(receipt=>receipt.result.domains.some(domain=>domain.domain==='down.example'&&domain.ok===false&&domain.error==='offline')));
+ healthy=['pendingDelete'];down=false;await scheduler.tick(at+5*21600000);
+ assert.equal(store.get('jobs','domain-watch-sweeper').paused,false);assert.equal(store.get('jobs','domain-watch-sweeper').state,'pending');
+ assert.equal(store.get('domain_watches','domain-'+hash('up.example').slice(0,24)).state,'pending delete');assert.equal(store.get('domain_watches','domain-'+hash('down.example').slice(0,24)).state,'registered');
+ assert.equal(store.list('notifications').filter(note=>note.domain==='up.example').length,1);
+});
+
 test('chat authorizes adding, listing and removing a named domain',async()=>{
  const {store,query}=setup();let seen,answer={reply:'Done',language:'en',operations:[{type:'domain-watch-add',domain:'example.com',source_quote:'watch the domain example.com'}]};
  const domains=new Domains(query,{provider:async request=>{seen=request;return answer;}});
