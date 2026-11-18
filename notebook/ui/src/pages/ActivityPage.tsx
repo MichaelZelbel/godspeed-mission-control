@@ -141,7 +141,7 @@ export default function ActivityPage() {
       {/* Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <Select value={actionFilter} onValueChange={setActionFilter}>
-          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-[160px]" aria-label="Show activity"><SelectValue /></SelectTrigger>
           <SelectContent>
             {ACTION_OPTIONS.map((o) => (
               <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
