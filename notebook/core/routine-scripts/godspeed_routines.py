@@ -58,6 +58,9 @@ run and only when the routine has no line of its own. The notebook writes it wit
 chat reads. A mission control not made from the starter has a third one, notices, that says only notices; a
 notice marked not_sent (queued before that routine first started) is never said. Every message a routine sends is recorded in the notebook's conversation_messages, so
 the chat can tell what a message was about (core/background-reports.mjs).
+On a mission control not made from the starter the journal and the coach leave every notice to notices
+(#712): Hermes there keeps wrapping a routine's message with "stop reminder <routine>", and that must
+name the routine that really sends it.
 
 Printing nothing is Hermes' silence: nothing is sent and no note is saved. A failure exits non-zero
 with one plain sentence, which the notebook's Routines list shows as the last run.
@@ -833,6 +836,12 @@ def tick(c, env, kind, r):
     own = r.stdout.strip() if r is not None and r.returncode == 0 else ""
     if own:
         return own, False
+    # On a mission control not made from the starter Hermes keeps its own cron.wrap_response, so a
+    # notice said here would end with "stop reminder <journal or coach>" (#712). The notice sender says
+    # them there; held_ids still runs, since whichever reader comes first holds what came before it.
+    if c.get("adopted"):
+        held_ids(c)
+        return "", True
     found = notice(c)
     if found:
         return say_claimed(c, env, found), True

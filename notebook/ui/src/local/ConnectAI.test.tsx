@@ -41,9 +41,11 @@ describe("the saved main AI in Settings", () => {
     settings();
     expect(await screen.findByText("This installation runs no daily routines and no assistant chat because no assistant program is installed.")).toBeInTheDocument();
     const choice = screen.getByRole("checkbox", { name: /daily routines and the chat/ });
-    expect(choice).not.toBeChecked();
+    expect(choice).toBeChecked();
     expect(choice).toBeEnabled();
-    expect(choice.parentElement).toHaveTextContent("Test and connect keeps this AI for notebook work only");
+    expect(choice.parentElement).toHaveTextContent("ticked it answers the chats itself; unticked, Test and connect keeps this AI for notebook work only");
+    fireEvent.click(choice);
+    expect(choice).not.toBeChecked();
     fireEvent.change(screen.getByLabelText(/Model, written/),{target:{value:"fictional/model"}});
     fireEvent.change(screen.getByLabelText("Key"),{target:{value:"fictional-key"}});
     fireEvent.click(screen.getByRole("button",{name:"Test and connect"}));
@@ -51,16 +53,17 @@ describe("the saved main AI in Settings", () => {
     expect(calls.find(c=>c.route==="provider"&&c.body)?.body).toMatchObject({model:"fictional/model",routines:false});
   });
 
-  it("keeps the unavailable assistant scope from being saved as if it worked", async () => {
-    const calls=serve(supportingRoutes);
+  it("lets an installation without an assistant connect its AI for the chats too", async () => {
+    const calls=serve({...supportingRoutes,provider:body=>[200,body?{connected:true,provider:{configured:true,url:body.url,model:body.model,key:true,routines:body.routines},routines:{available:false}}:{configured:false,key:false}]});
     settings();
     const choice=await screen.findByRole("checkbox",{name:/daily routines and the chat/});
-    fireEvent.click(choice);
+    expect(choice).toBeChecked();
     fireEvent.change(screen.getByLabelText(/Model, written/),{target:{value:"fictional/model"}});
     fireEvent.change(screen.getByLabelText("Key"),{target:{value:"fictional-key"}});
     fireEvent.click(screen.getByRole("button",{name:"Test and connect"}));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Install the assistant program/);
-    expect(calls.some(c=>c.route==="provider"&&c.body)).toBe(false);
+    await screen.findByText("Connected. The chat and the notebook use it.");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(calls.find(c=>c.route==="provider"&&c.body)?.body).toMatchObject({model:"fictional/model",routines:true});
   });
 
   it("keeps the routines and chat choice and saves it when assistant routines are available", async () => {

@@ -7,7 +7,7 @@ import '@testing-library/jest-dom/vitest';
 import {GlobalAIChatFAB} from './GlobalAIChatFAB';
 import {NoteChatPanel} from '@/components/notes/NoteChatPanel';
 import {CollectionChatPanel} from '@/components/collections/CollectionChatPanel';
-import {ChatConnectionEmptyState,chatHistoryVisible} from './ChatConnectionEmptyState';
+import {ChatConnectionEmptyState} from './ChatConnectionEmptyState';
 
 vi.mock('sonner',()=>({toast:{error:vi.fn(),warning:vi.fn()}}));
 vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:{id:'owner'},session:{user:{id:'owner'}}})}));
@@ -47,6 +47,16 @@ it('refreshes an open chat in the background when AI availability changes',async
   expect(screen.getByText('Your AI could not be reached')).toBeInTheDocument();
 });
 
+it('replaces stale unavailable guidance when an open composer recovers the AI',async()=>{
+  let options={connected:true,usable:false};
+  vi.stubGlobal('fetch',vi.fn(async()=>response(options)));
+  wrap(<ChatConnectionEmptyState ready={<div>Ready to chat</div>}/>);
+  await vi.waitFor(()=>expect(screen.getByText('Your AI could not be reached')).toBeInTheDocument());
+  options={connected:true,usable:true};
+  await act(async()=>window.dispatchEvent(new Event('chat-ai-options-changed')));
+  await vi.waitFor(()=>expect(screen.getByText('Ready to chat')).toBeInTheDocument());
+});
+
 for(const [name,show] of surfaces){
   it(`${name} shows setup guidance with no AI`,async()=>{
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}):response({data:[]})));
@@ -78,8 +88,21 @@ it('an open note chat with an earlier reply shows a later refused-key state',asy
   expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toBeInTheDocument();
 });
 
-it('keeps existing replies visible while the first live-state read is still pending',()=>{
-  expect(chatHistoryVisible('checking')).toBe(true);
-  expect(chatHistoryVisible('ready')).toBe(true);
-  for(const state of ['none','refused','unreachable','settings-only'] as const)expect(chatHistoryVisible(state)).toBe(false);
+it('keeps an open conversation readable and shows the live state under it',async()=>{
+  let options:Record<string,unknown>={connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]};
+  vi.stubGlobal('fetch',vi.fn(async()=>response(options)));
+  const {client}=wrap(<><p>Earlier stand-in reply</p><ChatConnectionEmptyState ready={null}/></>);
+  // The first read is still pending: nothing extra appears under the conversation.
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  await vi.waitFor(()=>expect(client.getQueryData(['chat-options'])).toBeTruthy());
+  for(const [availability,text] of [['refused','Your AI key or sign-in was refused'],['unreachable','Your AI could not be reached']] as const){
+    options={...options,usable:false,availability};
+    act(()=>{client.setQueryData(['chat-options'],options);});
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    expect(screen.getByText('Earlier stand-in reply')).toBeInTheDocument();
+  }
+  options={...options,usable:true,availability:'ready'};
+  act(()=>{client.setQueryData(['chat-options'],options);});
+  await vi.waitFor(()=>expect(screen.queryByText('Your AI could not be reached')).not.toBeInTheDocument());
+  expect(screen.getByText('Earlier stand-in reply')).toBeInTheDocument();
 });

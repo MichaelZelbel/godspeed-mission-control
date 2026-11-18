@@ -49,6 +49,23 @@ it('keeps an open chat notice and picker on the same state after reconnection',a
  expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('fictional-model');
 });
 
+it('an open chat notice and its picker follow a refusal, an outage and recovery within about five seconds, without a reload',async()=>{
+ vi.useFakeTimers();let state:'ready'|'refused'|'unreachable'='ready';
+ const body=()=>state==='ready'?{connected:true,usable:true,availability:'ready',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}:{connected:true,usable:false,availability:state,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]};
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(body()),{headers:{'Content-Type':'application/json'}})));
+ const props={value:'',onChange(){},onSend(){},onStop(){},busy:false,files:[],onFiles(){},model:'',effort:'',onModel:vi.fn(),onEffort(){},reply:'',onError(){}};
+ render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter><ChatConnectionEmptyState ready={<p>Ready notice</p>}/><ChatComposer {...props}/></MemoryRouter></QueryClientProvider>);
+ await vi.waitFor(()=>expect(screen.getByText('Ready notice')).toBeInTheDocument());
+ for(const [next,notice,picker] of [['refused','Your AI key or sign-in was refused','Model: Your AI key or sign-in was refused'],['unreachable','Your AI could not be reached','Model: Your AI could not be reached'],['ready','Ready notice','fictional-model']] as const){
+  state=next;
+  // Two seconds, well inside the five the server takes between its own checks: the page reads the
+  // shared state each second, and the picker refreshes as soon as that state changes.
+  await act(()=>vi.advanceTimersByTimeAsync(2000));
+  expect(screen.getByText(notice)).toBeInTheDocument();
+  expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue(picker);
+ }
+});
+
 it('with no AI connected the model picker says so and both pickers are off',async()=>{
  answer({connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]});show();
  const model=screen.getByRole('combobox',{name:'Model'});
@@ -69,6 +86,27 @@ it('a connected AI keeps its model and effort choices',async()=>{
  const props=show();
  await waitFor(()=>expect(props.onModel).toHaveBeenCalledWith('fictional-model'));
  expect(screen.getByRole('option',{name:'fictional-model'})).toBeInTheDocument();expect(screen.getByRole('option',{name:'other-model'})).toBeInTheDocument();
+ expect(screen.getByRole('combobox',{name:'Model'})).toBeEnabled();
+});
+
+it('clears an already selected model when the connected AI is unusable',async()=>{
+ answer({connected:true,usable:false,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]});
+ const props={value:'',onChange(){},onSend(){},onStop(){},busy:false,files:[],onFiles(){},model:'fictional-model',effort:'high',onModel:vi.fn(),onEffort:vi.fn(),reply:'',onError(){}};
+ const {rerender}=render(<ChatComposer {...props}/>);
+ await waitFor(()=>expect(props.onModel).toHaveBeenCalledWith(''));
+ expect(props.onEffort).toHaveBeenCalledWith('');
+ rerender(<ChatComposer {...props} model="" effort=""/>);
+ expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('Model: Your AI could not be reached');
+ expect(screen.getByRole('combobox',{name:'Model'})).toBeDisabled();
+});
+
+it('refreshes an already-open chat when AI availability changes',async()=>{
+ vi.useFakeTimers({toFake:['setInterval','clearInterval']});let available=false;
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(available?{connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}:{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]}),{headers:{'Content-Type':'application/json'}})));
+ const props=show();
+ await waitFor(()=>expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('Model: No AI is connected yet'));
+ available=true;await act(async()=>{await vi.advanceTimersByTimeAsync(5000);});
+ await waitFor(()=>expect(props.onModel).toHaveBeenLastCalledWith('fictional-model'));
  expect(screen.getByRole('combobox',{name:'Model'})).toBeEnabled();
 });
 

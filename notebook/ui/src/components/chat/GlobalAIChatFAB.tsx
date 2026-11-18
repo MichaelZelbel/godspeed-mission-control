@@ -49,7 +49,7 @@ import {
 const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 
 import ChatComposer, {type ChatFile} from "./ChatComposer";
-import {ChatConnectionEmptyState,chatAIState,chatHistoryVisible,useChatOptions} from "./ChatConnectionEmptyState";
+import {ChatConnectionEmptyState} from "./ChatConnectionEmptyState";
 import {isCurrentAIError,listenForChatOptions} from "@/local/chat-options.mjs";
 import { useChatEntryInView } from "./chat-entry";
 import { BRAIN_PAGE } from "@/lib/brain-page";
@@ -76,7 +76,6 @@ export const OPEN_CHAT_EVENT="godspeed:open-chat";
 // dashboard's "Tell Godspeed about you" sends "context"); returns false when no floating chat answered.
 export function openFloatingChat(message?:string){const event=new CustomEvent(OPEN_CHAT_EVENT,{cancelable:true,detail:{message}});window.dispatchEvent(event);return event.defaultPrevented;}
 export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChange,pageContext}:{page?:boolean;embedded?:boolean;noteTitle?:string;onOpenChange?:(open:boolean)=>void;pageContext?:PageContext}) {
-  const liveAIState=chatAIState(useChatOptions().data);
   const { user, session } = useAuth();
   const location = useLocation();
   const talkId=page?new URLSearchParams(location.search).get('talk'):null;
@@ -643,7 +642,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                 </div>}/>
               )}
 
-              {chatHistoryVisible(liveAIState)&&state.messages.map((msg, i) => (
+              {state.messages.map((msg, i) => (
                 <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : ""}`}>
 
                   <div
@@ -709,6 +708,10 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                 </div>
               ))}
 
+              {/* An open conversation keeps its replies and shows the AI's current state under them, so a
+                  refused key, an outage or recovery is seen without a reload (#590). */}
+              {state.messages.length > 0 && <ChatConnectionEmptyState ready={null}/>}
+
               {isLoading && (
                 <div className="flex items-center gap-2">
 
@@ -719,7 +722,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
               )}
 
               {error && (
-                <div className="flex items-center gap-2 text-destructive text-xs bg-destructive/10 rounded-lg px-3 py-2">
+                <div role="alert" data-chat-reply-error className="flex items-center gap-2 text-destructive text-xs bg-destructive/10 rounded-lg px-3 py-2">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span>{error}</span>
                 </div>

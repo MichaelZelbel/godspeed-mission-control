@@ -196,6 +196,20 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   let workouts=null;
   const automaticUpdate=new AutomaticUpdate({store,lifecycle,start:()=>startUpdate({root:store.root})});
   domains.assistantProblem=assistantMissing?assistantProblem:null;
+  // The AI a person connected in Settings, as saved (null when there is none or it cannot be read).
+  const savedChatProvider=()=>{try{return readSavedProvider(providerPath);}catch{return null;}};
+  // With the original runtime on and no verified assistant program, an AI the person connected in
+  // Settings "for the daily routines and the chat too" answers the chats itself, so connecting,
+  // a refused key, an outage and recovery show in every chat (#590). Unticked, it stays with the
+  // notebook's own work, and the chats say so (settingsOnlyAI).
+  const settingsChatAI=()=>assistantMissing&&!!domains.provider&&savedChatProvider()?.routines===true;
+  const chatAssistantMissing=()=>assistantMissing&&!settingsChatAI();
+  Object.defineProperty(domains,'assistantProblem',{configurable:true,enumerable:true,get:()=>chatAssistantMissing()?assistantProblem:null,set:()=>{}});
+  // Connected in Settings for notebook work only: with Hermes, Hermes has no model of its own; without
+  // it, the person left "for the daily routines and the chat too" unticked.
+  const settingsOnlyAI=()=>{if(!originalRuntime)return false;const saved=savedChatProvider();if(!saved)return false;return routineAI?routineAIStatus(routineAI).source==='none':saved.routines!==true;};
+  // Whether the chat AI answers now: the newest provider result (a check or a real request) wins (#590).
+  const chatAIReady=()=>{if(!domains.provider||chatAssistantMissing()||settingsOnlyAI())return false;const health=provider?.health?.();return provider?.availabilityHealth&&chatAICheckedAt?health==='ready':chatAIUsable&&health!=='refused';};
   if(originalRuntime&&!assistantMissing){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root,providerFile:providerPath,keptFile:path.join(store.state,KEPT_FILE),lifecycle});const scenarioReleaseUrl=process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL;const updater=new HermesUpdate({store,descriptor,ask:askDirectly,lifecycle,releaseUrl:isScenarioHermesReleaseUrl(scenarioReleaseUrl)?scenarioReleaseUrl:undefined});scheduler.updater=updater;scheduler.chatHealth=new ChatHealth({store,descriptor,lifecycle});domains.hermesUpdate=updater;domains.nativeScheduler=scheduler;query.nativeHermesHome=descriptor.home;}
   // Where the routines' AI is set: the Hermes home the routines run in (core/routine-ai.mjs).
   const routineAI=originalRuntime&&descriptor?.verified&&descriptor.home?{home:descriptor.home,state:store.state}:null;
@@ -433,7 +447,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(req.method!=='POST')return send(res,405,{error:'Use POST'});
         return send(res,200,automaticUpdate.save(JSON.parse(await body(req,4096))));
       }
-      if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,aiConfigured:!!domains.provider,runtimeConfigured:!!domains.provider&&!assistantMissing,assistantProblem:domains.provider&&!assistantMissing?null:assistantProblem,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime&&!assistantMissing?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
+      if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,aiConfigured:!!domains.provider,runtimeConfigured:chatAIReady(),assistantProblem:domains.provider&&!chatAssistantMissing()?null:assistantProblem,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime&&!assistantMissing?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
       if(route==='/api/hermes-update'){
         if(!domains.hermesUpdate)return send(res,200,{available:false});
         if(req.method==='GET')return send(res,200,{available:true,...updateStatus(store)});
@@ -711,23 +725,25 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         // A provider deliberately kept for notebook work is still connected, even when this
         // checkout has no assistant program. It is not usable for chat, which is the state the
         // public Settings form created and the person needs to see.
-        if(originalRuntime&&readSavedProvider(providerPath)&&(!routineAI||routineAIStatus(routineAI).source==='none')){
+        if(settingsOnlyAI()){
           const options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
           return send(res,200,{connected:true,usable:false,availability:chatAvailability('settings-only'),...options});
         }
-        if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,availability:chatAvailability('none'),current:NO_AI_STATUS,models:[{id:'',efforts:[]}]});
+        if(!domains.provider||chatAssistantMissing())return send(res,200,{connected:false,usable:false,availability:chatAvailability('none'),current:NO_AI_STATUS,models:[{id:'',efforts:[]}]});
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
-        // On an integrated install, the Settings endpoint can power notebook-only jobs while the
-        // assistant still has no model. Do not present that endpoint as a working chat model.
-        if(provider?.check&&(chatAICheck||Date.now()-chatAICheckedAt>=5000)){
-          if(!chatAICheck){chatAICheckedAt=Date.now();chatAICheck=provider.check().then(()=>{chatAIUsable=true;},error=>{chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}).finally(()=>{chatAICheck=null;});}
-          await chatAICheck;
+        // One shared check for every overlapping reader (#667): a reader that arrives while it runs
+        // waits for the same result instead of reporting the older cached one.
+        if(provider?.check){
+          if(!chatAICheck&&Date.now()-chatAICheckedAt>=5000){
+            chatAICheckedAt=Date.now();
+            chatAICheck=(async()=>{try{await provider.check();chatAIUsable=true;}catch(error){chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}})().finally(()=>{chatAICheck=null;});
+          }
+          if(chatAICheck)await chatAICheck;
         }
         // A real chat request can fail between the five-second probes. Its provider result is newer
         // than the cached probe and must immediately win, or the Dashboard can still say Ready while
-        // the chat correctly reports a refused key or outage.
-        const providerHealth=provider?.health?.(),usable=provider?.availabilityHealth?providerHealth==='ready':chatAIUsable&&providerHealth!=='refused';
-        const availability=chatAvailability(usable?'ready':providerHealth==='refused'?'refused':'unreachable');
+        // the chat correctly reports a refused key or outage (#590).
+        const usable=chatAIReady(),availability=chatAvailability(usable?'ready':provider?.health?.()==='refused'?'refused':'unreachable');
         return send(res,200,{connected:true,usable,availability,...options});
       }
       if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}
@@ -735,7 +751,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));
         // A chat summary is read-only (Domains.summarizeChat): no message, receipt or retained conversation.
         const isChat=NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode!=='summarize',id=isChat?input.request_id:undefined;
-        if(isChat&&originalRuntime&&readSavedProvider(providerPath)&&(!routineAI||routineAIStatus(routineAI).source==='none'))throw new Error(SETTINGS_ONLY_AI_STATUS+'. '+SETTINGS_ONLY_AI_HELP);
+        if(isChat&&settingsOnlyAI())throw new Error(SETTINGS_ONLY_AI_STATUS+'. '+SETTINGS_ONLY_AI_HELP);
         if(isChat&&id&&(!/^[a-f0-9-]{36}$/.test(id)||chatRequests.has(id)))throw new Error('Invalid chat request');
         const receiptId=isChat&&id?'chat-request-'+id:null,requestHash=hash({name,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
         if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,{data:previous.result,error:null});throw Error('This interrupted chat request needs review before replay');}
@@ -761,7 +777,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});
         }catch(error){
           if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});
-          if(isChat&&domains.provider&&!assistantMissing&&!controller.signal.aborted&&/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d/i.test(error.message)){
+          if(isChat&&domains.provider&&!chatAssistantMissing()&&!controller.signal.aborted&&/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d/i.test(error.message)){
             chatAIUsable=false;chatAICheckedAt=Date.now();
             const refused=/HTTP (401|403)\b/.test(error.message)||(!/fetch failed|HTTP 5\d\d\b/i.test(error.message)&&domains.provider.health?.()==='refused');
             throw new Error(refused?'Your AI key or sign-in was refused. Check it in Settings, Your AI, then try again.':'Your AI could not be reached. Check its connection and Settings, Your AI, then try again.');

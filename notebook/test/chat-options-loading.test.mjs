@@ -16,15 +16,15 @@ test('invalid choices fail visibly rather than making up a model',async()=>{
 // #563: with no AI connected the picker said "Connected model" while the Dashboard and the chat said no AI is connected.
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import http from 'node:http';import {EventEmitter} from 'node:events';import {PassThrough} from 'node:stream';import {hermesProvider,modelProvider} from '../core/runtime.mjs';import {CHAT_AVAILABILITIES} from '../core/chat-availability.mjs';
-async function optionsFrom(t,provider){
+async function optionsFrom(t,provider,{defer=false}={}){
  const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL','GODSPEED_MODEL_KEY','GODSPEED_MODEL'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-options-'));
  for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
  const {createService}=await import('../server/main.mjs');const service=await createService({root:path.join(root,'workspace'),port:0,provider});
  t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
- const base='http://127.0.0.1:'+service.address.port,status=await (await fetch(base+'/api/status')).json();
+ const base='http://127.0.0.1:'+service.address.port,readStatus=async()=>await (await fetch(base+'/api/status')).json(),status=await readStatus();
  const readOptions=()=>loadChatOptions({fetcher:(url,init)=>fetch(base+url,init)});
- return {status,options:await readOptions(),readOptions};
+ return {status,options:defer?null:await readOptions(),readOptions,readStatus};
 }
 test('with no AI connected the model choices say so rather than naming a connected model',async t=>{
  const {status,options}=await optionsFrom(t);
@@ -69,12 +69,40 @@ test('AI usability is rechecked every five seconds in both directions',async t=>
  let now=100000,usable=true;
  t.mock.method(Date,'now',()=>now);
  const provider=Object.assign(async()=>({reply:'ok'}),{check:async()=>{if(!usable)throw Error('Fictional provider refusal');}});
- const {options,readOptions}=await optionsFrom(t,provider);
+ const {options,readOptions,readStatus}=await optionsFrom(t,provider);
  assert.equal(options.usable,true);
  usable=false;now+=5000;
  const unavailable=await readOptions();assert.equal(unavailable.usable,false);assert.equal(unavailable.availability,'unreachable');
+ assert.equal((await readStatus()).runtimeConfigured,false);
  usable=true;now+=5000;
  const ready=await readOptions();assert.equal(ready.usable,true);assert.equal(ready.availability,'ready');assert.deepEqual([...CHAT_AVAILABILITIES],['none','ready','refused','unreachable','settings-only']);
+ assert.equal((await readStatus()).runtimeConfigured,true);
+});
+test('overlapping availability reads share a failed health check result over a cached ready one, and a newer passing check restores ready',async t=>{
+ let now=100000,checks=0,optionReads=0,failNext=false,rejectCheck,checkStarted,secondArrived;
+ t.mock.method(Date,'now',()=>now);
+ const started=new Promise(resolve=>{checkStarted=resolve;}),arrived=new Promise(resolve=>{secondArrived=resolve;});
+ const provider=Object.assign(async()=>({reply:'ok'}),{
+  options:async()=>{optionReads++;if(failNext&&optionReads===3)secondArrived();return {current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]};},
+  check:()=>{checks++;if(!failNext)return Promise.resolve();checkStarted();return new Promise((resolve,reject)=>{rejectCheck=reject;});}});
+ const {readOptions,readStatus}=await optionsFrom(t,provider,{defer:true});
+ // A passing check reports ready at once and is cached for the next five seconds.
+ assert.equal((await readOptions()).usable,true);assert.equal((await readStatus()).runtimeConfigured,true);assert.equal(checks,1);
+ // Five seconds later one shared check is held in flight while a second reader overlaps it, then the check fails.
+ failNext=true;now+=5000;
+ const first=readOptions();await started;
+ const second=readOptions();await arrived;await new Promise(resolve=>setImmediate(resolve));
+ rejectCheck(new Error('Fictional private provider failure'));
+ const results=await Promise.all([first,second]);
+ assert.deepEqual(results.map(result=>result.usable),[false,false]);
+ assert.equal(checks,2,'the overlapping readers share one provider check');
+ assert.equal((await readOptions()).usable,false,'a later cached read keeps the failure');
+ assert.equal((await readStatus()).runtimeConfigured,false);
+ assert.equal(checks,2);
+ assert.doesNotMatch(JSON.stringify(results),/Fictional private provider failure/);
+ // Only a newer passing check restores ready.
+ failNext=false;now+=5000;
+ assert.equal((await readOptions()).usable,true);assert.equal((await readStatus()).runtimeConfigured,true);assert.equal(checks,3);
 });
 test('overlapping option requests wait for the same failing health check',async t=>{
  let now=100000,checks=0,optionReads=0,rejectCheck,startCheck,secondRequestArrived;
@@ -157,6 +185,37 @@ test('a notebook-only AI remains visible when an integrated checkout has no assi
  const options=await loadChatOptions({fetcher:(url,init)=>fetch(origin+url,init)});assert.equal(options.connected,true);assert.equal(options.usable,false);assert.equal(options.availability,'settings-only');
  const reply=await fetch(origin+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})}),answer=await reply.json();
  assert.equal(reply.status,400);assert.match(answer.error,/connected only to the notebook.*Use it for the daily routines and the chat too/);assert.doesNotMatch(answer.error,/fictional-key/);
+});
+test('an integrated checkout without an assistant program uses an AI connected for the chat too, and every surface follows its refusals, outages and recovery',async t=>{
+ // The stand-in answers with whatever status the test sets; 401 and 403 are refusals, 500 and a closed port are outages.
+ let status=200,requests=0;
+ const endpoint=http.createServer(async(req,res)=>{for await(const chunk of req);requests++;res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(status===200?{choices:[{message:{content:JSON.stringify({reply:'Stand-in answer.'})}}]}:{error:{message:'private provider detail fictional-key'}}));});
+ await new Promise(resolve=>endpoint.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>endpoint.close(resolve)));
+ const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
+ const base=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-settings-chat-no-assistant-')),root=path.join(base,'workspace');process.env.GODSPEED_ORIGINAL_RUNTIME='on';process.env.GODSPEED_ASSISTANT_CONFIG=path.join(base,'missing-assistant.json');
+ let now=1_000_000;t.mock.method(Date,'now',()=>now);
+ const {createService}=await import('../server/main.mjs');const service=await createService({root,port:0});
+ t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(base,{recursive:true,force:true});});
+ const origin='http://127.0.0.1:'+service.address.port,read=()=>loadChatOptions({fetcher:(url,init)=>fetch(origin+url,init)}),statusOf=async()=>(await fetch(origin+'/api/status')).json();
+ const chat=async()=>{const reply=await fetch(origin+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})});return {status:reply.status,body:await reply.json()};};
+ // Before connecting, nothing is connected and the chat says why.
+ assert.equal((await read()).availability,'none');assert.equal((await statusOf()).runtimeConfigured,false);
+ const connected=await fetch(origin+'/api/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'http://127.0.0.1:'+endpoint.address().port,key:'fictional-key',model:'fictional-model',routines:true})});
+ assert.equal(connected.status,200);
+ const ready=await read();assert.equal(ready.connected,true);assert.equal(ready.usable,true);assert.equal(ready.availability,'ready');
+ let state=await statusOf();assert.equal(state.runtimeConfigured,true);assert.equal(state.assistantProblem,null);
+ const answered=await chat();assert.equal(answered.status,200);assert.match(JSON.stringify(answered.body),/Stand-in answer\./);
+ for(const [code,expected,said] of [[401,'refused',/key or sign-in was refused/],[200,'ready',null],[403,'refused',/key or sign-in was refused/],[500,'unreachable',/could not be reached/],[200,'ready',null]]){
+  status=code;now+=5000;
+  const options=await read();assert.equal(options.availability,expected,'HTTP '+code);assert.equal(options.usable,expected==='ready');
+  state=await statusOf();assert.equal(state.runtimeConfigured,expected==='ready','the Dashboard agrees with the chats after HTTP '+code);
+  if(said){const failed=await chat();assert.equal(failed.status,400);assert.match(failed.body.error,said);assert.doesNotMatch(JSON.stringify([options,state,failed.body]),/fictional-key|private provider detail/);}
+  else{const again=await chat();assert.equal(again.status,200);assert.match(JSON.stringify(again.body),/Stand-in answer\./);}
+ }
+ // The address stops answering: an outage, not a refusal.
+ await new Promise(resolve=>endpoint.close(resolve));endpoint.closeAllConnections?.();now+=5000;
+ const down=await read();assert.equal(down.availability,'unreachable');assert.equal((await statusOf()).runtimeConfigured,false);
+ assert.ok(requests>0);
 });
 test('a connected AI without a model list is still shown as the connected model',async t=>{
  const {options}=await optionsFrom(t,async()=>({reply:'ok'}));

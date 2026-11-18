@@ -1,6 +1,6 @@
 import { useDockedChat } from "@/lib/side-chat";
 import ChatComposer, {type ChatFile} from "@/components/chat/ChatComposer";
-import {ChatConnectionEmptyState,chatAIState,chatHistoryVisible,useChatOptions} from "@/components/chat/ChatConnectionEmptyState";
+import {ChatConnectionEmptyState} from "@/components/chat/ChatConnectionEmptyState";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -57,7 +57,6 @@ export interface NoteChatPanelProps {
 }
 
 export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelProps) {
-  const liveAIState=chatAIState(useChatOptions().data);
   useDockedChat();
   const { session, user } = useAuth();
   const contextKey = `note:${note.id}`;
@@ -334,16 +333,18 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 p-3 space-y-3">
-        <ChatConnectionEmptyState ready={state.messages.length === 0 ? <div className="text-center text-muted-foreground text-xs py-8 space-y-2">
+        {state.messages.length === 0 && (
+          <ChatConnectionEmptyState ready={<div className="text-center text-muted-foreground text-xs py-8 space-y-2">
             <Bot className="h-8 w-8 mx-auto opacity-40" />
             <p>Ask me anything about this note or your knowledge base.</p>
             <p className="text-[10px]">
               I can search your notes, add content, update tags & metadata, and
               create links.
             </p>
-          </div> : null}/>
+          </div>}/>
+        )}
 
-        {chatHistoryVisible(liveAIState)&&state.messages.map((msg, i) => (
+        {state.messages.map((msg, i) => (
           <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : ""}`}>
 
             <div
@@ -414,6 +415,10 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
           </div>
         ))}
 
+        {/* An open conversation keeps its replies and shows the AI's current state under them, so a
+            refused key, an outage or recovery is seen without a reload (#590). */}
+        {state.messages.length > 0 && <ChatConnectionEmptyState ready={null}/>}
+
         {isLoading && (
           <div className="flex items-center gap-2">
 
@@ -424,7 +429,7 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
         )}
 
         {error && (
-          <div className="flex items-center gap-2 text-destructive text-xs bg-destructive/10 rounded-lg px-3 py-2">
+          <div role="alert" data-chat-reply-error className="flex items-center gap-2 text-destructive text-xs bg-destructive/10 rounded-lg px-3 py-2">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
