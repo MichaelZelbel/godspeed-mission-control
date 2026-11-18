@@ -517,6 +517,7 @@ jobs:
       GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
       GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
       GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+      GODSPEED_SCENARIO_AI_FREE_MODEL: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.pr != '' && inputs.stage == '')) && vars.GODSPEED_SCENARIO_AI_FREE_MODEL || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -529,7 +530,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/update-keeps-everything.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/free-first.sh bash scenarios/update-keeps-everything.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) update-keeps-everything:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL update-keeps-everything: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
@@ -722,6 +723,7 @@ jobs:
       GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
       GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
       GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+      GODSPEED_SCENARIO_AI_FREE_MODEL: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.pr != '' && inputs.stage == '')) && vars.GODSPEED_SCENARIO_AI_FREE_MODEL || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -734,7 +736,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/charm-challenge.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/free-first.sh bash scenarios/charm-challenge.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) charm-challenge:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL charm-challenge: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
@@ -799,6 +801,7 @@ jobs:
       GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
       GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
       GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+      GODSPEED_SCENARIO_AI_FREE_MODEL: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.pr != '' && inputs.stage == '')) && vars.GODSPEED_SCENARIO_AI_FREE_MODEL || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -811,7 +814,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/briefing-breaks-a-rule.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/free-first.sh bash scenarios/briefing-breaks-a-rule.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) briefing-breaks-a-rule:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL briefing-breaks-a-rule: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
@@ -866,6 +869,7 @@ jobs:
       GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
       GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
       GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+      GODSPEED_SCENARIO_AI_FREE_MODEL: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.pr != '' && inputs.stage == '')) && vars.GODSPEED_SCENARIO_AI_FREE_MODEL || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -878,7 +882,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/telegram-language.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/free-first.sh bash scenarios/telegram-language.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Keep what the scenario saw (each reply before and after, the plugin's log)
         if: always()
         uses: actions/upload-artifact@v4
@@ -903,6 +907,7 @@ jobs:
       GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
       GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
       GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+      GODSPEED_SCENARIO_AI_FREE_MODEL: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.pr != '' && inputs.stage == '')) && vars.GODSPEED_SCENARIO_AI_FREE_MODEL || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -915,7 +920,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/brief-asked-in-chat.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/free-first.sh bash scenarios/brief-asked-in-chat.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) brief-asked-in-chat:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL brief-asked-in-chat: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
@@ -930,6 +935,7 @@ jobs:
       GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
       GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
       GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+      GODSPEED_SCENARIO_AI_FREE_MODEL: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.pr != '' && inputs.stage == '')) && vars.GODSPEED_SCENARIO_AI_FREE_MODEL || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -942,7 +948,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/talk-prep-honest.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/free-first.sh bash scenarios/talk-prep-honest.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) talk-prep-honest:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL talk-prep-honest: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
@@ -966,6 +972,7 @@ jobs:
       GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
       GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
       GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+      GODSPEED_SCENARIO_AI_FREE_MODEL: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.pr != '' && inputs.stage == '')) && vars.GODSPEED_SCENARIO_AI_FREE_MODEL || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -978,7 +985,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/no-question-he-cannot-judge.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/free-first.sh bash scenarios/no-question-he-cannot-judge.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Keep what the scenario saw (every message sent, the waiting steps after each situation)
         if: always()
         uses: actions/upload-artifact@v4
@@ -1000,6 +1007,7 @@ jobs:
       GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
       GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
       GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+      GODSPEED_SCENARIO_AI_FREE_MODEL: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.pr != '' && inputs.stage == '')) && vars.GODSPEED_SCENARIO_AI_FREE_MODEL || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1012,7 +1020,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/plain-yes.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/free-first.sh bash scenarios/plain-yes.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Keep what the scenario saw (every message sent, the waiting steps after each answer)
         if: always()
         uses: actions/upload-artifact@v4
@@ -1034,6 +1042,7 @@ jobs:
       GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
       GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
       GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+      GODSPEED_SCENARIO_AI_FREE_MODEL: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.pr != '' && inputs.stage == '')) && vars.GODSPEED_SCENARIO_AI_FREE_MODEL || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1046,7 +1055,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/what-was-that.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/free-first.sh bash scenarios/what-was-that.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Keep what the scenario saw (the report, its record, the answer)
         if: always()
         uses: actions/upload-artifact@v4
@@ -1130,6 +1139,7 @@ jobs:
       GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
       GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
       GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+      GODSPEED_SCENARIO_AI_FREE_MODEL: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.pr != '' && inputs.stage == '')) && vars.GODSPEED_SCENARIO_AI_FREE_MODEL || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1142,7 +1152,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/day-becomes-facts.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/free-first.sh bash scenarios/day-becomes-facts.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Keep what the scenario saw
         if: always()
         uses: actions/upload-artifact@v4
@@ -1194,6 +1204,7 @@ jobs:
       GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
       GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
       GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+      GODSPEED_SCENARIO_AI_FREE_MODEL: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.pr != '' && inputs.stage == '')) && vars.GODSPEED_SCENARIO_AI_FREE_MODEL || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1206,7 +1217,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/first-day.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/free-first.sh bash scenarios/first-day.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Keep what the scenario saw (the work, the brief, every request)
         if: always()
         uses: actions/upload-artifact@v4
