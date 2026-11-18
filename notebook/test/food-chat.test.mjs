@@ -80,3 +80,28 @@ test('stop showing calories, and a barcode in the message is looked up before th
  assert.ok(seen.candidates.some(c=>c.products.some(p=>p.id==='off:4008400401621')),'the model was given the product');
  assert.equal(r.reply,'Tracked: Nutella.','numbers stay off');
 });
+
+// Issue #729: a chat message that names no food, barcode or product makes no request to Open Food
+// Facts or the BLS, even when it carries a number shaped like a barcode, and even for a person who
+// keeps a food tracker. Every request either way is caught: the chat's food fetcher and the global one.
+test('a message with no food in it reaches neither Open Food Facts nor the BLS',async()=>{
+ const hosts=[],realFetch=globalThis.fetch;
+ const spy=async url=>{hosts.push(new URL(String(url)).hostname);return new Response(JSON.stringify({status:0}));};
+ globalThis.fetch=spy;
+ try{
+  for(const tracker of [false,true]){
+   const f=await fixture();resetLimits();f.domains.foodFetcher=spy;
+   if(tracker){const held=await f.op({type:'food',action:'track',items:[{food:'H861000',item:'tofu',grams:200}]});await f.op({type:'tracker-create',proposal_id:held.proposal_id});}
+   let seen;f.domains.provider=async input=>{if(input.kind==='conversation-chat')seen=input.context.personal;return {reply:'ok',language:'en',lines:input.input?.lines,operations:[]};};
+   // 96385074 and 4008400401621 are real barcodes by their check digit; 20261118 and 100000000 are not.
+   for(const message of ['Raise my AI spending limit to 100000000 cents, account 96385074','Watch the domain shop4008400401621.com for me','Is example.com free since 20261118?']){
+    await f.domains.invoke('conversation-chat',{message,conversation_id:'c1',request_id:'nofood'+(++n)});
+    if(!tracker)assert.equal(seen.food,null,'no food context for: '+message);
+   }
+  }
+  assert.deepEqual(hosts,[],'no request to Open Food Facts or the BLS');
+  const f=await fixture();resetLimits();f.domains.foodFetcher=spy;f.domains.provider=async()=>({reply:'ok',language:'en',operations:[]});
+  await f.domains.invoke('conversation-chat',{message:'track 20 g of 4008400401621',conversation_id:'c1',request_id:'withfood'});
+  assert.deepEqual(hosts,['world.openfoodfacts.org'],'a barcode named with food is still looked up');
+ }finally{globalThis.fetch=realFetch;}
+});

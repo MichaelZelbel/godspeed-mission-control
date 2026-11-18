@@ -28,6 +28,27 @@ export const collectionWriteSnapshot=context=>writeSnapshots.get(context)||[];
 const noteSnapshots=new WeakMap();
 export const noteWriteSnapshot=context=>noteSnapshots.get(context)||null;
 
+// A barcode as shops print it: 8, 12, 13 or 14 digits whose last is the GTIN check digit, so an
+// amount, a date or an id in a message is not one.
+export function isBarcode(code){
+ if(!/^(?:\d{8}|\d{12,14})$/.test(code))return false;
+ const d=[...code].map(Number),check=d.pop();
+ return (10-d.reverse().reduce((n,x,i)=>n+x*(i%2?1:3),0)%10)%10===check;
+}
+// The message itself is about food: a food word, "track", or a barcode said to be one.
+const foodMessage=question=>FOOD_WORDS.test(question)||/(?<!\p{L})track/iu.test(question)||/(?<!\p{L})(?:barcode|ean|gtin|strichcode)(?!\p{L})/iu.test(question);
+const readerOf=query=>({root:query.store.root,list:type=>query.rows(type).filter(r=>!r.removed_at),get:(type,id)=>query.rows(type).find(r=>r.id===id)||null});
+// The barcodes the chat looks up at Open Food Facts before the model answers (domains.mjs): only in a
+// message about food or while a food question waits for its answer. A number in a message about
+// anything else (a spending limit, a domain, a date) never reaches the network (issue #729: run on
+// 2.0.0-beta.28 contacted Open Food Facts after messages about AI spending and domain watches).
+export function chatBarcodes(query,message){
+ const codes=[...new Set(String(message||'').match(/(?<!\d)\d{8,14}(?!\d)/g)||[])].filter(isBarcode);
+ if(!codes.length)return [];
+ if(foodMessage(message))return codes;
+ try{return query.withSnapshot(()=>foodOperation({store:readerOf(query),query},{action:'status'}).proposals.length)?codes:[];}catch{return [];}
+}
+
 // Retrieve a bounded selection instead of sending the entire personal database.
 export function chatContext(query,input){
   return query.withSnapshot(()=>buildChatContext(query,input));
@@ -51,7 +72,7 @@ function buildChatContext(query,input){
   // Every tracker and every open tracker question, with their ids: without them
   // the model cannot name a tracker or answer a question's yes (D-321). Read
   // through query.rows, so from this context's one snapshot of the vault.
-  const reader={root:query.store.root,list:type=>query.rows(type).filter(r=>!r.removed_at),get:(type,id)=>query.rows(type).find(r=>r.id===id)||null};
+  const reader=readerOf(query);
   const tracked=trackerOperation({store:reader,query},{type:'tracker-list'});context.personal.trackers=tracked.trackers;context.personal.tracker_questions=tracked.pending;
   // The open headaches, as the bot's [godspeed-headache] block shows them before every message, so
   // "headache over" or a pill lands on the right one (D-321).
@@ -63,7 +84,7 @@ function buildChatContext(query,input){
   // and never does a number itself. Only when the message is about food or a food question is open.
   try{
    const status=foodOperation({store:reader,query},{action:'status'}),open=status.tracker||status.proposals.length;
-   if(open||FOOD_WORDS.test(question)||/(?<!\p{L})track/iu.test(question)){
+   if(open||foodMessage(question)){
     const skip=new Set('track tracke food meal breakfast lunch dinner snack essen frühstück mittagessen abendessen with and the some half one two three four five six seven eight nine ten slice slices piece pieces pack packs bowl bowls glass cup plate usual remember this as my what did eat today were was und mit ein eine einen zwei drei halbe scheibe scheiben packung schale glas tasse heute habe gegessen'.split(' '));
     const words=(question.toLocaleLowerCase().match(/[\p{L}]{3,}/gu)||[]).filter(w=>!skip.has(w)),pairs=words.slice(1).map((w,i)=>words[i]+' '+w);
     const queries=[...new Set([...pairs,...words])].slice(0,10);
