@@ -13,8 +13,19 @@ import {Telegram} from '../core/telegram.mjs';
 const CHAT_SURFACES=['conversation-chat','note-chat','collection-chat'];
 assert.deepEqual(new Set(CHAT_SURFACES),new Set(NOTEBOOK_CHAT_FUNCTIONS),'saved brief cases must cover every notebook chat surface');
 
-const saved='Saved filtered briefing.\n\nNext: exact allowed next step.\n\nCharm Challenge: exact line.';
-const acceptedSentences=['Saved filtered briefing.','Next: exact allowed next step.'];
+const acceptedSentences=[
+ 'No fresh health observations are recorded.',
+ 'The fictional launch plan is ready for review.',
+ 'The first checklist covers the opening task.',
+ 'The second checklist covers the follow-up.',
+ 'The schedule keeps the fictional deadline visible.',
+ 'The notes name the next decision.',
+ 'The draft keeps the agreed scope.',
+ 'The review can happen in the notebook.',
+ 'Nothing in this fictional plan has been sent.',
+ 'Next: review the fictional launch plan.',
+];
+const saved=acceptedSentences.join('\n\n');
 const savedWithoutChallenge='Saved filtered briefing.\n\nNext: exact allowed next step.';
 const day=()=>new Date().toISOString().slice(0,10);
 const saveBrief=(store,content=saved)=>store.save('notes',{title:'Your morning briefing',content,source_app:'morning-brief',brief_day:day()});
@@ -53,13 +64,13 @@ test('all chat surfaces preserve a saved brief without adding a Charm Challenge'
  assert.equal(calls,0);
 });
 
-test('a first conversation brief request creates and reuses the checked saved briefing',async t=>{
+test('a complex create and repeat request preserves every accepted sentence in one canonical briefing',async t=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-new-brief-chat-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
  store.save('settings',{id:'installation',timezone:'UTC'});store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  const calls=[],provider=async input=>{calls.push(input.kind);return input.kind==='brief-verification'?{passed:true,reason:'Fictional briefing checked.'}:saved;};
  const domains=new Domains(query,{provider});
- const first=await domains.invoke('conversation-chat',{conversation_id:'notebook:first',request_id:'brief-first',message:"today's brief"});
- const again=await domains.invoke('conversation-chat',{conversation_id:'notebook:first',request_id:'brief-again',message:'the brief again'});
+ const first=await domains.invoke('conversation-chat',{conversation_id:'notebook:first',request_id:'brief-first',message:"Please create today's morning briefing"});
+ const again=await domains.invoke('conversation-chat',{conversation_id:'notebook:first',request_id:'brief-again',message:"Please repeat today's morning briefing"});
  const briefs=store.list('notes').filter(note=>note.source_app==='morning-brief');
  assert.equal(briefs.length,1);assert.equal(first.reply,briefs[0].content);assert.equal(again.reply,briefs[0].content);
  for(const sentence of acceptedSentences)assert.ok(briefs[0].content.includes(sentence),sentence);
@@ -183,15 +194,17 @@ test('candidate Telegram delivers a long saved brief in full',async t=>{
  assert.equal(sent.length,2);assert.equal(sent.join(''),longSaved);assert.match(sent.at(-1),/Charm Challenge: exact final line\.$/);
 });
 
-test('both notebook chat endpoints return the briefing created by the first request',async t=>{
+test('saved record and both notebook chat endpoints agree after complex creation and repeat',async t=>{
  const calls=[],root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-saved-brief-endpoints-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const provider=async input=>{calls.push(input.kind);return input.kind==='brief-verification'?{passed:true,reason:'Fictional briefing checked.'}:saved;};
  const service=await createService({root,port:0,provider}),base='http://127.0.0.1:'+service.address.port;t.after(()=>service.close());
  service.store.save('settings',{id:'installation',timezone:'UTC'});service.store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  const post=async(route,body)=>{const response=await fetch(base+route,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});assert.equal(response.status,200);return response.json();};
- const standard=await post('/api/functions/conversation-chat',{conversation_id:'notebook:panel',message:"today's brief",request_id:'01234567-1234-4234-8234-012345678901'});
- const browser=await post('/api/browser-chat',{message:'mein Morgenbriefing',request_id:'01234567-1234-4234-8234-012345678902'});
- assert.equal(standard.data.reply,saved);assert.equal(browser.reply,saved);
+ const standard=await post('/api/functions/conversation-chat',{conversation_id:'notebook:panel',message:"Please prepare today's morning briefing",request_id:'01234567-1234-4234-8234-012345678901'});
+ const browser=await post('/api/browser-chat',{message:"Please repeat today's morning briefing",request_id:'01234567-1234-4234-8234-012345678902'});
+ const briefs=service.query.rows('notes').filter(note=>note.source_app==='morning-brief');assert.equal(briefs.length,1);
+ assert.equal(standard.data.reply,briefs[0].content);assert.equal(browser.reply,briefs[0].content);
+ for(const sentence of acceptedSentences)assert.ok(briefs[0].content.includes(sentence),sentence);
  assert.ok(calls.includes('brief-verification'));assert.equal(calls.includes('conversation-chat'),false);
  assert.equal(service.query.rows('conversation_messages').filter(message=>message.role==='assistant'&&message.content===saved).length,2);
 });
