@@ -7,6 +7,8 @@ import {atomic} from './records/store.mjs';
 // such a notice here, in this machine's own state, and the two routines that run every 15 minutes
 // (the coach's reminders and the journal's check-ins, routine-scripts/godspeed_routines.py notices)
 // say each one once, where the routines' results go: Telegram, or a note in "From your routines".
+// On a mission control not made from the starter only the notice sender says them (#712), so the stop
+// hint Hermes adds there names that routine, not the journal or the coach.
 // The notebook's bell shows it too (a notifications record), for a machine with neither routine.
 // The unattended Git helper (tools/unattended-git.cjs) queues a git-sign-in-<day> notice when this computer's GitHub sign-in is missing.
 //
