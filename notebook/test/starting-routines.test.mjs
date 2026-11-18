@@ -492,9 +492,18 @@ test('the coaching talk preparation runs mc-coach-prep with a two-hour budget an
  const call=fs.readFileSync(log,'utf8');
  assert.match(call,/--budget-minutes 120/);assert.match(call,new RegExp('--date '+berlinDay));
  assert.equal(status().failed,null);
+ const opened=path.join(root,'opened-talk.txt').replaceAll(path.sep,'/'),fakeCoach=path.join(root,'fake-coach.mjs');
+ fs.writeFileSync(fakeCoach,'import fs from "node:fs";fs.writeFileSync('+JSON.stringify(opened)+',process.argv.slice(2).join(" ")+"\\n");\n');
+ fs.writeFileSync(settings,JSON.stringify({...JSON.parse(fs.readFileSync(settings,'utf8')),tools:fake,coach:fakeCoach}));
+ tool('mkdir -p "$GODSPEED_ROOT/routines/coach-prep/$GODSPEED_TODAY"\nprintf \'health 2026-10-26: prepared (coach/health/prep/2026-10-26.md): Prepared.\\n\' > "$GODSPEED_ROOT/routines/coach-prep/$GODSPEED_TODAY/summary.txt"\nexit 0\n');
+ run=runScript(home,'godspeed-coach-prep.py');
+ assert.equal(run.status,0,run.stderr);assert.equal(run.stdout,'','opening the waiting talk does not send it');
+ assert.equal(fs.readFileSync(opened,'utf8'),`talk open health --date 2026-10-26 --from-prep coach/health/prep/2026-10-26.md --godspeed ${root}\n`);
+ fs.rmSync(opened);
  tool('echo "weekly-check-in: NOT PREPARED"\nexit 1\n');
  run=runScript(home,'godspeed-coach-prep.py');
  assert.equal(run.status,0,run.stderr);assert.equal(run.stdout,'','a talk that could not be prepared opens from its brief; nothing is sent');
+ assert.equal(fs.existsSync(opened),false,'an insufficient preparation creates no canonical talk record');
  assert.match(status().failed,/could not be prepared ahead/);
  tool('echo "mc-coach-prep: the coach (godspeed-coach) is not installed" >&2\nexit 3\n');
  assert.match(runScript(home,'godspeed-coach-prep.py').stdout,/could not start tonight/);

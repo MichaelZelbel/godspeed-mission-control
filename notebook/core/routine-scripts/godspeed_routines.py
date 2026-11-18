@@ -567,6 +567,23 @@ def coach_prep(c):
     if r.returncode != 0:
         remember(c, "coach-prep", "A coaching talk could not be prepared ahead, so it opens from its brief; routines/coach-prep/" + day + "/summary.txt says which.")
         return ""
+    # Run now is the public preparation boundary. A preparation that passed the unchanged coach
+    # gate becomes the canonical waiting talk here, through the coach's ordinary guarded opener.
+    # The summary is written by mc-coach-prep only after prep-check (and the independent review,
+    # where required) accepted the file. Draft and failed preparations have NOT PREPARED lines and
+    # never reach this loop.
+    summary = os.path.join(c["root"], "routines", "coach-prep", day, "summary.txt")
+    try:
+        with open(summary, encoding="utf-8") as f:
+            prepared = [m.groups() for line in f for m in [re.match(
+                r"^([a-z0-9][a-z0-9-]*) (\d{4}-\d{2}-\d{2}): prepared \((coach/[^\r\n()]+/prep/\2\.md)\)", line)] if m]
+    except OSError:
+        prepared = []
+    for area, talk, prep in prepared:
+        opened = run([c["node"], c["coach"], "talk", "open", area, "--date", talk,
+                      "--from-prep", prep, "--godspeed", c["root"]], c, env, timeout=120)
+        if opened.returncode != 0:
+            return went_wrong(c, "coach-prep", day, "The coaching talk was prepared, but its talk record could not be opened.", opened)
     remember(c, "coach-prep")
     return ""
 
