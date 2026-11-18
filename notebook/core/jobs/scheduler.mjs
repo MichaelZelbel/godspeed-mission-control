@@ -109,7 +109,7 @@ export class Scheduler {
     // sleeps until the first topic is due (a day at most, so an edited topic
     // is found). Until 6 October 2026 one idle topic woke it every minute and
     // left some 4,400 files a day in the synced notebook.
-    if(!recovery&&job.kind==='watch'&&!job.force_sources){
+    if(!recovery&&['watch','domain-watch'].includes(job.kind)&&!job.force_sources){
       const due=watchDue(this.query,job,now);
       if(due!==true){
         const at=new Date(Math.max(now+60000,Math.min(due??Infinity,now+86400000))).toISOString();
@@ -138,11 +138,17 @@ export class Scheduler {
       result=await beatWhile(this.executor(job,{settings,store:this.store}),()=>this.onProgress?.(),{limitMs:this.jobLimit,every:this.beatEvery});
       await this.store.waitForWriter();
       if(!result?.verified)throw new Error('The executor returned no verified result');
-      if((this.delivery||settings.delivery)==='telegram'&&!result.silent){
+      // A result of several saved messages (record_ids, a domain sweep's batches) is sent one
+      // message at a time, and the list is kept on the run's receipt first, so a message this
+      // run never tried is still known when a later batch's delivery is uncertain and the run
+      // stops: the next run sends it (domain-watch.mjs, pendingDeliveries). An uncertain one
+      // is never sent again (telegram.mjs).
+      if((this.delivery||settings.delivery)==='telegram'&&!result.silent&&Array.isArray(result.record_ids)){
         if(!this.deliver)throw new Error('Connect Telegram before choosing to get results there');
-        const recordIds=result.record_ids||[result.record_id];
-        for(const recordId of recordIds)await this.deliver(receipt.id,{...result,record_id:recordId});
-      }
+        await this.store.saveAsync('job_receipts',{id:receipt.id,delivery_record_ids:result.record_ids});
+        for(const recordId of result.record_ids)await this.deliver(receipt.id,{...result,record_id:recordId});
+      }else
+      if((this.delivery||settings.delivery)==='telegram'&&!result.silent){if(!this.deliver)throw new Error('Connect Telegram before choosing to get results there');await this.deliver(receipt.id,result);}
     } catch(e) {
       const retry=(job.retry_count||0)+1,needsReview=e.code==='OUTWARD_UNCERTAIN'||retry>=(job.max_retries||3);
       try{

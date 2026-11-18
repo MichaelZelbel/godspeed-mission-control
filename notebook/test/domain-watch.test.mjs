@@ -5,7 +5,7 @@ import {Store,hash} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
 import {procedure} from '../core/procedures.mjs';
-import {addDomainWatch,listDomainWatches,removeDomainWatch} from '../core/domain-watch.mjs';
+import {addDomainWatch,listDomainWatches,removeDomainWatch,pendingDeliveries,telegramDeliveryReceiptId} from '../core/domain-watch.mjs';
 import {Scheduler} from '../core/jobs/scheduler.mjs';
 import {Telegram} from '../core/telegram.mjs';
 import {createService} from '../server/main.mjs';
@@ -76,6 +76,39 @@ test('the scheduler delivers every bounded message in a large transition batch',
  assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'verified');
 });
 
+test('after one batch is delivered and the next is uncertain, the next run delivers the rest exactly once',async()=>{
+ const {store,query}=setup(),at=Date.parse('2026-11-17T12:00:00Z');store.save('settings',{id:'installation',owner:store.device,timezone:'UTC',delivery:'telegram'});
+ const domains=Array.from({length:40},(_,index)=>'partial-'+String(index).padStart(2,'0')+'-'+'x'.repeat(50)+'.'+'y'.repeat(60)+'.example');
+ for(const domain of domains)addDomainWatch(store,domain);
+ await procedure({kind:'domain-watch'},{store,query,fetcher:async()=>rdap(['active'])});store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at).toISOString()});
+ let attempted=[],sends=0;const telegram=new Telegram({store,domains:null,token:'token',owner:'1',transport:async(_url,input)=>{
+  const text=JSON.parse(String(input.body)).text;attempted.push(text);
+  if(++sends===2)throw Error('connection lost');
+  return new Response(JSON.stringify({ok:true,result:{message_id:attempted.length}}),{status:200,headers:{'Content-Type':'application/json'}});
+ }});
+ const scheduler=new Scheduler(store,{query,delivery:'telegram',executor:job=>procedure(job,{store,query,fetcher:async()=>rdap(['pendingDelete'])})});scheduler.deliver=telegram.deliver.bind(telegram);
+ await scheduler.tick(at);
+ const first=store.list('job_receipts').find(item=>item.job_id==='domain-watch-sweeper'),batches=first.delivery_record_ids;
+ assert.ok(batches.length>=3);assert.equal(attempted.length,2);assert.equal(store.get('jobs','domain-watch-sweeper').state,'needs_review');
+ assert.equal(store.get('command_receipts',telegramDeliveryReceiptId(store.get('notes',batches[0]))).state,'verified');
+ assert.equal(store.get('command_receipts',telegramDeliveryReceiptId(store.get('notes',batches[1]))).state,'needs_review');
+ assert.deepEqual(pendingDeliveries(store),batches.slice(2));
+ // The uncertain run is reviewed and the sweeper released; RDAP answers as before, so no domain changes.
+ const later=at+21600000;store.save('jobs',{id:'domain-watch-sweeper',state:'pending',paused:false,retry_count:0,next_run:new Date(later).toISOString()});
+ const firstRun=attempted;attempted=[];
+ await scheduler.tick(later);
+ assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'verified');
+ assert.deepEqual(attempted,batches.slice(2).map(id=>store.get('notes',id).content));
+ for(const domain of domains){
+  const sent=[...firstRun,...attempted].filter(text=>text.includes(domain+' is now pending delete')).length;
+  assert.equal(sent,1,domain);
+ }
+ assert.deepEqual(pendingDeliveries(store),[]);
+ // A further unchanged run sends nothing.
+ attempted=[];store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(later+21600000).toISOString()});
+ await scheduler.tick(later+21600000);assert.deepEqual(attempted,[]);assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'verified');
+});
+
 test('a mixed RDAP outage keeps the scheduler failure visible',async()=>{
  const {store,query}=setup(),at=Date.parse('2026-11-17T12:00:00Z');store.save('settings',{id:'installation',owner:store.device,timezone:'UTC',delivery:'notebook'});addDomainWatch(store,'up.example');addDomainWatch(store,'down.example');
  store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at).toISOString()});
@@ -103,7 +136,7 @@ test('Settings operations add, list and remove a domain through the personal API
  t.after(async()=>{await service.close();fs.rmSync(root,{recursive:true,force:true,maxRetries:3});});
  const operation=value=>fetch(base+'/api/functions/personal-operation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});
  assert.equal((await operation({type:'domain-watch-add',domain:'Settings.Example'})).status,200);
- let state=await (await fetch(base+'/api/personal')).json();assert.deepEqual(state.domains.map(w=>w.domain),['settings.example']);
+ let state=await (await fetch(base+'/api/domain-watches')).json();assert.deepEqual(state.domains.map(w=>w.domain),['settings.example']);
  assert.equal((await operation({type:'domain-watch-remove',domain:'settings.example'})).status,200);
- state=await (await fetch(base+'/api/personal')).json();assert.deepEqual(state.domains,[]);
+ state=await (await fetch(base+'/api/domain-watches')).json();assert.deepEqual(state.domains,[]);
 });

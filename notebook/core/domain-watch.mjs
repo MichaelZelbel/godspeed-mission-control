@@ -69,6 +69,24 @@ async function lookup(domain,fetcher){
   throw last||Error('RDAP lookup failed');
 }
 
+// The receipt Telegram keeps for one saved message it was handed (telegram.mjs, deliver): any
+// state of it means the message was sent or its sending is uncertain, and it is not sent again.
+export const telegramDeliveryReceiptId=record=>'delivery-'+hash([record.type,record.id,String(record.content)]).slice(0,40);
+
+// The sweeper's saved messages a run handed to Telegram (the receipt's delivery_record_ids,
+// jobs/scheduler.mjs) that Telegram was never asked to send: when one message's delivery was
+// uncertain the run stopped there, and the domain states it had saved bring no new
+// transition, so the next run sends these first. In the order they were saved.
+export function pendingDeliveries(store,jobId='domain-watch-sweeper'){
+  const runs=store.list('job_receipts').filter(r=>r.job_id===jobId&&Array.isArray(r.delivery_record_ids)).sort((a,b)=>String(a.started_at).localeCompare(String(b.started_at)));
+  const pending=[];
+  for(const id of runs.flatMap(r=>r.delivery_record_ids)){
+    const note=store.get('notes',id);
+    if(note?.content&&!note.is_trashed&&!pending.includes(id)&&!store.get('command_receipts',telegramDeliveryReceiptId(note)))pending.push(id);
+  }
+  return pending;
+}
+
 export async function runDomainWatches({store,fetcher}){
   const outcomes=[],successful=[];
   for(const snapshot of active(store)){
@@ -103,6 +121,6 @@ export async function runDomainWatches({store,fetcher}){
     }
     if(records.length)store.commit(records);
   });
-  const failed=outcomes.filter(outcome=>!outcome.ok);
-  return {verified:failed.length===0,silent:deliveries.length===0,domains:outcomes,...(deliveries.length?{record_id:deliveries[0].id,record_ids:deliveries.map(note=>note.id),content_hash:store.get('notes',deliveries[0].id)._hash,delivery:'notebook'}:{})};
+  const failed=outcomes.filter(outcome=>!outcome.ok),recordIds=[...pendingDeliveries(store).filter(id=>!deliveries.some(note=>note.id===id)),...deliveries.map(note=>note.id)];
+  return {verified:failed.length===0,silent:recordIds.length===0,domains:outcomes,...(recordIds.length?{record_id:recordIds[0],record_ids:recordIds,content_hash:store.get('notes',recordIds[0])._hash,delivery:'notebook'}:{})};
 }
