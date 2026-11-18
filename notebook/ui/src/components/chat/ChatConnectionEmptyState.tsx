@@ -25,7 +25,9 @@ async function chatOptions(){
 
 export function useChatOptions(){
   const queryClient=useQueryClient();
-  const options=useQuery({queryKey:['chat-options'],queryFn:chatOptions,refetchInterval:5000,refetchIntervalInBackground:true});
+  // Leave enough room inside the five-second promise for a real request to finish. All chat
+  // surfaces in this window share this query, so one poll publishes one settled state to them.
+  const options=useQuery<ChatOptions>({queryKey:['chat-options'],queryFn:chatOptions,refetchInterval:3000,refetchIntervalInBackground:true});
   useEffect(()=>listenForChatOptions((next:ChatOptions)=>queryClient.setQueryData(['chat-options'],next)),[queryClient]);
   return options;
 }

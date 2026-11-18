@@ -84,7 +84,9 @@ export function ConnectAI(){
   const selectedUrl=service==='other'?address.trim():SERVICES.find(s=>s.id===service)?.url||'';
   const editableAddress=(value:string)=>value.replace(/\/chat\/completions\/?$/,'').replace(/\/+$/,'');
   const canRetainKey=!!saved.data?.configured&&saved.data.key&&editableAddress(selectedUrl)===editableAddress(saved.data.url);
-  const submit=async(e:React.FormEvent)=>{e.preventDefault();setBusy(true);setError('');setDone('');
+  const submit=async(e:React.FormEvent)=>{e.preventDefault();setError('');setDone('');
+    if(useForRoutines&&!data?.available){setError('Install the assistant program before using this AI for the daily routines and the chat. Or leave that choice unticked to connect it for notebook work only.');return;}
+    setBusy(true);
     const url=service==='other'?address.trim():SERVICES.find(s=>s.id===service)!.url;
     try{const result=await call('provider',{url,key,model,routines:useForRoutines});setKey('');qc.setQueryData(['provider'],result.provider);
       if(result.routines?.available)qc.setQueryData(['routine-ai'],result.routines);
@@ -105,7 +107,7 @@ export function ConnectAI(){
         <Input required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></label>
       <label className="block">{canRetainKey?'Key (leave it empty to keep the saved one)':'Key'}
         <Input required={!canRetainKey} type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></label>
-      <label className="flex gap-2 items-start"><input type="checkbox" className="mt-1" checked={useForRoutines} disabled={!data?.available} onChange={e=>setRoutines(e.target.checked)}/><span>Use it for the daily routines and the chat too{data?.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':data?.available?'.':'. Install the assistant program to turn this on. Without it, Test and connect keeps this AI for notebook work only.'}</span></label>
+      <label className="flex gap-2 items-start"><input type="checkbox" className="mt-1" checked={useForRoutines} onChange={e=>setRoutines(e.target.checked)}/><span>Use it for the daily routines and the chat too{data?.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':data?.available?'.':'. This needs the assistant program. Leave it unticked and Test and connect keeps this AI for notebook work only.'}</span></label>
       <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect'}</Button></>}
       {done&&<p role="status">{done}</p>}
       {error&&<p role="alert" className="text-red-500">{error}</p>}
