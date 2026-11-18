@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { format } from "date-fns";
 import { Loader2, Plus, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -92,6 +92,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
   const markFilled = (field: "title" | "dateStart" | "dateEnd" | "status" | "impactLevel" | "confDate" | "confTruth") => setFilled((f) => (f[field] ? f : { ...f, [field]: true }));
   const [aiLoading, setAiLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const peopleFieldId = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -334,7 +335,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
         </div>
         <ImportanceSlider value={impactLevel} onChange={(v) => { setImpactLevel(v); markFilled("impactLevel"); }} />
         <div className="space-y-2"><Label>Confidence (Truth): {confTruth}</Label><Slider value={[confTruth]} onValueChange={([v]) => { setConfTruth(v); markFilled("confTruth"); }} min={0} max={10} step={1} /></div>
-        <div className="space-y-2"><Label className="text-xs">People</Label><PeopleMultiSelect people={people} value={matchedPeople} onChange={setMatchedPeople} newNames={typedNewPeople} onNewNamesChange={setTypedNewPeople} /></div>
+        <div className="space-y-2"><Label htmlFor={peopleFieldId} className="text-xs">People</Label><PeopleMultiSelect id={peopleFieldId} people={people} value={matchedPeople} onChange={setMatchedPeople} newNames={typedNewPeople} onNewNamesChange={setTypedNewPeople} /></div>
         {suggestedNewPeople.length > 0 && <div className="space-y-2"><Label className="text-xs text-muted-foreground">Add new people (not yet in your list)</Label><div className="space-y-1.5">{suggestedNewPeople.map((name) => <label key={name} className="flex items-center gap-2 cursor-pointer"><Checkbox checked={selectedNewPeople.includes(name)} onCheckedChange={(checked) => setSelectedNewPeople((prev) => checked ? [...prev, name] : prev.filter((n) => n !== name))} /><span className="text-sm">{name}</span></label>)}</div></div>}
       </div>
       <DialogFooter><Button onClick={handleSave} disabled={saving || !title.trim() || !dateStart}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{isEditMode ? "Save Changes" : "Create Moment"}</Button></DialogFooter>
