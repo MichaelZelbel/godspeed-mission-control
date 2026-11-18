@@ -15,15 +15,15 @@ test('invalid choices fail visibly rather than making up a model',async()=>{
 
 // #563: with no AI connected the picker said "Connected model" while the Dashboard and the chat said no AI is connected.
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-async function optionsFrom(t,provider){
+async function optionsFrom(t,provider,{defer=false}={}){
  const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL','GODSPEED_MODEL_KEY','GODSPEED_MODEL'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-options-'));
  for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
  const {createService}=await import('../server/main.mjs');const service=await createService({root:path.join(root,'workspace'),port:0,provider});
  t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
- const base='http://127.0.0.1:'+service.address.port,status=await (await fetch(base+'/api/status')).json();
+ const base='http://127.0.0.1:'+service.address.port,readStatus=async()=>await (await fetch(base+'/api/status')).json(),status=await readStatus();
  const readOptions=()=>loadChatOptions({fetcher:(url,init)=>fetch(base+url,init)});
- return {status,options:await readOptions(),readOptions};
+ return {status,options:defer?null:await readOptions(),readOptions,readStatus};
 }
 test('with no AI connected the model choices say so rather than naming a connected model',async t=>{
  const {status,options}=await optionsFrom(t);
@@ -43,12 +43,40 @@ test('AI usability is rechecked every five seconds in both directions',async t=>
  let now=100000,usable=true;
  t.mock.method(Date,'now',()=>now);
  const provider=Object.assign(async()=>({reply:'ok'}),{check:async()=>{if(!usable)throw Error('Fictional provider refusal');}});
- const {options,readOptions}=await optionsFrom(t,provider);
+ const {options,readOptions,readStatus}=await optionsFrom(t,provider);
  assert.equal(options.usable,true);
  usable=false;now+=5000;
  assert.equal((await readOptions()).usable,false);
+ assert.equal((await readStatus()).runtimeConfigured,false);
  usable=true;now+=5000;
  assert.equal((await readOptions()).usable,true);
+ assert.equal((await readStatus()).runtimeConfigured,true);
+});
+test('overlapping availability reads share a failed health check result over a cached ready one, and a newer passing check restores ready',async t=>{
+ let now=100000,checks=0,optionReads=0,failNext=false,rejectCheck,checkStarted,secondArrived;
+ t.mock.method(Date,'now',()=>now);
+ const started=new Promise(resolve=>{checkStarted=resolve;}),arrived=new Promise(resolve=>{secondArrived=resolve;});
+ const provider=Object.assign(async()=>({reply:'ok'}),{
+  options:async()=>{optionReads++;if(failNext&&optionReads===3)secondArrived();return {current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]};},
+  check:()=>{checks++;if(!failNext)return Promise.resolve();checkStarted();return new Promise((resolve,reject)=>{rejectCheck=reject;});}});
+ const {readOptions,readStatus}=await optionsFrom(t,provider,{defer:true});
+ // A passing check reports ready at once and is cached for the next five seconds.
+ assert.equal((await readOptions()).usable,true);assert.equal((await readStatus()).runtimeConfigured,true);assert.equal(checks,1);
+ // Five seconds later one shared check is held in flight while a second reader overlaps it, then the check fails.
+ failNext=true;now+=5000;
+ const first=readOptions();await started;
+ const second=readOptions();await arrived;await new Promise(resolve=>setImmediate(resolve));
+ rejectCheck(new Error('Fictional private provider failure'));
+ const results=await Promise.all([first,second]);
+ assert.deepEqual(results.map(result=>result.usable),[false,false]);
+ assert.equal(checks,2,'the overlapping readers share one provider check');
+ assert.equal((await readOptions()).usable,false,'a later cached read keeps the failure');
+ assert.equal((await readStatus()).runtimeConfigured,false);
+ assert.equal(checks,2);
+ assert.doesNotMatch(JSON.stringify(results),/Fictional private provider failure/);
+ // Only a newer passing check restores ready.
+ failNext=false;now+=5000;
+ assert.equal((await readOptions()).usable,true);assert.equal((await readStatus()).runtimeConfigured,true);assert.equal(checks,3);
 });
 test('a refused chat returns plain guidance instead of provider diagnostics',async t=>{
  const provider=async()=>{throw Error('Model provider failed with HTTP 401: secret provider detail');};
