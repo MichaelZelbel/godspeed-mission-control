@@ -769,13 +769,13 @@ export default function MediaLibrary() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-48 max-w-sm">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input aria-label="Search media"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search media by description, text, filename…"
+              placeholder="Search descriptions, text, files…"
               className="pl-8 h-8 text-sm"
             />
             {searchQuery && (
@@ -789,7 +789,7 @@ export default function MediaLibrary() {
           </div>
 
           <Select value={contentTypeFilter} onValueChange={setContentTypeFilter}>
-            <SelectTrigger className="w-40 h-8 text-xs">
+            <SelectTrigger aria-label="Content type" className="w-40 h-8 text-xs">
               <SelectValue placeholder="Content type" />
             </SelectTrigger>
             <SelectContent>
