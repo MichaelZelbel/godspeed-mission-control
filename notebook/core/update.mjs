@@ -18,6 +18,7 @@ import {fileURLToPath} from 'node:url';
 import {atomic} from './records/store.mjs';
 import {installedRelease,productRoot as ownProduct} from './about.mjs';
 import {VERSION} from './version.mjs';
+import {NAMES} from '../scripts/native-start-script.mjs';
 
 const REPOSITORY='MichaelZelbel/godspeed-mission-control';
 export const ARCHIVE='Godspeed-v2-integrated-source.tar.gz';
@@ -174,7 +175,7 @@ const runChild=(command,args,{env,cwd,detached=false}={})=>new Promise(resolve=>
 });
 // The settings start.mjs gives the notebook are the installation's, which the installer reads from
 // start.mjs itself; inherited from the service they would only stand in for them.
-const SERVICE_NAMES=['GODSPEED_WORKSPACE','GODSPEED_ORIGINAL_RUNTIME','GODSPEED_PORT','GODSPEED_BIND','HERMES_HOME','GODSPEED_DEVICE','GODSPEED_MEDIA_ROOT','GODSPEED_WEB_PORT','GODSPEED_HOST','GODSPEED_WEB_ADDRESS','GODSPEED_HANDOVER'];
+const SERVICE_NAMES=[...NAMES,'GODSPEED_HANDOVER'];
 const besideHermes=root=>{try{return fs.readFileSync(path.join(runtime(root),'start.mjs'),'utf8').includes('"HERMES_HOME":'+JSON.stringify(path.join(runtime(root),'hermes')));}catch{return false;}};
 
 // The update: the command's whole work, and what the Update now button starts.
