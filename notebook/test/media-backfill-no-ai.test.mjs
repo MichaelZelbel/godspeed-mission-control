@@ -39,3 +39,35 @@ test('with an AI connected the scan says so and the run analyses the upload as b
   const [row]=query.rows('media_analysis');
   assert.equal(row.storage_path,'owner/holiday.png');assert.equal(row.analysis_status,'complete');assert.equal(row.description,'A beach');
 });
+
+// D1 on #739: analysis reads only PNG, JPEG, WebP, GIF and PDF. An MP3 or an
+// SVG was counted as waiting, drew the connect-an-AI advice, and with an AI
+// connected ended in "1 failed" with no reason.
+function unreadable(t,options){
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-media-backfill-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const query=new QueryService(new Store(root));
+  query.execute({table:'note_attachments',operation:'insert',values:{filename:'song.mp3',storage_path:'owner/song.mp3',mime_type:'audio/mpeg'}});
+  query.execute({table:'note_attachments',operation:'insert',values:{filename:'logo.svg',storage_path:'owner/logo.svg',file_type:'image/svg+xml'}});
+  return {query,domains:new Domains(query,options)};
+}
+
+test('files analysis cannot read are not waiting, with or without an AI',async t=>{
+  const {domains}=unreadable(t,{});
+  const scan=await domains.invoke('backfill-media-analysis',{mode:'scan'});
+  assert.deepEqual({total:scan.total_media,waiting:scan.unanalyzed_total,images:scan.unanalyzed_images,pdfs:scan.unanalyzed_pdfs},{total:0,waiting:0,images:0,pdfs:0});
+  const run=await domains.invoke('backfill-media-analysis',{mode:'run'});
+  assert.deepEqual({processed:run.processed,total:run.total,failed:run.failed},{processed:0,total:0,failed:0});
+  let asked=0;const {query,domains:withAi}=unreadable(t,{provider:async()=>{asked++;return {description:'x'};}});
+  assert.equal((await withAi.invoke('backfill-media-analysis',{mode:'scan'})).unanalyzed_total,0);
+  const aiRun=await withAi.invoke('backfill-media-analysis',{mode:'run'});
+  assert.deepEqual({processed:aiRun.processed,total:aiRun.total,failed:aiRun.failed},{processed:0,total:0,failed:0});
+  assert.equal(asked,0);assert.deepEqual(query.rows('media_analysis'),[]);
+});
+
+test('a PDF uploaded with its mime type is counted as a PDF',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-media-backfill-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const query=new QueryService(new Store(root));
+  query.execute({table:'note_attachments',operation:'insert',values:{filename:'letter.pdf',storage_path:'owner/letter.pdf',mime_type:'application/pdf'}});
+  const scan=await new Domains(query,{}).invoke('backfill-media-analysis',{mode:'scan'});
+  assert.deepEqual({images:scan.unanalyzed_images,pdfs:scan.unanalyzed_pdfs},{images:0,pdfs:1});
+});
