@@ -49,7 +49,7 @@ import {
 const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 
 import ChatComposer, {type ChatFile} from "./ChatComposer";
-import {ChatConnectionEmptyState,chatAIState,useChatOptions} from "./ChatConnectionEmptyState";
+import {ChatConnectionEmptyState,chatAIState,chatHistoryVisible,useChatOptions} from "./ChatConnectionEmptyState";
 import {isCurrentAIError,listenForChatOptions} from "@/local/chat-options.mjs";
 import { useChatEntryInView } from "./chat-entry";
 import { BRAIN_PAGE } from "@/lib/brain-page";
@@ -643,7 +643,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                 </div>}/>
               )}
 
-              {liveAIState==='ready'&&state.messages.map((msg, i) => (
+              {chatHistoryVisible(liveAIState)&&state.messages.map((msg, i) => (
                 <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : ""}`}>
 
                   <div

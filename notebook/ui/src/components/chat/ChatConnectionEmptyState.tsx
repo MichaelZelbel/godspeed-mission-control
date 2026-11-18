@@ -15,6 +15,8 @@ export function chatAIState(options?:ChatOptions):ChatAIState{
   return options.availability==='refused'?'refused':options.availability==='settings-only'?'settings-only':'unreachable';
 }
 
+export const chatHistoryVisible=(state:ChatAIState)=>!['none','refused','unreachable','settings-only'].includes(state);
+
 async function chatOptions(){
   const response=await fetch('/api/chat/options');
   if(!response.ok)throw Error('Could not read AI connection status');

@@ -7,7 +7,7 @@ import '@testing-library/jest-dom/vitest';
 import {GlobalAIChatFAB} from './GlobalAIChatFAB';
 import {NoteChatPanel} from '@/components/notes/NoteChatPanel';
 import {CollectionChatPanel} from '@/components/collections/CollectionChatPanel';
-import {ChatConnectionEmptyState} from './ChatConnectionEmptyState';
+import {ChatConnectionEmptyState,chatHistoryVisible} from './ChatConnectionEmptyState';
 
 vi.mock('sonner',()=>({toast:{error:vi.fn(),warning:vi.fn()}}));
 vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:{id:'owner'},session:{user:{id:'owner'}}})}));
@@ -76,4 +76,10 @@ it('an open note chat with an earlier reply shows a later refused-key state',asy
   expect(await screen.findByText('Your AI key or sign-in was refused')).toBeInTheDocument();
   expect(screen.queryByText('Earlier stand-in reply')).not.toBeInTheDocument();
   expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toBeInTheDocument();
+});
+
+it('keeps existing replies visible while the first live-state read is still pending',()=>{
+  expect(chatHistoryVisible('checking')).toBe(true);
+  expect(chatHistoryVisible('ready')).toBe(true);
+  for(const state of ['none','refused','unreachable','settings-only'] as const)expect(chatHistoryVisible(state)).toBe(false);
 });

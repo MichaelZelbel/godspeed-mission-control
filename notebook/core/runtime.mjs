@@ -33,7 +33,6 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider,sour
   let healthFailure='unreachable',healthSequence=0,settledHealthSequence=0;
   const run=async input=>{
     const healthRequest=++healthSequence,setHealth=value=>{if(healthRequest>=settledHealthSequence){settledHealthSequence=healthRequest;healthFailure=value;}};
-    setHealth('unreachable');
     const timeoutMs=providerTimeBudget(input);
     if(input.attachments?.some(a=>a.mime==='application/pdf'))throw new Error('Use a document-capable model endpoint for PDF analysis');
     const signal=input.signal;
@@ -53,7 +52,7 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider,sour
       // Classify known failures without persisting or exposing private diagnostics.
       // The notebook's own one-turn calls are not a conversation with the person: a coach talk
       // waiting for their chat must not be used up here (godspeed-coach lib/context.mjs).
-      const result=await runChild(executable,args,{cwd,env:{...assistantEnvironment({home,workspace:cwd}),GODSPEED_SCHEDULED_RUN:'1'},input:JSON.stringify(prompt),timeoutMs,maxBytes:1024*1024,signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The AI connection could not start');});
+      const result=await runChild(executable,args,{cwd,env:{...assistantEnvironment({home,workspace:cwd}),GODSPEED_SCHEDULED_RUN:'1'},input:JSON.stringify(prompt),timeoutMs,maxBytes:1024*1024,signal,spawnProcess}).catch(error=>{setHealth('unreachable');throw childFailure(error,timeoutMs,'The AI connection could not start');});
       const text=hermesResponse(result.stdout);
       if(result.code===0&&text){setHealth('ready');return text;}
       setHealth(AI_SIGN_IN.test(result.stderr+'\n'+text)?'refused':'unreachable');
