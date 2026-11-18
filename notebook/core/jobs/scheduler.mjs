@@ -132,6 +132,7 @@ export class Scheduler {
     });
     if(!receipt)return null;this.onProgress?.();
     let result;
+    let deliverySet=false;
     try {
       if (!this.executor) throw new Error('No assistant runtime configured');
       // The work beats the heartbeat while it is inside its time limit.
@@ -146,10 +147,22 @@ export class Scheduler {
       if((this.delivery||settings.delivery)==='telegram'&&!result.silent&&Array.isArray(result.record_ids)){
         if(!this.deliver)throw new Error('Connect Telegram before choosing to get results there');
         await this.store.saveAsync('job_receipts',{id:receipt.id,delivery_record_ids:result.record_ids});
+        deliverySet=true;
         for(const recordId of result.record_ids)await this.deliver(receipt.id,{...result,record_id:recordId});
       }else
       if((this.delivery||settings.delivery)==='telegram'&&!result.silent){if(!this.deliver)throw new Error('Connect Telegram before choosing to get results there');await this.deliver(receipt.id,result);}
     } catch(e) {
+      // A set of saved messages whose delivery became uncertain partway keeps its schedule: the
+      // uncertain message is never sent again (Telegram's own receipt for it refuses), and the
+      // next run at the usual time sends the messages this run never handed over
+      // (domain-watch.mjs, pendingDeliveries); a slot moved later meanwhile is kept. Until 18 November 2026 the run paused the job for
+      // a review nothing offered, so those messages were never sent.
+      if(deliverySet&&e.code==='OUTWARD_UNCERTAIN')try{
+        await this.store.waitForWriter();
+        await this.store.saveAsync('job_receipts',{id:receipt.id,state:'failed',error:e.message,finished_at:new Date().toISOString()});
+        await this.store.withLockAsync(()=>{const current=this.store.get('jobs',job.id);if(current){let next=null;if(!(Date.parse(current.next_run)>Date.parse(job.next_run)))try{next=nextCalendarRun(current,settings.timezone,now);}catch{}this.store.commit([this.store.prepare('jobs',{state:'failed',last_outcome:'One message may not have reached Telegram. It stays in your notebook and is not sent again; the messages after it are sent on the next run.',last_run:new Date(now).toISOString(),...(next?{next_run:next}:{})},current)]);}});
+        return {id:job.id,state:'failed',error:e.message};
+      }catch{}
       const retry=(job.retry_count||0)+1,needsReview=e.code==='OUTWARD_UNCERTAIN'||retry>=(job.max_retries||3);
       try{
         await this.store.waitForWriter();

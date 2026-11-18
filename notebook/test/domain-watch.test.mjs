@@ -89,12 +89,14 @@ test('after one batch is delivered and the next is uncertain, the next run deliv
  const scheduler=new Scheduler(store,{query,delivery:'telegram',executor:job=>procedure(job,{store,query,fetcher:async()=>rdap(['pendingDelete'])})});scheduler.deliver=telegram.deliver.bind(telegram);
  await scheduler.tick(at);
  const first=store.list('job_receipts').find(item=>item.job_id==='domain-watch-sweeper'),batches=first.delivery_record_ids;
- assert.ok(batches.length>=3);assert.equal(attempted.length,2);assert.equal(store.get('jobs','domain-watch-sweeper').state,'needs_review');
+ assert.ok(batches.length>=3);assert.equal(attempted.length,2);
+ // The sweeper is not held for a review nothing offers: it keeps its next six-hour slot.
+ const held=store.get('jobs','domain-watch-sweeper');assert.equal(held.paused,false);assert.notEqual(held.state,'needs_review');assert.equal(Date.parse(held.next_run),at+21600000);assert.match(held.last_outcome,/not sent again/);
  assert.equal(store.get('command_receipts',telegramDeliveryReceiptId(store.get('notes',batches[0]))).state,'verified');
  assert.equal(store.get('command_receipts',telegramDeliveryReceiptId(store.get('notes',batches[1]))).state,'needs_review');
  assert.deepEqual(pendingDeliveries(store),batches.slice(2));
- // The uncertain run is reviewed and the sweeper released; RDAP answers as before, so no domain changes.
- const later=at+21600000;store.save('jobs',{id:'domain-watch-sweeper',state:'pending',paused:false,retry_count:0,next_run:new Date(later).toISOString()});
+ // Nothing touches the job: the scheduler's next tick at the usual time runs it. RDAP answers as before, so no domain changes.
+ const later=at+21600000;await scheduler.tick(later-60000);assert.equal(store.list('job_receipts').filter(item=>item.job_id==='domain-watch-sweeper').length,1);
  const firstRun=attempted;attempted=[];
  await scheduler.tick(later);
  assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'verified');
@@ -105,7 +107,7 @@ test('after one batch is delivered and the next is uncertain, the next run deliv
  }
  assert.deepEqual(pendingDeliveries(store),[]);
  // A further unchanged run sends nothing.
- attempted=[];store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(later+21600000).toISOString()});
+ attempted=[];assert.equal(Date.parse(store.get('jobs','domain-watch-sweeper').next_run),later+21600000);
  await scheduler.tick(later+21600000);assert.deepEqual(attempted,[]);assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'verified');
 });
 
