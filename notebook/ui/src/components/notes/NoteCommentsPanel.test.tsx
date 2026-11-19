@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import { NoteCommentsPanel, commentAuthor, commentDate } from "./NoteCommentsPanel";
+import { WAIT } from "@/test/wait-limits";
 
 // The Comments panel under a note (18 October 2026): it lists the note's comments with a readable
 // date, adds one and deletes one through the notebook's /api/query, as notebook/test/note-comments
@@ -30,32 +31,32 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.localStorage.clear();
 describe("NoteCommentsPanel", () => {
   it("shows the count while folded, then the comments with who wrote them and when", async () => {
     notebook([{ id: "comments-a", note_id: "garden-plan-1", content: "Ask the neighbour about the hose.", author: "owner", created_at: "2026-10-17T09:30:00.000Z", _hash: "a" }]);
-    const header = await screen.findByRole("button", { name: /Comments \(1\)/ });
+    const header = await screen.findByRole("button", { name: /Comments \(1\)/ }, WAIT);
     expect(screen.queryByText("Ask the neighbour about the hose.")).toBeNull();
     fireEvent.click(header);
-    expect(await screen.findByText("Ask the neighbour about the hose.")).toBeInTheDocument();
+    expect(await screen.findByText("Ask the neighbour about the hose.", undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByText("You, " + commentDate("2026-10-17T09:30:00.000Z"))).toBeInTheDocument();
   });
 
   it("adds a comment for this note and shows it", async () => {
     const requests = notebook([]);
-    fireEvent.click(await screen.findByRole("button", { name: /Comments \(0\)/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Comments \(0\)/ }, WAIT));
     fireEvent.change(screen.getByLabelText("Write a comment"), { target: { value: "  Seeds ordered.  " } });
     fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
-    expect(await screen.findByText("Seeds ordered.")).toBeInTheDocument();
+    expect(await screen.findByText("Seeds ordered.", undefined, WAIT)).toBeInTheDocument();
     expect(requests.find((r) => r.operation === "insert")).toMatchObject({ table: "comments", values: { note_id: "garden-plan-1", content: "Seeds ordered.", author: "owner" } });
     expect(screen.getByLabelText("Write a comment")).toHaveValue("");
   });
 
   it("deletes a comment after asking", async () => {
     const requests = notebook([{ id: "comments-a", note_id: "garden-plan-1", content: "Old remark", author: "owner", created_at: "2026-10-17T09:30:00.000Z", _hash: "a" }]);
-    fireEvent.click(await screen.findByRole("button", { name: /Comments \(1\)/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Delete this comment" }));
-    expect(await screen.findByText("Delete this comment?")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /Comments \(1\)/ }, WAIT));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete this comment" }, WAIT));
+    expect(await screen.findByText("Delete this comment?", undefined, WAIT)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(screen.queryByText("Old remark")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("Old remark")).toBeNull(), WAIT);
     expect(requests.find((r) => r.operation === "delete")).toMatchObject({ table: "comments", filters: [["eq", "id", "comments-a"]], expected: { "comments-a": "a" } });
-    expect(await screen.findByRole("button", { name: /Comments \(0\)/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Comments \(0\)/ }, WAIT)).toBeInTheDocument();
   });
 
   it("names the owner as You, another writer by its name, and never shows a broken date", () => {

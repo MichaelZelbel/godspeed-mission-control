@@ -5,6 +5,7 @@ import '@testing-library/jest-dom/vitest';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {MemoryRouter} from 'react-router-dom';
 import {ChatConnectionEmptyState,chatAIState} from './ChatConnectionEmptyState';
+import { WAIT } from "@/test/wait-limits";
 
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 
@@ -17,25 +18,25 @@ function show(options:unknown){
 describe.each(surfaces)('%s pre-composer state',surface=>{
   it('names no AI and routes to Settings, Your AI',async()=>{
     show({connected:false,usable:false});
-    expect(await screen.findByText('No AI is connected yet')).toBeInTheDocument();
+    expect(await screen.findByText('No AI is connected yet', undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
     expect(screen.queryByText('Ordinary ready state')).not.toBeInTheDocument();
   });
   it('replaces ready wording when the configured AI cannot be reached',async()=>{
     show({connected:true,usable:false,availability:'unreachable'});
-    expect(await screen.findByText('Your AI could not be reached')).toBeInTheDocument();
+    expect(await screen.findByText('Your AI could not be reached', undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByText('Check its connection before you type.')).toBeInTheDocument();
     expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
     expect(screen.queryByText('Ordinary ready state')).not.toBeInTheDocument();
   });
   it('keeps the ordinary empty state when the AI is usable',async()=>{
     show({connected:true,usable:true});
-    expect(await screen.findByText('Ordinary ready state')).toBeInTheDocument();
-    await waitFor(()=>expect(screen.queryByText('Checking AI connection…')).not.toBeInTheDocument());
+    expect(await screen.findByText('Ordinary ready state', undefined, WAIT)).toBeInTheDocument();
+    await waitFor(()=>expect(screen.queryByText('Checking AI connection…')).not.toBeInTheDocument(), WAIT);
   });
   it('explains an AI connected only to the notebook and names the Settings box',async()=>{
     show({connected:true,usable:false,availability:'settings-only'});
-    expect(await screen.findByText('Your AI is connected only to the notebook')).toBeInTheDocument();
+    expect(await screen.findByText('Your AI is connected only to the notebook', undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByText(/Use it for the daily routines and the chat too/)).toBeInTheDocument();
     expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
   });

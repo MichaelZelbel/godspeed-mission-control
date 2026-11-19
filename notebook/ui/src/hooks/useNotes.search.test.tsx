@@ -3,6 +3,7 @@ import {afterEach,expect,it,vi} from 'vitest';
 import {act,cleanup,renderHook,waitFor} from '@testing-library/react';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {useIlikeSearch} from './useNotes';
+import { WAIT } from "@/test/wait-limits";
 
 vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:{id:'owner'}})}));
 vi.mock('@/sync/sync-health',()=>({isLocalFirstActive:()=>false,useLocalFirstActive:()=>false}));
@@ -17,12 +18,12 @@ it('shows indexed matches first, then includes compound matches in Exact search 
   const fetcher=vi.fn(async(url:string)=>new URL(url,'http://notebook').searchParams.has('expand')?expansion.promise:response([row('tax','Tax Reporting')]));
   vi.stubGlobal('fetch',fetcher);const hook=show();let finished:any;
   act(()=>{finished=hook.result.current.mutateAsync({query:'report',complete:true,onWords:words});});
-  await waitFor(()=>expect(words).toHaveBeenCalledTimes(1));
+  await waitFor(()=>expect(words).toHaveBeenCalledTimes(1), WAIT);
   expect(words.mock.calls[0][0].map((r:any)=>r.id)).toEqual(['tax']);
-  await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(2));
+  await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(2), WAIT);
   expect(hook.result.current.isPending).toBe(true);
   await act(async()=>{expansion.resolve(response([row('tax','Tax Reporting'),row('compound','Jahresreport')]));await finished;});
-  await waitFor(()=>expect(hook.result.current.data?.map(r=>r.id)).toEqual(['tax','compound']));
+  await waitFor(()=>expect(hook.result.current.data?.map(r=>r.id)).toEqual(['tax','compound']), WAIT);
   for(const [url] of fetcher.mock.calls)expect(new URL(url,'http://notebook').searchParams.get('mode')).toBe('words');
 });
 
@@ -31,7 +32,7 @@ it('rejects an obsolete expansion even if its transport returns after cancellati
   const fetcher=vi.fn(async(url:string)=>new URL(url,'http://notebook').searchParams.has('expand')?expansion.promise:response([row('tax','Tax Reporting')]));
   vi.stubGlobal('fetch',fetcher);const hook=show();let finished:Promise<any>;
   act(()=>{finished=hook.result.current.mutateAsync({query:'report',complete:true,onWords:words,signal:controller.signal}).catch(error=>error);});
-  await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(2));controller.abort();
+  await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(2), WAIT);controller.abort();
   await act(async()=>{expansion.resolve(response([row('obsolete','Old compound match')]));const error=await finished;expect(error.name).toBe('AbortError');});
   expect(hook.result.current.data).toBeUndefined();expect(words).toHaveBeenCalledTimes(1);
 });
