@@ -912,9 +912,10 @@ export default function Notes() {
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="w-72 p-3 space-y-3">
-              <p className="text-xs font-medium text-muted-foreground">Create folder</p>
+              <label htmlFor="notes-new-folder-path" className="block text-xs font-medium text-muted-foreground">Folder name</label>
               <div className="flex gap-2">
                 <Input
+                  id="notes-new-folder-path"
                   value={newFolderPath}
                   onChange={(e) => setNewFolderPath(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") createFolder(); }}
@@ -1370,6 +1371,7 @@ export default function Notes() {
             }
           }}
           placeholder="Folder name"
+          aria-label="Folder name"
         />
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
