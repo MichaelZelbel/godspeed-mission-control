@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { format, formatDistanceToNow, isValid, parseISO } from "date-fns";
 import {
@@ -1157,7 +1157,7 @@ function LinkPicker({
   );
 }
 
-function FieldInput({
+export function FieldInput({
   field,
   value,
   error,
@@ -1173,6 +1173,8 @@ function FieldInput({
   currentCollection: Collection | null;
 }) {
   const selectedDate = parseDate(value);
+  const switchId = useId();
+  const switchRef = useRef<HTMLButtonElement>(null);
   const label = (
     <div className="mb-2 flex items-center gap-2">
       <Label>{field.label}</Label>
@@ -1192,14 +1194,25 @@ function FieldInput({
       <div className="rounded-md border p-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <Label>{field.label}</Label>
+            {/* Like a checkbox's label: a click toggles the switch and focuses it. */}
+            <Label
+              htmlFor={switchId}
+              className="cursor-pointer"
+              onClick={(event) => {
+                event.preventDefault();
+                switchRef.current?.focus();
+                onChange(!value);
+              }}
+            >
+              {field.label}
+            </Label>
             {field.primary && (
               <Badge variant="secondary" className="text-[10px]">
                 primary
               </Badge>
             )}
           </div>
-          <Switch checked={Boolean(value)} onCheckedChange={onChange} />
+          <Switch id={switchId} ref={switchRef} checked={Boolean(value)} onCheckedChange={onChange} />
         </div>
         {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
       </div>

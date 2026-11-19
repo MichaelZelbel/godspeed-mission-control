@@ -91,9 +91,9 @@ function TopicsPanel({ contactId, contactName }: { contactId: string; contactNam
           setTitle(''); setPriority('normal'); setRecurring(false); setStatus('checklist'); setOptionsOpen(false); input.current?.focus();
         }
       }}>
+        <label htmlFor={`topic-title-${contactId}`} className="block pt-2 text-xs font-medium text-muted-foreground">New topic</label>
         <div className="flex min-w-0 items-center gap-1">
           <Button variant="ghost" size="icon" className="h-11 w-11 -ml-3 shrink-0 text-muted-foreground" aria-label={mutation.isPending ? 'Saving...' : 'Add topic'} disabled={mutation.isPending || !title.trim()}><Plus aria-hidden="true" className="h-4 w-4" /></Button>
-          <label htmlFor={`topic-title-${contactId}`} className="sr-only">New topic</label>
           <Input ref={input} id={`topic-title-${contactId}`} placeholder="Add a topic..." maxLength={300} required className="h-11 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0" value={title} disabled={mutation.isPending} onChange={e => setTitle(e.target.value)} />
           <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-muted-foreground/70" aria-label="New topic options" aria-expanded={optionsOpen} onClick={() => setOptionsOpen(!optionsOpen)}><SlidersHorizontal aria-hidden="true" className="h-3.5 w-3.5" /></Button>
         </div>
