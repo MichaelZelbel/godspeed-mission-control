@@ -22,7 +22,8 @@ vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "owner"
 const KEY = "sk-fictional-refused-key-774";
 const REFUSED = "Your AI key or sign-in was refused. Check it in Settings, Your AI, then try again.";
 const UNREACHABLE = "Your AI could not be reached. Check its connection in Settings, Your AI, then try again.";
-const RAW = /HTTP|\b[45]\d\d\b|Model provider|Incorrect API key|Internal server error|provider wording|127\.0\.0\.1/;
+const UNREADABLE = "Your AI answered, but its answer could not be used. Try again, or choose another model in Settings, Your AI.";
+const RAW = /JSON|proposal list|HTTP|\b[45]\d\d\b|Model provider|Incorrect API key|Internal server error|provider wording|127\.0\.0\.1/;
 
 const standIn = { status: 200 };
 const endpoint = http.createServer((req, res) => {
@@ -109,6 +110,8 @@ describe.each([
   { case: "a key refused with HTTP 401", status: 401, expected: REFUSED },
   { case: "a key refused with HTTP 403", status: 403, expected: REFUSED },
   { case: "an AI answering HTTP 500", status: 500, expected: UNREACHABLE },
+  // #792: an AI that answers, but not in the shape the action needs ("Connected").
+  { case: "an AI answering only \"Connected\"", status: 200, expected: UNREADABLE },
 ])("$case", ({ status, expected }) => {
   it.each(actions)("$name says it plainly", async ({ press }) => {
     standIn.status = status;
