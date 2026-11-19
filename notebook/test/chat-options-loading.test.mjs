@@ -99,3 +99,62 @@ test('a connected AI without a model list is still shown as the connected model'
  const {options}=await optionsFrom(t,async()=>({reply:'ok'}));
  assert.equal(options.connected,true);assert.equal(options.current,'');assert.equal(options.label,'Connected model');
 });
+
+// #764: an AI connected in Settings is usable at once, without a chat having been opened first.
+import http from 'node:http';
+async function fakeEndpoint(t){
+ const state={status:200,kinds:[]};
+ const server=http.createServer((req,res)=>{let raw='';req.on('data',c=>raw+=c);req.on('end',()=>{try{state.kinds.push(JSON.parse(JSON.parse(raw).messages[1].content).kind);}catch{}res.statusCode=state.status;res.setHeader('content-type','application/json');res.end(JSON.stringify(state.status===200?{choices:[{message:{content:'Connected'}}]}:{error:{message:'Fictional refused key'}}));});});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ return {state,address:'http://127.0.0.1:'+server.address().port+'/v1'};
+}
+async function notebookAt(t,root,provider){
+ const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL','GODSPEED_MODEL_KEY','GODSPEED_MODEL'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
+ for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
+ const {createService}=await import('../server/main.mjs');const service=await createService({root:path.join(root,'workspace'),port:0,provider});
+ let closed=false;const close=async()=>{if(closed)return;closed=true;await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];};t.after(close);
+ const base='http://127.0.0.1:'+service.address.port;
+ return {close,status:async()=>await (await fetch(base+'/api/status')).json(),options:()=>loadChatOptions({fetcher:(url,init)=>fetch(base+url,init)}),connect:address=>fetch(base+'/api/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:address,key:'fictional-key',model:'fictional-model',routines:false})})};
+}
+const tempRoot=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-ai-connect-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;};
+test('an AI connected in Settings is available at once on a fresh notebook, with no chat opened',async t=>{
+ const ai=await fakeEndpoint(t),notebook=await notebookAt(t,tempRoot(t));
+ assert.equal((await notebook.status()).runtimeConfigured,false);
+ const connected=await notebook.connect(ai.address);assert.equal(connected.status,200);
+ const status=await notebook.status();
+ assert.equal(status.aiConfigured,true);assert.equal(status.runtimeConfigured,true,'the Dashboard, Add Moment and every runtimeConfigured reader see the AI at once');
+ assert.deepEqual(ai.state.kinds,['connection-test'],'no chat or chat options were read to get there');
+});
+test('a fresh start with a saved, working connection is available before any chat is opened',async t=>{
+ const ai=await fakeEndpoint(t),root=tempRoot(t),first=await notebookAt(t,root);
+ assert.equal((await first.connect(ai.address)).status,200);await first.close();
+ const reopened=await notebookAt(t,root);
+ assert.equal((await reopened.status()).runtimeConfigured,true);
+ assert.equal((await reopened.options()).usable,true);
+});
+test('connecting a working AI after a failed check makes it available again at once',async t=>{
+ let now=100000;t.mock.method(Date,'now',()=>now);
+ const ai=await fakeEndpoint(t),root=tempRoot(t),first=await notebookAt(t,root);
+ assert.equal((await first.connect(ai.address)).status,200);await first.close();
+ const notebook=await notebookAt(t,root);
+ ai.state.status=401;
+ assert.equal((await notebook.options()).usable,false);assert.equal((await notebook.status()).runtimeConfigured,false);
+ ai.state.status=200;now+=1000;
+ assert.equal((await notebook.connect(ai.address)).status,200);
+ assert.equal((await notebook.status()).runtimeConfigured,true);
+});
+test('a refused key at connect time leaves the AI off',async t=>{
+ const ai=await fakeEndpoint(t),notebook=await notebookAt(t,tempRoot(t));
+ ai.state.status=401;
+ assert.notEqual((await notebook.connect(ai.address)).status,200);
+ const status=await notebook.status();assert.equal(status.aiConfigured,false);assert.equal(status.runtimeConfigured,false);
+});
+test('a check still running for the AI that was replaced does not turn the new one off',async t=>{
+ let rejectCheck,checkStarted;const started=new Promise(resolve=>{checkStarted=resolve;});
+ const old=Object.assign(async()=>({reply:'ok'}),{check:()=>{checkStarted();return new Promise((resolve,reject)=>{rejectCheck=reject;});}});
+ const ai=await fakeEndpoint(t),notebook=await notebookAt(t,tempRoot(t),old);
+ const reading=notebook.options();await started;
+ assert.equal((await notebook.connect(ai.address)).status,200);
+ rejectCheck(new Error('Fictional old provider failure'));await reading;
+ assert.equal((await notebook.status()).runtimeConfigured,true);
+});
