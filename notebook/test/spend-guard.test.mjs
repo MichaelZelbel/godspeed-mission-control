@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {Store,atomic} from '../core/records/store.mjs';
-import {runSpendGuard,saveSpendGuardSettings,spendGuardKeys} from '../core/spend-guard.mjs';
+import {runSpendGuard,saveSpendGuardSettings,spendGuardKeys,spendGuardStatus} from '../core/spend-guard.mjs';
 
 const setup=()=>new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-spend-')));
 const connect=(store,key='sk-fixture-secret')=>atomic(path.join(store.state,'provider.json'),JSON.stringify({url:'https://openrouter.ai/api/v1/chat/completions',key,model:'fixture/model'}));
@@ -86,4 +86,15 @@ test('connecting an OpenRouter key in Settings starts the hourly check, and noth
  const main=await open();
  assert.equal((await main.call('provider',{url:'https://openrouter.ai/api/v1',key:'sk-or-main-secret',model:'x/y'})).status,200);
  assert.equal(main.service.store.get('jobs','spend-guard')?.kind,'spend-guard');
+});
+
+test('the status line says the spending checks are off whenever they are saved off',()=>{
+ const hourly='OpenRouter spending is checked hourly.',off='Spending checks are off.',none='Spending is not checked for the connected provider yet. The check starts automatically when an OpenRouter key is connected.';
+ const store=setup();connect(store);assert.equal(spendGuardStatus(store).provider_message,hourly);
+ for(let lap=0;lap<2;lap++){
+  saveSpendGuardSettings(store,{enabled:false});const status=spendGuardStatus(store);assert.equal(status.enabled,false);assert.equal(status.openrouter_connected,true);assert.equal(status.provider_message,off);assert.doesNotMatch(status.provider_message,/hourly/);
+  saveSpendGuardSettings(store,{enabled:true});assert.equal(spendGuardStatus(store).enabled,true);assert.equal(spendGuardStatus(store).provider_message,hourly);
+ }
+ const bare=setup();assert.equal(spendGuardStatus(bare).provider_message,none);
+ saveSpendGuardSettings(bare,{enabled:false});assert.equal(spendGuardStatus(bare).provider_message,off);assert.doesNotMatch(spendGuardStatus(bare).provider_message,/checked hourly|starts automatically/);
 });
