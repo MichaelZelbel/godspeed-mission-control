@@ -87,6 +87,15 @@ test('a refused chat returns plain guidance instead of provider diagnostics',asy
  const result=await fetch('http://127.0.0.1:'+service.address.port+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})});
  const body=await result.json();assert.equal(result.status,400);assert.match(body.error,/Your AI key or sign-in was refused.*Settings, Your AI/);assert.doesNotMatch(body.error,/401|secret provider detail|could not be reached/);
 });
+// #783: a failure that is not the AI's said "Your AI could not be used" and marked the AI unusable.
+test('a chat failure that is not the AI\'s is said as it is and leaves the AI usable',async t=>{
+ let checks=0;const provider=Object.assign(async()=>{throw Error('Use a document-capable model endpoint for PDF analysis with this model provider');},{options:async()=>({current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}),check:async()=>{checks++;}});
+ const {base,readOptions,readStatus}=await optionsFrom(t,provider,{defer:true});
+ const result=await fetch(base+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})});
+ const body=await result.json();assert.equal(result.status,400);assert.match(body.error,/document-capable model endpoint/);assert.doesNotMatch(body.error,/could not be used|refused|could not be reached/);
+ assert.equal((await readStatus()).runtimeConfigured,true);
+ const options=await readOptions();assert.equal(options.usable,true);assert.equal(options.availability,'ready');
+});
 test('a chat send with no AI keeps the no-AI setup guidance',async t=>{
  const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-no-ai-'));for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');

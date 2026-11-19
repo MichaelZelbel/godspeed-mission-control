@@ -75,7 +75,7 @@ import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/herm
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
 import {trackAIHealth,aiFailure} from '../core/ai-health.mjs';
-import {SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS,AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS,NO_AI_STATUS} from '../core/no-ai.mjs';
+import {AI_REFUSED,AI_UNREACHABLE,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS,NO_AI_STATUS} from '../core/no-ai.mjs';
 import {MEDIA_CARRY_MAX_MB,MEDIA_PRESENCE_BATCH_SIZE,MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
 import {spendGuardStatus,saveSpendGuardSettings} from '../core/spend-guard.mjs';
 
@@ -107,7 +107,7 @@ const plainAIFailure=error=>{
   const message=String(error?.message||'');
   if(message.startsWith(NO_AI_STATUS)||message.startsWith(SETTINGS_ONLY_AI_STATUS)||!PROVIDER_FAILURE.test(message))return null;
   const kind=aiFailure(error);
-  return kind==='refused'?AI_REFUSED_STATUS+'. Check it in Settings, Your AI, then try again.':kind?AI_UNREACHABLE_STATUS+'. Check its connection in Settings, Your AI, then try again.':null;
+  return kind==='refused'?AI_REFUSED:kind?AI_UNREACHABLE:null;
 };
 // The AI actions outside the chats that say a refused key or an outage the same way (#779).
 const AI_ACTIONS=['draft-event','process-note','extract-moment-profile'];
@@ -774,8 +774,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           if(chatAICheck)await chatAICheck;
         }
         // Refused and outage are told apart, and a real chat request newer than the check counts too (#590).
-        {const availability=chatAIAvailability();return send(res,200,{connected:true,usable:availability==='ready',availability,...options});}
-        return send(res,200,{connected:true,usable:chatAIUsable,...options});
+        const availability=chatAIAvailability();return send(res,200,{connected:true,usable:availability==='ready',availability,...options});
       }
       if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}
       if (route.startsWith('/api/functions/') && req.method === 'POST') {
@@ -810,7 +809,6 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});
           // A refused key and an outage are said apart, each with what to do (#590). Only the category is said, never the provider's words.
           if(isChat&&domains.provider&&!assistantMissing&&!controller.signal.aborted){const said=plainAIFailure(error);if(said){chatAIUsable=false;chatAICheckedAt=Date.now();throw new Error(said);}}
-          if(isChat&&domains.provider&&!assistantMissing&&!controller.signal.aborted&&/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d/i.test(error.message)){chatAIUsable=false;chatAICheckedAt=Date.now();throw new Error('Your AI could not be used. Check Settings, Your AI, then try again.');}
           if(AI_ACTIONS.includes(name)&&domains.provider&&!controller.signal.aborted){const said=plainAIFailure(error);if(said)throw new Error(said);}
           throw error;
         }finally{if(isChat&&id)chatRequests.delete(id);if(isSearch){req.off('aborted',abortSearch);res.off('close',abortSearch);}}
