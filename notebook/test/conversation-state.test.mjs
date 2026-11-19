@@ -38,7 +38,7 @@ test('the completed reply is durable before HTTP returns without a later browser
  }finally{await service.close();}
 });
 
-test('a turn sent from a second window that missed the first window\'s turn is kept once, after it',async()=>{
+test('a turn sent from a second window that missed the first window\'s turn is kept once, after it, with what only that window knows',async()=>{
  const service=await createService({root:fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-two-windows-')),port:0,provider:async()=>({reply:'Fictional pop-out answer'})}),base='http://127.0.0.1:'+service.address.port;
  const key='note:fictional-two-windows',m=(role,content)=>({role,content}),chat=(...messages)=>({messages,summary:'',summarizedUpTo:0});
  const save=async state=>(await fetch(base+'/api/chat-state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({context_key:key,state})})).json();
@@ -49,8 +49,10 @@ test('a turn sent from a second window that missed the first window\'s turn is k
   assert.deepEqual((await save(chat(q1,a1,q3))).state.messages,[q1,a1,q2,a2,q3]);
   const reply=await fetch(base+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:q3.content,conversation_id:'notebook:'+key,request_id:'aaaaaaaa-bbbb-cccc-dddd-222222222222'})});
   assert.equal(reply.status,200);
-  const last=await save(chat(q1,a1,q3,a3));
-  assert.equal(last.ignored_stale,true);
-  assert.deepEqual(service.store.list('note_conversations')[0].state.messages.map(({role,content})=>({role,content})),[q1,a1,q2,a2,q3,a3]);
+  assert.equal((await save(chat(q1,a1,q3,a3))).ignored_stale,true);
+  const undo={...a3,noteEdit:{previousContent:'Fictional note before the edit'}},last=await save(chat(q1,a1,q3,undo));
+  const kept=service.store.list('note_conversations')[0].state.messages;
+  assert.equal(last.ignored_stale,undefined);assert.deepEqual(last.state.messages,kept);assert.deepEqual(kept.at(-1).noteEdit,undo.noteEdit);
+  assert.deepEqual(kept.map(({role,content})=>({role,content})),[q1,a1,q2,a2,q3,a3]);
  }finally{await service.close();}
 });

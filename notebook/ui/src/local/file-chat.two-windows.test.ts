@@ -81,3 +81,36 @@ it('shows a failed save once and not again for the save that works after it',asy
   expect(toastError).toHaveBeenCalledTimes(1);
   expect(toastError).toHaveBeenCalledWith('Conversation history was not saved. Keep this window open and retry.');
 });
+
+it('keeps a turn whose save failed once the other window saves, and both windows show it',async()=>{
+  const q1=user('Fictional question'),a1=assistant('Fictional answer');
+  const panel=await openWindow();
+  panel.saveFileChat(key,chat(q1,a1));
+  await vi.waitFor(async()=>expect(await stored()).toHaveLength(2));
+  const popout=await openWindow();
+  const unsaved=user('Fictional panel question that failed to save'),later=user('Fictional pop-out question');
+  failSaves=true;
+  panel.saveFileChat(key,chat(q1,a1,unsaved));
+  await vi.waitFor(()=>expect(toastError).toHaveBeenCalledTimes(1));
+  failSaves=false;
+  popout.saveFileChat(key,chat(q1,a1,later));
+  const both=[q1,a1,later,unsaved];
+  await vi.waitFor(()=>{expect(panel.loadFileChat(key).messages).toEqual(both);expect(popout.loadFileChat(key).messages).toEqual(both);});
+  expect(await stored()).toEqual(both);
+  expect(toastError).toHaveBeenCalledTimes(1);
+});
+
+it('clears the conversation in the other window too, which then saves its next turn',async()=>{
+  const panel=await openWindow();
+  panel.saveFileChat(key,chat(user('Fictional old question'),assistant('Fictional old answer')));
+  await vi.waitFor(async()=>expect(await stored()).toHaveLength(2));
+  const popout=await openWindow();
+  const cleared=await panel.clearFileChat(key);
+  await vi.waitFor(()=>expect(popout.loadFileChat(key)).toEqual(cleared));
+  expect(cleared.messages).toEqual([]);
+  const next=user('Fictional question after clearing');
+  popout.saveFileChat(key,{...popout.loadFileChat(key),messages:[next]});
+  await vi.waitFor(()=>expect(panel.loadFileChat(key).messages).toEqual([next]));
+  expect(await stored()).toEqual([next]);
+  expect(toastError).not.toHaveBeenCalled();
+});

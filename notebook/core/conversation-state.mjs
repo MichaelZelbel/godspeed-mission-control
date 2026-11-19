@@ -14,11 +14,17 @@ const sameMessage=(a,b)=>a.role===b.role&&a.content===b.content;
 const prefix=(short,long)=>short.length<=long.length&&short.every((message,i)=>sameMessage(message,long[i]));
 // Another window on the same conversation saved turns this one never saw. The
 // stored turns keep their place and this window's turns that the store lacks
-// follow them, so neither window's messages are lost or repeated.
+// follow them, so neither window's messages are lost or repeated. A turn both
+// hold keeps the fields only this window knows, such as an edit's undo.
 function joined(stored,incoming){
- let shared=0;while(shared<stored.length&&shared<incoming.length&&sameMessage(stored[shared],incoming[shared]))shared++;
- const unmatched=stored.slice(shared);
- return [...stored,...incoming.slice(shared).filter(message=>{const at=unmatched.findIndex(m=>sameMessage(m,message));if(at<0)return true;unmatched.splice(at,1);return false;})];
+ const messages=[...stored];let shared=0;
+ while(shared<stored.length&&shared<incoming.length&&sameMessage(stored[shared],incoming[shared])){messages[shared]={...stored[shared],...incoming[shared]};shared++;}
+ const unmatched=stored.map((_,i)=>i).slice(shared);
+ for(const message of incoming.slice(shared)){
+  const at=unmatched.findIndex(i=>sameMessage(stored[i],message));
+  if(at<0)messages.push(message);else{const i=unmatched.splice(at,1)[0];messages[i]={...stored[i],...message};}
+ }
+ return messages;
 }
 export function saveConversationState(store,input,{asyncWriter=false,signal}={}){
  const key=input.context_key;let state=input.state;
@@ -32,9 +38,8 @@ export function saveConversationState(store,input,{asyncWriter=false,signal}={})
    if((state.session_id||'')!==(current.session_id||''))return {ok:true,state:current,revision,ignored_stale:true};
    if(hash(current)===hash(state))return {ok:true,state:current,revision,unchanged:true};
    if(!prefix(current.messages,state.messages)){
-    const messages=joined(current.messages,state.messages);
-    if(messages.length===current.messages.length)return {ok:true,state:current,revision,ignored_stale:true};
-    state={...current,messages};
+    state={...current,messages:joined(current.messages,state.messages)};
+    if(hash(state)===hash(current))return {ok:true,state:current,revision,ignored_stale:true};
    }else{
     if(state.messages.length===current.messages.length&&(state.summarizedUpTo||0)<(current.summarizedUpTo||0))return {ok:true,state:current,revision,ignored_stale:true};
     state={...state,messages:state.messages.map((message,i)=>({...current.messages[i],...message}))};
