@@ -322,9 +322,13 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
       const apiMessages = buildApiMessages(nextState);
       const chatFn = collectionId ? "collection-chat" : noteId ? "note-chat" : "conversation-chat";
       // Flush the open editor's pending autosave so the agent edits on top of
-      // the user's newest text (and knows which version it is based on).
+      // the user's newest text (and knows which version it is based on). The
+      // chat in its own window (/dashboard/chat?note=...) has no editor to ask:
+      // waiting for one held every send there for the whole flush timeout, with
+      // the reply spinning and nothing sent to the AI (#758). The note's own
+      // window saves its text as the person types, as it always did.
       const flushed =
-        noteId && !collectionId
+        noteId && !collectionId && !page
           ? await flushNoteSave(noteId)
           : { updatedAt: null, content: null };
       const invokeBody = collectionId
@@ -446,7 +450,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
     } finally {
       setIsLoading(false);requestRef.current=null;
     }
-  }, [input, files, model, effort, isLoading, session, state, noteId, personId,talkId, pageChat, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
+  }, [input, files, model, effort, isLoading, session, state, page, noteId, personId,talkId, pageChat, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
 
   // A message handed in with openFloatingChat goes out once the panel is open and free; after a
   // moment, so the conversation the panel just loaded is the one it is added to.
