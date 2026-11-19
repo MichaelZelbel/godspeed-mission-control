@@ -214,6 +214,25 @@ describe("the saved main AI in Settings", () => {
     expect(screen.queryByRole("button", { name: "Test and connect" })).toBeNull();
   });
 
+  it("removes a saved connection that cannot be read, so the person can connect again", async () => {
+    const calls = serve({ ...supportingRoutes, provider: () => [500, { error: "The saved AI connection is not valid." }], "provider/remove": () => [200, { removed: true, connected: false, provider: { configured: false, key: false }, routines: { available: false } }] });
+    settings();
+    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    expect(await screen.findByText("Removed. No AI is connected now. Connect one here whenever you like.")).toBeInTheDocument();
+    expect(calls.filter(c => c.route === "provider/remove")).toEqual([{ route: "provider/remove", body: {} }]);
+    expect(screen.getByLabelText("Key")).toBeRequired();
+  });
+
+  it("says the notebook keeps the AI it had before when one is left after removal", async () => {
+    let saved: unknown = { configured: true, url: "https://openrouter.ai/api/v1/chat/completions", model: "fictional/model", key: true };
+    serve({ ...supportingRoutes, provider: () => [200, saved], "provider/remove": () => { saved = { configured: false, key: false };return [200, { removed: true, connected: true, provider: saved, routines: { available: false } }]; } });
+    settings();
+    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    expect(await screen.findByText("Removed. The notebook uses the AI it had before this connection.")).toBeInTheDocument();
+  });
+
   it("shows a saved Another service after the server and Settings reopen", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed-connect-ai-ui-"));
     const endpoint = http.createServer((req, res) => { res.setHeader("content-type", "application/json");res.end(JSON.stringify({ choices: [{ message: { content: "Connected" } }] })); });

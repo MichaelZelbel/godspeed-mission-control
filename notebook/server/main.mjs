@@ -499,17 +499,19 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         connectRoutineAI({...routineAI,config});
         return send(res,200,{connected:true,provider:providerView(config),routines:{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})}});
       }
-      // Removing the AI connected above (#779): its saved file goes, and what it wrote into Hermes for
-      // the routines and the chat. The notebook then uses what is left, as it would at startup: the
-      // GODSPEED_MODEL_* address, or a Hermes that keeps an AI of its own, or none.
+      // Removing the AI connected above (#779): what it wrote into Hermes for the routines and the chat
+      // goes first, so a failure there leaves the connection whole and Remove can be tried again; then
+      // its saved file, even one that no longer reads as a connection. The running notebook then uses
+      // the GODSPEED_MODEL_* address, or a Hermes that keeps an AI of its own, or none. Startup is
+      // looser: after a restart a verified Hermes is picked even when it keeps no AI.
       if(route==='/api/provider/remove'&&req.method==='POST'){
-        const saved=readSavedProvider(providerPath);
-        try{fs.unlinkSync(providerPath);}catch(error){if(error.code!=='ENOENT')throw error;}
+        let saved=null;try{saved=JSON.parse(fs.readFileSync(providerPath,'utf8'));}catch{}
         if(routineAI&&saved)disconnectRoutineAI({...routineAI,config:saved});
+        let removed=true;try{fs.unlinkSync(providerPath);}catch(error){if(error.code!=='ENOENT')throw error;removed=false;}
         const next=guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}))
           ||(routineAI&&routineAIStatus(routineAI).source!=='none'?hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot}):null);
         provider=next?trackAIHealth(next):null;domains.provider=provider;scheduler.executor=jobExecutor(provider,query);chatAIUsable=!!provider;chatAICheckedAt=0;
-        return send(res,200,{removed:!!saved,provider:{configured:false,key:false},routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
+        return send(res,200,{removed,connected:!!provider,provider:{configured:false,key:false},routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
       }
       if(route==='/api/spend-guard'&&req.method==='GET')return send(res,200,spendGuardStatus(store,{hermesHome:routineAI?.home}));
       if(route==='/api/spend-guard'&&req.method==='POST'){

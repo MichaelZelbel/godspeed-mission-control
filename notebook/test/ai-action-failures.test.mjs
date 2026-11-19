@@ -22,10 +22,10 @@ async function standIn(t){
   return ai;
 }
 
-async function notebook(t){
+async function notebook(t,env={}){
   const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL','GODSPEED_MODEL_KEY','GODSPEED_MODEL'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-ai-actions-'));
-  for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
+  for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');Object.assign(process.env,env);
   const {createService}=await import('../server/main.mjs');const service=await createService({root:path.join(root,'workspace'),port:0});
   t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
   const base='http://127.0.0.1:'+service.address.port;
@@ -35,8 +35,8 @@ async function notebook(t){
   return {root,base,post,get,insert,providerFile:path.join(root,'workspace','.godspeed','provider.json')};
 }
 
-async function seeded(t){
-  const nb=await notebook(t);
+async function seeded(t,env){
+  const nb=await notebook(t,env);
   const note=await nb.insert('notes',{title:'Lunch',content:'Lunch with Ada about the garden.'});
   const moment=await nb.insert('moments',{title:'Lunch with Ada',description:'We talked about the garden.',happened_at:'2026-11-01'});
   const actions={
@@ -100,7 +100,7 @@ test('removing the saved AI connection forgets its key and leaves no AI connecte
   assert.equal((await nb.post('/api/provider',{url:ai.url,key:KEY,model:'fictional-model'})).status,200);
   const removed=await nb.post('/api/provider/remove',{});
   assert.equal(removed.status,200);
-  assert.deepEqual(JSON.parse(removed.text),{removed:true,provider:{configured:false,key:false},routines:{available:false}});
+  assert.deepEqual(JSON.parse(removed.text),{removed:true,connected:false,provider:{configured:false,key:false},routines:{available:false}});
   assert.equal(fs.existsSync(nb.providerFile),false);
   const provider=await nb.get('/api/provider'),options=await nb.get('/api/chat/options'),status=await nb.get('/api/status'),draft=await nb.run('draft-event');
   assert.deepEqual(JSON.parse(provider.text),{configured:false,key:false});
@@ -109,4 +109,25 @@ test('removing the saved AI connection forgets its key and leaves no AI connecte
   assert.ok(errorOf(draft).startsWith(NO_AI_STATUS));
   for(const answer of [removed,provider,options,status,draft])assert.equal(answer.text.includes(KEY),false);
   assert.equal(JSON.parse((await nb.post('/api/provider/remove',{})).text).removed,false);
+});
+
+test('removing the saved connection hands the notebook back to the GODSPEED_MODEL_* address',async t=>{
+  const ai=await standIn(t),nb=await seeded(t,{GODSPEED_MODEL_URL:ai.url,GODSPEED_MODEL_KEY:'env-key',GODSPEED_MODEL:'env-model'});
+  assert.equal((await nb.post('/api/provider',{url:ai.url,key:KEY,model:'fictional-model'})).status,200);
+  const removed=JSON.parse((await nb.post('/api/provider/remove',{})).text);
+  assert.equal(removed.removed,true);assert.equal(removed.connected,true);
+  assert.equal(JSON.parse((await nb.get('/api/chat/options')).text).connected,true);
+  assert.equal(JSON.parse((await nb.get('/api/status')).text).runtimeConfigured,true);
+  const asked=ai.requests,draft=await nb.run('draft-event');
+  assert.ok(ai.requests>asked,draft.text);assert.equal(draft.text.includes(NO_AI_STATUS),false);
+});
+
+test('a saved connection that no longer reads as one can still be removed',async t=>{
+  const nb=await notebook(t);
+  fs.mkdirSync(path.dirname(nb.providerFile),{recursive:true});fs.writeFileSync(nb.providerFile,'{broken '+KEY);
+  assert.notEqual((await nb.get('/api/provider')).status,200);
+  const removed=await nb.post('/api/provider/remove',{});
+  assert.equal(removed.status,200,removed.text);assert.equal(JSON.parse(removed.text).removed,true);
+  assert.equal(fs.existsSync(nb.providerFile),false);
+  assert.deepEqual(JSON.parse((await nb.get('/api/provider')).text),{configured:false,key:false});
 });
