@@ -11,6 +11,13 @@ const advice={
   redemption:'the owner can still renew it for about 30 days',
   registered:'it is registered again'
 };
+// How each state reads after "<domain> is now": a plain sentence, never the bare state keyword.
+const phrase={
+  available:'available',
+  'pending delete':'pending deletion',
+  redemption:'in its redemption period',
+  registered:'registered'
+};
 
 export function normalizeDomain(raw){
   const entered=String(raw??'').trim().replace(/\.$/,'');
@@ -115,7 +122,7 @@ export async function runDomainWatches({store,fetcher}){
       const changed=!!current.state&&current.state!==read.state,transition=changed?hash([current.id,current.state,read.state,current._hash]):null;
       const observation=store.prepare('domain_watch_observations',{watch_id:current.id,domain:current.domain,state:read.state,observed_at:at,endpoint:read.endpoint,http_status:read.http_status,statuses:read.statuses,changed});
       records.push(observation,store.prepare('domain_watches',{state:read.state,checked_at:at,last_observation_id:observation.id,...(current.last_lookup_error?{last_lookup_error:null}:{})},current));
-      if(changed)transitions.push({id:'domain-watch-'+transition,domain:current.domain,watch_id:current.id,observation_id:observation.id,body:current.domain+' is now '+read.state+': '+advice[read.state]+'.'});
+      if(changed)transitions.push({id:'domain-watch-'+transition,domain:current.domain,watch_id:current.id,observation_id:observation.id,body:current.domain+' is now '+phrase[read.state]+': '+advice[read.state]+'.'});
       outcomes.push({domain:current.domain,ok:true,state:read.state,changed});
     }
     if(transitions.length){
