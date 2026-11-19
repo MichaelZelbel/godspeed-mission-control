@@ -6,7 +6,7 @@ import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
 import {asksForTodaysBrief,savedBriefToday} from './briefing.mjs';
 import {NOTEBOOK_CHAT_FUNCTIONS} from './notebook-chat.mjs';
 
-const AI_ANALYSIS_ACTIONS=['generate-profile-suggestions','generate_collection_schema'];
+const AI_ANALYSIS_ACTIONS=['generate-profile-suggestions','generate_collection_schema','process-note'];
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
 import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
@@ -148,8 +148,10 @@ export function weekNotes(notes){
 }
 export class Domains {
   constructor(query, { provider = null } = {}) { this.query = query; this.store = query.store; this.provider = provider; }
-  // A saved picture or PDF, read where it is kept (media-store.mjs).
+  // A saved picture or PDF, read where it is kept (media-store.mjs). A call that names none, such as
+  // Analyze media on a note without one, is told so; it was a server error until #808.
   media(original){
+    if(!original)throw new Error('There is no image or PDF to analyze here. Add one to the note first.');
     const found=findMedia({mediaRoot:this.mediaRoot,carried:carriedRoot(this.store)},original);
     if(!found)throw new Error('Media not found');if(found.removed)throw new Error('Media was removed');
     return found;
@@ -281,7 +283,8 @@ export class Domains {
     return found.context?{context:found.context}:null;
   }
   // The AI actions outside the chats say a refused key or an outage in plain words, never the
-  // provider's (#774): Suggest and My Profile's suggestions, and Create collection with AI.
+  // provider's (#774): Suggest and My Profile's suggestions, Create collection with AI, and Process
+  // note, whose background run keeps what it was told for the note's badge (#808).
   async invoke(name, input = {}) {
     if(!AI_ANALYSIS_ACTIONS.includes(name))return this.answer(name,input);
     try{return await this.answer(name,input);}catch(error){throw analysisFailure(error);}
@@ -464,8 +467,8 @@ export class Domains {
     }
     if(name==='analyze-media'){
       if(input.note_id&&!visibleRows(this.query,'notes').some(n=>n.id===input.note_id))throw new Error('This source is hidden from the assistant');
-      if(!this.provider)throw new Error('Connect a model with image or PDF support before media analysis');
       const {mapping,file}=this.media(input.storage_path);
+      if(!this.provider)throw new Error('Connect a model with image or PDF support before media analysis');
       const bytes=fs.readFileSync(file);if(hash(bytes)!==mapping.sha256)throw new Error('Media integrity check failed');
       if(!analyzableMediaType(mapping.contentType))throw new Error('Analysis supports images and PDF documents');
       const old=this.query.rows('media_analysis').find(r=>r.storage_path===input.storage_path);

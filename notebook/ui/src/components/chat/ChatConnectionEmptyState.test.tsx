@@ -4,7 +4,7 @@ import {render,screen,waitFor,cleanup} from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {MemoryRouter} from 'react-router-dom';
-import {ChatConnectionEmptyState,chatAIState} from './ChatConnectionEmptyState';
+import {ChatConnectionEmptyState,chatAIState,stateSaid} from './ChatConnectionEmptyState';
 import { WAIT } from "@/test/wait-limits";
 
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
@@ -34,6 +34,13 @@ describe.each(surfaces)('%s pre-composer state',surface=>{
     expect(await screen.findByText('Ordinary ready state', undefined, WAIT)).toBeInTheDocument();
     await waitFor(()=>expect(screen.queryByText('Checking AI connection…')).not.toBeInTheDocument(), WAIT);
   });
+  // #808: a stall was headlined "Your AI could not be reached", the outage wording.
+  it('says a stalled AI is not answering, not that it could not be reached',async()=>{
+    show({connected:true,usable:false,availability:'stalled'});
+    expect(await screen.findByText('Your AI is not answering', undefined, WAIT)).toBeInTheDocument();
+    expect(screen.queryByText(/could not be reached/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
+  });
   it('explains an AI connected only to the notebook and names the Settings box',async()=>{
     show({connected:true,usable:false,availability:'settings-only'});
     expect(await screen.findByText('Your AI is connected only to the notebook', undefined, WAIT)).toBeInTheDocument();
@@ -44,4 +51,8 @@ describe.each(surfaces)('%s pre-composer state',surface=>{
 
 it('preserves a ready state when connection checking is unavailable',()=>{
   expect(chatAIState({connected:true})).toBe('ready');
+});
+
+it('knows a stalled reply already says the stall, so the notice under it does not repeat it',()=>{
+  expect(stateSaid('Your AI is not answering. Try again in a moment, or check it in Settings, Your AI.')).toBe('stalled');
 });
