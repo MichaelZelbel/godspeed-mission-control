@@ -1,6 +1,7 @@
 // #762: with an AI connected, every open page read /api/chat/options every 5 seconds and each read
-// could send the AI a billed chat. The check now asks the service's free key endpoint, and sends a
-// chat at most once every 10 minutes only when that endpoint cannot tell a refused key apart.
+// could send the AI a billed chat. The check now asks the service's free key endpoint. It sends a chat only
+// after a chat failed, until one answers, or at most once every 10 minutes when that endpoint cannot tell
+// a refused key apart.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';
 import {loadChatOptions} from '../ui/src/local/chat-options.mjs';
 import {modelProvider} from '../core/runtime.mjs';
@@ -81,5 +82,31 @@ test('OpenRouter is asked its key endpoint, never a chat, and a chat\'s own answ
   await provider.check();
   assert.equal(provider.health(),'ready');
   assert.equal(requests.filter(request=>request.method==='POST').length,1,'only the person\'s own chat was sent');
+ }finally{globalThis.fetch=original;}
+});
+
+test('a chat the service fails stays failed at the next check while the key endpoint answers, and its recovery shows at the check after',async()=>{
+ const original=globalThis.fetch;let chatAnswer=200,posts=0;
+ globalThis.fetch=async(url,init={})=>{
+  if(init.method==='POST'){posts++;return new Response(JSON.stringify(chatAnswer===200?{choices:[{message:{content:'OK'}}]}:{error:{message:'Provider returned error'}}),{status:chatAnswer,headers:{'Content-Type':'application/json'}});}
+  return new Response('{}',{status:init.headers?.Authorization?200:401});
+ };
+ try{
+  const provider=trackAIHealth(modelProvider({url:'https://openrouter.ai/api/v1/chat/completions',key:'fictional-key',model:'fictional-model',retryWaits:[]}));
+  await provider.check();
+  assert.equal(provider.health(),'ready');
+  for(const status of [502,402,400]){
+   chatAnswer=status;
+   await assert.rejects(provider({kind:'chat',message:'Hello'}));
+   assert.equal(provider.health(),'unreachable');
+   await assert.rejects(provider.check(),new RegExp('HTTP '+status));
+   assert.equal(provider.health(),'unreachable',status+' was overruled by the key endpoint');
+   chatAnswer=200;
+   await provider.check();
+   assert.equal(provider.health(),'ready');
+  }
+  const before=posts;
+  await provider.check();
+  assert.equal(posts,before,'a check after a chat answered again sends no chat');
  }finally{globalThis.fetch=original;}
 });

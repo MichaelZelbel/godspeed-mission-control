@@ -186,14 +186,14 @@ export function stalledAI(url,cause){
   return Object.assign(Error((host?'The model provider at '+host:'The model provider')+' stopped answering. Check that this computer is online and that the AI\'s address in Settings is right.',{cause}),{code:'AI_STALLED'});
 }
 // The connection check asks the service's key endpoint (OpenRouter's /key, anyone else's /models),
-// which costs nothing. Only when that endpoint cannot tell a refused key from a working one is a
-// chat sent, and then at most once every 10 minutes. Until 19 November 2026 every open page sent a
-// billed chat every 5 seconds (#762).
+// which costs nothing. A chat is sent only after a chat failed, until one answers again, or when that
+// endpoint cannot tell a refused key from a working one, and then at most once every 10 minutes.
+// Until 19 November 2026 every open page sent a billed chat every 5 seconds (#762).
 export const BILLED_CHECK_EVERY_MS=600000;
 export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = [2000,5000], stallWatch = STALL_WATCH } = {}) {
   if(!url || !key || !model)return null;
   const parsed=new URL(url),local=LOOPBACK.includes(parsed.hostname);if(parsed.protocol!=='https:' && !local)throw new Error('Model provider requires HTTPS');
-  let refusal=null,keyCheckedAt=0,keyChecked;
+  let chatFailed=false,chatPassedAt=0,keyChecked,billedCheck=null;
   const isRefusal=status=>status===401||status===403,isSuccess=status=>status>=200&&status<300;
   const headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'};
   const requestBody=(textInput,attachments,answerBudget)=>{
@@ -226,18 +226,19 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
         const waitStop=AbortSignal.any(stopping);
         await new Promise((resolve,reject)=>{if(waitStop.aborted)return reject(waitStop.reason);const timer=setTimeout(resolve,retryWaits[attempt]);waitStop.addEventListener('abort',()=>{clearTimeout(timer);reject(waitStop.reason);},{once:true});});
       }
-      if(!response.ok){const refusedKey=isRefusal(response.status);let reason='';try{const body=await response.json();reason=String(body?.error?.message||body?.message||'').replace(/\s+/g,' ').slice(0,200);}catch{}const failure=new Error('Model provider failed with HTTP '+response.status+(reason?': '+reason:''));if(refusedKey){refusal=failure;keyCheckedAt=Date.now();}throw failure;}
+      if(!response.ok){let reason='';try{const body=await response.json();reason=String(body?.error?.message||body?.message||'').replace(/\s+/g,' ').slice(0,200);}catch{}throw new Error('Model provider failed with HTTP '+response.status+(reason?': '+reason:''));}
       const result=await response.json(), text=result.choices?.[0]?.message?.content;if(typeof text!=='string')throw new Error('Model provider returned no text');
-      refusal=null;keyCheckedAt=Date.now();
+      chatFailed=false;chatPassedAt=Date.now();
       return text;
     }catch(error){
+      if(!signal?.aborted)chatFailed=true;
       if(watch?.stalled&&!signal?.aborted)throw stalledAI(url,error);
       throw error;
     }finally{watch?.stop();}
   };
   // A GET to the key endpoint, sent once without the key, shows whether that endpoint checks keys.
-  // A refused key, a closed port or a server error still shows at every check. A chat or check
-  // that the service answers is the newest word on the key, so a public model list never overrules it.
+  // A refused key, a closed port or a server error still shows at every check. A key endpoint that
+  // answers never overrules a failed chat: the next check asks a chat again until one answers.
   const askKeyEndpoint=async withKey=>{
     let response;
     try{response=await fetch(keyUrl,{headers:withKey?{Authorization:'Bearer '+key}:{},signal:AbortSignal.timeout(checkInput.timeout_ms)});}
@@ -251,11 +252,11 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
       const keyless=keyChecked===undefined?await askKeyEndpoint(false):null;
       if(isRefusal(keyless))keyChecked=true;else if(isSuccess(keyless))keyChecked=false;
       const status=await askKeyEndpoint(true);
-      if(isRefusal(status)){keyChecked=true;refusal=Error('Model provider failed with HTTP '+status);keyCheckedAt=Date.now();throw refusal;}
+      if(isRefusal(status)){keyChecked=true;throw Error('Model provider failed with HTTP '+status);}
       if(status===408||status===429||status>=500)throw Error('Model provider failed with HTTP '+status);
-      if(isSuccess(status)&&keyChecked){refusal=null;keyCheckedAt=Date.now();return;}
-      if(Date.now()-keyCheckedAt<BILLED_CHECK_EVERY_MS){if(refusal)throw refusal;return;}
-      keyCheckedAt=Date.now();await run(checkInput);
+      if(!chatFailed&&(isSuccess(status)&&keyChecked||Date.now()-chatPassedAt<BILLED_CHECK_EVERY_MS))return;
+      billedCheck??=run(checkInput).finally(()=>{billedCheck=null;});
+      await billedCheck;
     }
   });
 }
