@@ -24,11 +24,12 @@ test('a routine cannot be added or run on a machine that does not run the routin
 test('with the original assistant, the notebook\'s own record routines run on the machine that runs the routines',async t=>{
  const root=temporary(t),server=owned(root,'vps'),now=new Date(Date.now()-1000).toISOString();
  server.store.save('jobs',{id:'radar-prepare-x',kind:'radar-prepare',owner:'vps',paused:false,state:'pending',next_run:now,interval_ms:86400000});
+ server.store.save('jobs',{id:'spend-guard',kind:'spend-guard',owner:'vps',paused:false,state:'pending',next_run:now,interval_ms:3600000});
  // Hermes owns the goal routines: the notebook does not run a second copy of them.
  server.store.save('jobs',{id:'goal-work',kind:'goal-work',owner:'vps',paused:false,state:'pending',next_run:now,interval_ms:86400000});
  await server.scheduler.tick();
- assert.deepEqual(server.ran,['radar-prepare']);assert.deepEqual(server.calls.map(a=>a.join(' ')).filter(a=>!a.startsWith('cron create')),['cron tick']);
- const laptop=owned(temporary(t),'laptop-1234abcd');laptop.store.save('jobs',{id:'radar-prepare-x',kind:'radar-prepare',owner:'vps',paused:false,state:'pending',next_run:now,interval_ms:86400000});
+ assert.deepEqual(server.ran.sort(),['radar-prepare','spend-guard']);assert.deepEqual(server.calls.map(a=>a.join(' ')).filter(a=>!a.startsWith('cron create')),['cron tick']);
+ const laptop=owned(temporary(t),'laptop-1234abcd');laptop.store.save('jobs',{id:'radar-prepare-x',kind:'radar-prepare',owner:'vps',paused:false,state:'pending',next_run:now,interval_ms:86400000});laptop.store.save('jobs',{id:'spend-guard',kind:'spend-guard',owner:'vps',paused:false,state:'pending',next_run:now,interval_ms:3600000});
  await laptop.scheduler.tick();assert.deepEqual(laptop.ran,[]);
 });
 
