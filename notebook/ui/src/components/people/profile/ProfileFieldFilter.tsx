@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -16,6 +16,7 @@ interface ProfileFieldFilterProps {
  */
 export function ProfileFieldFilter({ value, onChange }: ProfileFieldFilterProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const inputId = useId();
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -39,9 +40,13 @@ export function ProfileFieldFilter({ value, onChange }: ProfileFieldFilterProps)
 
   return (
     <div className="relative">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <label htmlFor={inputId} className="sr-only">
+        Filter fields
+      </label>
+      <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         ref={inputRef}
+        id={inputId}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
