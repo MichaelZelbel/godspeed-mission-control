@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { BackupAI, ConnectAI, PlanSignIn, RoutineAIState } from "./ConnectAI";
+import { BackupAI, ConnectAI, PlanSignIn, RoutineAIState, SpendGuardSettings, spendGuardResponse } from "./ConnectAI";
 
 // A backup AI (22 October 2026, discussion #20): a second AI the person connects themselves, used
 // only when the main one fails. Settings shows it, what it did, a form like the main one, and Remove.
@@ -27,6 +27,22 @@ function serve(routes: Record<string, (body?: any) => [number, unknown]>) {
   return calls;
 }
 const show = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><BackupAI /></QueryClientProvider>);
+
+describe("OpenRouter spending protection", () => {
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+  const showGuard = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><SpendGuardSettings /></QueryClientProvider>);
+  it("waits for saved values and posts the person's exact changes", async () => {
+    let release:(value:Response)=>void=()=>{};
+    const first=new Promise<Response>(resolve=>{release=resolve;});
+    const fetcher=vi.fn((url:string,init?:RequestInit)=>init?.method==='POST'?Promise.resolve(new Response(JSON.stringify({enabled:false,daily_limit:7,low_balance:9,openrouter_connected:false,provider_message:'Spending is not checked for the connected provider yet.'}),{status:200,headers:{'content-type':'application/json'}})):first);
+    vi.stubGlobal('fetch',fetcher);showGuard();expect(screen.getByRole('button',{name:'Save spending protection'})).toBeDisabled();
+    release(new Response(JSON.stringify({enabled:true,daily_limit:7,low_balance:9,openrouter_connected:false,provider_message:'Spending is not checked for the connected provider yet.'}),{status:200,headers:{'content-type':'application/json'}}));
+    expect(await screen.findByDisplayValue('7')).toBeEnabled();expect(screen.getByText(/not checked for the connected provider yet/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox',{name:'Check OpenRouter spending'}));fireEvent.change(screen.getByLabelText(/remaining credit/),{target:{value:'11'}});fireEvent.click(screen.getByRole('button',{name:'Save spending protection'}));
+    await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(2));expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toEqual({enabled:false,daily_limit:7,low_balance:11});
+  });
+  it("binds the five-field server response",()=>{expect(()=>spendGuardResponse({enabled:true,daily_limit:2,low_balance:5,openrouter_connected:true})).toThrow(/could not be read/);});
+});
 
 describe("the saved main AI in Settings", () => {
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
