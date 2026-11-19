@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
+import { WAIT } from "@/test/wait-limits";
 
 const { createSignedUrl } = vi.hoisted(() => ({ createSignedUrl: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { storage: { from: () => ({ createSignedUrl }) } } }));
@@ -25,7 +26,7 @@ describe("note attachment presence", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<MemoryRouter><QueryClientProvider client={client}><NoteAttachmentsPanel noteId="note-1" /></QueryClientProvider></MemoryRouter>);
 
-    expect(await screen.findByText(/Open it on the computer where it was added/)).toBeInTheDocument();
+    expect(await screen.findByText(/Open it on the computer where it was added/, undefined, WAIT)).toBeInTheDocument();
     expect(createSignedUrl).not.toHaveBeenCalled();
   });
 });

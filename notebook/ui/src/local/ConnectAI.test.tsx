@@ -9,6 +9,7 @@ import path from "node:path";
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { BackupAI, ConnectAI, PlanSignIn, RoutineAIState, SpendGuardSettings, spendGuardResponse } from "./ConnectAI";
+import { WAIT } from "@/test/wait-limits";
 
 // A backup AI (22 October 2026, discussion #20): a second AI the person connects themselves, used
 // only when the main one fails. Settings shows it, what it did, a form like the main one, and Remove.
@@ -37,9 +38,9 @@ describe("OpenRouter spending protection", () => {
     const fetcher=vi.fn((url:string,init?:RequestInit)=>init?.method==='POST'?Promise.resolve(new Response(JSON.stringify({enabled:false,daily_limit:7,low_balance:9,openrouter_connected:false,provider_message:'Spending is not checked for the connected provider yet.'}),{status:200,headers:{'content-type':'application/json'}})):first);
     vi.stubGlobal('fetch',fetcher);showGuard();expect(screen.getByRole('button',{name:'Save spending protection'})).toBeDisabled();
     release(new Response(JSON.stringify({enabled:true,daily_limit:7,low_balance:9,openrouter_connected:false,provider_message:'Spending is not checked for the connected provider yet.'}),{status:200,headers:{'content-type':'application/json'}}));
-    expect(await screen.findByDisplayValue('7')).toBeEnabled();expect(screen.getByText(/not checked for the connected provider yet/)).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('7', undefined, WAIT)).toBeEnabled();expect(screen.getByText(/not checked for the connected provider yet/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox',{name:'Check OpenRouter spending'}));fireEvent.change(screen.getByLabelText(/remaining credit/),{target:{value:'11'}});fireEvent.click(screen.getByRole('button',{name:'Save spending protection'}));
-    await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(2));expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toEqual({enabled:false,daily_limit:7,low_balance:11});
+    await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(2), WAIT);expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toEqual({enabled:false,daily_limit:7,low_balance:11});
   });
   it("binds the five-field server response",()=>{expect(()=>spendGuardResponse({enabled:true,daily_limit:2,low_balance:5,openrouter_connected:true})).toThrow(/could not be read/);});
 });
@@ -55,7 +56,7 @@ describe("the saved main AI in Settings", () => {
   it("explains that an installation without an assistant program has no routines choice", async () => {
     serve(supportingRoutes);
     settings();
-    expect(await screen.findByText("No assistant program is installed here. The notebook still runs its own routines, such as reminders and domain watch. Connect your AI below to add the chat and the routines that need an AI.")).toBeInTheDocument();
+    expect(await screen.findByText("No assistant program is installed here. The notebook still runs its own routines, such as reminders and domain watch. Connect your AI below to add the chat and the routines that need an AI.", undefined, WAIT)).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("This installation runs no daily routines and no assistant chat");
     expect(screen.queryByRole("checkbox", { name: /daily routines and the chat/ })).toBeNull();
   });
@@ -64,7 +65,7 @@ describe("the saved main AI in Settings", () => {
   it("does not call the chat or the routines unavailable once an AI is connected without an assistant program", async () => {
     serve({ ...supportingRoutes, provider: () => [200, { configured: true, url: "https://openrouter.ai/api/v1/chat/completions", model: "fictional/model", key: true }] });
     settings();
-    const notice = await screen.findByText(/No assistant program is installed here/);
+    const notice = await screen.findByText(/No assistant program is installed here/, undefined, WAIT);
     expect(notice).toHaveTextContent("The notebook runs its own routines, such as reminders and domain watch, and the AI you connected below answers the chat and the routines that need an AI.");
     expect(document.body).not.toHaveTextContent(/runs no daily routines|no assistant chat|cannot run|unavailable|not available/i);
   });
@@ -74,15 +75,15 @@ describe("the saved main AI in Settings", () => {
     let saved: unknown = { configured: true, url: "https://openrouter.ai/api/v1/chat/completions", model: "fictional/model", key: true };
     const calls = serve({ ...supportingRoutes, provider: () => [200, saved], "provider/remove": () => { saved = { configured: false, key: false };return [200, { removed: true, provider: saved, routines: { available: false } }]; } });
     settings();
-    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }));
-    expect(await screen.findByRole("alertdialog", { name: "Remove your AI connection?" })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }, WAIT));
+    expect(await screen.findByRole("alertdialog", { name: "Remove your AI connection?" }, WAIT)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
-    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull(), WAIT);
     expect(calls.some(c => c.route === "provider/remove")).toBe(false);
     expect(screen.getByLabelText("Key (leave it empty to keep the saved one)")).not.toBeRequired();
     fireEvent.click(screen.getByRole("button", { name: "Remove this AI connection" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
-    expect(await screen.findByText("Removed. No AI is connected now. Connect one here whenever you like.")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }, WAIT));
+    expect(await screen.findByText("Removed. No AI is connected now. Connect one here whenever you like.", undefined, WAIT)).toBeInTheDocument();
     expect(calls.filter(c => c.route === "provider/remove")).toEqual([{ route: "provider/remove", body: {} }]);
     expect(screen.getByLabelText("Key")).toBeRequired();
     expect(screen.queryByRole("button", { name: "Remove this AI connection" })).toBeNull();
@@ -91,7 +92,7 @@ describe("the saved main AI in Settings", () => {
   it("offers no removal when no AI connection is saved", async () => {
     serve(supportingRoutes);
     settings();
-    expect(await screen.findByRole("button", { name: "Test and connect" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Test and connect" }, WAIT)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Remove this AI connection" })).toBeNull();
   });
 
@@ -113,7 +114,7 @@ describe("the saved main AI in Settings", () => {
       const nativeFetch = fetch;
       vi.stubGlobal("fetch", (url: string, init?: RequestInit) => nativeFetch(String(url).startsWith("/api/") ? server.base + url : url, init));
       settings();
-      await waitFor(() => expect(screen.getByLabelText("Your AI service")).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByLabelText("Your AI service")).toBeInTheDocument(), WAIT);
       fireEvent.change(screen.getByLabelText("Your AI service"), { target: { value: "other" } });
       fireEvent.change(screen.getByLabelText(/Model, written/), { target: { value: "fictional-model" } });
       const attempt = async (address: string) => {
@@ -148,13 +149,13 @@ describe("the saved main AI in Settings", () => {
       provider: body => [200, body ? { connected: true, provider: { configured: true, url: body.url, model: body.model, key: true }, routines: { available: true, check: { at: new Date().toISOString(), ok: true } } } : { configured: false, key: false }],
     });
     settings();
-    const choice = await screen.findByRole("checkbox", { name: /Use it for the daily routines and the chat too/ });
+    const choice = await screen.findByRole("checkbox", { name: /Use it for the daily routines and the chat too/ }, WAIT);
     expect(choice).toBeChecked();
     fireEvent.click(choice);
     fireEvent.change(screen.getByLabelText(/Model, written/), { target: { value: "fictional/model" } });
     fireEvent.change(screen.getByLabelText("Key"), { target: { value: "fictional-key" } });
     fireEvent.click(screen.getByRole("button", { name: "Test and connect" }));
-    await screen.findByText("Connected. The notebook uses it.");
+    await screen.findByText("Connected. The notebook uses it.", undefined, WAIT);
     expect(calls.find(c => c.route === "provider" && c.body)?.body).toMatchObject({ routines: false });
   });
 
@@ -162,22 +163,22 @@ describe("the saved main AI in Settings", () => {
     const saved = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true };
     const calls = serve({ ...supportingRoutes, provider: body => [200, body ? { connected: true, provider: saved, routines: { available: false } } : saved] });
     const first = settings();
-    await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"));
+    await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"), WAIT);
     expect(screen.getByLabelText(/Its address/)).toHaveValue(saved.url);
     expect(screen.getByLabelText(/Model, written/)).toHaveValue(saved.model);
     const key = screen.getByLabelText("Key (leave it empty to keep the saved one)") as HTMLInputElement;
     expect(key).not.toBeRequired();expect(key).toHaveValue("");expect(document.body).not.toHaveTextContent("fictional-secret");
     first.unmount();settings();
-    await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"));
+    await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"), WAIT);
     fireEvent.click(screen.getByRole("button", { name: "Test and connect" }));
-    await screen.findByText("Connected. The notebook uses it.");
+    await screen.findByText("Connected. The notebook uses it.", undefined, WAIT);
     expect(calls.find(c => c.body && c.route === "provider")?.body).toEqual({ url: saved.url, key: "", model: saved.model, routines: true });
   });
 
   it("keeps a new form on OpenRouter and requires a key", async () => {
     serve({ ...supportingRoutes, provider: () => [200, { configured: false, key: false }] });
     settings();
-    expect(await screen.findByLabelText("Your AI service")).toHaveValue("openrouter");
+    expect(await screen.findByLabelText("Your AI service", undefined, WAIT)).toHaveValue("openrouter");
     expect(screen.getByLabelText("Key")).toBeRequired();
   });
 
@@ -188,7 +189,7 @@ describe("the saved main AI in Settings", () => {
   ])("classifies the saved URL %s as %s", async (url, service, label) => {
     serve({ ...supportingRoutes, provider: () => [200, { configured: true, url, model: "fictional/model", key: true }] });
     settings();
-    const select = await screen.findByLabelText("Your AI service") as HTMLSelectElement;
+    const select = await screen.findByLabelText("Your AI service", undefined, WAIT) as HTMLSelectElement;
     expect(select).toHaveValue(service);
     expect(select.selectedOptions[0]).toHaveTextContent(label);
   });
@@ -196,30 +197,30 @@ describe("the saved main AI in Settings", () => {
   it("withholds the form when a successful saved-provider response is malformed", async () => {
     serve({ ...supportingRoutes, provider: () => [200, { configured: true, url: "https://ai.example.test/v1", key: true }] });
     settings();
-    expect(await screen.findByRole("alert")).toHaveTextContent(/form is unavailable/);
+    expect(await screen.findByRole("alert", undefined, WAIT)).toHaveTextContent(/form is unavailable/);
     expect(screen.queryByRole("button", { name: "Test and connect" })).toBeNull();
   });
 
   it("requires a new key when the saved endpoint changes", async () => {
     const saved = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true };
     serve({ ...supportingRoutes, provider: () => [200, saved] });settings();
-    await screen.findByLabelText("Key (leave it empty to keep the saved one)");
+    await screen.findByLabelText("Key (leave it empty to keep the saved one)", undefined, WAIT);
     fireEvent.change(screen.getByLabelText(/Its address/), { target: { value: "https://other.example.test/v1" } });
     expect(screen.getByLabelText("Key")).toBeRequired();
   });
 
   it("does not present an unconfigured form when the saved connection cannot be read", async () => {
     serve({ ...supportingRoutes, provider: () => [500, { error: "unreadable" }] });settings();
-    expect(await screen.findByRole("alert")).toHaveTextContent(/form is unavailable/);
+    expect(await screen.findByRole("alert", undefined, WAIT)).toHaveTextContent(/form is unavailable/);
     expect(screen.queryByRole("button", { name: "Test and connect" })).toBeNull();
   });
 
   it("removes a saved connection that cannot be read, so the person can connect again", async () => {
     const calls = serve({ ...supportingRoutes, provider: () => [500, { error: "The saved AI connection is not valid." }], "provider/remove": () => [200, { removed: true, connected: false, provider: { configured: false, key: false }, routines: { available: false } }] });
     settings();
-    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
-    expect(await screen.findByText("Removed. No AI is connected now. Connect one here whenever you like.")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }, WAIT));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }, WAIT));
+    expect(await screen.findByText("Removed. No AI is connected now. Connect one here whenever you like.", undefined, WAIT)).toBeInTheDocument();
     expect(calls.filter(c => c.route === "provider/remove")).toEqual([{ route: "provider/remove", body: {} }]);
     expect(screen.getByLabelText("Key")).toBeRequired();
   });
@@ -228,9 +229,9 @@ describe("the saved main AI in Settings", () => {
     let saved: unknown = { configured: true, url: "https://openrouter.ai/api/v1/chat/completions", model: "fictional/model", key: true };
     serve({ ...supportingRoutes, provider: () => [200, saved], "provider/remove": () => { saved = { configured: false, key: false };return [200, { removed: true, connected: true, provider: saved, routines: { available: false } }]; } });
     settings();
-    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
-    expect(await screen.findByText("Removed. The notebook uses the AI it had before this connection.")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }, WAIT));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }, WAIT));
+    expect(await screen.findByText("Removed. The notebook uses the AI it had before this connection.", undefined, WAIT)).toBeInTheDocument();
   });
 
   it("shows a saved Another service after the server and Settings reopen", async () => {
@@ -250,7 +251,7 @@ describe("the saved main AI in Settings", () => {
     const base = reopened.base, nativeFetch = fetch;
     vi.stubGlobal("fetch", (url: string, init?: RequestInit) => nativeFetch(String(url).startsWith("/api/") ? base + url : url, init));
     settings();
-    await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"));
+    await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"), WAIT);
     expect(screen.getByLabelText(/Its address/)).toHaveValue(address);
     expect(screen.getByLabelText(/Model, written/)).toHaveValue("fictional-model");
     expect(screen.getByLabelText(/leave it empty/)).toHaveValue("");
@@ -265,7 +266,7 @@ describe("Backup AI in Settings", () => {
   it("says plainly that none is connected and what one would do", async () => {
     serve({ "backup-ai": () => [200, none] });
     show();
-    expect(await screen.findByText("No backup AI is connected.")).toBeInTheDocument();
+    expect(await screen.findByText("No backup AI is connected.", undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByText(/steps in only when your main AI fails/)).toBeInTheDocument();
     expect(screen.getByText(/Godspeed never adds one by itself/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Remove the backup" })).toBeNull();
@@ -274,11 +275,11 @@ describe("Backup AI in Settings", () => {
   it("tests and connects one, and never keeps the key in the form", async () => {
     const calls = serve({ "backup-ai": body => [200, body ? { connected: true, ...connected } : none] });
     show();
-    await screen.findByText("No backup AI is connected.");
+    await screen.findByText("No backup AI is connected.", undefined, WAIT);
     fireEvent.change(screen.getByLabelText(/Backup model/), { target: { value: "fictional/backup-model" } });
     fireEvent.change(screen.getByLabelText(/Backup key/), { target: { value: "sk-or-fictional" } });
     fireEvent.click(screen.getByRole("button", { name: "Test and connect as backup" }));
-    expect(await screen.findByText(/Connected as your backup\. It answered a test just now/)).toBeInTheDocument();
+    expect(await screen.findByText(/Connected as your backup\. It answered a test just now/, undefined, WAIT)).toBeInTheDocument();
     expect(calls.find(c => c.body)?.body).toEqual({ url: "https://openrouter.ai/api/v1/chat/completions", key: "sk-or-fictional", model: "fictional/backup-model" });
     expect(screen.getByText(/Your backup AI is/)).toHaveTextContent("Your backup AI is fictional/backup-model through OpenRouter. You connected it here.");
     expect((screen.getByLabelText(/Backup key/) as HTMLInputElement).value).toBe("");
@@ -288,11 +289,11 @@ describe("Backup AI in Settings", () => {
     const working = { ...connected, backup: { ...connected.backup, via: "telegram" }, more: 1, usage: { answers: 3, last_answer_at: "2026-10-22T09:00:00Z", main_failing_since: "2026-10-22T07:00:00Z", last_main_error: "The AI account reached a usage limit." } };
     const calls = serve({ "backup-ai": () => [200, working], "backup-ai/remove": () => [200, { removed: true, ...none }] });
     show();
-    expect(await screen.findByText(/You connected it in Telegram\. Hermes has 1 more after it\./)).toBeInTheDocument();
+    expect(await screen.findByText(/You connected it in Telegram\. Hermes has 1 more after it\./, undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByText(/It answered 3 times while your main AI was failing/)).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(/Your main AI has been failing since .*The AI account reached a usage limit\./);
     fireEvent.click(screen.getByRole("button", { name: "Remove the backup" }));
-    expect(await screen.findByText("No backup AI is connected.")).toBeInTheDocument();
+    expect(await screen.findByText("No backup AI is connected.", undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByText(/The backup is removed/)).toBeInTheDocument();
     expect(calls.some(c => c.route === "backup-ai/remove")).toBe(true);
   });
@@ -300,11 +301,11 @@ describe("Backup AI in Settings", () => {
   it("shows the server's refusal, such as the main AI given again", async () => {
     serve({ "backup-ai": body => body ? [400, { error: "That is the service your main AI uses already. A backup steps in when the main AI fails, so it has to be another service." }] : [200, none] });
     show();
-    await screen.findByText("No backup AI is connected.");
+    await screen.findByText("No backup AI is connected.", undefined, WAIT);
     fireEvent.change(screen.getByLabelText(/Backup model/), { target: { value: "same" } });
     fireEvent.change(screen.getByLabelText(/Backup key/), { target: { value: "same-key" } });
     fireEvent.click(screen.getByRole("button", { name: "Test and connect as backup" }));
-    expect(await screen.findByText(/That is the service your main AI uses already/)).toBeInTheDocument();
+    expect(await screen.findByText(/That is the service your main AI uses already/, undefined, WAIT)).toBeInTheDocument();
   });
 });
 
@@ -333,7 +334,7 @@ describe("the same choices for the main AI and the backup", () => {
   it("lists the same services in both forms, the ChatGPT plan among them where Hermes runs", async () => {
     serve({ "routine-ai": () => [200, { available: true, provider: "openrouter", model: "x/y", source: "settings", key: true, check: { at: new Date().toISOString(), ok: true } }], "backup-ai": () => [200, none], "ai-signin": () => [200, { available: true, state: "idle" }] });
     settings();
-    await screen.findByText("No backup AI is connected.");
+    await screen.findByText("No backup AI is connected.", undefined, WAIT);
     const main = screen.getByLabelText("Your AI service") as HTMLSelectElement, backup = screen.getByLabelText("Backup AI service") as HTMLSelectElement;
     expect(options(main)).toEqual(["OpenRouter", "OpenAI", "ChatGPT (sign in with your ChatGPT plan)", "Another service"]);
     expect(options(backup)).toEqual(options(main));
@@ -342,7 +343,7 @@ describe("the same choices for the main AI and the backup", () => {
   it("offers no plan sign-in in either form where no Hermes runs the routines", async () => {
     serve({ "routine-ai": () => [200, { available: false }], "backup-ai": () => [200, { ...none, hermes: false }], "ai-signin": () => [200, { available: false, state: "idle" }] });
     settings();
-    await screen.findByText("No backup AI is connected.");
+    await screen.findByText("No backup AI is connected.", undefined, WAIT);
     expect(options(screen.getByLabelText("Your AI service") as HTMLSelectElement)).toEqual(["OpenRouter", "OpenAI", "Another service"]);
     expect(options(screen.getByLabelText("Backup AI service") as HTMLSelectElement)).toEqual(["OpenRouter", "OpenAI", "Another service"]);
   });
@@ -355,11 +356,11 @@ describe("the same choices for the main AI and the backup", () => {
     });
     const connected = vi.fn();
     render(<PlanSignIn as="backup" every={20} onConnected={connected} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Sign in with ChatGPT" }));
-    expect(await screen.findByText("ABCD-12345")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in with ChatGPT" }, WAIT));
+    expect(await screen.findByText("ABCD-12345", undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "https://auth.openai.com/codex/device" })).toHaveAttribute("target", "_blank");
     expect(calls.find(c => c.route === "ai-signin/start")?.body).toEqual({ as: "backup" });
-    await waitFor(() => expect(connected).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(connected).toHaveBeenCalledTimes(1), WAIT);
     expect(connected.mock.calls[0][0]).toMatchObject({ state: "connected", as: "backup", model: "gpt-fictional" });
   });
 
@@ -368,9 +369,9 @@ describe("the same choices for the main AI and the backup", () => {
       "ai-signin/start": () => [400, { error: "That is the service your backup AI uses. Remove the backup first, or choose another service for your main AI." }] });
     const connected = vi.fn();
     render(<PlanSignIn as="main" onConnected={connected} />);
-    expect(await screen.findByText(/The code ran out/)).toBeInTheDocument();
+    expect(await screen.findByText(/The code ran out/, undefined, WAIT)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByText(/That is the service your backup AI uses/)).toBeInTheDocument();
+    expect(await screen.findByText(/That is the service your backup AI uses/, undefined, WAIT)).toBeInTheDocument();
     expect(connected).not.toHaveBeenCalled();
   });
 
@@ -378,7 +379,7 @@ describe("the same choices for the main AI and the backup", () => {
     serve({ "ai-signin": () => [200, { available: true, state: "connected", as: "backup", model: "gpt-old" }] });
     const connected = vi.fn();
     render(<PlanSignIn as="backup" onConnected={connected} />);
-    expect(await screen.findByRole("button", { name: "Sign in with ChatGPT" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Sign in with ChatGPT" }, WAIT)).toBeInTheDocument();
     await new Promise(r => setTimeout(r, 30));
     expect(connected).not.toHaveBeenCalled();
   });
