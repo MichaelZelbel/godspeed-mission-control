@@ -40,7 +40,7 @@ describe("Voice replies in Settings", () => {
     await screen.findByText(/free voice from Microsoft Edge/);
     fireEvent.change(screen.getByLabelText(/^ElevenLabs key/), { target: { value: "sk_fictional000000000000000000000000" } });
     fireEvent.change(screen.getByLabelText(/^Voice ID/), { target: { value: "FictionalVoice00001" } });
-    fireEvent.change(screen.getByLabelText(/^Model/), { target: { value: "eleven_v3" } });
+    fireEvent.change(screen.getByLabelText(/^ElevenLabs model/), { target: { value: "eleven_v3" } });
     fireEvent.change(screen.getByLabelText(/^Stability/), { target: { value: "0.3" } });
     fireEvent.change(screen.getByLabelText(/^Similarity/), { target: { value: "1" } });
     fireEvent.change(screen.getByLabelText(/^Style/), { target: { value: "0.3" } });
@@ -71,7 +71,7 @@ describe("Voice replies in Settings", () => {
     serve({ voice: () => [200, { ...free, elevenlabs: { ...free.elevenlabs, model: "eleven_v4_turbo" } }] });
     show();
     await screen.findByText(/free voice from Microsoft Edge/);
-    expect((screen.getByLabelText(/^Model/) as HTMLInputElement).value).toBe("eleven_v4_turbo");
+    expect((screen.getByLabelText(/^ElevenLabs model/) as HTMLInputElement).value).toBe("eleven_v4_turbo");
     const offered = Array.from(document.querySelectorAll("#voice-models option")).map(o => o.getAttribute("value"));
     expect(offered[0]).toBe("eleven_v4_turbo");
     expect(offered).toContain("eleven_multilingual_v2");

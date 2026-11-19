@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useId,useRef,useState} from 'react';
 import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
@@ -66,7 +66,7 @@ export function RoutineAIState({status,checking,onCheck}:{status?:RoutineAI;chec
 }
 
 export function ConnectAI(){
-  const qc=useQueryClient();
+  const qc=useQueryClient(),id=useId();
   const status=useQuery({queryKey:['routine-ai'],queryFn:routineAIStatus});
   const saved=useQuery({queryKey:['provider'],queryFn:savedProvider});
   const [service,setService]=useState('openrouter'),[address,setAddress]=useState(''),[model,setModel]=useState(''),[key,setKey]=useState('');
@@ -96,16 +96,16 @@ export function ConnectAI(){
     {status.isLoading?<p role="status">Reading which AI your routines use…</p>:<RoutineAIState status={data} checking={checking} onCheck={check}/>}
     {saved.error?<p role="alert" className="text-red-500">The saved AI connection could not be read. The form is unavailable so it cannot be overwritten.</p>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
       <p>Connect the AI account you pay for. The key stays on this device and never goes into your notes.</p>
-      <label className="block">Your AI service
-        <select className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!data?.available).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      <div><label className="block" htmlFor={id+'service'}>Your AI service</label>
+        <select id={id+'service'} className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!data?.available).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
       {service==='chatgpt'?<PlanSignIn as="main" onConnected={signedIn=>{setError('');setDone('Connected. Your ChatGPT plan ('+signedIn.model+') now powers the routines, the chat and the notebook.');qc.invalidateQueries({queryKey:['routine-ai']});qc.invalidateQueries({queryKey:['backup-ai']});qc.invalidateQueries({queryKey:['candidate-status']});}}/>:<>
-      {service==='other'&&<label className="block">Its address, as the service gives it (OpenAI-compatible)
-        <Input required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></label>}
-      <label className="block">Model, written the way your service writes it
-        <Input required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></label>
-      <label className="block">{canRetainKey?'Key (leave it empty to keep the saved one)':'Key'}
-        <Input required={!canRetainKey} type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></label>
-      {data?.available&&<label className="flex gap-2 items-start"><input type="checkbox" className="mt-1" checked={useForRoutines} onChange={e=>setRoutines(e.target.checked)}/><span>Use it for the daily routines and the chat too{data.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':'.'}</span></label>}
+      {service==='other'&&<div><label className="block" htmlFor={id+'address'}>Its address, as the service gives it (OpenAI-compatible)</label>
+        <Input id={id+'address'} required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></div>}
+      <div><label className="block" htmlFor={id+'model'}>Model, written the way your service writes it</label>
+        <Input id={id+'model'} required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></div>
+      <div><label className="block" htmlFor={id+'key'}>{canRetainKey?'Key (leave it empty to keep the saved one)':'Key'}</label>
+        <Input id={id+'key'} required={!canRetainKey} type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></div>
+      {data?.available&&<div className="flex gap-2 items-start"><input id={id+'routines'} type="checkbox" className="mt-1" checked={useForRoutines} onChange={e=>setRoutines(e.target.checked)}/><label htmlFor={id+'routines'}>Use it for the daily routines and the chat too{data.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':'.'}</label></div>}
       <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect'}</Button></>}
       {done&&<p role="status">{done}</p>}
       {error&&<p role="alert" className="text-red-500">{error}</p>}
@@ -133,7 +133,7 @@ export function BackupState({status,removing,onRemove}:{status?:BackupStatus;rem
   </div>;
 }
 export function BackupAI(){
-  const qc=useQueryClient();
+  const qc=useQueryClient(),id=useId();
   const status=useQuery({queryKey:['backup-ai'],queryFn:()=>call('backup-ai') as Promise<BackupStatus>});
   const [service,setService]=useState('openrouter'),[address,setAddress]=useState(''),[model,setModel]=useState(''),[key,setKey]=useState('');
   const [busy,setBusy]=useState(false),[removing,setRemoving]=useState(false),[error,setError]=useState(''),[done,setDone]=useState('');
@@ -152,15 +152,15 @@ export function BackupAI(){
     {status.isLoading?<p role="status">Reading your backup AI…</p>:<BackupState status={status.data} removing={removing} onRemove={remove}/>}
     <form className="space-y-3" onSubmit={submit} aria-label="Connect a backup AI">
       <p>{status.data?.configured?'Connect another one in its place, the same ways as your main AI:':'Connect one the same ways as your main AI:'}</p>
-      <label className="block">Backup AI service
-        <select className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!status.data?.hermes).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      <div><label className="block" htmlFor={id+'service'}>Backup AI service</label>
+        <select id={id+'service'} className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!status.data?.hermes).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
       {service==='chatgpt'?<PlanSignIn as="backup" onConnected={signedIn=>{setError('');setDone('Connected as your backup: your ChatGPT plan ('+signedIn.model+'). It answered a test just now, and it steps in only when your main AI fails.');qc.invalidateQueries({queryKey:['backup-ai']});qc.invalidateQueries({queryKey:['routine-ai']});}}/>:<>
-      {service==='other'&&<label className="block">Its address, as the service gives it (OpenAI-compatible)
-        <Input required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></label>}
-      <label className="block">Backup model, written the way your service writes it
-        <Input required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></label>
-      <label className="block">Backup key
-        <Input required type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></label>
+      {service==='other'&&<div><label className="block" htmlFor={id+'address'}>Backup AI address, as the service gives it (OpenAI-compatible)</label>
+        <Input id={id+'address'} required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></div>}
+      <div><label className="block" htmlFor={id+'model'}>Backup model, written the way your service writes it</label>
+        <Input id={id+'model'} required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></div>
+      <div><label className="block" htmlFor={id+'key'}>Backup key</label>
+        <Input id={id+'key'} required type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></div>
       <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect as backup'}</Button></>}
       {done&&<p role="status">{done}</p>}
       {error&&<p role="alert" className="text-red-500">{error}</p>}
