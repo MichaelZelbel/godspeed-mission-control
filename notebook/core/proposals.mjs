@@ -8,6 +8,7 @@ import {fieldList} from './fields.mjs';
 import {WITHDRAWN} from './review-sources.mjs';
 import {screenSuggestions, knownRecords, previousProcessedText, logFiltered} from './suggestion-filter.mjs';
 import {valueKey, wordsOf} from './same-thing.mjs';
+import {readReply, unreadableReply} from './no-ai.mjs';
 
 // What processing a note gives: tags and metadata on the note itself, its
 // people linked by name, and proposals for the review queue. Each proposal
@@ -117,8 +118,9 @@ export function noteRequest(query, store, note, {today, contract = CONTRACT}) {
 // The model's answer about a note, read: its metadata and tags, and each suggestion in its kind's
 // shape (null where it has none).
 export function readAnswer(result, query, store, note, {today, cites}) {
-  const answer = typeof result === 'string' ? JSON.parse(result.replace(/^```(?:json)?\s*|\s*```$/g, '')) : result;
-  if (!answer || typeof answer !== 'object' || !Array.isArray(answer.suggestions || [])) throw new Error('The assistant returned an invalid proposal list');
+  // A reply the notebook cannot use says so in plain words (#792), its detail kept as the cause.
+  const answer = readReply(result);
+  if (!answer || typeof answer !== 'object' || !Array.isArray(answer.suggestions || [])) throw unreadableReply(new Error('The assistant returned an invalid proposal list'));
   const fields = fieldList(store.root), person = resolver(query), raw = answer.suggestions || [];
   const shaped = raw.map(s => shapeProposal(s, {person, note, today, cites: q => cites(note, q), fields}));
   // An answer that quotes words the note does not hold is not trusted at all. Proposals that are
