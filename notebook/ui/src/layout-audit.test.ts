@@ -237,9 +237,15 @@ describe("the routes the check visits", () => {
   });
 });
 
-describe("the audit's rules on pages built for them", () => {
+describe("the audit's rules on pages built for them", { timeout: 20_000 }, () => {
   let browser: Browser;
-  beforeAll(async () => { browser = await launch(); }, 60_000);
+  // Each case opens a page in a real browser: about 50 ms alone, but the first one, which also pays for
+  // the browser's first page, timed out at vitest's 5 s default in a busy CI job (#775). So a first page
+  // is opened and closed here, under this hook's own limit, and each case gets 20 s.
+  beforeAll(async () => {
+    browser = await launch();
+    await (await browser.newPage()).close();
+  }, 60_000);
   afterAll(async () => { await browser?.close(); });
 
   async function audit(body: string, width = 375): Promise<string[]> {
