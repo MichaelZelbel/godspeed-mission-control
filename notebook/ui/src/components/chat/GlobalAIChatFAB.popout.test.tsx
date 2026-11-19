@@ -70,3 +70,48 @@ it('the chat page opened from it shows and talks to that collection',async()=>{
  expect(body.item_id).toBe('item-7');
  expect(body.messages.at(-1)).toEqual({role:'user',content:'Fictional new question'});
 });
+
+// A note chat's pop-out window has no note editor. Its send waited for one to save the note
+// first, so for the whole wait the reply spun and nothing reached the AI (#758).
+const sendFromPopOut=async(text:string)=>{
+ show('/dashboard/chat?note=note-1',true);
+ fireEvent.change(await screen.findByLabelText('Message'),{target:{value:text}});
+ fireEvent.click(screen.getByRole('button',{name:'Send'}));
+};
+const spinning=()=>document.querySelector('.animate-spin');
+it("a message sent from a note chat's pop-out reaches the AI at once and its reply ends the wait",async()=>{
+ await sendFromPopOut('Fictional pop-out question');
+ await waitFor(()=>expect(invoke).toHaveBeenCalledTimes(1),{timeout:1500});
+ const [fn,{body}]=invoke.mock.calls[0] as any;
+ expect(fn).toBe('note-chat');
+ expect(body.note_id).toBe('note-1');
+ expect(body.message).toBe('Fictional pop-out question');
+ expect(await screen.findByText('Fictional reply')).toBeInTheDocument();
+ expect(spinning()).toBeNull();
+ expect(invoke).toHaveBeenCalledTimes(1);
+});
+
+it("a pop-out send the AI does not answer stops spinning and says so",async()=>{
+ const refused='Your AI could not be used. Check Settings, Your AI, then try again.';
+ // The notebook's own answer to a send the AI refused (server/main.mjs), as the client hands it on.
+ invoke.mockImplementationOnce(async()=>({data:null,error:{message:refused,context:new Response(JSON.stringify({error:refused}),{status:400})}}) as any);
+ await sendFromPopOut('Fictional unanswered question');
+ expect(await screen.findByText(refused,{},{timeout:1500})).toBeInTheDocument();
+ expect(spinning()).toBeNull();
+ expect(screen.getByLabelText('Message')).toHaveValue('Fictional unanswered question');
+});
+
+it("the note's own chat still asks its open editor to save the note before sending",async()=>{
+ const asked=vi.fn((event:Event)=>{const {requestId}=(event as CustomEvent).detail;window.dispatchEvent(new CustomEvent('menerio:flush-note-save-done',{detail:{requestId,updatedAt:'2026-11-19T00:00:00.000Z',content:'Fictional body'}}));});
+ window.addEventListener('menerio:flush-note-save',asked);
+ try{
+  show('/dashboard/notes/note-1');
+  fireEvent.click(await screen.findByRole('button',{name:/chat/i}));
+  fireEvent.change(await screen.findByLabelText('Message'),{target:{value:'Fictional panel question'}});
+  fireEvent.click(screen.getByRole('button',{name:'Send'}));
+  await waitFor(()=>expect(invoke).toHaveBeenCalledTimes(1));
+  expect(asked).toHaveBeenCalledTimes(1);
+  expect((invoke.mock.calls[0] as any)[1].body.base_updated_at).toBe('2026-11-19T00:00:00.000Z');
+  await waitFor(()=>expect(spinning()).toBeNull());
+ }finally{window.removeEventListener('menerio:flush-note-save',asked);}
+});
