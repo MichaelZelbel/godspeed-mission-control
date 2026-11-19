@@ -13,6 +13,7 @@ import { Domains } from '../core/domains.mjs';
 import { Scheduler } from '../core/jobs/scheduler.mjs';
 import {controlRoutine} from '../core/jobs/routine-control.mjs';
 import { modelProvider, jobExecutor,hermesProvider,isHermesExecutable } from '../core/runtime.mjs';
+import {readSavedProvider,savedProviderOrNull} from '../core/saved-provider.mjs';
 import {assistantEnvironment} from '../core/assistant-files.mjs';
 import { FileSync } from '../core/sync/git.mjs';
 import {conflictView,resolveSavedConflict} from '../core/conflicts.mjs';
@@ -93,12 +94,6 @@ export const startupReadiness=publication=>{
 };
 export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
 const providerView=config=>({configured:true,url:baseAddress(config.url),model:config.model,key:!!config.key});
-const readSavedProvider=file=>{
-  let text;try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code==='ENOENT')return null;throw error;}
-  const config=JSON.parse(text);
-  if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error('The saved AI connection is not valid. Connect it again after checking the server log.');
-  return config;
-};
 // A failed request to the AI, said as the chats say it (#590): a refused key or an outage, each with
 // what to do, never the provider's words, which can quote the key. Godspeed's own no-AI sentences are
 // not provider failures, though they name an "AI service". null when the error is not the AI's.
@@ -178,7 +173,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const backupFor=()=>{const saved=readBackupEndpoint(store.state);if(saved){try{return modelProvider(saved);}catch{return null;}}
     try{return routineAI&&fallbackChain(fs.readFileSync(path.join(routineAI.home,'config.yaml'),'utf8')).length?hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot}):null;}catch{return null;}};
   const guarded=main=>withBackup(main,backupFor,{state:store.state,model:()=>readBackupEndpoint(store.state)?.model});
-  if(!provider&&fs.existsSync(providerPath))provider=guarded(modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8'))));
+  // A saved connection that cannot be read leaves the notebook running with no AI connected, and
+  // Settings, Your AI, says so; the file stays for a look (#805). Until then it stopped startup.
+  if(!provider){try{const saved=readSavedProvider(providerPath);if(saved)provider=guarded(modelProvider(saved));}
+    catch(error){console.error('Godspeed Mission Control: the saved AI connection in '+providerPath+' cannot be read, so no AI is connected from it:',error.message);}}
   provider ||= guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}));
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
   // Where this notebook really runs from, for the tools (core/running-notebook.mjs): Windows only.
@@ -221,7 +219,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const routineAI=originalRuntime&&descriptor?.verified&&descriptor.home?{home:descriptor.home,state:store.state}:null;
   // An AI connected in Settings for the notebook only, while Hermes, which answers the chats, has no
   // AI of its own: the chats and the card say so, with the step that changes it (#590).
-  const settingsOnlyAI=()=>{if(!routineAI||!fs.existsSync(providerPath))return false;try{return routineAIStatus(routineAI).source==='none';}catch{return false;}};
+  const settingsOnlyAI=()=>{if(!routineAI||!savedProviderOrNull(providerPath))return false;try{return routineAIStatus(routineAI).source==='none';}catch{return false;}};
   // The chats' state: the newest provider result wins; before any, the last connection check (#590).
   const chatAIAvailability=()=>{const health=provider?.health?.();return health&&health!=='unknown'?health:chatAIUsable?'ready':'unreachable';};
   const ensureSpendGuard=()=>{
