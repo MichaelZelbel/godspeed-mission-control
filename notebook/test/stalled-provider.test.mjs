@@ -11,7 +11,7 @@ async function fakeAI(t,{mode='working',slowMs=700,reply='{"reply":"Here is your
   const server=http.createServer(async(req,res)=>{
     let body='';for await(const chunk of req)body+=chunk;
     const probe=isProbe(req,body);if(probe)state.probes++;else state.chats++;
-    if(state.mode==='stalled')return;
+    if(state.mode==='stalled'||(state.mode==='probe-only'&&!probe))return;
     const answer=(status,content)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(status===200?{choices:[{message:{content}}]}:{error:{message:'Fictional outage'}}));};
     if(state.mode==='500')return answer(500);
     if(state.mode==='slow'&&!probe)return setTimeout(()=>answer(200,state.reply),state.slowMs);
@@ -37,6 +37,46 @@ test('a slow provider that answers its probes is not cut off',async t=>{
   const ai=await fakeAI(t,{mode:'slow',slowMs:700});
   assert.equal(await provider(ai)({kind:'conversation-chat',contract:'Answer.'}),'{"reply":"Here is your answer."}');
   assert.ok(ai.probes>=2,'probed '+ai.probes+' times while it worked');
+  assert.equal(ai.chats,1,'sent once');
+});
+// #782: a send made while the AI was stalled kept spinning toward ten minutes once the AI came back,
+// because the request it made was swallowed and its probes now answered.
+const RECOVERY={afterMs:200,timeoutMs:150,everyMs:400};
+const whenChatArrives=async(ai,chats)=>{while(ai.chats<=chats)await pause(10);};
+test('a send made while the AI was stalled is sent once more when the AI answers again, and gets the answer',async t=>{
+  const ai=await fakeAI(t,{mode:'stalled'}),call=provider(ai,{stallWatch:RECOVERY});
+  assert.equal((await call({kind:'conversation-chat'}).then(()=>null,e=>e))?.code,'AI_STALLED');
+  const chats=ai.chats,send=call({kind:'conversation-chat'});
+  await whenChatArrives(ai,chats);ai.mode='working';const recovered=Date.now();
+  assert.equal(await send,'{"reply":"Here is your answer."}');
+  assert.ok(Date.now()-recovered<1000,'ended '+(Date.now()-recovered)+' ms after the AI came back');
+  assert.equal(ai.chats-chats,2,'the swallowed request and one fresh copy');
+});
+test('a connection check that got no answer makes the next send be sent once more when the AI answers again',{timeout:40000},async t=>{
+  const ai=await fakeAI(t,{mode:'stalled'}),call=provider(ai,{stallWatch:RECOVERY});
+  await assert.rejects(call.check(),/did not finish/);
+  const chats=ai.chats,send=call({kind:'conversation-chat'});
+  await whenChatArrives(ai,chats);ai.mode='working';
+  assert.equal(await send,'{"reply":"Here is your answer."}');
+  assert.equal(ai.chats-chats,2,'the swallowed request and one fresh copy');
+});
+test('a slow send to an AI that missed a check but answered since is sent once',async t=>{
+  const ai=await fakeAI(t,{mode:'stalled'}),call=provider(ai);
+  await call({kind:'conversation-chat'}).catch(()=>{});
+  ai.mode='working';await call({kind:'conversation-chat'});
+  ai.mode='slow';const chats=ai.chats;
+  assert.equal(await call({kind:'conversation-chat'}),'{"reply":"Here is your answer."}');
+  assert.ok(ai.probes>=3,'probed while it worked');assert.equal(ai.chats-chats,1,'sent once');
+});
+test('a fresh copy that gets no answer either ends with the outage reply',async t=>{
+  const ai=await fakeAI(t,{mode:'stalled'}),call=provider(ai,{stallWatch:RECOVERY});
+  await call({kind:'conversation-chat'}).catch(()=>{});
+  const chats=ai.chats,send=call({kind:'conversation-chat'}).then(()=>null,e=>e);
+  await whenChatArrives(ai,chats);
+  // The probe answers, then the fresh copy and its probe are swallowed again.
+  ai.mode='probe-only';
+  await whenChatArrives(ai,chats+1);ai.mode='stalled';
+  assert.equal((await send)?.code,'AI_STALLED');assert.equal(ai.chats-chats,2);
 });
 test('an HTTP error is said at once, and an answer within the first wait sends no probe',async t=>{
   const ai=await fakeAI(t,{mode:'500'});
@@ -101,6 +141,17 @@ test('a stalled send gets the reply an HTTP 500 gets on the chat page, note pane
   }
   ai.mode='working';
   const answered=await send('conversation-chat');assert.equal(answered.error,null);assert.equal(answered.data.reply,'Here is your answer.');
+});
+test('a send made during a stall is answered once the AI is back, on the chat page, note panel and collection panel',async t=>{
+  const ai=await fakeAI(t,{mode:'500'}),{service,send}=await serviceWith(t,provider(ai,{stallWatch:RECOVERY}));
+  const note=service.store.save('notes',{title:'Shopping',content:'A list'}),collection=service.store.save('collections',{name:'Films',field_schema:[{key:'title',label:'Title',type:'text',primary:true}]});
+  for(const [chat,extra] of [['conversation-chat',{}],['note-chat',{note_id:note.id}],['collection-chat',{collection_id:collection.id}]]){
+    ai.mode='stalled';assert.ok((await send(chat,extra)).error,chat+' gets the outage reply while stalled');
+    const chats=ai.chats,sending=send(chat,extra);
+    await whenChatArrives(ai,chats);ai.mode='working';const recovered=Date.now();
+    const result=await sending,afterRecovery=Date.now()-recovered;
+    assert.equal(result.error,null,chat);assert.equal(result.data.reply,'Here is your answer.',chat);assert.ok(afterRecovery<1500,chat+' ended '+afterRecovery+' ms after the AI came back');
+  }
 });
 test('a closed port keeps its own reply',async t=>{
   const closed=http.createServer();await new Promise(r=>closed.listen(0,'127.0.0.1',r));const port=closed.address().port;await new Promise(r=>closed.close(r));
