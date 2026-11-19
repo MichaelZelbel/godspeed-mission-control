@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { triggerCreditsRefresh } from "@/lib/credits-events";
 import { summarizeChat } from "@/lib/chat-summary";
 import { functionErrorMessage, OUT_OF_CREDITS_MESSAGE } from "@/lib/function-error";
+import {isCurrentAIError,listenForChatOptions} from "@/local/chat-options.mjs";
 import { Button } from "@/components/ui/button";
 import { useConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,6 +54,7 @@ export function CollectionChatPanel({
   const [isClearing, setIsClearing] = useState(false);
   const clearingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(()=>listenForChatOptions(options=>{if(options.usable)setError(previous=>isCurrentAIError(previous)?null:previous);}),[]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [files,setFiles]=useState<ChatFile[]>([]),[model,setModel]=useState(''),[effort,setEffort]=useState('');
@@ -265,6 +267,10 @@ export function CollectionChatPanel({
           </div>
         ))}
 
+        {/* An open conversation keeps its replies and shows the AI's current state under them, so a
+            refused key, an outage or recovery is seen without a reload (#590). */}
+        {state.messages.length > 0 && <ChatConnectionEmptyState ready={null} said={error}/>}
+
         {isLoading && (
           <div className="flex items-center gap-2">
 
@@ -275,7 +281,7 @@ export function CollectionChatPanel({
         )}
 
         {error && (
-          <div className="flex items-center gap-2 text-destructive text-xs bg-destructive/10 rounded-lg px-3 py-2">
+          <div role="alert" data-chat-reply-error className="flex items-center gap-2 text-destructive text-xs bg-destructive/10 rounded-lg px-3 py-2">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
