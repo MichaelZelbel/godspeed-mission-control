@@ -185,9 +185,10 @@ const RETRY_STATUS=new Set([429,502,503,504]);
 // when the send began, or one went unanswered while it waited), the waiting request is given up and
 // one fresh copy is sent with what is left of the ten minutes, watched the same way, never sent a
 // third time. Only a missed check permits this: a slow AI that answers every check is never cut off
-// or sent twice (#770). A connection check that times out on an AI on this computer is not counted:
-// such a server answers one chat at a time, so the check may only be waiting behind another program's
-// chat, and its model-list probe already tells a stall apart.
+// or sent twice (#770). A connection check that times out on an AI on this computer counts only if
+// its model list then gets no answer either: such a server answers one chat at a time, so the check
+// may only have waited behind another program's chat. The list is asked at once and settles before a
+// later send's first probe.
 export const STALL_WATCH={afterMs:20000,timeoutMs:15000,everyMs:60000};
 const LOOPBACK=['127.0.0.1','localhost'];
 export function stalledAI(url,cause){
@@ -209,6 +210,9 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
   };
   const checkInput={kind:'connection-check',contract:'Reply with OK.',max_tokens:8,timeout_ms:15000};
   const probeRequest=local?{url:url.replace(/\/chat\/completions\/?$/,'')+'/models',init:{headers}}:{url,init:{method:'POST',headers,body:requestBody({kind:checkInput.kind,contract:checkInput.contract},[],checkInput.max_tokens)}};
+  const confirmMissedCheck=()=>fetch(probeRequest.url,{...probeRequest.init,signal:AbortSignal.timeout(stallWatch.timeoutMs)}).then(
+    response=>{response.body?.cancel().catch(()=>{});answered();},
+    error=>{if(error.name==='TimeoutError'||error.message==='fetch failed')missedCheck();});
   const watchForStall=suspect=>{
     const controller=new AbortController();let timer,stalled=false,lost=false;
     const schedule=wait=>{if(controller.signal.aborted)return;timer=setTimeout(probe,wait);timer.unref?.();};
@@ -229,7 +233,7 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
       for(let attempt=0;;attempt++){
         try{response=await fetch(url,{method:'POST',headers,body:request,signal:AbortSignal.any([...stopping,AbortSignal.timeout(budgetMs)])});}
         catch(error){
-          if(error.name==='TimeoutError'){if(isCheck&&!local)missedCheck();throw Error(providerTimeoutMessage(timeoutMs));}
+          if(error.name==='TimeoutError'){if(isCheck)(local?confirmMissedCheck():missedCheck());throw Error(providerTimeoutMessage(timeoutMs));}
           if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;
         }
         answered();

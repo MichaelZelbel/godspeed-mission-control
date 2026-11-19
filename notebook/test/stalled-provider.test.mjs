@@ -73,6 +73,32 @@ test('a connection check that times out while another program holds an AI on thi
   assert.equal(chats-before,1,'sent once');
   await other;
 });
+test('a connection check that got no answer from a stalled AI on this computer makes the next send be sent once more when the AI answers again',{timeout:40000},async t=>{
+  const ai=await fakeAI(t,{mode:'stalled'}),call=provider(ai,{stallWatch:RECOVERY});
+  await assert.rejects(call.check(),/did not finish/);
+  const chats=ai.chats,send=call({kind:'conversation-chat'});
+  await whenChatArrives(ai,chats);ai.mode='working';
+  assert.equal(await send,'{"reply":"Here is your answer."}');
+  assert.equal(ai.chats-chats,2,'the swallowed request and one fresh copy');
+});
+test('a connection check that got no answer from a remote AI makes the next send be sent once more when the AI answers again',async t=>{
+  const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original;});
+  let mode='stalled',calls=0;
+  globalThis.fetch=async(url,init)=>{
+    calls++;
+    if(mode==='working')return new Response(JSON.stringify({choices:[{message:{content:'The answer.'}}]}),{status:200,headers:{'Content-Type':'application/json'}});
+    // A connection check is given 15 seconds; this one is ended by its timeout at once.
+    if(calls===1)throw new DOMException('The operation was aborted due to timeout','TimeoutError');
+    return new Promise((resolve,reject)=>init.signal.addEventListener('abort',()=>reject(init.signal.reason),{once:true}));
+  };
+  const call=modelProvider({url:'https://ai.example.test/v1/chat/completions',key:'fictional-secret-key',model:'fictional-model',retryWaits:[],stallWatch:RECOVERY});
+  await assert.rejects(call.check(),/did not finish/);
+  const send=call({kind:'conversation-chat'});
+  while(calls<2)await pause(10);
+  mode='working';
+  assert.equal(await send,'The answer.');
+  assert.equal(calls,4,'the check, the swallowed request, the answered probe and one fresh copy');
+});
 test('a slow send to an AI that missed a check but answered since is sent once',async t=>{
   const ai=await fakeAI(t,{mode:'stalled'}),call=provider(ai);
   await call({kind:'conversation-chat'}).catch(()=>{});
