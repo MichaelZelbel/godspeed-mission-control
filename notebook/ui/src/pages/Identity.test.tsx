@@ -117,6 +117,7 @@ describe("Godspeed's brain", () => {
     expect(screen.queryByText(/Removed rules/)).toBeNull();
   });
 
+  // It runs many role queries over the whole page: about 1.7 s alone, 4.8 s with the CPUs busy, past vitest's 5 s default (#775).
   it("moves a removed rule to Removed rules, opens its earlier versions there, and brings it back", async () => {
     open();
     fireEvent.click(await screen.findByRole("button", { name: /Never spend my money/ }));
@@ -133,7 +134,7 @@ describe("Godspeed's brain", () => {
     await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/restore")?.body).toMatchObject({ target: "rule:never-spend", version: "v-before" }));
     await waitFor(() => expect(screen.queryByText(/Removed rules/)).toBeNull());
     expect(await screen.findByRole("button", { name: /Never spend my money/ })).toBeVisible();
-  });
+  }, 20_000);
 
   it("numbers the rules as the server does, the kind as a tag, and keeps the one-job rules closed until asked", async () => {
     open();
