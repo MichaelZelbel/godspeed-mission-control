@@ -109,8 +109,9 @@ const plainAIFailure=error=>{
   const kind=aiFailure(error);
   return kind==='refused'?AI_REFUSED_STATUS+'. Check it in Settings, Your AI, then try again.':kind?AI_UNREACHABLE_STATUS+'. Check its connection in Settings, Your AI, then try again.':null;
 };
-// The AI actions outside the chats that say a refused key or an outage the same way (#779).
-const AI_ACTIONS=['draft-event','process-note','extract-moment-profile'];
+// The AI actions outside the chats that say a refused key or an outage the same way (#779); Process
+// note says it in Domains.invoke, so its background run does too (#808).
+const AI_ACTIONS=['draft-event','extract-moment-profile'];
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
