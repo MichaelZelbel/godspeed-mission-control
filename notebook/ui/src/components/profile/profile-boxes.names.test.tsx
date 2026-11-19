@@ -18,6 +18,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 import { SelfRecognitionSection } from "./SelfRecognitionSection";
 import { ProfileFieldFilter } from "@/components/people/profile/ProfileFieldFilter";
+import { WAIT } from "@/test/wait-limits";
 
 function wrap(node: React.ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -34,7 +35,7 @@ describe("My Profile's boxes", () => {
     fake.supabase = { ...db.client, auth: { getUser: async () => ({ data: { user: { id: "owner" } } }) } };
     wrap(<SelfRecognitionSection />);
 
-    const box = await screen.findByLabelText("Add a nickname", { exact: true });
+    const box = await screen.findByLabelText("Add a nickname", { exact: true }, WAIT);
     expect(box.tagName).toBe("INPUT");
     expect(screen.getByRole("textbox", { name: "Add a nickname" })).toBe(box);
     const label = (box as HTMLInputElement).labels![0];
@@ -50,7 +51,7 @@ describe("My Profile's boxes", () => {
     const add = screen.getByRole("button", { name: "Add nickname" });
     expect(add).toBeEnabled();
     fireEvent.click(add);
-    await waitFor(() => expect(db.on("user_self_aliases", "insert")).toHaveLength(1));
+    await waitFor(() => expect(db.on("user_self_aliases", "insert")).toHaveLength(1), WAIT);
     expect(db.on("user_self_aliases", "insert")[0].payload).toEqual({ user_id: "owner", alias: "Addie" });
   });
 

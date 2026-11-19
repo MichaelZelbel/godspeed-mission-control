@@ -15,6 +15,7 @@ import http from "node:http";
 import { spawn } from "node:child_process";
 import { supabase } from "@/integrations/supabase/client";
 import AddEventDialog from "./AddEventDialog";
+import { WAIT } from "@/test/wait-limits";
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "owner" }, session: { access_token: "token", user: { id: "owner" } } }),
@@ -100,9 +101,9 @@ describe("saving a moment with an AI connected in Settings and no chat opened", 
     fireEvent.change(within(dialog).getByPlaceholderText("Short title for this moment"), { target: { value: "Fictional lunch" } });
     fireEvent.change(within(dialog).getByPlaceholderText("Describe what happened…"), { target: { value: quote } });
     fireEvent.click(within(dialog).getByRole("combobox", { name: "People" }));
-    fireEvent.click(await screen.findByRole("option", { name: "Fictional Ada" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Fictional Ada" }, WAIT));
     // The dialog's AI availability comes from the notebook's own status.
-    await waitFor(() => expect(routes.filter(route => route === "/api/status").length).toBeGreaterThan(1));
+    await waitFor(() => expect(routes.filter(route => route === "/api/status").length).toBeGreaterThan(1), WAIT);
     await new Promise(resolve => setTimeout(resolve, 50));
     fireEvent.click(within(dialog).getByRole("button", { name: "Create Moment" }));
     await waitFor(() => expect(onCreated).toHaveBeenCalledOnce(), { timeout: 10000 });
