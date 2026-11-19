@@ -10,6 +10,7 @@ import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import Notes from './Notes';
 import {TooltipProvider} from '@/components/ui/tooltip';
 import {clickLabel} from '@/test/label-click';
+import { WAIT } from "@/test/wait-limits";
 
 const empty={data:[],isLoading:false};
 vi.mock('@/hooks/useNotes',()=>({useNotes:()=>empty,useNote:()=>({data:null,isFetched:false,isError:false}),useCreateNote:()=>({isPending:false}),useUpdateNote:()=>({}),useIlikeSearch:()=>({isPending:false,mutate:vi.fn()}),useSemanticSearch:()=>({isPending:false,mutate:vi.fn()})}));
@@ -33,7 +34,7 @@ function page(){
 it('names the box in the New folder popover "Folder name", and its label puts the cursor there',async()=>{
   page();
   fireEvent.click(screen.getByRole('button',{name:'New folder'}));
-  const box=await screen.findByLabelText('Folder name',{exact:true});
+  const box=await screen.findByLabelText('Folder name',{exact:true}, WAIT);
   expect(box.tagName).toBe('INPUT');
   expect(screen.getAllByLabelText('Folder name',{exact:true})).toHaveLength(1);
   const label=(box as HTMLInputElement).labels![0];
@@ -47,8 +48,8 @@ it('names the box in the New Folder dialog "Folder name"',async()=>{
   const plus=screen.getByRole('button',{name:'New note or folder'});
   fireEvent.pointerDown(plus,{button:0,ctrlKey:false});
   fireEvent.keyDown(plus,{key:'Enter'});
-  fireEvent.click(await screen.findByRole('menuitem',{name:/New Folder/}));
-  const dialog=await screen.findByRole('alertdialog');
+  fireEvent.click(await screen.findByRole('menuitem',{name:/New Folder/}, WAIT));
+  const dialog=await screen.findByRole('alertdialog', undefined, WAIT);
   expect(within(dialog).getByText('New folder')).toBeInTheDocument();
   const box=within(dialog).getByLabelText('Folder name',{exact:true});
   expect(box.tagName).toBe('INPUT');

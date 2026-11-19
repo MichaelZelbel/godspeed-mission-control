@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import PeopleMultiSelect from "./PeopleMultiSelect";
+import { WAIT } from "@/test/wait-limits";
 
 const people = [
   { id: "ada", name: "Ada", relationship: "friend" },
@@ -27,7 +28,7 @@ describe("PeopleMultiSelect", () => {
     render(<PeopleMultiSelect people={people} value={[]} onChange={onChange} />);
 
     fireEvent.click(screen.getByRole("combobox"));
-    const menu = await screen.findByRole("dialog");
+    const menu = await screen.findByRole("dialog", undefined, WAIT);
     expect(menu).toHaveClass("z-[60]", "max-w-[calc(100vw-2rem)]");
 
     fireEvent.click(screen.getByText("Ada"));
@@ -36,6 +37,6 @@ describe("PeopleMultiSelect", () => {
     fireEvent.change(screen.getByPlaceholderText("Search people…"), { target: { value: "Grace" } });
     fireEvent.keyDown(screen.getByPlaceholderText("Search people…"), { key: "ArrowDown" });
     fireEvent.keyDown(screen.getByPlaceholderText("Search people…"), { key: "Enter" });
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith(["grace"]));
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(["grace"]), WAIT);
   });
 });

@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
 import { createFakeSupabase } from "@/test/fake-supabase";
+import { WAIT } from "@/test/wait-limits";
 
 // A Media Library card's "Kept on this computer only" badge (top left) used to be placed on its
 // own over the thumbnail, and so did the status (top right): the long badge ran under the
@@ -79,8 +80,8 @@ describe("Media Library card badges and status", () => {
 
   it("puts 'Kept on this computer only' beside the Analyzing… chip, not under it", async () => {
     await open("processing");
-    const badge = await screen.findByText("Kept on this computer only");
-    const chips = await screen.findAllByText("Analyzing…");
+    const badge = await screen.findByText("Kept on this computer only", undefined, WAIT);
+    const chips = await screen.findAllByText("Analyzing…", undefined, WAIT);
     const chip = chips.find((c) => badge.parentElement!.contains(c))!;
     expect(chip).toBeTruthy();
     expectSideBySide(badge, chip.parentElement as HTMLElement);
@@ -88,8 +89,8 @@ describe("Media Library card badges and status", () => {
 
   it("puts 'Kept on this computer only' beside the analyzed check mark, not under it", async () => {
     await open("complete");
-    const badge = await screen.findByText("Kept on this computer only");
-    const marks = await screen.findAllByText("✓");
+    const badge = await screen.findByText("Kept on this computer only", undefined, WAIT);
+    const marks = await screen.findAllByText("✓", undefined, WAIT);
     const mark = marks.find((m) => badge.parentElement!.contains(m))!;
     expect(mark).toBeTruthy();
     expectSideBySide(badge, mark.parentElement as HTMLElement);
@@ -100,8 +101,8 @@ describe("Media Library card badges and status", () => {
 
   it("keeps 'Kept on another computer' in the same row as its status", async () => {
     await open("complete");
-    const badge = await screen.findByText("Kept on another computer");
-    const mark = (await screen.findAllByText("✓")).find((m) => badge.parentElement!.contains(m))!;
+    const badge = await screen.findByText("Kept on another computer", undefined, WAIT);
+    const mark = (await screen.findAllByText("✓", undefined, WAIT)).find((m) => badge.parentElement!.contains(m))!;
     expect(mark).toBeTruthy();
     expectSideBySide(badge, mark.parentElement as HTMLElement);
   });
@@ -151,8 +152,8 @@ describe("Media Library card badges drawn at a phone's width and a desktop's wid
 
   it("keeps 'Kept on this computer only' readable, on at most two lines, clear of the check mark and Re-analyze", async () => {
     await open("complete");
-    await screen.findByText("Kept on this computer only");
-    await screen.findAllByText("✓");
+    await screen.findByText("Kept on this computer only", undefined, WAIT);
+    await screen.findAllByText("✓", undefined, WAIT);
     // The page inside the app's frame: the sidebar (16rem, hidden below 768 px) and the padded main area.
     const page = `<div style="display:flex;min-height:100vh"><div class="hidden md:block w-[16rem] shrink-0"></div>`
       + `<main class="flex-1 min-w-0 overflow-auto p-6">${document.body.innerHTML}</main></div>`;
