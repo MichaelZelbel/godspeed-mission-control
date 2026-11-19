@@ -1,7 +1,7 @@
 // #590: the chats, their pickers and the Dashboard card read one AI state. A refused key (401, 403)
 // is told apart from an outage (a timeout, a provider error, no route, no answer), and a provider
 // that stops answering counts as an outage within a few seconds.
-import test from 'node:test';import assert from 'node:assert/strict';
+import test,{mock} from 'node:test';import assert from 'node:assert/strict';
 import {aiFailure,trackAIHealth} from '../core/ai-health.mjs';
 import {modelProvider} from '../core/runtime.mjs';
 
@@ -101,6 +101,39 @@ test('an AI that never answers its check reads as unreachable within the first w
  await assert.rejects(provider.check(),/did not answer the connection check/);
  assert.ok(Date.now()-started<1000);assert.equal(provider.health(),'unreachable');
  await assert.rejects(provider.check(),/did not answer the connection check/);assert.equal(provider.health(),'unreachable');
+});
+
+// The shipped waits, on a mocked clock: the notebook checks again five seconds after the last check
+// began, and never while one is still running (server/main.mjs, /api/chat/options).
+async function serverChecks(answerDelays){
+ mock.timers.enable({apis:['setTimeout','Date'],now:0});
+ const flush=()=>new Promise(r=>setImmediate(r));
+ const advanceTo=async t=>{while(Date.now()<t){mock.timers.tick(Math.min(100,t-Date.now()));await flush();}};
+ try{
+  let n=0;const delays=[...answerDelays];
+  const inner=Object.assign(async()=>'ok',{check:()=>{const delay=delays[n++];return delay===null?new Promise(()=>{}):new Promise(resolve=>setTimeout(resolve,delay));}});
+  const provider=trackAIHealth(inner),results=[];
+  for(let i=0,start=0;i<answerDelays.length;i++){
+   await advanceTo(start);start=Date.now();
+   let outcome;provider.check().then(()=>{outcome='ready';},()=>{outcome='unreachable';});
+   while(!outcome){if(Date.now()-start>60000)throw Error('a check did not settle within 60 seconds');mock.timers.tick(100);await flush();}
+   results.push({outcome,after:Date.now()-start,health:provider.health()});
+   start=Math.max(start+5000,Date.now());
+  }
+  return results;
+ }finally{mock.timers.reset();}
+}
+
+test('a working AI that answers in 4 to 6 seconds, varying from check to check, reads as ready on the shipped waits (#788)',async()=>{
+ const results=await serverChecks([4000,6000,4000,6000,5000,6000]);
+ assert.deepEqual(results.map(r=>r.health),Array(6).fill('ready'),JSON.stringify(results));
+});
+
+test('on the shipped waits, an AI that never answers, or a slow one that stops, reads as unreachable well within 60 seconds (#788)',async()=>{
+ const silent=await serverChecks([null,null]);
+ for(const r of silent){assert.equal(r.outcome,'unreachable');assert.equal(r.health,'unreachable');assert.ok(r.after<=8100,JSON.stringify(r));}
+ const stopped=await serverChecks([5000,null]);
+ assert.equal(stopped[0].health,'ready');assert.equal(stopped[1].health,'unreachable');assert.ok(stopped[1].after<=8100,JSON.stringify(stopped[1]));
 });
 
 test('a real model provider: 401 and 403 are refusals, 500 and a closed port are outages, and no key is kept',async()=>{
