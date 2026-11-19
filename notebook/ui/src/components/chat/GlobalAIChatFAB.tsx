@@ -19,6 +19,7 @@ import {
   buildApiMessages,
   withSummary,
   unansweredReason,
+  recordAIWorked,
   NOTE_MODIFYING_TOOLS,
   NOTE_CREATING_TOOLS,
   COLLECTION_MODIFYING_TOOLS,
@@ -51,7 +52,6 @@ const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 
 import ChatComposer, {type ChatFile} from "./ChatComposer";
 import {ChatConnectionEmptyState,chatAIState,stateSaid} from "./ChatConnectionEmptyState";
-import {watchForStall} from "@/lib/chat-stall";
 import {isCurrentAIError,listenForChatOptions} from "@/local/chat-options.mjs";
 import { useChatEntryInView } from "./chat-entry";
 import { BRAIN_PAGE } from "@/lib/brain-page";
@@ -365,25 +365,10 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
           };
 
 
-      const sentRequest = requestRef.current;
-      const asked = supabase.functions.invoke(chatFn, {
+      const askedAt = Date.now();
+      const { data, error: fnErr } = await supabase.functions.invoke(chatFn, {
         body: {...invokeBody,conversation_session:state.session_id||'',message:userMsg.content,conversation_id:'notebook:'+contextKey,talk_id:talkId||undefined,page:pageChat?.page,page_label:pageChat?.label,files:userMsg.attachments?.length?userMsg.attachments:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current},
       });
-      // A send the AI took and never answered ends, and the notebook stops working on it (chat-stall.ts).
-      const stall = watchForStall(() => chatAIState(queryClient.getQueryData(['chat-options'])));
-      let answer: Awaited<typeof asked>;
-      try {
-        answer = await Promise.race([asked, stall.stalled]);
-      } catch (stallError: any) {
-        if (stallError?.stalled && sentRequest) {
-          asked.catch(() => {});
-          void fetch('/api/chat/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:sentRequest})}).catch(()=>{});
-        }
-        throw stallError;
-      } finally {
-        stall.stop();
-      }
-      const { data, error: fnErr } = answer;
 
       // A non-2xx answer (out of credits is a 402) arrives as fnErr with
       // data null, so the reason is read from the answer itself.
@@ -471,6 +456,8 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
         window.dispatchEvent(new CustomEvent(pageChat.changedEvent ?? "godspeed:page-chat-changed", { detail: { page: pageChat.page } }));
       }
 
+      // The AI answered: a "No answer" note from before this send stays cleared in every chat (#821).
+      recordAIWorked(askedAt);
       deliver(sentKey, sentUserId, sentContext, updated);
       summarizeLater(chatFn, sentKey, sentUserId, sentContext, updated);
 
@@ -479,8 +466,8 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
       // The error belongs to the conversation that asked; do not show it in another.
       const shown = chatKeyRef.current === sentKey;
       const reason: string = stoppedRef.current ? "Reply stopped." : err.message || "Something went wrong";
-      // A send the AI refused, could not be reached for or stalled on stays marked on its message,
-      // so the reason survives a reload while that failure applies; a conversation cleared meanwhile
+      // A send the AI refused or could not be reached for stays marked on its message, with when, so
+      // the reason survives a reload while that failure applies; a conversation cleared meanwhile
       // has no such message left to mark. Any other failure (no AI connected, no credits) is said
       // as before: on the line under the conversation, with the words back in the composer.
       const said = stoppedRef.current ? null : stateSaid(reason);
@@ -488,13 +475,11 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
       if ((said === "refused" || said === "unreachable") && !cleared) {
         deliver(sentKey, sentUserId, sentContext, {
           ...nextState,
-          messages: nextState.messages.map((m, i) => (i === nextState.messages.length - 1 ? { ...m, lastFailure: reason } : m)),
+          messages: nextState.messages.map((m, i) => (i === nextState.messages.length - 1 ? { ...m, lastFailure: reason, failedAt: Date.now() } : m)),
         });
         // The notebook now reads the AI as this send found it (the newest request wins, ai-health.mjs):
         // every surface in this window says so at once, not at the next read.
-        if (!err?.stalled) queryClient.setQueryData(['chat-options'], (previous: any) => ({connected: true, ...previous, usable: false, availability: said}));
-        // A stall the AI's own checks do not see (they answer) is said here too, until they are read again.
-        else if (shown && chatAIState(queryClient.getQueryData(['chat-options'])) === "ready") setError(reason);
+        queryClient.setQueryData(['chat-options'], (previous: any) => ({connected: true, ...previous, usable: false, availability: said}));
       } else if (shown) {
         setError(reason);
         if (!stoppedRef.current && !resend) {

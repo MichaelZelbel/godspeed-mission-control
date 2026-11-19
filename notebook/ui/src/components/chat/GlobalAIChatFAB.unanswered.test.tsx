@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-// A message the AI refused, could not be reached for or stalled on says why under it, keeps saying
-// so after a reload while the AI still fails, shows once, and can be sent again in place; once the
-// AI works again the note goes from every open chat, and with no AI connected the no-AI sentence
-// shows alone (#790). Saves go through the notebook's own conversation merge.
+// A message the AI refused or could not be reached for says why under it, keeps saying so after a
+// reload while the AI still fails, shows once, and can be sent again in place; once the AI works
+// again the note goes from every open chat and stays gone, even when the AI fails again later
+// (#821), and with no AI connected the no-AI sentence shows alone (#790). Saves go through the
+// notebook's own conversation merge.
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
@@ -21,9 +22,6 @@ vi.mock('@/integrations/supabase/client',()=>({supabase:{
  functions:{invoke:(...args:unknown[])=>invoke(...args)},
  from:(table:string)=>row(table==='notes'?{id:'note-1',title:'Fictional note'}:null),
 }}));
-// The stall limits in tenths of a second, so a stalled send ends within a test (chat-stall.test.ts
-// checks the real ones).
-vi.mock('@/lib/chat-stall',async(original)=>{const real:any=await original();return {...real,watchForStall:(read:()=>string)=>real.watchForStall(read,{graceMs:300,limitMs:1500,everyMs:50})};});
 vi.mock('./ChatMarkdown',()=>({default:({children}:any)=><p>{children}</p>}));
 const FILE={path:'uploads/fictional.txt',name:'fictional.txt',type:'text/plain'};
 vi.mock('./ChatComposer',()=>({default:({value,onChange,onSend,onStop,busy,files,onFiles}:any)=><><textarea aria-label="Message" value={value} onChange={e=>onChange(e.target.value)}/>
@@ -45,7 +43,6 @@ const AI={
  none:{connected:false,usable:false,current:'No AI connected',models:MODELS},
 };
 let ai:any=AI.ready;
-const stops:string[]=[];
 const rows=new Map<string,any>();
 const conflicts:unknown[]=[];
 const store={get:(_table:string,id:string)=>rows.get(id),withLock:(f:()=>any)=>f(),prepare:(table:string,record:any)=>({table,record}),
@@ -56,12 +53,11 @@ beforeEach(async()=>{
  AbortSignal.timeout??=()=>new AbortController().signal;
  // The loaded conversations outlive a test, so each starts from the last one's emptied.
  for(const [id,record] of rows)rows.set(id,{...record,state:{messages:[],summary:'',summarizedUpTo:0}});
- conflicts.length=0;invoke.mockReset();ai=AI.ready;stops.length=0;
+ conflicts.length=0;invoke.mockReset();ai=AI.ready;localStorage.clear();
  vi.stubGlobal('fetch',vi.fn(async(url:string,init?:RequestInit)=>{
   if(url==='/api/query')return response({data:[...rows.values()].map(({context_key,state})=>({context_key,state}))});
   if(url==='/api/chat-state')return response({state:saveConversationState(store,JSON.parse(String(init?.body))).state});
   if(url==='/api/chat/options')return response(ai);
-  if(url==='/api/chat/stop'){stops.push(JSON.parse(String(init?.body)).id);return response({ok:true});}
   return response({});
  }));
  window.addEventListener('menerio:flush-note-save',flushed);
@@ -86,20 +82,20 @@ const saved=(key:string)=>[...rows.values()].find(r=>r.context_key===key)?.state
 const follows=(a:HTMLElement,b:HTMLElement)=>!!(a.compareDocumentPosition(b)&Node.DOCUMENT_POSITION_FOLLOWING);
 
 // The notebook's answer to each failed send, and what it then says about the AI.
-const pending=()=>new Promise(()=>{});
 const failures={
  refused:{reason:REFUSED,state:AI.refused,answer:()=>({data:null,error:{message:REFUSED,context:new Response(JSON.stringify({error:REFUSED}),{status:400})}})},
  unreachable:{reason:UNREACHABLE,state:AI.unreachable,answer:()=>({data:null,error:{message:UNREACHABLE,context:new Response(JSON.stringify({error:UNREACHABLE}),{status:502})}})},
- // Accepted and never answered, while the notebook's connection checks get no answer either.
- stalled:{reason:UNREACHABLE,state:AI.unreachable,answer:pending},
 };
-const sendFailing=async(surface:keyof typeof surfaces,kind:keyof typeof failures)=>{
+const typeAndFail=async(kind:keyof typeof failures,text:string)=>{
  const failure=failures[kind];
  invoke.mockImplementationOnce(async()=>{ai=failure.state;return failure.answer();});
- surfaces[surface].show();
- fireEvent.change(await screen.findByLabelText('Message'),{target:{value:QUESTION}});
+ fireEvent.change(await screen.findByLabelText('Message'),{target:{value:text}});
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
  expect(await screen.findByText(failure.reason,{},{timeout:3000})).toBeInTheDocument();
+};
+const sendFailing=async(surface:keyof typeof surfaces,kind:keyof typeof failures)=>{
+ surfaces[surface].show();
+ await typeAndFail(kind,QUESTION);
  expect(screen.getByText('No answer.')).toBeInTheDocument();
  await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION]));
 };
@@ -107,17 +103,12 @@ const sendFailing=async(surface:keyof typeof surfaces,kind:keyof typeof failures
 it.each([
  ['the chat page','refused'],
  ['the chat page','unreachable'],
- ['the chat page','stalled'],
  ["a note's chat",'refused'],
  ["a note's chat",'unreachable'],
- ["a note's chat",'stalled'],
 ] as const)('in %s, a %s send says why after a reload, shows once and can be sent again',async(surface,kind)=>{
  const {reason}=failures[kind];
  await sendFailing(surface,kind);
  expect(document.querySelector('.animate-spin')).toBeNull();
- // A stalled send is ended in the notebook too, so it does not answer later.
- expect(stops).toHaveLength(kind==='stalled'?1:0);
- if(kind==='stalled')expect(stops[0]).toBe((invoke.mock.calls.at(-1) as any)[1].body.request_id);
 
  await reload(surface);
  expect(await screen.findByText(reason)).toBeInTheDocument();
@@ -148,7 +139,7 @@ it.each([
 it.each([
  ['the chat page','refused','its key is accepted again'],
  ["a note's chat",'unreachable','it can be reached again'],
- ['the chat page','stalled','it answers again'],
+ ["a note's chat",'refused','its key is accepted again'],
 ] as const)('in %s, the note of a %s send goes from every open chat once %s, and stays gone after a reload',async(surface,kind,_recovery)=>{
  await sendFailing(surface,kind);
  // The same conversation open in its own window says the same.
@@ -166,6 +157,44 @@ it.each([
  await new Promise(r=>setTimeout(r,1200));
  expect(screen.queryByText('No answer.')).toBeNull();
  expect(screen.queryByText(failures[kind].reason)).toBeNull();
+});
+
+const SECOND='Fictional later question';
+it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, a note that cleared once the AI worked stays cleared when a later send fails, also after a reload',async(surface)=>{
+ await sendFailing(surface,'unreachable');
+ ai=AI.ready;
+ await waitFor(()=>expect(screen.queryAllByText('No answer.')).toHaveLength(0),{timeout:3000});
+
+ // A second outage: only the message sent after the AI last worked gets a note.
+ await typeAndFail('refused',SECOND);
+ await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,SECOND]));
+ const check=()=>{
+  expect(screen.getAllByText('No answer.')).toHaveLength(1);
+  expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(1);
+  expect(follows(screen.getByText(SECOND),screen.getByText('No answer.'))).toBe(true);
+  expect(screen.queryByText(UNREACHABLE)).toBeNull();
+ };
+ check();
+ await reload(surface);
+ expect(await screen.findByText(REFUSED,{},{timeout:3000})).toBeInTheDocument();
+ check();
+});
+
+it('a note in a chat that was closed while the AI worked again stays cleared in a later outage',async()=>{
+ await sendFailing("a note's chat",'unreachable');
+ cleanup();
+ // The AI works again while only the chat page is open.
+ ai=AI.ready;
+ surfaces['the chat page'].show();
+ await waitFor(()=>expect(localStorage.getItem('godspeed:ai-worked-at')).not.toBeNull(),{timeout:3000});
+ cleanup();
+
+ ai=AI.unreachable;
+ await reload("a note's chat");
+ await waitFor(()=>expect(document.querySelector('[data-chat-ai-state="unreachable"]')).not.toBeNull(),{timeout:3000});
+ expect(screen.getAllByText(QUESTION)).toHaveLength(1);
+ expect(screen.queryByText('No answer.')).toBeNull();
+ expect(screen.queryByRole('button',{name:'Send again'})).toBeNull();
 });
 
 it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, a send with no AI connected says the no-AI sentence alone, and sending it again keeps one copy',async(surface)=>{
@@ -188,24 +217,6 @@ it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, a send with 
  await reload(surface);
  await screen.findByText(ANSWER);
  expect(screen.getAllByText(QUESTION)).toHaveLength(1);
-});
-
-it('a send the AI takes and never answers while its connection checks still answer ends at the stall limit and says why',async()=>{
- invoke.mockImplementationOnce(pending);
- surfaces['the chat page'].show();
- fireEvent.change(await screen.findByLabelText('Message'),{target:{value:QUESTION}});
- fireEvent.click(screen.getByRole('button',{name:'Send'}));
- expect(await screen.findByText(UNREACHABLE,{},{timeout:4000})).toBeInTheDocument();
- expect(document.querySelector('.animate-spin')).toBeNull();
- expect(stops).toHaveLength(1);
- // The AI's own checks say it works, so there is no note to send again from; the same words typed
- // again replace the unanswered message instead of standing under it.
- expect(screen.queryByText('No answer.')).toBeNull();
- invoke.mockResolvedValueOnce({data:{reply:ANSWER},error:null});
- fireEvent.change(screen.getByLabelText('Message'),{target:{value:QUESTION}});
- fireEvent.click(screen.getByRole('button',{name:'Send'}));
- await screen.findByText(ANSWER,{},{timeout:1500});
- await waitFor(()=>expect(saved('general')).toEqual([QUESTION,ANSWER]));
 });
 
 const savedMessages=(key:string)=>[...rows.values()].find(r=>r.context_key===key)?.state.messages;

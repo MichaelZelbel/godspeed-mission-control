@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
-import { NOTE_MODIFYING_TOOLS, unansweredReason, withSummary } from "./chat-history";
+import { NOTE_MODIFYING_TOOLS, aiWorkedAt, recordAIWorked, unansweredReason, withSummary } from "./chat-history";
 
 // The note chat reports what it did by tool name (domains.mjs): update_note
 // for a text change, update_note_metadata, trash_note. A name missing here
@@ -18,7 +19,7 @@ it("a summary from an earlier session cannot return after Clear, even when the n
 });
 
 it("a message that got no answer keeps its reason only while the AI still fails and no later message is answered", () => {
-  const failed = {role: "user" as const, content: "Fictional question", lastFailure: "Your AI could not be reached."};
+  const failed = {role: "user" as const, content: "Fictional question", lastFailure: "Your AI could not be reached.", failedAt: 2000};
   const reply = {role: "assistant" as const, content: "Fictional answer"};
   const followUp = {role: "user" as const, content: "Fictional follow-up"};
   expect(unansweredReason([failed], 0, "unreachable")).toBe("Your AI could not be reached.");
@@ -28,4 +29,17 @@ it("a message that got no answer keeps its reason only while the AI still fails 
   expect(unansweredReason([failed, followUp, reply], 0, "unreachable")).toBeNull();
   for (const state of ["ready", "none", "settings-only", "checking"]) expect(unansweredReason([failed], 0, state)).toBeNull();
   expect(unansweredReason([{role: "user", content: "Fictional question"}], 0, "unreachable")).toBeNull();
+  // A note belongs to its failure: once the AI has worked after it, a later outage does not bring it back (#821).
+  expect(unansweredReason([failed], 0, "unreachable", 1999)).toBe("Your AI could not be reached.");
+  expect(unansweredReason([failed], 0, "unreachable", 2000)).toBeNull();
+  expect(unansweredReason([failed], 0, "refused", 5000)).toBeNull();
+});
+
+it("records when the AI last worked, and never moves it back", () => {
+  localStorage.clear();
+  expect(aiWorkedAt()).toBe(0);
+  recordAIWorked(3000);
+  recordAIWorked(1000);
+  expect(aiWorkedAt()).toBe(3000);
+  localStorage.clear();
 });
