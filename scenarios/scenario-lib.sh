@@ -166,6 +166,7 @@ show_assistant_home() {
 # There is no default for either on purpose: a default once sent the checks to a paid model on the
 # owner's OpenRouter account. The checks use a capped OpenRouter test account and only a small
 # Claude Haiku model, so the configured model is always explicit and affordable.
+# A model whose name ends in :free costs nothing, so it keeps that intent (pull requests try one first).
 AI_URL=${GODSPEED_SCENARIO_AI_URL:-}
 AI_MODEL=${GODSPEED_SCENARIO_AI_MODEL:-}
 check_the_ai_settings() {
@@ -177,6 +178,7 @@ check_the_ai_settings() {
   esac
   case "$AI_MODEL" in
     claude-haiku-*|anthropic/claude-haiku-*) ;;
+    *:free) ;;
     *) fail "GODSPEED_SCENARIO_AI_MODEL is $AI_MODEL, not a small Claude Haiku model, so the scenario cannot use it" ;;
   esac
 }

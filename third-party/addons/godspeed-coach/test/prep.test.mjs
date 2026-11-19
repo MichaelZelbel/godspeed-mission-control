@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { readArea } from "../lib/areas.mjs";
 import { brief, continuingTalkDay } from "../lib/brief.mjs";
 import { gate } from "../lib/gate.mjs";
-import { prepForBrief, prepDue, rhythmDrop, countsAsTalkDay } from "../lib/prep.mjs";
+import { prepForBrief, prepDue, rhythmDrop, countsAsTalkDay, prepProblem, readPrep } from "../lib/prep.mjs";
 import { tmpMission, area, S } from "./helpers.mjs";
 
 const BIN = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "bin", "godspeed-coach.mjs");
@@ -465,6 +465,11 @@ test("prepWords gives everyday words for each reason, never the raw one", () => 
     ['its independent review did not judge the goal "buffer"', "the second check left out a goal this talk serves"],
     ['its independent review does not substantiate goal "buffer"', "the second check did not confirm the research on a goal this talk serves"],
     ["something else entirely", "it did not pass its checks"]]) assert.equal(prepWords(why), words);
+});
+
+test("a draft demoted for uncovered adopted goals keeps the failed-review reason", () => {
+  const mc = mission({ "coach/work/prep/2026-10-21.md": prep({ state: "draft" }).replace("## Gaps\n", "## Gaps\nIndependent review left these adopted goals uncovered: buffer.\n") });
+  assert.equal(prepProblem(readPrep(path.join(mc, "coach/work/prep/2026-10-21.md")), work(mc), new Date("2026-10-21T17:00:00Z")), "its independent research review did not pass");
 });
 
 test("the recipe says never to claim how long or how widely research ran, and has the step for a talk that is not prepared", () => {

@@ -58,6 +58,7 @@ export function readPrep(file) {
 export function prepProblem(p, area = null, now = clockNow(), opts = {}) {
   if (!p) return "there is no such file";
   if (area && p.head.AREA && p.head.AREA.trim().toLowerCase() !== area.slug) return `it is for the ${p.head.AREA.trim()} talk, not the ${area.title} talk`;
+  if (p.state === "draft" && /Independent review left these adopted goals uncovered:/i.test(p.text)) return "its independent research review did not pass";
   if (p.state !== "ready") return `its STATE is ${p.state || "missing"}, not ready`;
   const empty = [["The opening", p.opening], ["Talk card", p.card]].filter(([, v]) => !v).map(([k]) => `"${k}"`);
   if (empty.length) return `its section${empty.length > 1 ? "s" : ""} ${empty.join(" and ")} ${empty.length > 1 ? "are" : "is"} empty`;
