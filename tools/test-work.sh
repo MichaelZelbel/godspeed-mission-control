@@ -31,7 +31,7 @@ export GODSPEED_NOW="2026-09-13T10:00:00.000Z"
 hw() { "$NODE" "$TMP/bin/work.js" "$@"; }
 idof() { hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s).find(x=>x.KEY===process.argv[1]);console.log(x?x.id:"none")})' "$1"; }
 
-PASS=0; FAIL=0
+PASS=0; FAIL=0; ABS_CASE=0
 ok()   { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf '  FAIL %s\n' "$1"; }
 check() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (wanted [$3], got [$2])"; fi; }
@@ -102,6 +102,20 @@ OUT="$(hw verify "$ABSOLUTE_COVER" 2>&1)"; check "  an absolute workspace result
 contains "  its path spelling cannot bypass the content gate" "$OUT" "content review found missing work"
 OUT="$(hw verify "$ABSOLUTE_COVER" --content-review "$TMP/review-pass.json" 2>&1)"
 contains "  an absolute workspace result verifies after both judgments" "$OUT" "verified by its check and content review"
+
+# An absolute DONE WHEN spelled with other capitals or a trailing dot is the same file (#571), so
+# `files` still finds it for the commit and the page, and it still needs the content review.
+printf '%s\n' 'shape only' > "$TMP/work/cover.md"
+for spelled in "$TMP/work/Cover.md" "$TMP/WORK./cover.md" "$(dirname "$TMP" | tr '[:lower:]' '[:upper:]')/$(basename "$TMP")/work/COVER.md"; do
+  KEY="abs-case-$((++ABS_CASE))"
+  hw file --what "Fix the cover as spelled" --done-when "$spelled describes the corrected cover" --check "test -s work/cover.md" --key "$KEY" --source test >/dev/null
+  ITEM="$(idof "$KEY")"
+  check "  files finds $spelled as work/cover.md" "$(hw files "$ITEM" 2>&1)" "work/cover.md"
+  hw take "$ITEM" --runner claude-laptop >/dev/null
+  hw attempt "$ITEM" --runner claude-laptop --ok --result "wrote the cover" >/dev/null
+  OUT="$(hw verify "$ITEM" 2>&1)"; check "  and without a content review it stays attempted" "$?" "2"
+  contains "  naming the missing review" "$OUT" "content review found missing work"
+done
 
 hw file --what "Restart the local counter" --done-when "the counter reads 4" --check "test -f $TMP/counter-four" --key counter --source test >/dev/null
 COUNTER="$(idof counter)"; hw take "$COUNTER" --runner claude-laptop >/dev/null; hw attempt "$COUNTER" --runner claude-laptop --ok --result "counter reads 4" >/dev/null; touch "$TMP/counter-four"

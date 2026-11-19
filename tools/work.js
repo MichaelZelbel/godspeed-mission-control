@@ -162,16 +162,34 @@ const NAMED_FILE_EXT = /\.(md|csv|json|txt|html)$/i;
 const fileOnDisk = (written, root) => {
   let c = written.replace(/^["'`(\[<]+/, '').replace(/[.,;:)"'`\]>]+$/, '');
   if (!/[\\/]/.test(c) || !NAMED_FILE_EXT.test(c)) return '';
+  let absolute = false, realRoot = '';
   if (/^([\\/]|[A-Za-z]:[\\/])/.test(c)) {
     // Compare the places on disk, not their spellings. Installed workspaces can be reached through
     // a symlink (for example the stable Godspeed folder pointing at the current installation), and
     // an absolute DONE WHEN written through that name must not evade the same review as a relative
-    // path. realpath also prevents a symlink inside the workspace from making an outside file count.
-    let realRoot, realFile;
-    try { realRoot = fs.realpathSync(root); realFile = fs.realpathSync(c); } catch (e) { return ''; }
-    const rel = path.relative(realRoot, realFile);
-    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return '';
-    c = rel;
+    // path. Only the deepest folder of the path that is there as written is resolved on disk; the
+    // steps after it keep the lookup below, so other capitals and trailing dots or spaces are found
+    // as for a relative path (#571), also in the steps that name the mission control itself.
+    try { realRoot = fs.realpathSync(root); } catch (e) { return ''; }
+    const drive = (c.match(/^[A-Za-z]:/) || [''])[0];
+    const steps = pathParts(c.slice(drive.length));
+    if (steps.includes('..')) return '';
+    let real = '', rest = [];
+    for (let i = steps.length; i >= 0 && !real; i--) {
+      try { real = fs.realpathSync(path.join(drive + path.sep, ...steps.slice(0, i))); rest = steps.slice(i); } catch (e) { /* a shorter start */ }
+    }
+    if (!real) return '';
+    let rel = path.relative(realRoot, real);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      // The mission control may lie below that folder, its own steps spelled with other capitals.
+      const down = path.relative(real, realRoot);
+      if (!down || down.startsWith('..') || path.isAbsolute(down)) return '';
+      const want = pathSteps(down);
+      if (rest.length <= want.length || !want.every((w, k) => pathSteps(rest[k])[0] === w)) return '';
+      rest = rest.slice(want.length); rel = '';
+    }
+    c = [...pathParts(rel), ...rest].join('/');
+    absolute = true;
   }
   const parts = pathParts(c);
   if (!parts.length || parts.includes('..')) return '';
@@ -183,7 +201,12 @@ const fileOnDisk = (written, root) => {
     if (!name) return '';
     out.push(name); dir = path.join(dir, name);
   }
-  try { return fs.statSync(dir).isFile() ? out.join('/') : ''; } catch (e) { return ''; }
+  try {
+    if (!fs.statSync(dir).isFile()) return '';
+    // A symlink inside the mission control must not make a file outside it count.
+    if (absolute) { const rel = path.relative(realRoot, fs.realpathSync(dir)); if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return ''; }
+    return out.join('/');
+  } catch (e) { return ''; }
 };
 const fileNamed = (text, root = GODSPEED) => {
   const words = String(text || '').replace(WEB_ADDRESS, ' ').split(/(\s+)/);
