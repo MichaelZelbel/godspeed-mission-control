@@ -75,7 +75,7 @@ import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/herm
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
 import {trackAIHealth,aiFailure} from '../core/ai-health.mjs';
-import {SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS,AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS,NO_AI_STATUS} from '../core/no-ai.mjs';
+import {SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS,AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS,AI_STALLED_STATUS,NO_AI_STATUS} from '../core/no-ai.mjs';
 import {MEDIA_CARRY_MAX_MB,MEDIA_PRESENCE_BATCH_SIZE,MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
 import {spendGuardStatus,saveSpendGuardSettings} from '../core/spend-guard.mjs';
 
@@ -99,18 +99,20 @@ const readSavedProvider=file=>{
   if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error('The saved AI connection is not valid. Connect it again after checking the server log.');
   return config;
 };
-// A failed request to the AI, said as the chats say it (#590): a refused key or an outage, each with
-// what to do, never the provider's words, which can quote the key. Godspeed's own no-AI sentences are
-// not provider failures, though they name an "AI service". null when the error is not the AI's.
+// A failed request to the AI, said as the chats say it (#590): a refused key, an outage, or an AI that
+// took the request and stopped answering (#808), each with what to do, never the provider's words,
+// which can quote the key. Godspeed's own no-AI sentences are not provider failures, though they
+// name an "AI service". null when the error is not the AI's.
 const PROVIDER_FAILURE=/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d|could not be reached|did not finish within|did not answer|needs sign-in|returned no text|connection could not start/i;
 const plainAIFailure=error=>{
   const message=String(error?.message||'');
   if(message.startsWith(NO_AI_STATUS)||message.startsWith(SETTINGS_ONLY_AI_STATUS)||!PROVIDER_FAILURE.test(message))return null;
   const kind=aiFailure(error);
-  return kind==='refused'?AI_REFUSED_STATUS+'. Check it in Settings, Your AI, then try again.':kind?AI_UNREACHABLE_STATUS+'. Check its connection in Settings, Your AI, then try again.':null;
+  return kind==='refused'?AI_REFUSED_STATUS+'. Check it in Settings, Your AI, then try again.':kind==='stalled'?AI_STALLED_STATUS+'. Try again in a moment, or check it in Settings, Your AI.':kind?AI_UNREACHABLE_STATUS+'. Check its connection in Settings, Your AI, then try again.':null;
 };
-// The AI actions outside the chats that say a refused key or an outage the same way (#779).
-const AI_ACTIONS=['draft-event','process-note','extract-moment-profile'];
+// The AI actions outside the chats that say a refused key or an outage the same way (#779); Process
+// note says it in Domains.invoke, so its background run does too (#808).
+const AI_ACTIONS=['draft-event','extract-moment-profile'];
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
