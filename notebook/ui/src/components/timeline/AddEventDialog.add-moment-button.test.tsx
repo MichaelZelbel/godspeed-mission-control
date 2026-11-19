@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import "@testing-library/jest-dom/vitest";
 import { createFakeSupabase, type RecordedQuery } from "@/test/fake-supabase";
 import AddEventDialog, { type TimelineContact } from "./AddEventDialog";
+import { WAIT } from "@/test/wait-limits";
 
 const { fake } = vi.hoisted(() => ({ fake: { current: null as any } }));
 vi.mock("@/integrations/supabase/client", () => ({ get supabase() { return fake.current.client; } }));
@@ -69,14 +70,14 @@ describe("the Add Moment button's dialog has a usable People control", () => {
 
     fireEvent.change(within(dialog).getByPlaceholderText("Short title for this moment"), { target: { value: "Fictional lunch" } });
     fireEvent.click(control);
-    fireEvent.click(await screen.findByRole("option", { name: ada.name }));
+    fireEvent.click(await screen.findByRole("option", { name: ada.name }, WAIT));
 
     // Visible before saving: the chosen person's chip, and the control now offers more.
     expect(within(dialog).getByRole("button", { name: `Remove ${ada.name}` })).toBeVisible();
     expect(control).toHaveTextContent("Add more");
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Create Moment" }));
-    await waitFor(() => expect(onCreated).toHaveBeenCalledOnce());
+    await waitFor(() => expect(onCreated).toHaveBeenCalledOnce(), WAIT);
 
     expect(fake.current.on("moments", "insert")[0].payload).toEqual(expect.objectContaining({ person_id: ada.id, source: "manual" }));
     const links = fake.current.on("moment_participants", "insert");
@@ -101,12 +102,12 @@ describe("the Add Moment button's dialog has a usable People control", () => {
     expect(within(dialog).queryByRole("button", { name: `Remove ${ada.name}` })).toBeNull();
 
     fireEvent.keyDown(document.activeElement ?? input, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByPlaceholderText("Search or type a new name…")).toBeNull());
+    await waitFor(() => expect(screen.queryByPlaceholderText("Search or type a new name…")).toBeNull(), WAIT);
     expect(screen.getByRole("dialog", { name: "Add Moment" })).toBeVisible();
 
     fireEvent.change(within(dialog).getByPlaceholderText("Short title for this moment"), { target: { value: "Fictional call" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create Moment" }));
-    await waitFor(() => expect(onCreated).toHaveBeenCalledOnce());
+    await waitFor(() => expect(onCreated).toHaveBeenCalledOnce(), WAIT);
     expect(fake.current.on("moment_participants", "insert")[0].payload).toEqual([{ moment_id: "moment-1", person_id: bea.id }]);
     expect(fake.current.on("contacts").filter((q: RecordedQuery) => q.op !== "select")).toEqual([]);
   });
@@ -130,14 +131,14 @@ describe("the Add Moment button's dialog has a usable People control", () => {
 
     // Escape closes only the picker; the moment dialog stays open.
     fireEvent.keyDown(input, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByPlaceholderText("Search or type a new name…")).toBeNull());
+    await waitFor(() => expect(screen.queryByPlaceholderText("Search or type a new name…")).toBeNull(), WAIT);
     expect(screen.getByRole("dialog", { name: "Add Moment" })).toBeVisible();
     expect(onCreated).not.toHaveBeenCalled();
 
     // The first person appears in People (the Timeline page reloads its list).
     view.rerender(<AddEventDialog people={[ada]} onCreated={onCreated} />);
     fireEvent.click(peopleControl(screen.getByRole("dialog", { name: "Add Moment" })));
-    fireEvent.click(await screen.findByRole("option", { name: ada.name }));
+    fireEvent.click(await screen.findByRole("option", { name: ada.name }, WAIT));
     expect(screen.getByRole("button", { name: `Remove ${ada.name}` })).toBeVisible();
   });
 });

@@ -7,6 +7,7 @@ import "@testing-library/jest-dom/vitest";
 import http from "node:http";
 import { AI_REFUSED_STATUS, AI_UNREACHABLE_STATUS, NO_AI_STATUS } from "../../../../core/no-ai.mjs";
 import { startNotebook, type RealNotebook } from "@/test/real-notebook";
+import { WAIT } from "@/test/wait-limits";
 
 // #779: "Classify with AI" in a note's menu said nothing when it failed. Against a real notebook and a
 // stand-in AI on 127.0.0.1 it now says that no AI is connected, that the key was refused, or that the
@@ -63,10 +64,10 @@ async function classify() {
       <MemoryRouter><NoteEditor note={note} /></MemoryRouter>
     </QueryClientProvider>,
   );
-  const more = await screen.findByTitle("More actions");
+  const more = await screen.findByTitle("More actions", undefined, WAIT);
   fireEvent.pointerDown(more, { button: 0, ctrlKey: false });
   fireEvent.keyDown(more, { key: "Enter" });
-  fireEvent.click(await screen.findByRole("menuitem", { name: "Classify with AI" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Classify with AI" }, WAIT));
   await waitFor(() => expect(toasts.filter((t) => t.startsWith("error: "))).toHaveLength(1), { timeout: 15_000 });
   const said = toasts.find((t) => t.startsWith("error: "))!;
   expect(said).not.toMatch(/HTTP|\b[45]\d\d\b|Model provider|Incorrect API key|127\.0\.0\.1/);

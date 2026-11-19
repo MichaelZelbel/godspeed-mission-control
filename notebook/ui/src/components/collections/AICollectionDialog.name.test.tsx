@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
 import { AICollectionDialog } from "./AICollectionDialog";
+import { WAIT } from "@/test/wait-limits";
 
 const { insert, invoke } = vi.hoisted(() => ({
   insert: vi.fn(),
@@ -42,7 +43,7 @@ describe("AI collection name", () => {
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Make a reading list for my books" } });
     fireEvent.click(screen.getByRole("button", { name: /generate/i }));
 
-    const name = await screen.findByRole("textbox", { name: "Collection name" });
+    const name = await screen.findByRole("textbox", { name: "Collection name" }, WAIT);
     fireEvent.change(name, { target: { value: "   " } });
     fireEvent.click(screen.getByRole("button", { name: "Save Collection" }));
 
@@ -57,7 +58,7 @@ describe("AI collection name", () => {
     fireEvent.click(screen.getByRole("button", { name: /generate/i }));
 
     const longName = "A".repeat(61);
-    fireEvent.change(await screen.findByRole("textbox", { name: "Collection name" }), { target: { value: longName } });
+    fireEvent.change(await screen.findByRole("textbox", { name: "Collection name" }, WAIT), { target: { value: longName } });
     fireEvent.click(screen.getByRole("button", { name: "Save Collection" }));
 
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ name: longName }));

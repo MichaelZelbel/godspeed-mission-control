@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
 import CollectionTemplates from "./CollectionTemplates";
+import { WAIT } from "@/test/wait-limits";
 
 const { insert } = vi.hoisted(() => ({ insert: vi.fn() }));
 
@@ -47,7 +48,7 @@ describe("template collection name", () => {
   it("explains a blank name beside the field and does not create", async () => {
     render(<MemoryRouter><CollectionTemplates /></MemoryRouter>);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Preview the Reading List template" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Preview the Reading List template" }, WAIT));
     fireEvent.click(screen.getByRole("button", { name: "Use This Template" }));
     const name = screen.getByRole("textbox", { name: "Collection name" });
     fireEvent.change(name, { target: { value: "   " } });

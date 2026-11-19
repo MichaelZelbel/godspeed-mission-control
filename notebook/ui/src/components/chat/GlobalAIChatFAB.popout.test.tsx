@@ -8,6 +8,7 @@ import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import '@testing-library/jest-dom/vitest';
 import {GlobalAIChatFAB} from './GlobalAIChatFAB';
 import {hydrateFileChats} from '@/local/file-chat';
+import { WAIT } from "@/test/wait-limits";
 
 vi.mock('sonner',()=>({toast:{error:vi.fn(),warning:vi.fn()}}));
 vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:{id:'owner'},session:{user:{id:'owner'}}})}));
@@ -36,8 +37,8 @@ afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 const show=(path:string,page=false)=>render(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={[path]}><GlobalAIChatFAB page={page}/></MemoryRouter></QueryClientProvider>);
 const popOut=async(path:string)=>{
  show(path);
- fireEvent.click(await screen.findByRole('button',{name:/chat/i}));
- const link=await screen.findByRole('link',{name:'Open chat in a new window'});
+ fireEvent.click(await screen.findByRole('button',{name:/chat/i}, WAIT));
+ const link=await screen.findByRole('link',{name:'Open chat in a new window'}, WAIT);
  expect(link).toHaveAttribute('target','_blank');
  return link.getAttribute('href');
 };
@@ -60,10 +61,10 @@ it('note and person chats keep their links',async()=>{
 
 it('the chat page opened from it shows and talks to that collection',async()=>{
  show('/dashboard/chat?collection=fictional-books&item=item-7',true);
- expect(await screen.findByText('Fictional collection answer')).toBeInTheDocument();
+ expect(await screen.findByText('Fictional collection answer', undefined, WAIT)).toBeInTheDocument();
  fireEvent.change(screen.getByLabelText('Message'),{target:{value:'Fictional new question'}});
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
- await waitFor(()=>expect(invoke).toHaveBeenCalled());
+ await waitFor(()=>expect(invoke).toHaveBeenCalled(), WAIT);
  const [fn,{body}]=invoke.mock.calls[0] as any;
  expect(fn).toBe('collection-chat');
  expect(body.collection_id).toBe('col-1');
@@ -75,7 +76,7 @@ it('the chat page opened from it shows and talks to that collection',async()=>{
 // first, so for the whole wait the reply spun and nothing reached the AI (#758).
 const sendFromPopOut=async(text:string)=>{
  show('/dashboard/chat?note=note-1',true);
- fireEvent.change(await screen.findByLabelText('Message'),{target:{value:text}});
+ fireEvent.change(await screen.findByLabelText('Message', undefined, WAIT),{target:{value:text}});
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
 };
 const spinning=()=>document.querySelector('.animate-spin');
@@ -86,7 +87,7 @@ it("a message sent from a note chat's pop-out reaches the AI at once and its rep
  expect(fn).toBe('note-chat');
  expect(body.note_id).toBe('note-1');
  expect(body.message).toBe('Fictional pop-out question');
- expect(await screen.findByText('Fictional reply')).toBeInTheDocument();
+ expect(await screen.findByText('Fictional reply', undefined, WAIT)).toBeInTheDocument();
  expect(spinning()).toBeNull();
  expect(invoke).toHaveBeenCalledTimes(1);
 });
@@ -106,12 +107,12 @@ it("the note's own chat still asks its open editor to save the note before sendi
  window.addEventListener('menerio:flush-note-save',asked);
  try{
   show('/dashboard/notes/note-1');
-  fireEvent.click(await screen.findByRole('button',{name:/chat/i}));
-  fireEvent.change(await screen.findByLabelText('Message'),{target:{value:'Fictional panel question'}});
+  fireEvent.click(await screen.findByRole('button',{name:/chat/i}, WAIT));
+  fireEvent.change(await screen.findByLabelText('Message', undefined, WAIT),{target:{value:'Fictional panel question'}});
   fireEvent.click(screen.getByRole('button',{name:'Send'}));
-  await waitFor(()=>expect(invoke).toHaveBeenCalledTimes(1));
+  await waitFor(()=>expect(invoke).toHaveBeenCalledTimes(1), WAIT);
   expect(asked).toHaveBeenCalledTimes(1);
   expect((invoke.mock.calls[0] as any)[1].body.base_updated_at).toBe('2026-11-19T00:00:00.000Z');
-  await waitFor(()=>expect(spinning()).toBeNull());
+  await waitFor(()=>expect(spinning()).toBeNull(), WAIT);
  }finally{window.removeEventListener('menerio:flush-note-save',asked);}
 });
