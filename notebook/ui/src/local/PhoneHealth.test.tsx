@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import { PhoneHealth } from "./PhoneHealth";
+import { WAIT } from "@/test/wait-limits";
 
 // Health data from your phone (issue #214): a server install shows the address with its token and a
 // button for a new one; a Windows or Mac notebook shows one line. Every token is made up.
@@ -28,9 +29,9 @@ describe("Health data from your phone in Settings", () => {
     });
     vi.stubGlobal("confirm", vi.fn(() => true));
     show();
-    expect(await screen.findByLabelText("Address for Health Auto Export")).toHaveValue("https://notes.example.test/ingest/madeUpTokenOne");
+    expect(await screen.findByLabelText("Address for Health Auto Export", undefined, WAIT)).toHaveValue("https://notes.example.test/ingest/madeUpTokenOne");
     fireEvent.click(screen.getByRole("button", { name: "Make a new address" }));
-    await waitFor(() => expect(screen.getByLabelText("Address for Health Auto Export")).toHaveValue("https://notes.example.test/ingest/madeUpTokenTwo"));
+    await waitFor(() => expect(screen.getByLabelText("Address for Health Auto Export")).toHaveValue("https://notes.example.test/ingest/madeUpTokenTwo"), WAIT);
     expect(calls.filter(c => c.route === "phone-health/renew")).toEqual([{ route: "phone-health/renew", method: "POST" }]);
     expect(calls.find(c => c.route === "phone-health")?.method).toBe("GET");
   });
@@ -39,7 +40,7 @@ describe("Health data from your phone in Settings", () => {
     const calls = serve({ "phone-health": () => ({ available: true, address: "https://notes.example.test/ingest/madeUpTokenOne" }), "phone-health/renew": () => ({}) });
     vi.stubGlobal("confirm", vi.fn(() => false));
     show();
-    expect(await screen.findByLabelText("Address for Health Auto Export")).toHaveValue("https://notes.example.test/ingest/madeUpTokenOne");
+    expect(await screen.findByLabelText("Address for Health Auto Export", undefined, WAIT)).toHaveValue("https://notes.example.test/ingest/madeUpTokenOne");
     fireEvent.click(screen.getByRole("button", { name: "Make a new address" }));
     expect(calls.some(c => c.route === "phone-health/renew")).toBe(false);
   });
@@ -47,7 +48,7 @@ describe("Health data from your phone in Settings", () => {
   it("shows no address and no button when the server has no https address", async () => {
     serve({ "phone-health": () => ({ available: true, address: null }) });
     show();
-    expect(await screen.findByText(/only for this server's https web address/)).toBeInTheDocument();
+    expect(await screen.findByText(/only for this server's https web address/, undefined, WAIT)).toBeInTheDocument();
     expect(screen.queryByLabelText("Address for Health Auto Export")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
   });
@@ -55,7 +56,7 @@ describe("Health data from your phone in Settings", () => {
   it("shows the error when the first status request fails", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "The notebook could not read its health setup" }), { status: 500, headers: { "Content-Type": "application/json" } })));
     show();
-    expect(await screen.findByRole("alert")).toHaveTextContent("The notebook could not read its health setup");
+    expect(await screen.findByRole("alert", undefined, WAIT)).toHaveTextContent("The notebook could not read its health setup");
     expect(screen.queryByRole("button")).toBeNull();
   });
 
@@ -63,16 +64,16 @@ describe("Health data from your phone in Settings", () => {
     const calls = serve({ "phone-health": () => ({ available: true, address: null, damaged: true }), "phone-health/renew": () => ({ available: true, address: "https://notes.example.test/ingest/madeUpTokenTwo" }) });
     vi.stubGlobal("confirm", vi.fn(() => true));
     show();
-    expect(await screen.findByText(/uploads from your phone are switched off/)).toBeInTheDocument();
+    expect(await screen.findByText(/uploads from your phone are switched off/, undefined, WAIT)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Make a new address" }));
-    await waitFor(() => expect(screen.getByLabelText("Address for Health Auto Export")).toHaveValue("https://notes.example.test/ingest/madeUpTokenTwo"));
+    await waitFor(() => expect(screen.getByLabelText("Address for Health Auto Export")).toHaveValue("https://notes.example.test/ingest/madeUpTokenTwo"), WAIT);
     expect(calls.filter(c => c.route === "phone-health/renew")).toEqual([{ route: "phone-health/renew", method: "POST" }]);
   });
 
   it("says on Windows that the phone needs the server install, with no button", async () => {
     serve({ "phone-health": () => ({ available: false }) });
     show();
-    expect(await screen.findByText(/needs the server install of Godspeed Mission Control/)).toBeInTheDocument();
+    expect(await screen.findByText(/needs the server install of Godspeed Mission Control/, undefined, WAIT)).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
   });
 });

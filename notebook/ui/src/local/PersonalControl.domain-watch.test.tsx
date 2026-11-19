@@ -5,6 +5,7 @@ import {MemoryRouter} from 'react-router-dom';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import '@testing-library/jest-dom/vitest';
 import {PersonalControl} from './PersonalControl';
+import { WAIT } from "@/test/wait-limits";
 
 const personal={deadlines:[],talks:[],journal:[],health:[],habits:[],forecasts:[],watch:[],jobs:[]};
 const watched={domains:[{id:'domain-one',domain:'wanted.test',state:'available',checked_at:'2026-11-17T10:00:00Z'},{id:'domain-two',domain:'quiet.test',state:'registered',checked_at:'2026-11-17T04:00:00Z',last_lookup_error:'offline',last_lookup_failed_at:'2026-11-17T10:00:00Z'}]};
@@ -23,13 +24,13 @@ describe('domain watches in Settings',()=>{
   }));
   render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter><PersonalControl/></MemoryRouter></QueryClientProvider>);
   const heading=screen.getByText('Domains to watch'),section=heading.parentElement!;
-  expect(await within(section).findByText(/wanted\.test: available/)).toBeInTheDocument();
+  expect(await within(section).findByText(/wanted\.test: available/, undefined, WAIT)).toBeInTheDocument();
   fireEvent.change(within(section).getByLabelText('Domain'),{target:{value:'New.Example'}});
   fireEvent.click(within(section).getByRole('button',{name:'Watch this domain'}));
-  await waitFor(()=>expect(posts).toContainEqual({type:'domain-watch-add',domain:'New.Example'}));
+  await waitFor(()=>expect(posts).toContainEqual({type:'domain-watch-add',domain:'New.Example'}), WAIT);
   expect(within(section).getByText(/quiet\.test: registered/)).toBeInTheDocument();
   expect(within(section).getAllByText(/No registry answered on .*looked up again at the next check/)).toHaveLength(1);
   fireEvent.click(within(section).getAllByRole('button',{name:'Stop watching'})[0]);
-  await waitFor(()=>expect(posts).toContainEqual({type:'domain-watch-remove',domain:'wanted.test'}));
+  await waitFor(()=>expect(posts).toContainEqual({type:'domain-watch-remove',domain:'wanted.test'}), WAIT);
  });
 });

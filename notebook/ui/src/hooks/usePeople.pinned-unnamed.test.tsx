@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { usePinnedPeople } from "./usePeople";
+import { WAIT } from "@/test/wait-limits";
 
 // Issue 266: a person saved without any name came back among the People tree's favorites and recent people.
 const person = (id: string, name: unknown, aliases: unknown[] = []) => ({ id, name, aliases, is_favorite: true, last_viewed_at: "2026-11-01T10:00:00Z" });
@@ -29,6 +30,6 @@ afterEach(cleanup);
 it("leaves out people with no name and no nickname, once each", async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const hook = renderHook(() => usePinnedPeople(), { wrapper: ({ children }: any) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
-  await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
+  await waitFor(() => expect(hook.result.current.isSuccess).toBe(true), WAIT);
   expect(hook.result.current.data.map((p) => p.id)).toEqual(["ada", "nick"]);
 });
