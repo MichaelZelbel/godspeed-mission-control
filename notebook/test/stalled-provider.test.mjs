@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';
-import {modelProvider,STALL_WATCH} from '../core/runtime.mjs';
+import {modelProvider,STALL_WATCH} from '../core/runtime.mjs';import {withBackup} from '../core/backup-ai.mjs';
 
 // #770: a provider that took the request and never answered left a chat spinning for ten minutes,
 // while an HTTP 500 got the outage reply at once.
@@ -54,6 +54,25 @@ test('routines keep their own budget and are not watched',async t=>{
   const ai=await fakeAI(t,{mode:'stalled'}),controller=new AbortController();
   const call=provider(ai)({kind:'coaching',timeout_ms:300000,signal:controller.signal});
   await pause(400);assert.equal(ai.probes,0);controller.abort(Error('Reply stopped'));await assert.rejects(call,/Reply stopped/);
+});
+test('an AI on this computer that answers one request at a time is not watched, so its slow answer gets through',async t=>{
+  let line=Promise.resolve(),probes=0;
+  const server=http.createServer(async(req,res)=>{
+    let body='';for await(const chunk of req)body+=chunk;if(isProbe(body))probes++;
+    line=line.then(()=>pause(isProbe(body)?10:300).then(()=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({choices:[{message:{content:isProbe(body)?'OK':'The answer.'}}]}));}));
+  });
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));});
+  t.mock.timers.enable({apis:['setTimeout']});
+  const call=modelProvider({url:'http://localhost:'+server.address().port+'/v1/chat/completions',key:'fictional-secret-key',model:'fictional-model',retryWaits:[]})({kind:'conversation-chat'});
+  t.mock.timers.tick(STALL_WATCH.afterMs+STALL_WATCH.timeoutMs);t.mock.timers.reset();
+  assert.equal(await call,'The answer.');
+  assert.equal(probes,0);
+});
+test('a stalled send is not handed to the backup AI, so it is said within one watch',async t=>{
+  const ai=await fakeAI(t,{mode:'stalled'}),backup=await fakeAI(t,{mode:'stalled'}),started=Date.now();
+  const error=await withBackup(provider(ai),()=>provider(backup))({kind:'conversation-chat'}).then(()=>null,e=>e);
+  assert.equal(error?.code,'AI_STALLED');assert.match(error.message,new RegExp(new URL(ai.url).host));
+  assert.equal(backup.chats,0,'the backup was not asked');assert.ok(Date.now()-started<1000,'ended in '+(Date.now()-started)+' ms');
 });
 test('the default watch says a stall within a minute and lets a 90 second answer through',()=>{
   assert.ok(STALL_WATCH.afterMs+STALL_WATCH.timeoutMs<60000);

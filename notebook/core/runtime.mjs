@@ -173,15 +173,19 @@ const RETRY_STATUS=new Set([429,502,503,504]);
 // budget waits, the provider is asked the connection check's own question: after 20 seconds, then
 // a minute after each answer. Any HTTP answer to it, whatever its status, means the provider is
 // alive and the call keeps waiting; none within 15 seconds ends the call as stalled. Routines,
-// connection checks and suggestions have their own shorter budgets and are not watched.
+// connection checks and suggestions have their own shorter budgets and are not watched. Nor is an
+// AI on this computer (127.0.0.1, localhost): a local model server often answers one request at a
+// time, so the probe would wait behind the answer it is meant to vouch for and cut a working AI off.
 export const STALL_WATCH={afterMs:20000,timeoutMs:15000,everyMs:60000};
+const LOOPBACK=['127.0.0.1','localhost'];
 export function stalledAI(url,cause){
   let host='';try{host=new URL(url).host;}catch{}
   return Object.assign(Error((host?'The model provider at '+host:'The model provider')+' stopped answering. Check that this computer is online and that the AI\'s address in Settings is right.',{cause}),{code:'AI_STALLED'});
 }
-export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = [2000,5000], stallWatch = STALL_WATCH } = {}) {
+export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = [2000,5000], stallWatch } = {}) {
   if(!url || !key || !model)return null;
-  const parsed=new URL(url);if(parsed.protocol!=='https:' && !['127.0.0.1','localhost'].includes(parsed.hostname))throw new Error('Model provider requires HTTPS');
+  const parsed=new URL(url),local=LOOPBACK.includes(parsed.hostname);if(parsed.protocol!=='https:' && !local)throw new Error('Model provider requires HTTPS');
+  if(stallWatch===undefined)stallWatch=local?null:STALL_WATCH;
   let refused=false;
   const headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'};
   const requestBody=(textInput,attachments,answerBudget)=>{
