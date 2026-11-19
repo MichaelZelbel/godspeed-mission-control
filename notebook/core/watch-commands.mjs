@@ -54,6 +54,8 @@ export function addWatchTopic(store,data){return store.withLock(()=>{const topic
 // topic is next due (milliseconds), or null when it has none. The same topics
 // the sweep itself reads (procedures.mjs).
 export function watchDue(query,job,now=Date.now()){
+ // The domain sweeper reads no page topics: its own six-hour schedule says when it is due (domain-watch.mjs).
+ if(job.kind==='domain-watch')return true;
  let next=null;
  for(const topic of visibleRows(query,'watch_topics').filter(t=>!t.paused&&(!job.topic_ids||job.topic_ids.includes(t.id)))){
   const at=Date.parse(topic.next_run_at);if(!topic.next_run_at||!(at>now))return true;next=next===null?at:Math.min(next,at);

@@ -455,6 +455,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const input=JSON.parse(await body(req,4096));if(typeof input.enabled!=='boolean')throw Error('Choose whether to keep the assistant program up to date');
         domains.hermesUpdate.setEnabled(input.enabled);return send(res,200,{available:true,...updateStatus(store)});
       }
+      // The watched domains Settings lists (domain-watch.mjs); a removed one is not shown.
+      if(route==='/api/domain-watches')return query.withSnapshot(()=>send(res,200,{domains:query.rows('domain_watches').filter(w=>!w.removed_at)}));
       if(route==='/api/personal')return query.withSnapshot(()=>send(res,200,{goals:query.rows('goals'),work:query.rows('work_items'),deadlines:query.rows('deadlines'),talks:query.rows('coach_talks'),habits:query.rows('habits'),journal:query.rows('journal'),health:latestPerDayMetric(query.rows('health_observations')),forecasts:query.rows('forecasts'),watch:query.rows('watch_topics'),jobs:query.rows('jobs')}));
       // The AI the person connects in Settings serves the notebook and, unless they untick it,
       // the routines and the chat too: it is written into Hermes' own home (core/routine-ai.mjs),

@@ -180,7 +180,7 @@ function FirstOrNextGoal({first,operation,busy,onFirst}:{first:boolean;operation
   return <Card><CardHeader><CardTitle className="text-xl">{first?'Your first goal':'Add a goal'}</CardTitle></CardHeader><CardContent>
     <form className="space-y-3" onSubmit={async e=>{e.preventDefault();const saved=first?await onFirst(title.trim()):await operation({type:'goal-add',title:title.trim(),measure:measure.trim()});if(saved){setTitle('');setMeasure('');}}}>
       {first&&<p className="text-sm">Your first goal starts the routines: research at night, a decision each morning, the work during the day. You can also say it in the chat: "Make this a goal: …".</p>}
-      <label className="block space-y-1 text-sm font-medium">What do you want to reach?<Input className="text-base" required value={title} onChange={e=>setTitle(e.target.value)} placeholder="Finish the first draft of my novel by March"/></label>
+      <label className="block space-y-1 text-sm font-medium">What do you want to reach?<Input className="text-base" required value={title} onChange={e=>setTitle(e.target.value)} placeholder="Finish my novel by March"/></label>
       {!first&&<label className="block space-y-1 text-sm font-medium">How will you know it is reached?<Input className="text-base" required value={measure} onChange={e=>setMeasure(e.target.value)}/></label>}
       <Button className="min-h-11" disabled={busy}>{first?'Start':'Add this goal'}</Button>
     </form>
