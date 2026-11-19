@@ -7,6 +7,9 @@ export const NO_AI_STATUS='No AI is connected yet';
 // messages for the same states with them, so both say the same thing (#763).
 export const AI_REFUSED_STATUS='Your AI key or sign-in was refused';
 export const AI_UNREACHABLE_STATUS='Your AI could not be reached';
+// The chats' status line for an AI that took a request and has not answered it, which is not an
+// outage (#808).
+export const AI_STALLED_STATUS='Your AI is not answering';
 export const SETTINGS_ONLY_AI_STATUS='Your AI is connected only to the notebook';
 export const SETTINGS_ONLY_AI_HELP='Tick “Use it for the daily routines and the chat too” in Settings, Your AI.';
 export const NO_AI_CHAT=NO_AI_STATUS+'. Connect your AI service in Settings, Your AI, then ask Godspeed again.';
