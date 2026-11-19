@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, configure, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
@@ -8,11 +8,11 @@ import Identity from "./Identity";
 import { InstructionsMoved } from "@/components/profile/InstructionsMoved";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { places, plainInline, reflow, sizeLine, sizeState, versionLine, versionWords, type RuleTile } from "@/lib/identity";
+import { WAIT } from "@/test/wait-limits";
 
 // The page is large, so each role query over it is slow: "moves a removed rule" takes about 1.7 s
 // alone and 4.8 to 6.7 s with the CPUs busy, where a single findBy also ran past its 1 s default
-// (#775). Waits get 5 s here, and the page's tests 20 s.
-configure({ asyncUtilTimeout: 5_000 });
+// (#775). Its waits pass WAIT, and the page's tests get 20 s.
 
 vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
@@ -102,14 +102,14 @@ describe("Godspeed's brain", { timeout: 20_000 }, () => {
 
   it("shows its parts in plain words under its own name, with no word for the machinery", async () => {
     open();
-    expect(await screen.findByRole("heading", { level: 1, name: "Godspeed's brain" })).toBeVisible();
-    for (const name of ["Who it is", "Extra instructions", "Rules", "What it knows about you", "Skills"]) expect(await screen.findByRole("heading", { level: 2, name })).toBeVisible();
+    expect(await screen.findByRole("heading", { level: 1, name: "Godspeed's brain" }, WAIT)).toBeVisible();
+    for (const name of ["Who it is", "Extra instructions", "Rules", "What it knows about you", "Skills"]) expect(await screen.findByRole("heading", { level: 2, name }, WAIT)).toBeVisible();
     // "Who it is" in a readable column, one paragraph each.
     const whoSection = document.getElementById("who")!;
     expect(within(whoSection).getByText("You are Orbit, my assistant. Plain and kind.").tagName).toBe("P");
     expect(within(whoSection).getByText("You answer in short sentences.").tagName).toBe("P");
     expect(screen.getByText("Kept up to date by updates")).toBeVisible();
-    expect(await screen.findByText("Always address me as Sam.")).toBeVisible();
+    expect(await screen.findByText("Always address me as Sam.", undefined, WAIT)).toBeVisible();
     // The size of AGENTS.md is not shown under a text it does not describe.
     expect(document.body.textContent).not.toMatch(/of 20,000 characters/);
     for (const word of [/manual/i, /recipe/i, /markdown/i, /commit/i, /repository/i, /persona/i, /Identity/, /—/]) expect(document.body.textContent).not.toMatch(word);
@@ -117,32 +117,32 @@ describe("Godspeed's brain", { timeout: 20_000 }, () => {
 
   it("shows no Removed rules heading while no rule is removed", async () => {
     open();
-    await screen.findByRole("heading", { level: 2, name: "Rules" });
-    await screen.findByText("Always address me as Sam.");
+    await screen.findByRole("heading", { level: 2, name: "Rules" }, WAIT);
+    await screen.findByText("Always address me as Sam.", undefined, WAIT);
     expect(screen.queryByText(/Removed rules/)).toBeNull();
   });
 
   it("moves a removed rule to Removed rules, opens its earlier versions there, and brings it back", async () => {
     open();
-    fireEvent.click(await screen.findByRole("button", { name: /Never spend my money/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Remove this rule/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
-    const closed = await screen.findByRole("button", { name: "Removed rules (1)" });
+    fireEvent.click(await screen.findByRole("button", { name: /Never spend my money/ }, WAIT));
+    fireEvent.click(await screen.findByRole("button", { name: /Remove this rule/ }, WAIT));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }, WAIT));
+    const closed = await screen.findByRole("button", { name: "Removed rules (1)" }, WAIT);
     expect(closed).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("button", { name: /^Never spend my money/ })).toBeNull();
     fireEvent.click(closed);
-    fireEvent.click(await screen.findByRole("button", { name: "Open Never spend my money" }));
-    expect(await screen.findByRole("heading", { name: "Earlier versions" })).toBeVisible();
-    expect(await screen.findByText("2 versions, newest first.")).toBeVisible();
+    fireEvent.click(await screen.findByRole("button", { name: "Open Never spend my money" }, WAIT));
+    expect(await screen.findByRole("heading", { name: "Earlier versions" }, WAIT)).toBeVisible();
+    expect(await screen.findByText("2 versions, newest first.", undefined, WAIT)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Bring it back" }));
-    await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/restore")?.body).toMatchObject({ target: "rule:never-spend", version: "v-before" }));
-    await waitFor(() => expect(screen.queryByText(/Removed rules/)).toBeNull());
-    expect(await screen.findByRole("button", { name: /Never spend my money/ })).toBeVisible();
+    await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/restore")?.body).toMatchObject({ target: "rule:never-spend", version: "v-before" }), WAIT);
+    await waitFor(() => expect(screen.queryByText(/Removed rules/)).toBeNull(), WAIT);
+    expect(await screen.findByRole("button", { name: /Never spend my money/ }, WAIT)).toBeVisible();
   });
 
   it("numbers the rules as the server does, the kind as a tag, and keeps the one-job rules closed until asked", async () => {
     open();
-    const first = await screen.findByRole("button", { name: /When in doubt, ask/ });
+    const first = await screen.findByRole("button", { name: /When in doubt, ask/ }, WAIT);
     expect(within(first).getByText("1")).toBeVisible();expect(within(first).getByText("Must")).toBeVisible();
     const second = screen.getByRole("button", { name: /Never spend my money/ });
     expect(within(second).getByText("2")).toBeVisible();expect(within(second).getByText("Never")).toBeVisible();
@@ -151,7 +151,7 @@ describe("Godspeed's brain", { timeout: 20_000 }, () => {
     expect(closed).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Founder only")).toBeNull();
     fireEvent.click(closed);
-    expect(await screen.findByRole("heading", { name: "For the companies (1)" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "For the companies (1)" }, WAIT)).toBeVisible();
     expect(screen.getByRole("heading", { name: "For the skill daily brief (1)" })).toBeVisible();
     expect(within(screen.getByRole("button", { name: /Founder only/ })).getByText("3")).toBeVisible();
     // What it knows about you, and the skills, are numbered too.
@@ -162,15 +162,15 @@ describe("Godspeed's brain", { timeout: 20_000 }, () => {
   it("names each file about you by its own title, numbered, and never calls one a page", async () => {
     open();
     // The section says what they are, instead of "Pages about you...".
-    expect(await screen.findByText(/What it knows about you, your work and your voice\./)).toBeVisible();
-    const file = await screen.findByRole("button", { name: /About me/ });
+    expect(await screen.findByText(/What it knows about you, your work and your voice\./, undefined, WAIT)).toBeVisible();
+    const file = await screen.findByRole("button", { name: /About me/ }, WAIT);
     expect(within(file).getByText("1")).toBeVisible();
     expect(within(file).getByText("About me")).toBeVisible();
     // The screen itself is still a page.
     expect(screen.getByRole("navigation", { name: "Parts of this page" })).toBeVisible();
     // Open it: its own title, its number, and the file it is kept in.
     fireEvent.click(file);
-    expect(await screen.findByRole("heading", { name: "About me" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "About me" }, WAIT)).toBeVisible();
     expect(screen.getByText(/^1\. Kept in/)).toBeVisible();
     expect(screen.getByText("profile/about-me.md")).toBeVisible();
     // Nowhere a page, in the tiles or in the editor (26 October 2026: "a page is in a book or a
@@ -182,33 +182,33 @@ describe("Godspeed's brain", { timeout: 20_000 }, () => {
   it("says what is missing when it knows nothing about you yet", async () => {
     state = overview({ profile: [] });
     open();
-    expect(await screen.findByText("Nothing about you yet.")).toBeVisible();
+    expect(await screen.findByText("Nothing about you yet.", undefined, WAIT)).toBeVisible();
     expect(document.body.textContent).not.toMatch(/no pages yet/i);
   });
 
   it("saves a rule with only \"Read before every job\" switched, and holds only a changed name to a few words", async () => {
     open();
-    fireEvent.click(await screen.findByRole("button", { name: /Never spend my money/ }));
-    const name = await screen.findByLabelText("Its name");
+    fireEvent.click(await screen.findByRole("button", { name: /Never spend my money/ }, WAIT));
+    const name = await screen.findByLabelText("Its name", undefined, WAIT);
     expect(name).toHaveValue("Never spend my money");
     expect(screen.getByText("A few words, so you can find it.")).toBeVisible();
     fireEvent.click(screen.getByRole("switch", { name: /Read before every job/ }));
     const save = screen.getByRole("button", { name: "Save" });
     expect(save).toBeEnabled();
     fireEvent.click(save);
-    await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/save")?.body).toMatchObject({ target: "rule:never-spend", expected_hash: "h-rule", fields: { title: "Never spend my money", always: false } }));
+    await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/save")?.body).toMatchObject({ target: "rule:never-spend", expected_hash: "h-rule", fields: { title: "Never spend my money", always: false } }), WAIT);
     // A changed name longer than a few words cannot be saved, and says why.
-    fireEvent.click(await screen.findByRole("button", { name: /Never spend my money/ }));
-    fireEvent.change(await screen.findByLabelText("Its name"), { target: { value: "Never spend any of my money on anything at all, not even a coffee or a stamp" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Never spend my money/ }, WAIT));
+    fireEvent.change(await screen.findByLabelText("Its name", undefined, WAIT), { target: { value: "Never spend any of my money on anything at all, not even a coffee or a stamp" } });
     expect(screen.getByText(/at most 60 characters/)).toBeVisible();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
   it('saves "who it is" with the version it was opened from, and speaks of the size only near the limit', async () => {
     open();
-    await screen.findByRole("heading", { level: 2, name: "Who it is" });
+    await screen.findByRole("heading", { level: 2, name: "Who it is" }, WAIT);
     fireEvent.click(within(document.getElementById("who")!).getByRole("button", { name: "Edit" }));
-    const box = await screen.findByLabelText("Its name and character, in your words");
+    const box = await screen.findByLabelText("Its name and character, in your words", undefined, WAIT);
     expect(box).toHaveValue("You are Orbit, my assistant. Plain and kind.\n\nYou answer in short sentences.");
     expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.change(box, { target: { value: "You are Speedy. " + "Very long. ".repeat(20) } });
@@ -219,29 +219,29 @@ describe("Godspeed's brain", { timeout: 20_000 }, () => {
     fireEvent.change(box, { target: { value: "You are Speedy." } });
     expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/save")?.body).toEqual({ target: "who", text: "You are Speedy.", expected_hash: "h-who" }));
+    await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/save")?.body).toEqual({ target: "who", text: "You are Speedy.", expected_hash: "h-who" }), WAIT);
   });
 
   it("lists the earlier versions with their dates, undoes the last change and restores any version", async () => {
     open();
-    await screen.findByRole("heading", { level: 2, name: "Who it is" });
+    await screen.findByRole("heading", { level: 2, name: "Who it is" }, WAIT);
     fireEvent.click(within(document.getElementById("who")!).getByRole("button", { name: "Edit" }));
-    fireEvent.click(await screen.findByRole("tab", { name: "Earlier versions" }));
-    expect(await screen.findByText("2 versions, newest first.")).toBeVisible();
+    fireEvent.click(await screen.findByRole("tab", { name: "Earlier versions" }, WAIT));
+    expect(await screen.findByText("2 versions, newest first.", undefined, WAIT)).toBeVisible();
     expect(screen.getByText(/As it was before the next change, kept by your notebook/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Undo last change" }));
-    await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/undo")?.body).toEqual({ target: "who", expected_hash: "h-who" }));
+    await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/undo")?.body).toEqual({ target: "who", expected_hash: "h-who" }), WAIT);
     const older = screen.getAllByRole("listitem").find((li) => within(li).queryByRole("button", { name: "Restore this version" }))!;
     fireEvent.click(within(older).getByRole("button", { name: "Show" }));
     expect(within(older).getByText("You are Godspeed.")).toBeVisible();
     fireEvent.click(within(older).getByRole("button", { name: "Restore this version" }));
-    await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/restore")?.body).toEqual({ target: "who", version: "c1", expected_hash: "h-who" }));
+    await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/restore")?.body).toEqual({ target: "who", version: "c1", expected_hash: "h-who" }), WAIT);
   });
 
   it("shows the extra instructions as the Markdown they are, the first part until \"Show all\", and edits them exactly as written", async () => {
     state = overview({ extra: { state: "ok", text: extraMd, hash: "h-extra" } });
     open();
-    await screen.findByRole("heading", { level: 2, name: "Extra instructions" });
+    await screen.findByRole("heading", { level: 2, name: "Extra instructions" }, WAIT);
     const extra = document.getElementById("extra")!;
     expect(within(extra).getByRole("heading", { level: 3, name: "When Sam reaches you through Telegram" })).toBeVisible();
     expect(within(extra).getByRole("heading", { level: 4, name: "First action of every session" })).toBeVisible();
@@ -264,57 +264,57 @@ describe("Godspeed's brain", { timeout: 20_000 }, () => {
     expect(extra.querySelector("[data-collapsed]")).toBeNull();
     // The editor holds the text exactly as written: its lists, code and table come back as they went in.
     fireEvent.click(within(extra).getByRole("button", { name: "Edit" }));
-    const box = await screen.findByRole("textbox", { name: "Extra instructions" });
+    const box = await screen.findByRole("textbox", { name: "Extra instructions" }, WAIT);
     expect(box).toHaveValue(extraMd);
     // An earlier version reads as Markdown too.
     fireEvent.click(screen.getByRole("tab", { name: "Earlier versions" }));
-    const older = (await screen.findAllByRole("listitem")).find((li) => within(li).queryByRole("button", { name: "Restore this version" }))!;
+    const older = (await screen.findAllByRole("listitem", undefined, WAIT)).find((li) => within(li).queryByRole("button", { name: "Restore this version" }))!;
     fireEvent.click(within(older).getByRole("button", { name: "Show" }));
     expect(within(older).getByRole("heading", { name: "Before" })).toBeVisible();
     expect(within(older).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["One step", "Another step"]);
     fireEvent.click(screen.getByRole("tab", { name: "Edit" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
-    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Extra instructions" })).toBeNull());
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }, WAIT));
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Extra instructions" })).toBeNull(), WAIT);
     expect(calls.some((c) => c.route === "/api/identity/save")).toBe(false);
   });
 
   it("adds extra instructions, which the assistant reads right after \"who it is\"", async () => {
     open();
-    await screen.findByRole("heading", { level: 2, name: "Extra instructions" });
+    await screen.findByRole("heading", { level: 2, name: "Extra instructions" }, WAIT);
     const extra = document.getElementById("extra")!;
-    expect(await within(extra).findByText(/reads these right after "Who it is": in Telegram, in this notebook's chat and in its routines/)).toBeVisible();
+    expect(await within(extra).findByText(/reads these right after "Who it is": in Telegram, in this notebook's chat and in its routines/, undefined, WAIT)).toBeVisible();
     expect(within(extra).getByText(/None yet/)).toBeVisible();
     fireEvent.click(within(extra).getByRole("button", { name: "Add" }));
-    fireEvent.change(await screen.findByRole("textbox", { name: "Extra instructions" }), { target: { value: "Answer in German when I write German." } });
+    fireEvent.change(await screen.findByRole("textbox", { name: "Extra instructions" }, WAIT), { target: { value: "Answer in German when I write German." } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/save")?.body).toEqual({ target: "extra", text: "Answer in German when I write German.", expected_hash: "h-extra" }));
+    await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/save")?.body).toEqual({ target: "extra", text: "Answer in German when I write German.", expected_hash: "h-extra" }), WAIT);
   });
 
   it("shows a text the assistant's program reads that this page does not hold, whole, and brings it here when asked", async () => {
     state = overview({ soul: { kind: "own", text: "You are Jeeves.\nAlways bow.", chars: 0, limit: 20000, warn: 19000 } });
     open();
-    expect(await screen.findByText("Hermes, the program your assistant runs on, also reads a text this page does not hold yet.")).toBeVisible();
+    expect(await screen.findByText("Hermes, the program your assistant runs on, also reads a text this page does not hold yet.", undefined, WAIT)).toBeVisible();
     expect(document.body.textContent).not.toMatch(/someone else wrote|left as it is|may say something else/);
     fireEvent.click(screen.getByRole("button", { name: "Show it" }));
-    const shown = await screen.findByRole("dialog", { name: "The text Hermes also reads" });
+    const shown = await screen.findByRole("dialog", { name: "The text Hermes also reads" }, WAIT);
     expect(within(shown).getByText(/You are Jeeves\.\s+Always bow\./)).toBeVisible();
     fireEvent.click(within(shown).getByRole("button", { name: "Bring it here" }));
-    await waitFor(() => expect(calls.some((c) => c.route === "/api/identity/bring-soul-here")).toBe(true));
+    await waitFor(() => expect(calls.some((c) => c.route === "/api/identity/bring-soul-here")).toBe(true), WAIT);
   });
 
   it('offers to mark "who it is" in main instructions without the marks, instead of failing', async () => {
     state = overview({ who: { state: "no-markers", proposal: "You are Orbit." } });
     open();
-    expect(await screen.findByText(/do not mark which paragraph says who your assistant is/)).toBeVisible();
+    expect(await screen.findByText(/do not mark which paragraph says who your assistant is/, undefined, WAIT)).toBeVisible();
     expect(screen.getByText("You are Orbit.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Mark it" }));
-    await waitFor(() => expect(calls.some((c) => c.route === "/api/identity/mark-who")).toBe(true));
+    await waitFor(() => expect(calls.some((c) => c.route === "/api/identity/mark-who")).toBe(true), WAIT);
   });
 
   it("leaves a list of rules kept by the owner's own program to that program, with no button that would rewrite it", async () => {
     state = overview({ manual: { exists: true, chars: 18900, limit: 20000, warn: 19000, kept_under: 19000, rules_list: "kept-elsewhere", rules_program: "scripts/compile-rules.py" } });
     open();
-    const notice = await screen.findByText(/is not the list this page would write from your rules/);
+    const notice = await screen.findByText(/is not the list this page would write from your rules/, undefined, WAIT);
     expect(notice).toBeVisible();
     expect(within(notice).getByText("scripts/compile-rules.py")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Bring the list up to date" })).toBeNull();
@@ -322,7 +322,7 @@ describe("Godspeed's brain", { timeout: 20_000 }, () => {
 
   it("names everything else the assistant can look up in the notebook, with real counts and links", async () => {
     open();
-    const notes = await screen.findByRole("link", { name: /4,210\s*Notes/ });
+    const notes = await screen.findByRole("link", { name: /4,210\s*Notes/ }, WAIT);
     expect(notes).toHaveAttribute("href", "/dashboard/notes");
     expect(screen.getByRole("link", { name: /312\s*People/ })).toHaveAttribute("href", "/dashboard/people");
     expect(screen.getByRole("link", { name: /1,534\s*Facts/ })).toBeVisible();
@@ -331,21 +331,21 @@ describe("Godspeed's brain", { timeout: 20_000 }, () => {
 
   it("docks its own chat beside the page: the page's name goes with each message, and a change the assistant made shows", async () => {
     open();
-    await screen.findByRole("heading", { level: 1, name: "Godspeed's brain" });
+    await screen.findByRole("heading", { level: 1, name: "Godspeed's brain" }, WAIT);
     expect(screen.queryByRole("button", { name: "Chat with Godspeed" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Chat with Godspeed about this page" }));
-    expect(await screen.findByText("Godspeed / Godspeed's brain")).toBeVisible();
+    expect(await screen.findByText("Godspeed / Godspeed's brain", undefined, WAIT)).toBeVisible();
     const before = calls.filter((c) => c.route === "/api/identity").length;
     const message = screen.getByLabelText("Message");
     fireEvent.change(message, { target: { value: "Please change rule 2 so that it also covers bookings." } });
     fireEvent.keyDown(message, { key: "Enter" });
-    await waitFor(() => expect(calls.find((c) => c.route === "/api/functions/conversation-chat")?.body).toMatchObject({ message: "Please change rule 2 so that it also covers bookings.", page: "identity", page_label: "Godspeed's brain", conversation_id: "notebook:page:identity" }));
+    await waitFor(() => expect(calls.find((c) => c.route === "/api/functions/conversation-chat")?.body).toMatchObject({ message: "Please change rule 2 so that it also covers bookings.", page: "identity", page_label: "Godspeed's brain", conversation_id: "notebook:page:identity" }), WAIT);
     // The reply is shown plain, then as Markdown once that loads: look again until it settles.
-    await waitFor(() => expect(screen.getByText("Done.")).toBeVisible());
-    await waitFor(() => expect(calls.filter((c) => c.route === "/api/identity").length).toBeGreaterThan(before));
+    await waitFor(() => expect(screen.getByText("Done.")).toBeVisible(), WAIT);
+    await waitFor(() => expect(calls.filter((c) => c.route === "/api/identity").length).toBeGreaterThan(before), WAIT);
     // The switch at the top left closes it again.
     fireEvent.click(screen.getByRole("button", { name: "Close the chat" }));
-    await waitFor(() => expect(screen.queryByText("Godspeed / Godspeed's brain")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("Godspeed / Godspeed's brain")).toBeNull(), WAIT);
   });
 });
 
