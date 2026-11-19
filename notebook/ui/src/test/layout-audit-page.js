@@ -39,6 +39,23 @@
     }
     return rects;
   };
+  // What a line draws: its glyphs, each run of them measured on its own, so the whitespace around them
+  // is not. Chrome counts a wrapped line's trailing space in the line's rect and may end it one layout
+  // step (1/64 px) past the box (#746); that space draws nothing, and a glyph past the box by any amount
+  // is still found.
+  const glyphRects = (el) => {
+    const rects = [];
+    for (const node of el.childNodes) {
+      if (node.nodeType !== Node.TEXT_NODE) continue;
+      for (const run of node.textContent.matchAll(/\S+/g)) {
+        const range = document.createRange();
+        range.setStart(node, run.index);
+        range.setEnd(node, run.index + run[0].length);
+        rects.push(...[...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0));
+      }
+    }
+    return rects;
+  };
 
   const main = document.querySelector("main");
   const clips = (v) => v === "hidden" || v === "clip";
@@ -99,7 +116,7 @@
       if (clipped) found.push({ rule: "clipped", element: clipped });
       continue;
     }
-    const rects = textRects(el);
+    const rects = glyphRects(el);
     if (!rects.length || !visible(el)) continue;
     const boxes = cuttingBoxes(el);
     if (rects.some((text) => boxes.some((cut) => outside(text, cut)))) found.push({ rule: "clipped", element: describe(el) });
