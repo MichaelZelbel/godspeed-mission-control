@@ -10,7 +10,8 @@
 // A connection check that gets no answer within `waitMs` counts as an outage then, instead of after
 // the request's own 15 seconds: the chats read the state every second and must show a provider that
 // stopped answering within about five seconds. The request itself keeps running until its own limit;
-// a check that arrives within the wait shares it instead of asking the provider again.
+// a check that arrives within the wait shares it instead of asking the provider again; once the wait
+// has run out, the next check asks again.
 //
 // Nothing from the provider's answer is kept: only the category. Keys never reach this file.
 
@@ -57,6 +58,10 @@ export function trackAIHealth(inner,{waitMs=AI_HEALTH_WAIT_MS,initial='unknown'}
       const late=new Promise(resolve=>{timer=setTimeout(()=>resolve(null),left);});
       const result=await Promise.race([request,late]).finally(()=>clearTimeout(timer));
       if(!result){
+        // Its wait has run out, so the next check asks again. This does not trust the clock: a timer
+        // may fire a millisecond before Date.now() says the wait is over (#785), and a check that
+        // shared the stalled request then would time out at once.
+        if(pending===request)pending=null;
         settle(order,'unreachable');
         // When the slow answer does arrive, it is the newest word on the AI unless something newer settled.
         void request.then(late=>settle(order,late.ok?'ready':aiFailure(late.error)));
