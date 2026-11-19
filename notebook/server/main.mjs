@@ -41,7 +41,7 @@ import {durableRoots,durableFiles} from '../core/file-policy.mjs';
 import { WebAuth, safeReturn } from './web-auth.mjs';
 import { MenerioImport } from './menerio-import.mjs';
 import {TelegramConnection} from './telegram-connect.mjs';
-import {hermesSettingsFor,connectRoutineAI,routineAIStatus,checkRoutineAI,baseAddress,askDirectly,connectPlanMain} from '../core/routine-ai.mjs';
+import {hermesSettingsFor,connectRoutineAI,disconnectRoutineAI,routineAIStatus,checkRoutineAI,baseAddress,askDirectly,connectPlanMain} from '../core/routine-ai.mjs';
 import {withBackup,readBackupEndpoint,backupEntryFor,connectBackupAI,connectHermesBackup,removeBackupAI,backupStatus,fallbackChain} from '../core/backup-ai.mjs';
 import {PlanSignIn,PLAN_PROVIDER} from '../core/plan-signin.mjs';
 import {voiceStatus,saveVoice} from '../core/voice-replies.mjs';
@@ -75,7 +75,7 @@ import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/herm
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
 import {trackAIHealth,aiFailure} from '../core/ai-health.mjs';
-import {SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../core/no-ai.mjs';
+import {SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS,AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS,NO_AI_STATUS} from '../core/no-ai.mjs';
 import {MEDIA_CARRY_MAX_MB,MEDIA_PRESENCE_BATCH_SIZE,MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
 import {spendGuardStatus,saveSpendGuardSettings} from '../core/spend-guard.mjs';
 
@@ -99,6 +99,18 @@ const readSavedProvider=file=>{
   if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error('The saved AI connection is not valid. Connect it again after checking the server log.');
   return config;
 };
+// A failed request to the AI, said as the chats say it (#590): a refused key or an outage, each with
+// what to do, never the provider's words, which can quote the key. Godspeed's own no-AI sentences are
+// not provider failures, though they name an "AI service". null when the error is not the AI's.
+const PROVIDER_FAILURE=/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d|could not be reached|did not finish within|did not answer|needs sign-in|returned no text|connection could not start/i;
+const plainAIFailure=error=>{
+  const message=String(error?.message||'');
+  if(message.startsWith(NO_AI_STATUS)||message.startsWith(SETTINGS_ONLY_AI_STATUS)||!PROVIDER_FAILURE.test(message))return null;
+  const kind=aiFailure(error);
+  return kind==='refused'?AI_REFUSED_STATUS+'. Check it in Settings, Your AI, then try again.':kind?AI_UNREACHABLE_STATUS+'. Check its connection in Settings, Your AI, then try again.':null;
+};
+// The AI actions outside the chats that say a refused key or an outage the same way (#779).
+const AI_ACTIONS=['draft-event','process-note','extract-moment-profile'];
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
@@ -451,7 +463,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(req.method!=='POST')return send(res,405,{error:'Use POST'});
         return send(res,200,automaticUpdate.save(JSON.parse(await body(req,4096))));
       }
-      if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,aiConfigured:!!domains.provider,runtimeConfigured:!!domains.provider&&!assistantMissing&&chatAIUsable,assistantProblem:domains.provider&&!assistantMissing?null:assistantProblem,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime&&!assistantMissing?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
+      if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,aiConfigured:!!domains.provider,runtimeConfigured:!!domains.provider&&!assistantMissing&&chatAIUsable,aiAvailability:!domains.provider?'none':chatAIAvailability(),assistantProblem:domains.provider&&!assistantMissing?null:assistantProblem,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime&&!assistantMissing?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
       if(route==='/api/hermes-update'){
         if(!domains.hermesUpdate)return send(res,200,{available:false});
         if(req.method==='GET')return send(res,200,{available:true,...updateStatus(store)});
@@ -490,6 +502,20 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!routines)return send(res,200,{connected:true,provider:providerView(config),routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
         connectRoutineAI({...routineAI,config});
         return send(res,200,{connected:true,provider:providerView(config),routines:{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})}});
+      }
+      // Removing the AI connected above (#779): what it wrote into Hermes for the routines and the chat
+      // goes first, so a failure there leaves the connection whole and Remove can be tried again; then
+      // its saved file, even one that no longer reads as a connection. The running notebook then uses
+      // the GODSPEED_MODEL_* address, or a Hermes that keeps an AI of its own, or none. Startup is
+      // looser: after a restart a verified Hermes is picked even when it keeps no AI.
+      if(route==='/api/provider/remove'&&req.method==='POST'){
+        let saved=null;try{saved=JSON.parse(fs.readFileSync(providerPath,'utf8'));}catch{}
+        if(routineAI&&saved)disconnectRoutineAI({...routineAI,config:saved});
+        let removed=true;try{fs.unlinkSync(providerPath);}catch(error){if(error.code!=='ENOENT')throw error;removed=false;}
+        const next=guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}))
+          ||(routineAI&&routineAIStatus(routineAI).source!=='none'?hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot}):null);
+        provider=next?trackAIHealth(next):null;domains.provider=provider;scheduler.executor=jobExecutor(provider,query);chatAIUsable=!!provider;chatAICheckedAt=0;
+        return send(res,200,{removed,connected:!!provider,provider:{configured:false,key:false},routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
       }
       if(route==='/api/spend-guard'&&req.method==='GET')return send(res,200,spendGuardStatus(store,{hermesHome:routineAI?.home}));
       if(route==='/api/spend-guard'&&req.method==='POST'){
@@ -783,8 +809,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         }catch(error){
           if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});
           // A refused key and an outage are said apart, each with what to do (#590). Only the category is said, never the provider's words.
-          if(isChat&&domains.provider&&!assistantMissing&&!controller.signal.aborted&&/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d|could not be reached|did not finish within|did not answer|needs sign-in|returned no text|connection could not start/i.test(error.message)&&aiFailure(error)){chatAIUsable=false;chatAICheckedAt=Date.now();throw new Error(aiFailure(error)==='refused'?'Your AI key or sign-in was refused. Check it in Settings, Your AI, then try again.':'Your AI could not be reached. Check its connection in Settings, Your AI, then try again.');}
+          if(isChat&&domains.provider&&!assistantMissing&&!controller.signal.aborted){const said=plainAIFailure(error);if(said){chatAIUsable=false;chatAICheckedAt=Date.now();throw new Error(said);}}
           if(isChat&&domains.provider&&!assistantMissing&&!controller.signal.aborted&&/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d/i.test(error.message)){chatAIUsable=false;chatAICheckedAt=Date.now();throw new Error('Your AI could not be used. Check Settings, Your AI, then try again.');}
+          if(AI_ACTIONS.includes(name)&&domains.provider&&!controller.signal.aborted){const said=plainAIFailure(error);if(said)throw new Error(said);}
           throw error;
         }finally{if(isChat&&id)chatRequests.delete(id);if(isSearch){req.off('aborted',abortSearch);res.off('close',abortSearch);}}
       }
