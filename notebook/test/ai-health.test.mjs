@@ -1,7 +1,7 @@
 // #590: the chats, their pickers and the Dashboard card read one AI state. A refused key (401, 403)
 // is told apart from an outage (a provider error, no route, no answer), and a provider that stops
 // answering counts as stalled within a few seconds, not as an outage (#808).
-import test from 'node:test';import assert from 'node:assert/strict';
+import test,{mock} from 'node:test';import assert from 'node:assert/strict';
 import {aiFailure,trackAIHealth} from '../core/ai-health.mjs';
 import {modelProvider} from '../core/runtime.mjs';
 
@@ -41,7 +41,7 @@ test('a stopped chat request says nothing about the AI',async()=>{
 test('a provider that stops answering is stalled within the wait, and answering again is seen at the next check',async()=>{
  let checks=0,release;
  const inner=Object.assign(async()=>'ok',{check:()=>{checks++;return checks===1?new Promise(resolve=>{release=resolve;}):Promise.resolve();}});
- const provider=trackAIHealth(inner,{waitMs:50,initial:'ready'}),started=Date.now();
+ const provider=trackAIHealth(inner,{waitMs:50,firstWaitMs:50,initial:'ready'}),started=Date.now();
  await assert.rejects(provider.check(),/did not answer the connection check/);
  assert.ok(Date.now()-started<1000);assert.equal(provider.health(),'stalled');assert.equal(checks,1);
  // The next check does not wait for the stalled request: the provider answers it at once.
@@ -57,7 +57,7 @@ test('a timer that fires a millisecond before the clock says the wait is over st
  Date.now=()=>now;
  try{
   const inner=Object.assign(async()=>'ok',{check:()=>{checks++;if(checks===1){now=base+49;return new Promise(()=>{});}return Promise.resolve();}});
-  const provider=trackAIHealth(inner,{waitMs:50,initial:'ready'});
+  const provider=trackAIHealth(inner,{waitMs:50,firstWaitMs:50,initial:'ready'});
   await assert.rejects(provider.check(),/did not answer the connection check/);assert.equal(provider.health(),'stalled');
   await provider.check();assert.equal(checks,2,'the next check asks the provider again');assert.equal(provider.health(),'ready');
  }finally{Date.now=realNow;}
@@ -74,9 +74,57 @@ test('checks that overlap within the wait share one request',async()=>{
 test('a provider that is slow but answers gets a second more than its last answer took',async()=>{
  let checks=0;
  const inner=Object.assign(async()=>'ok',{check:()=>{checks++;return new Promise(resolve=>setTimeout(resolve,checks===1?120:80));}});
- const provider=trackAIHealth(inner,{waitMs:50});
+ const provider=trackAIHealth(inner,{waitMs:50,firstWaitMs:50});
  await assert.rejects(provider.check(),/did not answer/);await new Promise(r=>setTimeout(r,100));assert.equal(provider.health(),'ready','the slow answer arrived');
  await provider.check();assert.equal(provider.health(),'ready','the next check waits long enough');
+});
+
+test('a working AI that is slow to answer its first check reads as ready, not unreachable (#788)',async()=>{
+ const inner=Object.assign(async()=>'ok',{check:()=>new Promise(resolve=>setTimeout(resolve,150))});
+ const provider=trackAIHealth(inner,{waitMs:50,firstWaitMs:400,initial:'ready'});
+ await provider.check();assert.equal(provider.health(),'ready');
+ await provider.check();assert.equal(provider.health(),'ready','the next check waits as long as the last answer took');
+});
+
+test('an AI that never answers its check reads as stalled within the first wait',async()=>{
+ const inner=Object.assign(async()=>'ok',{check:()=>new Promise(()=>{})});
+ const provider=trackAIHealth(inner,{waitMs:50,firstWaitMs:200,initial:'ready'}),started=Date.now();
+ await assert.rejects(provider.check(),/did not answer the connection check/);
+ assert.ok(Date.now()-started<1000);assert.equal(provider.health(),'stalled');
+ await assert.rejects(provider.check(),/did not answer the connection check/);assert.equal(provider.health(),'stalled');
+});
+
+// The shipped waits, on a mocked clock: the notebook checks again five seconds after the last check
+// began, and never while one is still running (server/main.mjs, /api/chat/options).
+async function serverChecks(answerDelays){
+ mock.timers.enable({apis:['setTimeout','Date'],now:0});
+ const flush=()=>new Promise(r=>setImmediate(r));
+ const advanceTo=async t=>{while(Date.now()<t){mock.timers.tick(Math.min(100,t-Date.now()));await flush();}};
+ try{
+  let n=0;const delays=[...answerDelays];
+  const inner=Object.assign(async()=>'ok',{check:()=>{const delay=delays[n++];return delay===null?new Promise(()=>{}):new Promise(resolve=>setTimeout(resolve,delay));}});
+  const provider=trackAIHealth(inner),results=[];
+  for(let i=0,start=0;i<answerDelays.length;i++){
+   await advanceTo(start);start=Date.now();
+   let outcome;provider.check().then(()=>{outcome='ready';},()=>{outcome='failed';});
+   while(!outcome){if(Date.now()-start>60000)throw Error('a check did not settle within 60 seconds');mock.timers.tick(100);await flush();}
+   results.push({outcome,after:Date.now()-start,health:provider.health()});
+   start=Math.max(start+5000,Date.now());
+  }
+  return results;
+ }finally{mock.timers.reset();}
+}
+
+test('a working AI that answers in 4 to 6 seconds, varying from check to check, reads as ready on the shipped waits (#788)',async()=>{
+ const results=await serverChecks([4000,6000,4000,6000,5000,6000]);
+ assert.deepEqual(results.map(r=>r.health),Array(6).fill('ready'),JSON.stringify(results));
+});
+
+test('on the shipped waits, an AI that never answers, or a slow one that stops, reads as stalled well within 60 seconds (#788, #808)',async()=>{
+ const silent=await serverChecks([null,null]);
+ for(const r of silent){assert.equal(r.outcome,'failed');assert.equal(r.health,'stalled');assert.ok(r.after<=8100,JSON.stringify(r));}
+ const stopped=await serverChecks([5000,null]);
+ assert.equal(stopped[0].health,'ready');assert.equal(stopped[1].health,'stalled');assert.ok(stopped[1].after<=8100,JSON.stringify(stopped[1]));
 });
 
 test('a real model provider: 401 and 403 are refusals, 500 and a closed port are outages, and no key is kept',async()=>{
