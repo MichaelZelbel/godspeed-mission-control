@@ -100,8 +100,9 @@ const readSavedProvider=file=>{
   return config;
 };
 // A failed request to the AI, said as the chats say it (#590): a refused key, an outage, or an AI that
-// took the request and stopped answering (#808), each with what to do, never the provider's words, which can quote the key. Godspeed's own no-AI sentences are
-// not provider failures, though they name an "AI service". null when the error is not the AI's.
+// took the request and stopped answering (#808), each with what to do, never the provider's words,
+// which can quote the key. Godspeed's own no-AI sentences are not provider failures, though they
+// name an "AI service". null when the error is not the AI's.
 const PROVIDER_FAILURE=/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d|could not be reached|did not finish within|did not answer|needs sign-in|returned no text|connection could not start/i;
 const plainAIFailure=error=>{
   const message=String(error?.message||'');
