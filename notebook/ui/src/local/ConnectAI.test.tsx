@@ -75,15 +75,15 @@ describe("the saved main AI in Settings", () => {
     let saved: unknown = { configured: true, url: "https://openrouter.ai/api/v1/chat/completions", model: "fictional/model", key: true };
     const calls = serve({ ...supportingRoutes, provider: () => [200, saved], "provider/remove": () => { saved = { configured: false, key: false };return [200, { removed: true, provider: saved, routines: { available: false } }]; } });
     settings();
-    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }));
-    expect(await screen.findByRole("alertdialog", { name: "Remove your AI connection?" })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }, WAIT));
+    expect(await screen.findByRole("alertdialog", { name: "Remove your AI connection?" }, WAIT)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
-    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull(), WAIT);
     expect(calls.some(c => c.route === "provider/remove")).toBe(false);
     expect(screen.getByLabelText("Key (leave it empty to keep the saved one)")).not.toBeRequired();
     fireEvent.click(screen.getByRole("button", { name: "Remove this AI connection" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
-    expect(await screen.findByText("Removed. No AI is connected now. Connect one here whenever you like.")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }, WAIT));
+    expect(await screen.findByText("Removed. No AI is connected now. Connect one here whenever you like.", undefined, WAIT)).toBeInTheDocument();
     expect(calls.filter(c => c.route === "provider/remove")).toEqual([{ route: "provider/remove", body: {} }]);
     expect(screen.getByLabelText("Key")).toBeRequired();
     expect(screen.queryByRole("button", { name: "Remove this AI connection" })).toBeNull();
@@ -92,7 +92,7 @@ describe("the saved main AI in Settings", () => {
   it("offers no removal when no AI connection is saved", async () => {
     serve(supportingRoutes);
     settings();
-    expect(await screen.findByRole("button", { name: "Test and connect" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Test and connect" }, WAIT)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Remove this AI connection" })).toBeNull();
   });
 
@@ -218,9 +218,9 @@ describe("the saved main AI in Settings", () => {
   it("removes a saved connection that cannot be read, so the person can connect again", async () => {
     const calls = serve({ ...supportingRoutes, provider: () => [500, { error: "The saved AI connection is not valid." }], "provider/remove": () => [200, { removed: true, connected: false, provider: { configured: false, key: false }, routines: { available: false } }] });
     settings();
-    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
-    expect(await screen.findByText("Removed. No AI is connected now. Connect one here whenever you like.")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }, WAIT));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }, WAIT));
+    expect(await screen.findByText("Removed. No AI is connected now. Connect one here whenever you like.", undefined, WAIT)).toBeInTheDocument();
     expect(calls.filter(c => c.route === "provider/remove")).toEqual([{ route: "provider/remove", body: {} }]);
     expect(screen.getByLabelText("Key")).toBeRequired();
   });
@@ -229,9 +229,9 @@ describe("the saved main AI in Settings", () => {
     let saved: unknown = { configured: true, url: "https://openrouter.ai/api/v1/chat/completions", model: "fictional/model", key: true };
     serve({ ...supportingRoutes, provider: () => [200, saved], "provider/remove": () => { saved = { configured: false, key: false };return [200, { removed: true, connected: true, provider: saved, routines: { available: false } }]; } });
     settings();
-    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
-    expect(await screen.findByText("Removed. The notebook uses the AI it had before this connection.")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }, WAIT));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }, WAIT));
+    expect(await screen.findByText("Removed. The notebook uses the AI it had before this connection.", undefined, WAIT)).toBeInTheDocument();
   });
 
   it("shows a saved Another service after the server and Settings reopen", async () => {
