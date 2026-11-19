@@ -124,5 +124,6 @@ test('a refused or unreachable AI is told apart from anything else the extractio
   for (const other of [NO_AI_ANALYSIS, 'Source note missing', '', undefined]) assert.equal(aiFailureKind(other), null);
   assert.equal(factsNotPulledOut('refused'), 'No facts were pulled out of it. ' + AI_REFUSED_STATUS + '. Check it in Settings, Your AI.');
   assert.equal(factsNotPulledOut('unreachable'), 'No facts were pulled out of it. ' + AI_UNREACHABLE_STATUS + '. Check its connection in Settings, Your AI.');
-  for (const other of ['none', 'ready', null, undefined]) assert.equal(factsNotPulledOut(other), null);
+  assert.equal(factsNotPulledOut('none'), 'No AI is connected yet, so no facts about its people were pulled out. Connect your AI service in Settings, Your AI.');
+  for (const other of ['ready', null, undefined]) assert.equal(factsNotPulledOut(other), null);
 });

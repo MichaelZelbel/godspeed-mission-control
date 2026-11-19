@@ -2,7 +2,7 @@
 // apart from the dialog so it can be tested with node --test
 // (notebook/test/moment-form.test.mjs).
 
-import { AI_REFUSED_STATUS, AI_UNREACHABLE_STATUS } from '../../../../core/no-ai.mjs';
+import { AI_REFUSED_STATUS, AI_UNREACHABLE_STATUS, NO_AI_STATUS } from '../../../../core/no-ai.mjs';
 
 const DAY = /^(\d{4}-\d{2}-\d{2})/;
 
@@ -140,8 +140,11 @@ export function aiFailureKind(message) {
 }
 
 // What a saved moment's confirmation adds when no facts were pulled out of it
-// because of the AI (#779), or null when there is nothing to add.
+// because of the AI (#779), or null when there is nothing to add. With no AI
+// connected it says so in the other AI actions' words (#784); the dialog asks
+// for it only when the moment has people, since otherwise nothing was to be pulled out.
 export function factsNotPulledOut(kind) {
+  if (kind === 'none') return NO_AI_STATUS + ', so no facts about its people were pulled out. Connect your AI service in Settings, Your AI.';
   if (kind === 'refused') return 'No facts were pulled out of it. ' + AI_REFUSED_STATUS + '. Check it in Settings, Your AI.';
   if (kind === 'unreachable') return 'No facts were pulled out of it. ' + AI_UNREACHABLE_STATUS + '. Check its connection in Settings, Your AI.';
   return null;

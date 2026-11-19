@@ -296,7 +296,8 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
       }
 
       // Profile facts about the participants are pulled out after the save and never hold it up. When
-      // the AI refused the key or could not be reached, the confirmation says no facts were (#779).
+      // the AI refused the key or could not be reached, or no AI is connected, the confirmation says
+      // no facts were (#779, #784).
       const saved = isEditMode ? "Moment updated" : "Moment created";
       if (momentId && providerConfigured) {
         supabase.functions
@@ -307,7 +308,8 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
           })
           .catch(() => {});
       }
-      const why = providerConfigured ? null : factsNotPulledOut(aiAvailability);
+      // With no AI connected, a moment without people had nothing to pull out, so it says nothing more (#784).
+      const why = providerConfigured || (aiAvailability === "none" && desiredIds.length === 0) ? null : factsNotPulledOut(aiAvailability);
       toast(why ? { title: saved, description: why } : { title: saved });
       setOpen(false);
       onCreated();
