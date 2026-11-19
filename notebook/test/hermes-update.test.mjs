@@ -206,7 +206,8 @@ test('the native service accepts its loopback scenario release fixture',async t=
  assert.equal(service.domains.hermesUpdate.releaseUrl,releaseUrl);
 });
 
-test('a timed-out release lookup records failure and lets routines continue',{timeout:2000},async t=>{
+// Its three scheduler ticks take about 1 s alone and 1.5 s or more on a loaded machine, so 2 s timed out under load (#775); a lookup that never ends still fails here.
+test('a timed-out release lookup records failure and lets routines continue',{timeout:10_000},async t=>{
  for(const [name,fetcher] of [
   ['request',async()=>await new Promise(()=>{})],
   ['successful response body',async()=>({ok:true,json:async()=>await new Promise(()=>{})})],
