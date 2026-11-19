@@ -72,17 +72,17 @@ export function VoiceReplies(){
     <form className="space-y-3" onSubmit={save} aria-label="Use an ElevenLabs voice">
       <h3 className="text-lg">Use an ElevenLabs voice</h3>
       <p>Your own voice from ElevenLabs, with its settings as on its voice page. You pay ElevenLabs directly. The key stays on this device.</p>
-      <label className="block">ElevenLabs key{data?.key?' (leave it empty to keep the saved one)':''}
-        <Input type="password" autoComplete="off" spellCheck={false} required={!data?.key} value={key} onChange={e=>setKey(e.target.value)}/></label>
-      <label className="block">Voice ID, from the voice's page at ElevenLabs
-        <Input required spellCheck={false} value={voiceId} onChange={e=>setVoiceId(e.target.value)}/></label>
-      <label className="block">Model
-        <Input required spellCheck={false} list="voice-models" value={model} onChange={e=>setModel(e.target.value)}/></label>
+      <div><label className="block" htmlFor="voice-key">ElevenLabs key{data?.key?' (leave it empty to keep the saved one)':''}</label>
+        <Input id="voice-key" type="password" autoComplete="off" spellCheck={false} required={!data?.key} value={key} onChange={e=>setKey(e.target.value)}/></div>
+      <div><label className="block" htmlFor="voice-id">Voice ID, from the voice's page at ElevenLabs</label>
+        <Input id="voice-id" required spellCheck={false} value={voiceId} onChange={e=>setVoiceId(e.target.value)}/></div>
+      <div><label className="block" htmlFor="voice-model">ElevenLabs model</label>
+        <Input id="voice-model" required spellCheck={false} list="voice-models" value={model} onChange={e=>setModel(e.target.value)}/></div>
       <datalist id="voice-models">{MODELS.map(m=><option key={m} value={m}/>)}</datalist>
       <div className="flex flex-wrap gap-3">
-        <label className="block">Stability<Input type="number" min="0" max="1" step="0.05" required className="w-28" value={stability} onChange={e=>setStability(e.target.value)}/></label>
-        <label className="block">Similarity<Input type="number" min="0" max="1" step="0.05" required className="w-28" value={similarity} onChange={e=>setSimilarity(e.target.value)}/></label>
-        <label className="block">Style<Input type="number" min="0" max="1" step="0.05" required className="w-28" value={style} onChange={e=>setStyle(e.target.value)}/></label>
+        <div><label className="block" htmlFor="voice-stability">Stability</label><Input id="voice-stability" type="number" min="0" max="1" step="0.05" required className="w-28" value={stability} onChange={e=>setStability(e.target.value)}/></div>
+        <div><label className="block" htmlFor="voice-similarity">Similarity</label><Input id="voice-similarity" type="number" min="0" max="1" step="0.05" required className="w-28" value={similarity} onChange={e=>setSimilarity(e.target.value)}/></div>
+        <div><label className="block" htmlFor="voice-style">Style</label><Input id="voice-style" type="number" min="0" max="1" step="0.05" required className="w-28" value={style} onChange={e=>setStyle(e.target.value)}/></div>
       </div>
       <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Making a sample…</>:'Make a sample and save'}</Button>
       {done&&<p role="status">{done}</p>}

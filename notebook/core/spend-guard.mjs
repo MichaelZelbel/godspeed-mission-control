@@ -35,7 +35,7 @@ export function saveSpendGuardSettings(store,input){
  if(typeof next.enabled!=='boolean'||![next.daily_limit,next.low_balance].every(value=>typeof value==='number'&&Number.isFinite(value)&&value>=0))throw Error('Choose an on or off setting and non-negative dollar amounts');
  store.save('settings',{id:'spend-guard',...next});return next;
 }
-export function spendGuardStatus(store,options={}){const count=spendGuardKeys({state:store.state,...options}).length;return {...spendGuardSettings(store),openrouter_connected:count>0,provider_message:count?'OpenRouter spending is checked hourly.':'Spending is not checked for the connected provider yet. The check starts automatically when an OpenRouter key is connected.'};}
+export function spendGuardStatus(store,options={}){const count=spendGuardKeys({state:store.state,...options}).length,settings=spendGuardSettings(store);return {...settings,openrouter_connected:count>0,provider_message:!settings.enabled?'Spending checks are off.':count?'OpenRouter spending is checked hourly.':'Spending is not checked for the connected provider yet. The check starts automatically when an OpenRouter key is connected.'};}
 
 async function sample(key,fetcher){
  const headers={Authorization:'Bearer '+key};
