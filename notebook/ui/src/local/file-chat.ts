@@ -1,11 +1,31 @@
 import { toast } from 'sonner';
 import {startupRequest} from './startup-request';
+// What this window shows, and the newest history the server confirmed for it.
+// A window holding saves the server has not answered keeps its own copy; once
+// they are answered it takes the confirmed one, which holds them too.
 const states = new Map<string,any>();
+const confirmed = new Map<string,{state:any,revision:number}>();
+const waiting = new Map<string,number>();
 const queues = new Map<string,Promise<any>>();
-const resets=typeof BroadcastChannel==='function'?new BroadcastChannel('godspeed:chat-resets'):null;
+// The other windows open on the same notebook, such as a chat's pop-out.
+const windows=typeof BroadcastChannel==='function'?new BroadcastChannel('godspeed:chat-states'):null;
 function changed(key:string){window.dispatchEvent(new CustomEvent('godspeed:chat-history-updated',{detail:{key}}));}
-if(resets)resets.onmessage=({data})=>{
-  if(typeof data?.key==='string'&&data.state?.session_id){states.set(data.key,data.state);changed(data.key);}
+function settle(key:string){
+  const next=confirmed.get(key)?.state;
+  if(waiting.get(key)||!next||JSON.stringify(next)===JSON.stringify(states.get(key)))return;
+  states.set(key,next);changed(key);
+}
+function remember(key:string,state:any,revision:unknown){
+  const known=confirmed.get(key);
+  if(known&&typeof revision==='number'&&revision<=known.revision)return false;
+  confirmed.set(key,{state,revision:typeof revision==='number'?revision:known?.revision??0});
+  return true;
+}
+function share(key:string,state:any,revision:unknown){
+  if(remember(key,state,revision))windows?.postMessage({key,state,revision});
+}
+if(windows)windows.onmessage=({data})=>{
+  if(typeof data?.key==='string'&&Array.isArray(data.state?.messages)&&remember(data.key,data.state,data.revision))settle(data.key);
 };
 export async function hydrateFileChats(){
   // The sign-in gate waits for this, so whatever goes wrong here is the whole
@@ -13,22 +33,23 @@ export async function hydrateFileChats(){
   // straight at the person, who had asked for a dashboard, not a stopwatch.
   const r=await startupRequest(signal=>fetch('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'note_conversations'}),signal}));
   if(!r.ok)throw new Error('Conversation history could not be loaded');
-  const result=await r.json();for(const row of result.data||[])states.set(row.context_key,row.state);
+  const result=await r.json();for(const row of result.data||[]){states.set(row.context_key,row.state);remember(row.context_key,row.state,row.revision);}
 }
 export function loadFileChat(key:string){return states.get(key)||{messages:[],summary:'',summarizedUpTo:0};}
 export function saveFileChat(key:string,state:any){
   const expected=loadFileChat(key);
   if((expected.session_id||'')!==(state.session_id||'')){queueMicrotask(()=>changed(key));return;}
   if(JSON.stringify(expected)===JSON.stringify(state))return;
-  states.set(key,state);
+  states.set(key,state);waiting.set(key,(waiting.get(key)||0)+1);
   const previous=queues.get(key)||Promise.resolve();
   const next=previous.catch(()=>{}).then(async()=>{
-    const r=await fetch('/api/chat-state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({context_key:key,state})});
-    if(!r.ok)throw new Error('Conversation history was not saved. Keep this window open and retry.');
-    const result=await r.json();
-    if(result.state&&states.get(key)===state&&JSON.stringify(result.state)!==JSON.stringify(state)){
-      states.set(key,result.state);window.dispatchEvent(new CustomEvent('godspeed:chat-history-updated',{detail:{key}}));
-    }
+    let result;
+    try{
+      const r=await fetch('/api/chat-state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({context_key:key,state})});
+      if(!r.ok)throw new Error('Conversation history was not saved. Keep this window open and retry.');
+      result=await r.json();
+    }finally{waiting.set(key,waiting.get(key)!-1);}
+    if(result.state){share(key,result.state,result.revision);settle(key);}
   });
   queues.set(key,next);next.catch(e=>toast.error(e.message));
 }
@@ -41,7 +62,7 @@ export function clearFileChat(key:string){
     if(!r.ok)throw new Error(result.error||'This conversation could not be cleared. Please try again.');
     states.set(key,result.state);
     changed(key);
-    resets?.postMessage({key,state:result.state});
+    share(key,result.state,result.revision);
     return result.state;
   });
   // Keep the failure observable by this caller without poisoning the next attempt.

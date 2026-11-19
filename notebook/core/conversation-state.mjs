@@ -12,27 +12,36 @@ export function bindConversationSession(store,input){
 
 const sameMessage=(a,b)=>a.role===b.role&&a.content===b.content;
 const prefix=(short,long)=>short.length<=long.length&&short.every((message,i)=>sameMessage(message,long[i]));
+// Another window on the same conversation saved turns this one never saw. The
+// stored turns keep their place and this window's turns that the store lacks
+// follow them, so neither window's messages are lost or repeated.
+function joined(stored,incoming){
+ let shared=0;while(shared<stored.length&&shared<incoming.length&&sameMessage(stored[shared],incoming[shared]))shared++;
+ const unmatched=stored.slice(shared);
+ return [...stored,...incoming.slice(shared).filter(message=>{const at=unmatched.findIndex(m=>sameMessage(m,message));if(at<0)return true;unmatched.splice(at,1);return false;})];
+}
 export function saveConversationState(store,input,{asyncWriter=false,signal}={}){
  const key=input.context_key;let state=input.state;
  if(typeof key!=='string'||!key||key.length>400||!Array.isArray(state?.messages)||state.messages.some(m=>!['user','assistant'].includes(m.role)||typeof m.content!=='string'))throw Error('Invalid conversation state');
  return (asyncWriter?store.withLockAsync.bind(store):store.withLock.bind(store))(()=>{
-  const id='chat-'+hash(key).slice(0,24),old=store.get('note_conversations',id),current=old?.state;
+  const id='chat-'+hash(key).slice(0,24),old=store.get('note_conversations',id),current=old?.state,revision=old?.revision;
   if(input.clear===true){
    if(state.messages.length||!input.expected_state||(current&&hash(input.expected_state)!==hash(current)))throw Object.assign(Error('Conversation changed before clearing. Reopen it and review the current history.'),{code:'CONFLICT'});
    state={messages:[],summary:'',summarizedUpTo:0,session_id:randomUUID()};
   }else if(current){
-   if((state.session_id||'')!==(current.session_id||''))return {ok:true,state:current,ignored_stale:true};
-   if(hash(current)===hash(state))return {ok:true,state:current,unchanged:true};
-   if(prefix(state.messages,current.messages)&&state.messages.length<current.messages.length)return {ok:true,state:current,ignored_stale:true};
+   if((state.session_id||'')!==(current.session_id||''))return {ok:true,state:current,revision,ignored_stale:true};
+   if(hash(current)===hash(state))return {ok:true,state:current,revision,unchanged:true};
    if(!prefix(current.messages,state.messages)){
-    // Every competing branch remains available, but cannot replace another reply.
-    store.conflict('note_conversations',{...old,state},old);
+    const messages=joined(current.messages,state.messages);
+    if(messages.length===current.messages.length)return {ok:true,state:current,revision,ignored_stale:true};
+    state={...current,messages};
+   }else{
+    if(state.messages.length===current.messages.length&&(state.summarizedUpTo||0)<(current.summarizedUpTo||0))return {ok:true,state:current,revision,ignored_stale:true};
+    state={...state,messages:state.messages.map((message,i)=>({...current.messages[i],...message}))};
    }
-   if(state.messages.length===current.messages.length&&(state.summarizedUpTo||0)<(current.summarizedUpTo||0))return {ok:true,state:current,ignored_stale:true};
-   state={...state,messages:state.messages.map((message,i)=>({...current.messages[i],...message}))};
   }
   store.commit([store.prepare('note_conversations',{id,context_key:key,state},old),store.prepare('conversation_messages',{context_key:key,state_snapshot:state})]);
-  return {ok:true,state};
+  return {ok:true,state,revision:store.get('note_conversations',id).revision};
  },{signal});
 }
 
