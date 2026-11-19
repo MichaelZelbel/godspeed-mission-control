@@ -23,7 +23,7 @@ async function optionsFrom(t,provider,{defer=false}={}){
  t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
  const base='http://127.0.0.1:'+service.address.port,readStatus=async()=>await (await fetch(base+'/api/status')).json(),status=await readStatus();
  const readOptions=()=>loadChatOptions({fetcher:(url,init)=>fetch(base+url,init)});
- return {status,options:defer?null:await readOptions(),readOptions,readStatus};
+ return {status,options:defer?null:await readOptions(),readOptions,readStatus,base};
 }
 test('with no AI connected the model choices say so rather than naming a connected model',async t=>{
  const {status,options}=await optionsFrom(t);
@@ -37,7 +37,7 @@ test('a connected AI keeps its own model choices',async t=>{
 test('a configured AI that refuses its check keeps its model identity but is unusable',async t=>{
  const provider=Object.assign(async()=>{throw Error('Model provider failed with HTTP 401: secret provider detail');},{options:async()=>({current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}),check:async()=>{throw Error('Model provider failed with HTTP 401: secret provider detail');}});
  const {options}=await optionsFrom(t,provider);
- assert.equal(options.connected,true);assert.equal(options.usable,false);assert.equal(options.current,'fictional-model');assert.doesNotMatch(JSON.stringify(options),/401|secret provider detail/);
+ assert.equal(options.connected,true);assert.equal(options.usable,false);assert.equal(options.availability,'refused');assert.equal(options.current,'fictional-model');assert.doesNotMatch(JSON.stringify(options),/401|secret provider detail/);
 });
 test('AI usability is rechecked every five seconds in both directions',async t=>{
  let now=100000,usable=true;
@@ -85,7 +85,7 @@ test('a refused chat returns plain guidance instead of provider diagnostics',asy
  const {createService}=await import('../server/main.mjs');const service=await createService({root:path.join(root,'workspace'),port:0,provider});
  t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
  const result=await fetch('http://127.0.0.1:'+service.address.port+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})});
- const body=await result.json();assert.equal(result.status,400);assert.match(body.error,/Your AI could not be used.*Settings, Your AI/);assert.doesNotMatch(body.error,/401|secret provider detail/);
+ const body=await result.json();assert.equal(result.status,400);assert.match(body.error,/Your AI key or sign-in was refused.*Settings, Your AI/);assert.doesNotMatch(body.error,/401|secret provider detail|could not be reached/);
 });
 test('a chat send with no AI keeps the no-AI setup guidance',async t=>{
  const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
@@ -157,4 +157,54 @@ test('a check still running for the AI that was replaced does not turn the new o
  assert.equal((await notebook.connect(ai.address)).status,200);
  rejectCheck(new Error('Fictional old provider failure'));await reading;
  assert.equal((await notebook.status()).runtimeConfigured,true);
+});
+// #590: a real provider stand-in, connected through Settings, steps through every state. Each step
+// is read the way the chats, their pickers and the Dashboard card read it (/api/chat/options), and
+// a chat send says the same thing. A provider that stops answering is an outage within about five
+// seconds, not a refusal, and not after the request's own 15 seconds.
+test('refused keys (401, 403) and outages (500, no answer, closed port) are told apart, and recovery shows',async t=>{
+ let mode=200;const held=[];
+ const endpoint=http.createServer(async(req,res)=>{for await(const chunk of req);if(mode==='stall'){held.push(res);return;}res.statusCode=mode;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(mode===200?{choices:[{message:{content:JSON.stringify({reply:'Stand-in answer.'})}}]}:{error:{message:'private provider detail'}}));});
+ await new Promise(resolve=>endpoint.listen(0,'127.0.0.1',resolve));
+ t.after(()=>{for(const res of held)res.destroy();endpoint.closeAllConnections?.();return new Promise(resolve=>endpoint.close(()=>resolve()));});
+ let now=1_000_000;t.mock.method(Date,'now',()=>now);
+ const {readOptions,readStatus,base}=await optionsFrom(t,undefined,{defer:true});
+ const connected=await fetch(base+'/api/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'http://127.0.0.1:'+endpoint.address().port,key:'fictional-key',model:'fictional-model'})});
+ assert.equal(connected.status,200,await connected.clone().text());
+ const chat=async()=>{const reply=await fetch(base+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})});return {status:reply.status,text:await reply.text()};};
+ const ready=await readOptions();assert.equal(ready.usable,true);assert.equal(ready.availability,'ready');assert.equal(ready.current,'fictional-model');
+ for(const [code,expected,said] of [[401,'refused',/Your AI key or sign-in was refused.*Settings, Your AI/],[200,'ready',/Stand-in answer/],[403,'refused',/Your AI key or sign-in was refused.*Settings, Your AI/],[500,'unreachable',/Your AI could not be reached.*Settings, Your AI/],[200,'ready',/Stand-in answer/]]){
+  mode=code;now+=5000;
+  const options=await readOptions();assert.equal(options.availability,expected,'HTTP '+code);assert.equal(options.usable,expected==='ready');
+  assert.equal((await readStatus()).runtimeConfigured,expected==='ready','the status agrees after HTTP '+code);
+  const sent=await chat();assert.equal(sent.status,expected==='ready'?200:400,sent.text);assert.match(sent.text,said);
+  assert.doesNotMatch(JSON.stringify(options)+sent.text,/fictional-key|private provider detail|HTTP [45]\d\d/);
+  // A chat failure is the newest word on the AI: the next read says the same at once.
+  if(expected!=='ready')assert.equal((await readOptions()).availability,expected);
+ }
+ // The provider stops answering: within about five seconds every reader is told it is an outage.
+ mode='stall';now+=5000;const started=performance.now();
+ const stalled=await readOptions();const waited=performance.now()-started;
+ assert.equal(stalled.availability,'unreachable');assert.equal(stalled.usable,false);assert.ok(waited<6000,'answered after '+Math.round(waited)+' ms');
+ // It answers again: the next check sees it, without waiting for the stalled request to give up.
+ mode=200;now+=5000;assert.equal((await readOptions()).availability,'ready');
+ // The address goes away entirely: an outage again.
+ for(const res of held)res.destroy();endpoint.closeAllConnections?.();await new Promise(resolve=>endpoint.close(()=>resolve()));now+=5000;
+ assert.equal((await readOptions()).availability,'unreachable');
+});
+test('an AI connected only to the notebook while Hermes has none is not presented as ready for the chats',async t=>{
+ const endpoint=http.createServer(async(req,res)=>{for await(const chunk of req);res.setHeader('Content-Type','application/json');res.end(JSON.stringify({choices:[{message:{content:'Connected.'}}]}));});
+ await new Promise(resolve=>endpoint.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>endpoint.close(resolve)));
+ const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL','GODSPEED_MODEL_KEY','GODSPEED_MODEL'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-settings-only-')),root=path.join(dir,'workspace'),home=path.join(dir,'hermes-home'),assistant=path.join(dir,'assistant.json');
+ for(const n of names)delete process.env[n];
+ fs.mkdirSync(home,{recursive:true});fs.writeFileSync(assistant,JSON.stringify({verified:true,executable:'hermes',home}));process.env.GODSPEED_ORIGINAL_RUNTIME='on';process.env.GODSPEED_ASSISTANT_CONFIG=assistant;
+ const {createService}=await import('../server/main.mjs');const service=await createService({root,port:0});
+ t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(dir,{recursive:true,force:true});});
+ const origin='http://127.0.0.1:'+service.address.port,connected=await fetch(origin+'/api/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'http://127.0.0.1:'+endpoint.address().port,key:'fictional-key',model:'fictional-model',routines:false})});
+ assert.equal(connected.status,200);
+ const options=await loadChatOptions({fetcher:(url,init)=>fetch(origin+url,init)});
+ assert.equal(options.connected,true);assert.equal(options.usable,false);assert.equal(options.availability,'settings-only');assert.equal(options.current,'fictional-model');
+ const reply=await fetch(origin+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})}),answer=await reply.json();
+ assert.equal(reply.status,400);assert.match(answer.error,/connected only to the notebook.*Use it for the daily routines and the chat too.*Settings, Your AI/);assert.doesNotMatch(answer.error,/fictional-key/);
 });
