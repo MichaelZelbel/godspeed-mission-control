@@ -278,6 +278,37 @@ describe("the audit's rules on pages built for them", () => {
       .toEqual(['clipped: span "Kept on this computer only"']);
   });
 
+  // A paragraph whose box is sized by a script from its own text, so the case holds on any font: the
+  // first line is "Kept on this " and the box ends `past` px before the end of `upTo` characters.
+  const sizedParagraph = (upTo: number, past: number) => `<p id="sized" style="margin:0;white-space:pre-wrap">Kept on this computer only</p><script>
+    const p = document.getElementById("sized"), range = document.createRange();
+    range.setStart(p.firstChild, 0);
+    range.setEnd(p.firstChild, ${upTo});
+    p.style.width = (range.getBoundingClientRect().width - ${past}) + "px";
+  </script>`;
+
+  it("passes a wrapped line whose trailing space ends 1/64 px past its box", async () => {
+    // The premise, as the rule saw it before #746: the line's hanging space ends past the box.
+    const page = await browser.newPage({ viewport: { width: 375, height: 600 } });
+    try {
+      await page.setContent(`<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}</style></head><body>${sizedParagraph(13, 1 / 64)}</body></html>`);
+      const { box, lineEnds } = await page.evaluate(() => {
+        const p = document.getElementById("sized")!;
+        const range = document.createRange();
+        range.selectNodeContents(p.firstChild!);
+        return { box: p.getBoundingClientRect().right, lineEnds: [...range.getClientRects()].map((r) => r.right) };
+      });
+      expect(Math.max(...lineEnds) - box).toBeCloseTo(1 / 64, 6);
+    } finally {
+      await page.close();
+    }
+    expect(await audit(sizedParagraph(13, 1 / 64))).toEqual([]);
+  });
+
+  it("reports a wrapped line whose last glyph runs 1/64 px past its box", async () => {
+    expect(await audit(sizedParagraph(4, 1 / 64))).toEqual(['clipped: p "Kept on this computer only"']);
+  });
+
   it("reports an input whose placeholder does not fit", async () => {
     const [line] = await audit(`<input aria-label="Search" placeholder="Search every note you ever wrote" style="width:80px">`);
     expect(line).toMatch(/^clipped: input "Search": its text needs [\d.]+ px, the box has [\d.]+$/);
