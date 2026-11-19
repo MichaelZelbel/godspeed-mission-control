@@ -185,9 +185,9 @@ const RETRY_STATUS=new Set([429,502,503,504]);
 // when the send began, or one went unanswered while it waited), the waiting request is given up and
 // one fresh copy is sent with what is left of the ten minutes, watched the same way, never sent a
 // third time. Only a missed check permits this: a slow AI that answers every check is never cut off
-// or sent twice (#770). A check that times out on an AI on this computer while another call waits
-// on it does not count as missed, since such a server answers one chat at a time and the check
-// simply waits its turn.
+// or sent twice (#770). A connection check that times out on an AI on this computer is not counted:
+// such a server answers one chat at a time, so the check may only be waiting behind another program's
+// chat, and its model-list probe already tells a stall apart.
 export const STALL_WATCH={afterMs:20000,timeoutMs:15000,everyMs:60000};
 const LOOPBACK=['127.0.0.1','localhost'];
 export function stalledAI(url,cause){
@@ -197,9 +197,9 @@ export function stalledAI(url,cause){
 export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = [2000,5000], stallWatch = STALL_WATCH } = {}) {
   if(!url || !key || !model)return null;
   const parsed=new URL(url),local=LOOPBACK.includes(parsed.hostname);if(parsed.protocol!=='https:' && !local)throw new Error('Model provider requires HTTPS');
-  // What the provider has shown across calls: how many checks went unanswered, whether its newest
-  // check got no answer yet, and how many calls other than connection checks are waiting on it.
-  let refused=false,missed=0,unanswered=false,busy=0;
+  // What the provider has shown across calls: how many checks went unanswered, and whether its
+  // newest check got no answer yet.
+  let refused=false,missed=0,unanswered=false;
   const answered=()=>{unanswered=false;};
   const missedCheck=()=>{missed++;unanswered=true;};
   const headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'};
@@ -229,7 +229,7 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
       for(let attempt=0;;attempt++){
         try{response=await fetch(url,{method:'POST',headers,body:request,signal:AbortSignal.any([...stopping,AbortSignal.timeout(budgetMs)])});}
         catch(error){
-          if(error.name==='TimeoutError'){if(isCheck&&(!local||busy===0))missedCheck();throw Error(providerTimeoutMessage(timeoutMs));}
+          if(error.name==='TimeoutError'){if(isCheck&&!local)missedCheck();throw Error(providerTimeoutMessage(timeoutMs));}
           if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;
         }
         answered();
@@ -243,7 +243,6 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
       refused=false;
       return text;
     };
-    if(!isCheck)busy++;
     try{
       try{return await send(timeoutMs);}
       catch(error){
@@ -256,7 +255,7 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
     }catch(error){
       if(watch?.stalled&&!signal?.aborted)throw stalledAI(url,error);
       throw error;
-    }finally{watch?.stop();if(!isCheck)busy--;}
+    }finally{watch?.stop();}
   };
   // Keep the configured identity available to the picker. Checking uses the same
   // request path as chat, so a refused key or unreachable address cannot look ready.

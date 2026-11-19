@@ -52,13 +52,26 @@ test('a send made while the AI was stalled is sent once more when the AI answers
   assert.ok(Date.now()-recovered<1000,'ended '+(Date.now()-recovered)+' ms after the AI came back');
   assert.equal(ai.chats-chats,2,'the swallowed request and one fresh copy');
 });
-test('a connection check that got no answer makes the next send be sent once more when the AI answers again',{timeout:40000},async t=>{
-  const ai=await fakeAI(t,{mode:'stalled'}),call=provider(ai,{stallWatch:RECOVERY});
+test('a connection check that times out while another program holds an AI on this computer leaves the next send sent once',{timeout:40000},async t=>{
+  // A local model server that answers its model list at once and one chat at a time.
+  let line=Promise.resolve(),chats=0;
+  const server=http.createServer(async(req,res)=>{
+    let body='';for await(const chunk of req)body+=chunk;
+    const reply=content=>{if(res.destroyed)return;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(content));};
+    if(req.method==='GET')return reply({data:[{id:'fictional-model'}]});
+    const {max_tokens}=JSON.parse(body),holdMs=max_tokens===100?16000:700;if(max_tokens!==100&&max_tokens!==8)chats++;
+    line=line.then(()=>pause(holdMs).then(()=>reply({choices:[{message:{content:'The answer.'}}]})));
+  });
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));});
+  const url='http://127.0.0.1:'+server.address().port+'/v1/chat/completions';
+  const other=fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({max_tokens:100,messages:[]})}).then(r=>r.text(),()=>{});
+  await pause(100);
+  const call=modelProvider({url,key:'fictional-secret-key',model:'fictional-model',retryWaits:[],stallWatch:FAST});
   await assert.rejects(call.check(),/did not finish/);
-  const chats=ai.chats,send=call({kind:'conversation-chat'});
-  await whenChatArrives(ai,chats);ai.mode='working';
-  assert.equal(await send,'{"reply":"Here is your answer."}');
-  assert.equal(ai.chats-chats,2,'the swallowed request and one fresh copy');
+  const before=chats;
+  assert.equal(await call({kind:'conversation-chat'}),'The answer.');
+  assert.equal(chats-before,1,'sent once');
+  await other;
 });
 test('a slow send to an AI that missed a check but answered since is sent once',async t=>{
   const ai=await fakeAI(t,{mode:'stalled'}),call=provider(ai);
