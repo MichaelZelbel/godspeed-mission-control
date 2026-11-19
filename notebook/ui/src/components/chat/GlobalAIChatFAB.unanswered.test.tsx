@@ -9,6 +9,7 @@ import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/reac
 import {MemoryRouter} from 'react-router-dom';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import '@testing-library/jest-dom/vitest';
+import {WAIT} from '@/test/wait-limits';
 import {GlobalAIChatFAB} from './GlobalAIChatFAB';
 import {clearFileChat,hydrateFileChats} from '@/local/file-chat';
 import {saveConversationState} from '../../../../core/conversation-state.mjs';
@@ -76,7 +77,7 @@ const reload=async(surface:keyof typeof surfaces)=>{
  cleanup();
  await hydrateFileChats();
  surfaces[surface].show();
- await screen.findByLabelText('Message');
+ await screen.findByLabelText('Message',{},WAIT);
 };
 const saved=(key:string)=>[...rows.values()].find(r=>r.context_key===key)?.state.messages.map((m:any)=>m.content);
 const follows=(a:HTMLElement,b:HTMLElement)=>!!(a.compareDocumentPosition(b)&Node.DOCUMENT_POSITION_FOLLOWING);
@@ -89,7 +90,7 @@ const failures={
 const typeAndFail=async(kind:keyof typeof failures,text:string)=>{
  const failure=failures[kind];
  invoke.mockImplementationOnce(async()=>{ai=failure.state;return failure.answer();});
- fireEvent.change(await screen.findByLabelText('Message'),{target:{value:text}});
+ fireEvent.change(await screen.findByLabelText('Message',{},WAIT),{target:{value:text}});
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
  expect(await screen.findByText(failure.reason,{},{timeout:3000})).toBeInTheDocument();
 };
@@ -97,7 +98,7 @@ const sendFailing=async(surface:keyof typeof surfaces,kind:keyof typeof failures
  surfaces[surface].show();
  await typeAndFail(kind,QUESTION);
  expect(screen.getByText('No answer.')).toBeInTheDocument();
- await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION]));
+ await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION]),WAIT);
 };
 
 it.each([
@@ -111,7 +112,7 @@ it.each([
  expect(document.querySelector('.animate-spin')).toBeNull();
 
  await reload(surface);
- expect(await screen.findByText(reason)).toBeInTheDocument();
+ expect(await screen.findByText(reason,{},WAIT)).toBeInTheDocument();
  expect(screen.getAllByText(QUESTION)).toHaveLength(1);
  expect(screen.getByText('No answer.')).toBeInTheDocument();
  expect(screen.getByLabelText('Message')).toHaveValue('');
@@ -124,10 +125,10 @@ it.each([
  expect(sent.messages.filter((m:any)=>m.role==='user').map((m:any)=>m.content)).toEqual([QUESTION]);
  expect(follows(screen.getByText(QUESTION),answer)).toBe(true);
  expect(screen.queryByText('No answer.')).toBeNull();
- await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,ANSWER]));
+ await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,ANSWER]),WAIT);
 
  await reload(surface);
- const reloaded=await screen.findByText(ANSWER);
+ const reloaded=await screen.findByText(ANSWER,{},WAIT);
  expect(screen.getAllByText(QUESTION)).toHaveLength(1);
  expect(screen.getAllByText(ANSWER)).toHaveLength(1);
  expect(follows(screen.getByText(QUESTION),reloaded)).toBe(true);
@@ -153,7 +154,7 @@ it.each([
  expect(screen.queryByText(failures[kind].reason)).toBeNull();
 
  await reload(surface);
- await waitFor(()=>expect(screen.getAllByText(QUESTION)).toHaveLength(1));
+ await waitFor(()=>expect(screen.getAllByText(QUESTION)).toHaveLength(1),WAIT);
  await new Promise(r=>setTimeout(r,1200));
  expect(screen.queryByText('No answer.')).toBeNull();
  expect(screen.queryByText(failures[kind].reason)).toBeNull();
@@ -167,7 +168,7 @@ it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, a note that 
 
  // A second outage: only the message sent after the AI last worked gets a note.
  await typeAndFail('refused',SECOND);
- await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,SECOND]));
+ await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,SECOND]),WAIT);
  const check=()=>{
   expect(screen.getAllByText('No answer.')).toHaveLength(1);
   expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(1);
@@ -201,7 +202,7 @@ it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, a send with 
  ai=AI.none;
  invoke.mockResolvedValueOnce({data:null,error:{message:NO_AI_CHAT,context:new Response(JSON.stringify({error:NO_AI_CHAT}),{status:400})}});
  surfaces[surface].show();
- fireEvent.change(await screen.findByLabelText('Message'),{target:{value:QUESTION}});
+ fireEvent.change(await screen.findByLabelText('Message',{},WAIT),{target:{value:QUESTION}});
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
  expect(await screen.findByText(NO_AI_CHAT,{},{timeout:1500})).toBeInTheDocument();
  expect(screen.queryByText('No answer.')).toBeNull();
@@ -213,9 +214,9 @@ it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, a send with 
  invoke.mockResolvedValueOnce({data:{reply:ANSWER},error:null});
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
  await screen.findByText(ANSWER,{},{timeout:1500});
- await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,ANSWER]));
+ await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,ANSWER]),WAIT);
  await reload(surface);
- await screen.findByText(ANSWER);
+ await screen.findByText(ANSWER,{},WAIT);
  expect(screen.getAllByText(QUESTION)).toHaveLength(1);
 });
 
@@ -227,7 +228,7 @@ const refusal=()=>({data:null,error:{message:REFUSED,context:new Response(JSON.s
 it('sends a failed message its own files again and does not attach them to the next message',async()=>{
  invoke.mockImplementationOnce(async()=>{ai=AI.refused;return refusal();});
  surfaces['the chat page'].show();
- fireEvent.change(await screen.findByLabelText('Message'),{target:{value:QUESTION}});
+ fireEvent.change(await screen.findByLabelText('Message',{},WAIT),{target:{value:QUESTION}});
  fireEvent.click(screen.getByRole('button',{name:'Attach'}));
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
  await screen.findByText(REFUSED,{},{timeout:1500});
@@ -243,22 +244,22 @@ it('sends a failed message its own files again and does not attach them to the n
  fireEvent.change(screen.getByLabelText('Message'),{target:{value:'Fictional next message'}});
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
  await screen.findByText('Fictional second answer',{},{timeout:1500});
- await waitFor(()=>expect(savedMessages('general')?.map((m:any)=>m.attachments)).toEqual([[FILE],undefined,[],undefined]));
+ await waitFor(()=>expect(savedMessages('general')?.map((m:any)=>m.attachments)).toEqual([[FILE],undefined,[],undefined]),WAIT);
 });
 
 it('does not mark a send stopped by the person as unanswered',async()=>{
  const pending=deferred();invoke.mockReturnValueOnce(pending.promise);
  surfaces['the chat page'].show();
- fireEvent.change(await screen.findByLabelText('Message'),{target:{value:QUESTION}});
+ fireEvent.change(await screen.findByLabelText('Message',{},WAIT),{target:{value:QUESTION}});
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
- await waitFor(()=>expect(invoke).toHaveBeenCalled());
+ await waitFor(()=>expect(invoke).toHaveBeenCalled(),WAIT);
  fireEvent.click(screen.getByRole('button',{name:'Stop'}));
  await act(async()=>pending.reject(new Error('aborted')));
- expect(await screen.findByText('Reply stopped.')).toBeInTheDocument();
- await waitFor(()=>expect(saved('general')).toEqual([QUESTION]));
+ expect(await screen.findByText('Reply stopped.',{},WAIT)).toBeInTheDocument();
+ await waitFor(()=>expect(saved('general')).toEqual([QUESTION]),WAIT);
 
  await reload('the chat page');
- expect(await screen.findByText(QUESTION)).toBeInTheDocument();
+ expect(await screen.findByText(QUESTION,{},WAIT)).toBeInTheDocument();
  expect(screen.queryByText('No answer.')).toBeNull();
  expect(savedMessages('general')[0].lastFailure).toBeUndefined();
 });
@@ -266,13 +267,13 @@ it('does not mark a send stopped by the person as unanswered',async()=>{
 it('does not write a conversation cleared in another window back when its send fails',async()=>{
  const pending=deferred();invoke.mockReturnValueOnce(pending.promise);
  surfaces['the chat page'].show();
- fireEvent.change(await screen.findByLabelText('Message'),{target:{value:QUESTION}});
+ fireEvent.change(await screen.findByLabelText('Message',{},WAIT),{target:{value:QUESTION}});
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
- await waitFor(()=>expect(saved('general')).toEqual([QUESTION]));
+ await waitFor(()=>expect(saved('general')).toEqual([QUESTION]),WAIT);
  await act(async()=>{await clearFileChat('general');});
  await act(async()=>pending.reject(new Error(REFUSED)));
- expect(await screen.findByText(REFUSED)).toBeInTheDocument();
- await waitFor(()=>expect(inConversation(QUESTION)).toHaveLength(0));
+ expect(await screen.findByText(REFUSED,{},WAIT)).toBeInTheDocument();
+ await waitFor(()=>expect(inConversation(QUESTION)).toHaveLength(0),WAIT);
  expect(screen.getByText(REFUSED)).toBeInTheDocument();
  expect(screen.queryByText('No answer.')).toBeNull();
  expect(saved('general')).toEqual([]);
