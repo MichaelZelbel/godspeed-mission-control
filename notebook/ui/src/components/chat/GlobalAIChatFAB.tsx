@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore, lazy, Suspense } from "react";
 import { flushNoteSave, applyNoteEdit, applyNoteEditVerified, hashNoteContent } from "@/lib/note-ai-edit";
 import { toast } from "sonner";
 import { readScopedChat, updateScopedChat, persistScopedChat } from "@/local/scoped-chat-state.mjs";
@@ -50,7 +50,8 @@ import {
 const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 
 import ChatComposer, {type ChatFile} from "./ChatComposer";
-import {ChatConnectionEmptyState} from "./ChatConnectionEmptyState";
+import {ChatConnectionEmptyState,chatAIState,stateSaid} from "./ChatConnectionEmptyState";
+import {watchForStall} from "@/lib/chat-stall";
 import {isCurrentAIError,listenForChatOptions} from "@/local/chat-options.mjs";
 import { useChatEntryInView } from "./chat-entry";
 import { BRAIN_PAGE } from "@/lib/brain-page";
@@ -110,6 +111,10 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   const [contextTitle,setContextTitle]=useState("");
   const [files,setFiles]=useState<ChatFile[]>([]),[model,setModel]=useState(''),[effort,setEffort]=useState('');
   const requestRef=useRef<string|null>(null),stoppedRef=useRef(false);
+  // The AI's state every chat surface shares (ChatConnectionEmptyState polls it under an open
+  // conversation): a "No answer" note shows only while its failure still applies (#790). Read from
+  // the shared answer only, so a closed floating chat asks the server nothing.
+  const aiState=useSyncExternalStore(useCallback((changed:()=>void)=>queryClient.getQueryCache().subscribe(changed),[queryClient]),()=>chatAIState(queryClient.getQueryData(['chat-options'])));
   const stopReply=async()=>{if(requestRef.current){stoppedRef.current=true;await fetch('/api/chat/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:requestRef.current})});}};
 
   const setSizeMode = useCallback((m: SizeMode) => {
@@ -308,17 +313,22 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
     // A message handed in (openFloatingChat) is sent as if typed; a click or key event is not one.
     const text = (typeof override === "string" ? override : input).trim();
     if (isLoading || clearingRef.current || requestRef.current || !session) return;
-    const failed = resend && unansweredReason(state.messages, state.messages.length - 1) ? state.messages.at(-1) : undefined;
+    const failed = resend && unansweredReason(state.messages, state.messages.length - 1, aiState) ? state.messages.at(-1) : undefined;
     if (resend ? !failed : !text && !files.length) return;
+    const content = text||"Please describe the attached files.";
+    // The same words sent again after a send that got no answer (the newest message is still the
+    // person's) replace that message instead of standing under it, so a question shows once (#790).
+    const last = state.messages.at(-1);
+    const repeated = !failed && last?.role === "user" && last.content === content;
 
     setError(null);
     const sentKey = chatKey;
     const sentUserId = user?.id;
     const sentContext = contextKey;
-    const userMsg: ChatMessage = failed ?? { role: "user", content: text||"Please describe the attached files.", attachments:files };
+    const userMsg: ChatMessage = failed ?? { role: "user", content, attachments:files };
     const nextState: PersistedChatState = failed ? state : {
       ...state,
-      messages: [...state.messages, userMsg],
+      messages: [...(repeated ? state.messages.slice(0, -1) : state.messages), userMsg],
     };
     followRef.current=true;setState(nextState);
     if (!resend) {setInput("");setFiles([]);}
@@ -355,9 +365,25 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
           };
 
 
-      const { data, error: fnErr } = await supabase.functions.invoke(chatFn, {
+      const sentRequest = requestRef.current;
+      const asked = supabase.functions.invoke(chatFn, {
         body: {...invokeBody,conversation_session:state.session_id||'',message:userMsg.content,conversation_id:'notebook:'+contextKey,talk_id:talkId||undefined,page:pageChat?.page,page_label:pageChat?.label,files:userMsg.attachments?.length?userMsg.attachments:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current},
       });
+      // A send the AI took and never answered ends, and the notebook stops working on it (chat-stall.ts).
+      const stall = watchForStall(() => chatAIState(queryClient.getQueryData(['chat-options'])));
+      let answer: Awaited<typeof asked>;
+      try {
+        answer = await Promise.race([asked, stall.stalled]);
+      } catch (stallError: any) {
+        if (stallError?.stalled && sentRequest) {
+          asked.catch(() => {});
+          void fetch('/api/chat/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:sentRequest})}).catch(()=>{});
+        }
+        throw stallError;
+      } finally {
+        stall.stop();
+      }
+      const { data, error: fnErr } = answer;
 
       // A non-2xx answer (out of credits is a 402) arrives as fnErr with
       // data null, so the reason is read from the answer itself.
@@ -453,21 +479,33 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
       // The error belongs to the conversation that asked; do not show it in another.
       const shown = chatKeyRef.current === sentKey;
       const reason: string = stoppedRef.current ? "Reply stopped." : err.message || "Something went wrong";
-      // A send that got no answer stays marked on its message, so the reason survives a reload; a
-      // conversation cleared meanwhile has no such message left to mark.
+      // A send the AI refused, could not be reached for or stalled on stays marked on its message,
+      // so the reason survives a reload while that failure applies; a conversation cleared meanwhile
+      // has no such message left to mark. Any other failure (no AI connected, no credits) is said
+      // as before: on the line under the conversation, with the words back in the composer.
+      const said = stoppedRef.current ? null : stateSaid(reason);
       const cleared = (loadChatState(sentUserId, sentContext).session_id || "") !== (nextState.session_id || "");
-      if (stoppedRef.current || cleared) {
-        if (shown) setError(reason);
-      } else {
+      if ((said === "refused" || said === "unreachable") && !cleared) {
         deliver(sentKey, sentUserId, sentContext, {
           ...nextState,
           messages: nextState.messages.map((m, i) => (i === nextState.messages.length - 1 ? { ...m, lastFailure: reason } : m)),
         });
+        // The notebook now reads the AI as this send found it (the newest request wins, ai-health.mjs):
+        // every surface in this window says so at once, not at the next read.
+        if (!err?.stalled) queryClient.setQueryData(['chat-options'], (previous: any) => ({connected: true, ...previous, usable: false, availability: said}));
+        // A stall the AI's own checks do not see (they answer) is said here too, until they are read again.
+        else if (shown && chatAIState(queryClient.getQueryData(['chat-options'])) === "ready") setError(reason);
+      } else if (shown) {
+        setError(reason);
+        if (!stoppedRef.current && !resend) {
+          setInput(prev => prev || text);
+          setFiles(prev => prev.length ? prev : userMsg.attachments ?? []);
+        }
       }
     } finally {
       setIsLoading(false);requestRef.current=null;
     }
-  }, [input, files, model, effort, isLoading, session, state, page, noteId, personId,talkId, pageChat, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
+  }, [input, files, model, effort, isLoading, session, state, aiState, page, noteId, personId,talkId, pageChat, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
 
   // A message handed in with openFloatingChat goes out once the panel is open and free; after a
   // moment, so the conversation the panel just loaded is the one it is added to.
@@ -665,7 +703,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
 
               {state.messages.map((msg, i) => {
                 const newest = i === state.messages.length - 1;
-                const unanswered = isLoading && newest ? null : unansweredReason(state.messages, i);
+                const unanswered = isLoading && newest ? null : unansweredReason(state.messages, i, aiState);
                 return (
                 <div key={i}>
                 <div className={`flex gap-2 ${msg.role === "user" ? "justify-end" : ""}`}>
@@ -753,7 +791,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
 
               {/* An open conversation keeps its replies and shows the AI's current state under them, so a
                   refused key, an outage or recovery is seen without a reload (#590). */}
-              {state.messages.length > 0 && <ChatConnectionEmptyState ready={null} said={error ?? unansweredReason(state.messages, state.messages.length - 1)}/>}
+              {state.messages.length > 0 && <ChatConnectionEmptyState ready={null} said={error ?? unansweredReason(state.messages, state.messages.length - 1, aiState)}/>}
 
               {isLoading && (
                 <div className="flex items-center gap-2">

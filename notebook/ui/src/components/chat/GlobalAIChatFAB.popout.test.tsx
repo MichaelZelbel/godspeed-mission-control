@@ -98,8 +98,7 @@ it("a pop-out send the AI does not answer stops spinning and says so",async()=>{
  await sendFromPopOut('Fictional unanswered question');
  expect(await screen.findByText(refused,{},{timeout:1500})).toBeInTheDocument();
  expect(spinning()).toBeNull();
- expect(screen.getByLabelText('Message')).toHaveValue('');
- expect(screen.getByRole('button',{name:'Send again'})).toBeInTheDocument();
+ expect(screen.getByLabelText('Message')).toHaveValue('Fictional unanswered question');
 });
 
 it("the note's own chat still asks its open editor to save the note before sending",async()=>{

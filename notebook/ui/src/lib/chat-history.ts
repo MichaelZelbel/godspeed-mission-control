@@ -30,19 +30,25 @@ export interface PersistedChatMessage {
     folder_path: string;
   }>;
   /**
-   * On a user message whose latest send got no answer: the reason the person was shown. The
-   * server keeps the field after a later reply, so read it through unansweredReason.
+   * On a user message whose latest send got no answer because the AI refused it, could not be
+   * reached or stalled: the reason the person was shown. The server keeps the field after a later
+   * reply, so read it through unansweredReason.
    */
   lastFailure?: string;
 }
 
-/** Why the message at `index` got no answer, while no reply follows it; else null. */
-export function unansweredReason(messages: PersistedChatMessage[], index: number): string | null {
+/**
+ * Why the message at `index` got no answer, while that failure still applies (#790); else null.
+ * It applies while no later message has been answered and the AI still reads as refused or
+ * unreachable (`aiState`, the state every chat surface shares). Once the AI works again, or no AI
+ * is connected (that case says its own sentence), or before the state is known, there is no note.
+ */
+export function unansweredReason(messages: PersistedChatMessage[], index: number, aiState: string): string | null {
   const message = messages[index];
   if (message?.role !== "user" || !message.lastFailure) return null;
-  return messages[index + 1]?.role === "assistant" ? null : message.lastFailure;
+  if (aiState !== "refused" && aiState !== "unreachable") return null;
+  return messages.slice(index + 1).some((m) => m.role === "assistant") ? null : message.lastFailure;
 }
-
 
 export interface PersistedChatState {
   session_id?: string;

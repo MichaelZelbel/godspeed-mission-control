@@ -17,11 +17,15 @@ it("a summary from an earlier session cannot return after Clear, even when the n
   expect(withSummary(state, "Earlier conversation summary", 8, 20, "old-session")).toBe(state);
 });
 
-it("a message that got no answer keeps its reason only until a reply follows it", () => {
+it("a message that got no answer keeps its reason only while the AI still fails and no later message is answered", () => {
   const failed = {role: "user" as const, content: "Fictional question", lastFailure: "Your AI could not be reached."};
   const reply = {role: "assistant" as const, content: "Fictional answer"};
-  expect(unansweredReason([failed], 0)).toBe("Your AI could not be reached.");
-  expect(unansweredReason([failed, {role: "user", content: "Fictional follow-up"}], 0)).toBe("Your AI could not be reached.");
-  expect(unansweredReason([failed, reply], 0)).toBeNull();
-  expect(unansweredReason([{role: "user", content: "Fictional question"}], 0)).toBeNull();
+  const followUp = {role: "user" as const, content: "Fictional follow-up"};
+  expect(unansweredReason([failed], 0, "unreachable")).toBe("Your AI could not be reached.");
+  expect(unansweredReason([failed], 0, "refused")).toBe("Your AI could not be reached.");
+  expect(unansweredReason([failed, followUp], 0, "unreachable")).toBe("Your AI could not be reached.");
+  expect(unansweredReason([failed, reply], 0, "unreachable")).toBeNull();
+  expect(unansweredReason([failed, followUp, reply], 0, "unreachable")).toBeNull();
+  for (const state of ["ready", "none", "settings-only", "checking"]) expect(unansweredReason([failed], 0, state)).toBeNull();
+  expect(unansweredReason([{role: "user", content: "Fictional question"}], 0, "unreachable")).toBeNull();
 });
