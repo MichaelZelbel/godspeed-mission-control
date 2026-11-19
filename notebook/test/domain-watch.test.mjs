@@ -27,6 +27,24 @@ test('domain watch records each successful state and notices each transition onc
  assert.equal(calls[0].headers.Accept,'application/rdap+json');assert.match(calls[0].headers['User-Agent'],/Godspeed/);
 });
 
+test('each state change reads as a plain sentence, and redemption says it is in its redemption period',async()=>{
+ const {store,query}=setup();addDomainWatch(store,'plain.com');let answer=['active'];
+ const fetcher=async()=>answer==='free'?new Response(null,{status:404}):rdap(answer);
+ const bodies=[],seen=new Set();
+ const run=async next=>{answer=next;await procedure({kind:'domain-watch'},{store,query,fetcher});for(const n of store.list('notifications'))if(!seen.has(n.id)){seen.add(n.id);bodies.push(n.body);}};
+ // The first reading records the state and sends no notice; each later change sends exactly one.
+ await run(['active']);assert.equal(bodies.length,0);
+ await run(['redemptionPeriod']);await run(['redemptionPeriod']);
+ await run(['pendingDelete']);await run('free');await run(['active']);
+ assert.deepEqual(bodies,[
+  'plain.com is now in its redemption period: the owner can still renew it for about 30 days.',
+  'plain.com is now pending deletion: it is released in about five days; a backorder service can try to catch it.',
+  'plain.com is now available: it can be registered now, at any registrar.',
+  'plain.com is now registered: it is registered again.'
+ ]);
+ assert.ok(bodies.every(body=>!/is now redemption|is now pending delete\b/.test(body)));
+});
+
 test('RDAP fallback and total failure preserve the latest successful state',async()=>{
  const {store,query}=setup();addDomainWatch(store,'wanted.org');let called=[];
  await procedure({kind:'domain-watch'},{store,query,fetcher:async url=>{called.push(String(url));if(called.length===1)throw Error('offline');return rdap(['redemptionPeriod']);}});
@@ -61,7 +79,7 @@ test('the scheduler delivers a saved transition through Telegram and reports a t
  await procedure({kind:'domain-watch'},{store,query,fetcher:async()=>rdap(['active'])});store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at).toISOString()});
  const sent=[],telegram=new Telegram({store,domains:null,token:'token',owner:'1',transport:async(_url,input)=>{sent.push(JSON.parse(String(input.body)));return new Response(JSON.stringify({ok:true,result:{message_id:7}}),{status:200,headers:{'Content-Type':'application/json'}});}});
  const scheduler=new Scheduler(store,{query,delivery:'telegram',executor:job=>procedure(job,{store,query,fetcher:async()=>rdap(['pendingDelete'])})});scheduler.deliver=telegram.deliver.bind(telegram);
- await scheduler.tick(at);assert.equal(sent.length,1);assert.match(sent[0].text,/delivery\.test is now pending delete/);assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'verified');
+ await scheduler.tick(at);assert.equal(sent.length,1);assert.match(sent[0].text,/delivery\.test is now pending deletion/);assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'verified');
  store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at+21600000).toISOString()});scheduler.executor=job=>procedure(job,{store,query,fetcher:async()=>rdap(['pendingDelete'])});
  await scheduler.tick(at+21600000);assert.equal(sent.length,1);
  store.save('jobs',{id:'domain-watch-sweeper',next_run:new Date(at+43200000).toISOString()});scheduler.executor=job=>procedure(job,{store,query,fetcher:async()=>{throw Error('offline');}});
@@ -78,7 +96,7 @@ test('the scheduler delivers every bounded message in a large transition batch',
  const scheduler=new Scheduler(store,{query,delivery:'telegram',executor:job=>procedure(job,{store,query,fetcher:async()=>rdap(['pendingDelete'])})});scheduler.deliver=telegram.deliver.bind(telegram);
  await scheduler.tick(at);
  assert.ok(sent.length>1);assert.ok(sent.every(text=>text.length<=4000));
- for(const domain of domains)assert.equal(sent.filter(text=>text.includes(domain+' is now pending delete')).length,1);
+ for(const domain of domains)assert.equal(sent.filter(text=>text.includes(domain+' is now pending deletion')).length,1);
  assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'verified');
 });
 
@@ -108,7 +126,7 @@ test('after one batch is delivered and the next is uncertain, the next run deliv
  assert.equal(store.get('jobs','domain-watch-sweeper').last_outcome,'verified');
  assert.deepEqual(attempted,batches.slice(2).map(id=>store.get('notes',id).content));
  for(const domain of domains){
-  const sent=[...firstRun,...attempted].filter(text=>text.includes(domain+' is now pending delete')).length;
+  const sent=[...firstRun,...attempted].filter(text=>text.includes(domain+' is now pending deletion')).length;
   assert.equal(sent,1,domain);
  }
  assert.deepEqual(pendingDeliveries(store),[]);
@@ -166,7 +184,7 @@ test('a domain that always fails sits next to a healthy one that keeps being che
   assert.equal(checks,run+1);assert.equal(down().state,null);assert.equal(down().last_lookup_error,'offline');
  }
  assert.equal(up().state,'registered');
- assert.deepEqual(sent.map(text=>text.split(':')[0]),['up.example is now pending delete','up.example is now available','up.example is now registered']);
+ assert.deepEqual(sent.map(text=>text.split(':')[0]),['up.example is now pending deletion','up.example is now available','up.example is now registered']);
  assert.ok(sent.every(text=>!text.includes('down.example')));
 });
 
