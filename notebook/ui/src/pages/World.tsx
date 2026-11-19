@@ -56,6 +56,11 @@ export default function World() {
     return Array.from(seen.entries()).sort((a, b) => b[1] - a[1]);
   }, [entities]);
 
+  // "Nothing matches." is the answer to a search or a filter. An empty tab with neither says it is
+  // empty and how to fill it (#747).
+  const searching = search.trim() !== "";
+  const filteringEntities = searching || kindFilter !== null;
+
   const visibleEntities = useMemo(() => {
     const q = search.trim().toLowerCase();
     return entities.filter((e) => {
@@ -212,8 +217,21 @@ export default function World() {
 
             {entitiesLoading ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : visibleEntities.length === 0 ? (
+            ) : visibleEntities.length === 0 && filteringEntities ? (
               <p className="text-sm text-muted-foreground">Nothing matches.</p>
+            ) : visibleEntities.length === 0 ? (
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  No things yet. Add your first place, project or anything else with Add a thing. The
+                  people you add on the People screen show up here too.
+                </p>
+                {!adding && (
+                  <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => setAdding(true)}>
+                    <Plus className="h-3.5 w-3.5" />
+                    Add the first thing
+                  </Button>
+                )}
+              </div>
             ) : (
               <ul className="divide-y divide-border rounded-md border border-border">
                 {visibleEntities.map((entity) => (
@@ -250,8 +268,16 @@ export default function World() {
           <TabsContent value="events" className="space-y-3 pt-3">
             {eventsLoading ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : visibleEvents.length === 0 && searching ? (
+              <p className="text-sm text-muted-foreground">Nothing matches.</p>
             ) : visibleEvents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing dated yet.</p>
+              <p className="text-sm text-muted-foreground">
+                Nothing has happened here yet. Events are the moments on your{" "}
+                <Link to="/dashboard/timeline" className="text-primary underline underline-offset-2">
+                  Timeline
+                </Link>
+                : add the first one there with Add Moment.
+              </p>
             ) : (
               <ul className="divide-y divide-border rounded-md border border-border">
                 {visibleEvents.map((event) => (
@@ -276,8 +302,16 @@ export default function World() {
           <TabsContent value="claims" className="space-y-3 pt-3">
             {claimsLoading ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : claimGroups.length === 0 && searching ? (
+              <p className="text-sm text-muted-foreground">Nothing matches.</p>
             ) : claimGroups.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing believed yet.</p>
+              <p className="text-sm text-muted-foreground">
+                Nothing believed yet. Open a thing on the Entities tab, or a person on the{" "}
+                <Link to="/dashboard/people" className="text-primary underline underline-offset-2">
+                  People
+                </Link>{" "}
+                screen, and add a fact about them there.
+              </p>
             ) : (
               <ul className="space-y-2">
                 {claimGroups.map((group) => (
