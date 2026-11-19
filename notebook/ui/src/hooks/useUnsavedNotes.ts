@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { pinRecordVersion, recordVersion } from "@/integrations/supabase/client";
 import { saveUnsavedNoteText } from "@/hooks/useNotes";
@@ -38,4 +38,33 @@ export function useUnsavedNoteStatus(noteId: string): UnsavedStatus {
     () => unsavedNotes.status(noteId),
     () => "saved",
   );
+}
+
+/**
+ * The notes with any title typed in an editor that the notebook has not saved
+ * yet, so a list shows the title the person is typing instead of the saved
+ * one ("Untitled" in a new note) until the save lands (#809). It re-renders
+ * only when a typed title changes, not on every keystroke in a note's text.
+ */
+export function useTypedTitles<T extends { id: string; title?: string | null }>(notes: T[]): T[] {
+  const [titlesChanged, setTitlesChanged] = useState(0);
+  const seen = useRef(new Map<string, string | undefined>());
+  useEffect(() => unsavedNotes.subscribe((id) => {
+    const title = unsavedNotes.get(id)?.title;
+    if (seen.current.get(id) === title) return;
+    seen.current.set(id, title);
+    setTitlesChanged((n) => n + 1);
+  }), []);
+  return useMemo(() => {
+    let typed = false;
+    const shown = notes.map((note) => {
+      const title = unsavedNotes.get(note.id)?.title;
+      if (title === undefined || title === note.title) return note;
+      typed = true;
+      return { ...note, title };
+    });
+    return typed ? shown : notes;
+    // titlesChanged is how a typed title reaches this list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notes, titlesChanged]);
 }

@@ -5,7 +5,6 @@ import {MemoryRouter} from 'react-router-dom';
 import {focusManager,QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import '@testing-library/jest-dom/vitest';
 import {GlobalAIChatFAB} from './GlobalAIChatFAB';
-import {NoteChatPanel} from '@/components/notes/NoteChatPanel';
 import {CollectionChatPanel} from '@/components/collections/CollectionChatPanel';
 import {ChatConnectionEmptyState} from './ChatConnectionEmptyState';
 import { WAIT } from "@/test/wait-limits";
@@ -24,7 +23,8 @@ const wrap=(node:React.ReactNode,path='/dashboard')=>{const client=new QueryClie
 const surfaces=[
   ['floating',()=>{wrap(<GlobalAIChatFAB/>);fireEvent.click(screen.getByRole('button',{name:'Chat with Godspeed'}));}],
   ['pop-out',()=>wrap(<GlobalAIChatFAB page/>,'/dashboard/chat')],
-  ['note',()=>wrap(<NoteChatPanel note={{id:'note-1',title:'Fictional note',content:''} as any} onClose={()=>{}} onNoteChanged={()=>{}}/>)],
+  // The note chat is the one the Notes page mounts next to an open note (#809).
+  ['note',()=>{wrap(<GlobalAIChatFAB embedded noteTitle="Fictional note"/>,'/dashboard/notes/note-1');act(()=>{window.dispatchEvent(new Event('godspeed:toggle-note-chat'));});expect(screen.getByText('Godspeed / Fictional note')).toBeInTheDocument();}],
   ['collection',()=>wrap(<CollectionChatPanel collectionId="collection-1" collectionName="Fictional collection" onClose={()=>{}} onCollectionChanged={()=>{}}/>)],
 ] as const;
 
