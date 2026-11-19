@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 // Issue #809: the note toolbar's switch that hides a note from the AI was
 // labelled just "AI", which read like an AI action, and its toast showed at
-// the top right, over the toolbar. It now says what it does, and its toast
-// shows at the bottom of the screen.
+// the top right, over the toolbar. It now says what it does. Its toast moved
+// to the bottom centre, where it covered the note's save status (#819), so it
+// now shows in the bottom-left corner, lifted above the note's status bar.
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -39,11 +40,14 @@ it("says a hidden note is hidden from the AI and that a click shows it again", a
   expect(button).toHaveTextContent(/^Hidden from AI$/);
 });
 
-it("shows its toast at the bottom, away from the note toolbar", async () => {
+it("shows its toast in the bottom-left corner, above the note's status bar", async () => {
   await show(false);
   fireEvent.click(screen.getByRole("button", { name: /Hide from AI/ }));
   await waitFor(() => expect(toasts.length).toBe(1), WAIT);
   expect(toasts[0].message).toMatch(/^Hidden from AI/);
-  expect(toasts[0].options?.position).toMatch(/^bottom/);
+  expect(toasts[0].options?.position).toBe("bottom-left");
+  // Sonner's own 32px margin plus this lift keeps the toast above the 28px
+  // status bar that sits 24px above the bottom of the page.
+  expect(parseInt(toasts[0].options?.style?.bottom, 10)).toBeGreaterThanOrEqual(24);
   expect(await screen.findByRole("button", { name: "Hidden from AI. Show to AI again" }, WAIT)).toBeInTheDocument();
 });
