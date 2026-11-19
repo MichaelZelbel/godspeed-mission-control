@@ -114,3 +114,15 @@ test('a save creates the suggested and the typed new people, each once and only 
   assert.deepEqual(newPeopleToCreate([], []), [], 'a new chip removed before saving creates nobody');
   assert.deepEqual(newPeopleToCreate(['  '], ['']), []);
 });
+
+// #779: a saved moment's confirmation says when no facts were pulled out because of the AI.
+test('a refused or unreachable AI is told apart from anything else the extraction says', async () => {
+  const {aiFailureKind, factsNotPulledOut} = await import('../ui/src/components/timeline/moment-form.mjs');
+  const {AI_REFUSED_STATUS, AI_UNREACHABLE_STATUS, NO_AI_ANALYSIS} = await import('../core/no-ai.mjs');
+  assert.equal(aiFailureKind(AI_REFUSED_STATUS + '. Check it in Settings, Your AI, then try again.'), 'refused');
+  assert.equal(aiFailureKind(AI_UNREACHABLE_STATUS + '. Check its connection in Settings, Your AI, then try again.'), 'unreachable');
+  for (const other of [NO_AI_ANALYSIS, 'Source note missing', '', undefined]) assert.equal(aiFailureKind(other), null);
+  assert.equal(factsNotPulledOut('refused'), 'No facts were pulled out of it. ' + AI_REFUSED_STATUS + '. Check it in Settings, Your AI.');
+  assert.equal(factsNotPulledOut('unreachable'), 'No facts were pulled out of it. ' + AI_UNREACHABLE_STATUS + '. Check its connection in Settings, Your AI.');
+  for (const other of ['none', 'ready', null, undefined]) assert.equal(factsNotPulledOut(other), null);
+});

@@ -69,6 +69,32 @@ describe("the saved main AI in Settings", () => {
     expect(document.body).not.toHaveTextContent(/runs no daily routines|no assistant chat|cannot run|unavailable|not available/i);
   });
 
+  // #779: the saved main AI can be removed, after a confirmation that can be declined.
+  it("removes the saved AI connection only after the person confirms", async () => {
+    let saved: unknown = { configured: true, url: "https://openrouter.ai/api/v1/chat/completions", model: "fictional/model", key: true };
+    const calls = serve({ ...supportingRoutes, provider: () => [200, saved], "provider/remove": () => { saved = { configured: false, key: false };return [200, { removed: true, provider: saved, routines: { available: false } }]; } });
+    settings();
+    fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }));
+    expect(await screen.findByRole("alertdialog", { name: "Remove your AI connection?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(calls.some(c => c.route === "provider/remove")).toBe(false);
+    expect(screen.getByLabelText("Key (leave it empty to keep the saved one)")).not.toBeRequired();
+    fireEvent.click(screen.getByRole("button", { name: "Remove this AI connection" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    expect(await screen.findByText("Removed. No AI is connected now. Connect one here whenever you like.")).toBeInTheDocument();
+    expect(calls.filter(c => c.route === "provider/remove")).toEqual([{ route: "provider/remove", body: {} }]);
+    expect(screen.getByLabelText("Key")).toBeRequired();
+    expect(screen.queryByRole("button", { name: "Remove this AI connection" })).toBeNull();
+  });
+
+  it("offers no removal when no AI connection is saved", async () => {
+    serve(supportingRoutes);
+    settings();
+    expect(await screen.findByRole("button", { name: "Test and connect" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove this AI connection" })).toBeNull();
+  });
+
   // #763: "Test and connect" against a real notebook server and a stand-in AI on 127.0.0.1. A refused
   // key, an address where nothing answers and a server error each say in plain words what happened.
   it("says plainly that the key was refused, that nothing answered, or that the service failed", async () => {

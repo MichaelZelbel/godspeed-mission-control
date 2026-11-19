@@ -118,7 +118,7 @@ import { markdownToHtml, tiptapJsonToMarkdown } from "@/utils/markdown-converter
 import { resolveAttachmentImagesInHtml } from "@/lib/upload-attachment";
 import { buildTitleMap, resolveWikilinksInHtml } from "@/lib/wikilink-resolver";
 import { escapeLike, fetchAllPages, pgOrValue } from "@/lib/postgrest";
-import { dbErrorMessage } from "@/lib/function-error";
+import { dbErrorMessage, functionErrorMessage } from "@/lib/function-error";
 import {
   FLUSH_REQUEST_EVENT,
   FLUSH_DONE_EVENT,
@@ -147,6 +147,8 @@ interface NoteEditorProps {
   onToggleLocalGraph?: () => void;
   onNoteSelect?: (noteId: string) => void;
 }
+
+const CLASSIFY_FAILED = "Classify with AI did not finish. Try again.";
 
 /** Extract all wikilink noteIds from editor JSON content (resolved nodes only) */
 function extractWikilinkIds(doc: any): string[] {
@@ -1289,7 +1291,10 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
         if (saved?.updated_at) lastSavedUpdatedAtRef.current = Math.max(lastSavedUpdatedAtRef.current, new Date(saved.updated_at).getTime());
         setSaveStatus("saved");
       }
-      processNote.mutate(note.id);
+      // Says why it failed: no AI, a refused key or an outage (#779). It said nothing before.
+      processNote.mutate(note.id, {
+        onError: async (error) => showToast.error(await functionErrorMessage(error, CLASSIFY_FAILED)),
+      });
     } catch {
       setSaveStatus("error");
       showToast.error("Save the latest changes before requesting AI processing");
