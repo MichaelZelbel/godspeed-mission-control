@@ -1,4 +1,4 @@
-import {NO_AI_CHAT,NO_AI_ANALYSIS} from './no-ai.mjs';
+import {NO_AI_CHAT,NO_AI_ANALYSIS,analysisFailure} from './no-ai.mjs';
 import {momentDraft} from './moment-draft.mjs';
 import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
 import {startCharmJudgement} from './charm-judgement.mjs';
@@ -6,6 +6,7 @@ import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
 import {asksForTodaysBrief,savedBriefToday} from './briefing.mjs';
 import {NOTEBOOK_CHAT_FUNCTIONS} from './notebook-chat.mjs';
 
+const AI_ANALYSIS_ACTIONS=['generate-profile-suggestions','generate_collection_schema'];
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
 import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
@@ -270,7 +271,13 @@ export class Domains {
     }
     return found.context?{context:found.context}:null;
   }
+  // The AI actions outside the chats say a refused key or an outage in plain words, never the
+  // provider's (#774): Suggest and My Profile's suggestions, and Create collection with AI.
   async invoke(name, input = {}) {
+    if(!AI_ANALYSIS_ACTIONS.includes(name))return this.answer(name,input);
+    try{return await this.answer(name,input);}catch(error){throw analysisFailure(error);}
+  }
+  async answer(name, input = {}) {
     if(name==='draft-event')return draftEvent(this.provider,input);
     if(name==='retrieve-memory')return retrieveNoteWindows(this.query,input.query||input.message||'');
     // A message from the page that shows who the assistant is carries that page's numbered parts,
