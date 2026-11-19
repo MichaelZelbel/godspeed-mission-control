@@ -50,6 +50,7 @@ const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 
 import ChatComposer, {type ChatFile} from "./ChatComposer";
 import {ChatConnectionEmptyState} from "./ChatConnectionEmptyState";
+import {isCurrentAIError,listenForChatOptions} from "@/local/chat-options.mjs";
 import { useChatEntryInView } from "./chat-entry";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { personLabel } from "@/components/timeline/people";
@@ -98,6 +99,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   const [isClearing, setIsClearing] = useState(false);
   const clearingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(()=>listenForChatOptions(options=>{if(options.usable)setError(previous=>isCurrentAIError(previous)?null:previous);}),[]);
   const [sizeMode, setSizeModeState] = useState<SizeMode>(() => embedded ? "docked" : loadSizeMode());
   const scrollRef = useRef<HTMLDivElement>(null);
   const followRef=useRef(true);
@@ -706,6 +708,10 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                 </div>
               ))}
 
+              {/* An open conversation keeps its replies and shows the AI's current state under them, so a
+                  refused key, an outage or recovery is seen without a reload (#590). */}
+              {state.messages.length > 0 && <ChatConnectionEmptyState ready={null} said={error}/>}
+
               {isLoading && (
                 <div className="flex items-center gap-2">
 
@@ -716,7 +722,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
               )}
 
               {error && (
-                <div className="flex items-center gap-2 text-destructive text-xs bg-destructive/10 rounded-lg px-3 py-2">
+                <div role="alert" data-chat-reply-error className="flex items-center gap-2 text-destructive text-xs bg-destructive/10 rounded-lg px-3 py-2">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span>{error}</span>
                 </div>
