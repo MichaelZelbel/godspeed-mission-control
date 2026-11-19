@@ -118,7 +118,7 @@ import { markdownToHtml, tiptapJsonToMarkdown } from "@/utils/markdown-converter
 import { resolveAttachmentImagesInHtml } from "@/lib/upload-attachment";
 import { buildTitleMap, resolveWikilinksInHtml } from "@/lib/wikilink-resolver";
 import { escapeLike, fetchAllPages, pgOrValue } from "@/lib/postgrest";
-import { dbErrorMessage } from "@/lib/function-error";
+import { dbErrorMessage, functionErrorMessage } from "@/lib/function-error";
 import {
   FLUSH_REQUEST_EVENT,
   FLUSH_DONE_EVENT,
@@ -147,6 +147,8 @@ interface NoteEditorProps {
   onToggleLocalGraph?: () => void;
   onNoteSelect?: (noteId: string) => void;
 }
+
+const CLASSIFY_FAILED = "Classify with AI did not finish. Try again.";
 
 /** Extract all wikilink noteIds from editor JSON content (resolved nodes only) */
 function extractWikilinkIds(doc: any): string[] {
@@ -1289,7 +1291,10 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
         if (saved?.updated_at) lastSavedUpdatedAtRef.current = Math.max(lastSavedUpdatedAtRef.current, new Date(saved.updated_at).getTime());
         setSaveStatus("saved");
       }
-      processNote.mutate(note.id);
+      // Says why it failed: no AI, a refused key or an outage (#779). It said nothing before.
+      processNote.mutate(note.id, {
+        onError: async (error) => showToast.error(await functionErrorMessage(error, CLASSIFY_FAILED)),
+      });
     } catch {
       setSaveStatus("error");
       showToast.error("Save the latest changes before requesting AI processing");
@@ -1815,6 +1820,20 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             ref={titleInputRef}
             value={title}
             onChange={(e) => handleTitleChange(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter ends the title and goes on in the note's text, as a
+              // person expects; without this the next words joined the title
+              // (#791). Not while an input method is still composing a word.
+              if (e.key !== "Enter" || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || e.nativeEvent.isComposing) return;
+              e.preventDefault();
+              const ed = editorRef.current;
+              if (!ed) return;
+              // focus("start") puts the cursor at the start but only moves the
+              // focus on the next frame; a fast typist's next letter would still
+              // land in the title, so the focus moves here, at once.
+              ed.commands.focus("start");
+              ed.view.focus();
+            }}
             placeholder="Untitled"
             className="w-full min-w-0 text-2xl font-bold font-display bg-transparent border-none outline-none placeholder:text-muted-foreground/40"
             disabled={note.is_trashed || note.is_external}

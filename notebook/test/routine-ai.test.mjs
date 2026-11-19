@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
-import {hermesSettingsFor,setEnvValue,connectRoutineAI,routineAIStatus,checkRoutineAI} from '../core/routine-ai.mjs';
+import {hermesSettingsFor,setEnvValue,deleteEnvValue,connectRoutineAI,disconnectRoutineAI,readRecord,routineAIStatus,checkRoutineAI} from '../core/routine-ai.mjs';
 import {providerService} from '../core/provider-service.mjs';
 import {homeHasModel} from '../core/native-agent.mjs';
 
@@ -135,7 +135,18 @@ test('the Settings form connects the routines\' AI through the server, and leave
  const reopened=await createService({root,port:0,device:'pc'}),reopenedBase='http://127.0.0.1:'+reopened.address.port;
  try{const response=await fetch(reopenedBase+'/api/provider'),data=await response.json();assert.deepEqual(data,{configured:true,url,model:'retained-key-model',key:true});assert.equal(JSON.stringify(data).includes('other-key'),false);
   const providerFile=path.join(root,'.godspeed','provider.json');fs.writeFileSync(providerFile,'{broken');const broken=await fetch(reopenedBase+'/api/provider');assert.notEqual(broken.status,200);assert.match((await broken.json()).error,/not valid JSON/);
-  fs.rmSync(providerFile);fs.mkdirSync(providerFile);const unreadable=await fetch(reopenedBase+'/api/provider');assert.notEqual(unreadable.status,200);fs.rmdirSync(providerFile);}
+  fs.rmSync(providerFile);fs.mkdirSync(providerFile);const unreadable=await fetch(reopenedBase+'/api/provider');assert.notEqual(unreadable.status,200);fs.rmdirSync(providerFile);
+  // Removing an OpenRouter connection that was written into Hermes takes its key out of Hermes' .env
+  // and its model out of config.yaml, and leaves Hermes' other lines alone (#779).
+  const openrouter={url:'https://openrouter.ai/api/v1/chat/completions',key:'sk-or-fictional-779',model:'vendor/fictional'};
+  fs.writeFileSync(path.join(hermesHome,'.env'),'TELEGRAM_BOT_TOKEN=kept\n');fs.writeFileSync(providerFile,JSON.stringify(openrouter));
+  connectRoutineAI({home:hermesHome,state:path.join(root,'.godspeed'),config:openrouter});
+  assert.match(fs.readFileSync(path.join(hermesHome,'.env'),'utf8'),/sk-or-fictional-779/);
+  const removed=await (await fetch(reopenedBase+'/api/provider/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+  assert.equal(removed.removed,true);assert.equal(removed.connected,false);assert.equal(removed.routines.source,'none');
+  assert.equal(fs.existsSync(providerFile),false);
+  assert.equal(fs.readFileSync(path.join(hermesHome,'.env'),'utf8').includes('sk-or-fictional-779'),false);assert.match(fs.readFileSync(path.join(hermesHome,'.env'),'utf8'),/TELEGRAM_BOT_TOKEN=kept/);
+  assert.doesNotMatch(fs.readFileSync(path.join(hermesHome,'config.yaml'),'utf8'),/openrouter|vendor\/fictional/);}
  finally{await reopened.close();}
 });
 
@@ -163,4 +174,39 @@ test('with a backup connected, the check asks the main one and the backup each o
  const result=await askDirectly({executable:path.join(runtime,'hermes'),home:h,cwd:path.dirname(h),sourceRoot:runtime,spawnProcess,route:'backup'});
  assert.equal(result.backup,true);assert.ok(helper.calls[0][0].endsWith('addon-model.py'));
  const request=JSON.parse(sent);assert.equal(request.route,'backup');assert.equal(request.max_tokens,128);assert.equal(request.tools,undefined);
+});
+
+// Removing the AI connected in Settings (#779) takes out of Hermes what connecting wrote, and only that.
+test('removing the connection takes its model and key out of Hermes and keeps everything else',t=>{
+ assert.equal(deleteEnvValue('A=1\nexport OPENROUTER_API_KEY=old\nB=2\n','OPENROUTER_API_KEY'),'A=1\nB=2\n');
+ const {home:h,state}=home(t),config={url:'https://openrouter.ai/api/v1/chat/completions',key:'sk-or-fictional',model:'fictional/model'};
+ fs.writeFileSync(path.join(h,'config.yaml'),'# owner notes\ntimezone: "Europe/Berlin"\n');
+ fs.writeFileSync(path.join(h,'.env'),'TELEGRAM_BOT_TOKEN=fictional\n');
+ connectRoutineAI({home:h,state,config});
+ const status=disconnectRoutineAI({home:h,state,config});
+ assert.equal(status.source,'none');
+ const yaml=fs.readFileSync(path.join(h,'config.yaml'),'utf8'),env=fs.readFileSync(path.join(h,'.env'),'utf8');
+ assert.match(yaml,/# owner notes/);assert.match(yaml,/timezone: "Europe\/Berlin"/);
+ assert.doesNotMatch(yaml,/openrouter|fictional\/model|base_url|api_key/);
+ assert.equal(env,'TELEGRAM_BOT_TOKEN=fictional\n');
+ assert.equal(readRecord(state).connected,undefined);
+});
+
+test('removing a custom address clears its key in config.yaml',t=>{
+ const {home:h,state}=home(t),config={url:'https://llm.example.org/v1',key:'k-fictional',model:'m'};
+ connectRoutineAI({home:h,state,config});
+ assert.equal(disconnectRoutineAI({home:h,state,config}).source,'none');
+ assert.doesNotMatch(fs.readFileSync(path.join(h,'config.yaml'),'utf8'),/k-fictional|llm\.example\.org/);
+});
+
+test('removing leaves a sign-in of Hermes\' own and a connection made since alone',t=>{
+ const {home:h,state}=home(t),config={url:'https://openrouter.ai/api/v1',key:'sk-or-fictional',model:'fictional/model'};
+ const own='model:\n  provider: "nous"\n  default: "hermes-own"\n';
+ fs.writeFileSync(path.join(h,'config.yaml'),own);
+ assert.equal(disconnectRoutineAI({home:h,state,config}).source,'hermes');
+ assert.equal(fs.readFileSync(path.join(h,'config.yaml'),'utf8'),own);
+ connectRoutineAI({home:h,state,config:{...config,model:'other/model'}});
+ const before=fs.readFileSync(path.join(h,'config.yaml'),'utf8'),envBefore=fs.readFileSync(path.join(h,'.env'),'utf8');
+ assert.equal(disconnectRoutineAI({home:h,state,config}).source,'settings');
+ assert.equal(fs.readFileSync(path.join(h,'config.yaml'),'utf8'),before);assert.equal(fs.readFileSync(path.join(h,'.env'),'utf8'),envBefore);
 });
