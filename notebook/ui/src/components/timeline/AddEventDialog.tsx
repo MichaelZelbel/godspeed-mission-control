@@ -18,7 +18,7 @@ import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import ImportanceSlider from "./ImportanceSlider";
 import { UNNAMED_PERSON } from "./people";
-import { filledOnOpen, mergeSuggestion, newPeopleToCreate } from "./moment-form.mjs";
+import { aiFailureKind, factsNotPulledOut, filledOnOpen, mergeSuggestion, newPeopleToCreate } from "./moment-form.mjs";
 
 export interface TimelineContact {
   id: string;
@@ -63,7 +63,7 @@ const AI_FALLBACK = "The suggestion could not be made. Try again.";
 export default function AddEventDialog({ people, onCreated, editEvent, open: controlledOpen, onOpenChange }: AddEventDialogProps) {
   const { user, session } = useAuth();
   const { toast } = useToast();
-  const { checkCredits, providerConfigured } = useAICreditsGate();
+  const { checkCredits, providerConfigured, aiAvailability } = useAICreditsGate();
   const isControlled = controlledOpen !== undefined;
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isControlled ? controlledOpen : internalOpen;
@@ -295,12 +295,20 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
         }
       }
 
-      // Fire-and-forget: extract profile facts about participants from this moment.
+      // Profile facts about the participants are pulled out after the save and never hold it up. When
+      // the AI refused the key or could not be reached, the confirmation says no facts were (#779).
+      const saved = isEditMode ? "Moment updated" : "Moment created";
       if (momentId && providerConfigured) {
-        supabase.functions.invoke("extract-moment-profile", { body: { moment_id: momentId } }).catch(() => {});
+        supabase.functions
+          .invoke("extract-moment-profile", { body: { moment_id: momentId } })
+          .then(({ error }) => {
+            const skipped = factsNotPulledOut(aiFailureKind(error?.message));
+            if (skipped) toast({ title: saved, description: skipped });
+          })
+          .catch(() => {});
       }
-
-      toast({ title: isEditMode ? "Moment updated" : "Moment created" });
+      const why = providerConfigured ? null : factsNotPulledOut(aiAvailability);
+      toast(why ? { title: saved, description: why } : { title: saved });
       setOpen(false);
       onCreated();
 

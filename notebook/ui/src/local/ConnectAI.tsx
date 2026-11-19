@@ -2,6 +2,7 @@ import {useEffect,useId,useRef,useState} from 'react';
 import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
+import {AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger} from '@/components/ui/alert-dialog';
 import {AlertTriangle,CheckCircle2,Loader2} from 'lucide-react';
 import {providerService} from '../../../core/provider-service.mjs';
 import {aiFailure} from '../../../core/ai-health.mjs';
@@ -139,10 +140,33 @@ export function ConnectAI(){
       setDone(!useForRoutines||!result.routines?.available?'Connected. The notebook uses it.':result.routines.check?.ok?'Connected. The routines, the chat and the notebook use it, and the routines reached it just now.':'Connected for the notebook, but the routines could not reach it: '+(result.routines.check?.error||'no answer')+'.');
       qc.invalidateQueries({queryKey:['candidate-status']});
     }catch(err:any){setError(connectionError(err.message));}finally{setBusy(false);}};
+  // Removing the saved connection (#779): the server forgets its key, here and in Hermes when it was
+  // written there, and the form asks for a new one.
+  const [removing,setRemoving]=useState(false);
+  const remove=async()=>{setRemoving(true);setError('');setDone('');
+    try{const result=await call('provider/remove',{});qc.setQueryData(['provider'],{configured:false,key:false});
+      if(result.routines?.available)qc.setQueryData(['routine-ai'],result.routines);
+      setKey('');setModel('');setAddress('');setService('openrouter');
+      setDone(result.connected?'Removed. The notebook uses the AI it had before this connection.':'Removed. No AI is connected now. Connect one here whenever you like.');
+      for(const queryKey of [['candidate-status'],['provider-availability'],['chat-options'],['backup-ai']])qc.invalidateQueries({queryKey});
+    }catch(err:any){setError(err.message);}finally{setRemoving(false);}};
+  const removeControl=<AlertDialog>
+    <AlertDialogTrigger asChild><Button type="button" variant="outline" className="min-h-11" disabled={removing}>{removing?'Removing…':'Remove this AI connection'}</Button></AlertDialogTrigger>
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>Remove your AI connection?</AlertDialogTitle>
+        <AlertDialogDescription>Godspeed forgets its key and stops using this AI. The notebook, the chat and the routines that used it have no AI until you connect one again.</AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel>Keep it</AlertDialogCancel>
+        <AlertDialogAction onClick={remove}>Remove</AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>;
   return <section id="connect-ai" className="border rounded p-4 space-y-4" aria-labelledby="connect-ai-title">
     <h2 id="connect-ai-title" className="text-xl">Your AI</h2>
     {status.isLoading?<p role="status">Reading which AI your routines use…</p>:<RoutineAIState status={data} checking={checking} onCheck={check} connected={!!saved.data?.configured}/>}
-    {saved.error?<p role="alert" className="text-red-500">The saved AI connection could not be read. The form is unavailable so it cannot be overwritten.</p>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
+    {saved.error?<div className="space-y-3"><p role="alert" className="text-red-500">The saved AI connection could not be read. The form is unavailable so it cannot be overwritten. Remove it to connect one again.</p>{removeControl}{done&&<p role="status">{done}</p>}{error&&<p role="alert" className="text-red-500">{error}</p>}</div>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
       <p>Connect the AI account you pay for. The key stays on this device and never goes into your notes.</p>
       <div><label className="block" htmlFor={id+'service'}>Your AI service</label>
         <select id={id+'service'} className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!data?.available).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
@@ -155,6 +179,7 @@ export function ConnectAI(){
         <Input id={id+'key'} required={!canRetainKey} type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></div>
       {data?.available&&<div className="flex gap-2 items-start"><input id={id+'routines'} type="checkbox" className="mt-1" checked={useForRoutines} onChange={e=>setRoutines(e.target.checked)}/><label htmlFor={id+'routines'}>Use it for the daily routines and the chat too{data.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':'.'}</label></div>}
       <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect'}</Button></>}
+      {saved.data?.configured&&removeControl}
       {done&&<p role="status">{done}</p>}
       {error&&<p role="alert" className="text-red-500">{error}</p>}
     </form>}
