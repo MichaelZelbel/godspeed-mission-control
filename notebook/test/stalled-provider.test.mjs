@@ -4,17 +4,18 @@ import {modelProvider,STALL_WATCH} from '../core/runtime.mjs';import {withBackup
 // #770: a provider that took the request and never answered left a chat spinning for ten minutes,
 // while an HTTP 500 got the outage reply at once.
 const FAST={afterMs:100,timeoutMs:150,everyMs:200};
-const isProbe=body=>JSON.parse(body).max_tokens===8;
+// A provider on this computer is probed for its model list, a remote one with the connection check.
+const isProbe=(req,body)=>req.method==='GET'?req.url.endsWith('/v1/models'):JSON.parse(body).max_tokens===8;
 async function fakeAI(t,{mode='working',slowMs=700,reply='{"reply":"Here is your answer."}'}={}){
   const state={mode,slowMs,reply,chats:0,probes:0};
   const server=http.createServer(async(req,res)=>{
     let body='';for await(const chunk of req)body+=chunk;
-    if(isProbe(body))state.probes++;else state.chats++;
+    const probe=isProbe(req,body);if(probe)state.probes++;else state.chats++;
     if(state.mode==='stalled')return;
     const answer=(status,content)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(status===200?{choices:[{message:{content}}]}:{error:{message:'Fictional outage'}}));};
     if(state.mode==='500')return answer(500);
-    if(state.mode==='slow'&&!isProbe(body))return setTimeout(()=>answer(200,state.reply),state.slowMs);
-    answer(200,isProbe(body)?'OK':state.reply);
+    if(state.mode==='slow'&&!probe)return setTimeout(()=>answer(200,state.reply),state.slowMs);
+    answer(200,probe?'OK':state.reply);
   });
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
   t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));});
@@ -55,18 +56,18 @@ test('routines keep their own budget and are not watched',async t=>{
   const call=provider(ai)({kind:'coaching',timeout_ms:300000,signal:controller.signal});
   await pause(400);assert.equal(ai.probes,0);controller.abort(Error('Reply stopped'));await assert.rejects(call,/Reply stopped/);
 });
-test('an AI on this computer that answers one request at a time is not watched, so its slow answer gets through',async t=>{
+test('an AI on this computer that answers one chat at a time is probed for its model list, so its slow answer gets through',async t=>{
   let line=Promise.resolve(),probes=0;
   const server=http.createServer(async(req,res)=>{
-    let body='';for await(const chunk of req)body+=chunk;if(isProbe(body))probes++;
-    line=line.then(()=>pause(isProbe(body)?10:300).then(()=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({choices:[{message:{content:isProbe(body)?'OK':'The answer.'}}]}));}));
+    let body='';for await(const chunk of req)body+=chunk;
+    const reply=content=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(content));};
+    if(req.method==='GET'){probes++;return reply({data:[{id:'fictional-model'}]});}
+    line=line.then(()=>pause(700).then(()=>reply({choices:[{message:{content:'The answer.'}}]})));
   });
   await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));});
-  t.mock.timers.enable({apis:['setTimeout']});
-  const call=modelProvider({url:'http://localhost:'+server.address().port+'/v1/chat/completions',key:'fictional-secret-key',model:'fictional-model',retryWaits:[]})({kind:'conversation-chat'});
-  t.mock.timers.tick(STALL_WATCH.afterMs+STALL_WATCH.timeoutMs);t.mock.timers.reset();
-  assert.equal(await call,'The answer.');
-  assert.equal(probes,0);
+  const local=modelProvider({url:'http://localhost:'+server.address().port+'/v1/chat/completions',key:'fictional-secret-key',model:'fictional-model',retryWaits:[],stallWatch:FAST});
+  assert.equal(await local({kind:'conversation-chat'}),'The answer.');
+  assert.ok(probes>=2,'probed '+probes+' times while it worked');
 });
 test('a stalled send is not handed to the backup AI, so it is said within one watch',async t=>{
   const ai=await fakeAI(t,{mode:'stalled'}),backup=await fakeAI(t,{mode:'stalled'}),started=Date.now();
@@ -107,8 +108,8 @@ test('a closed port keeps its own reply',async t=>{
   const result=await send('conversation-chat');
   assert.match(result.error,/could not be reached/);assert.doesNotMatch(result.error,/stopped answering/);
 });
-test('with the default watch, a stalled chat ends in the outage reply within a minute',{timeout:70000},async t=>{
-  const ai=await fakeAI(t,{mode:'500'}),{send}=await serviceWith(t,provider(ai,{stallWatch:STALL_WATCH}));
+test('a provider saved in Settings says a stall within a minute, also on this computer',{timeout:70000},async t=>{
+  const ai=await fakeAI(t,{mode:'500'}),{send}=await serviceWith(t,modelProvider({url:ai.url,key:'fictional-secret-key',model:'fictional-model',retryWaits:[]}));
   const outage=(await send('conversation-chat')).error;
   ai.mode='stalled';const result=await send('conversation-chat');
   assert.equal(result.error,outage);assert.ok(result.elapsed<60000,'ended in '+result.elapsed+' ms');
