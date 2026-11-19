@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { checkedTestFiles, defaultWaits, repoRoot } from "./default-waits";
+import { WAIT_MS } from "./wait-limits";
+import viteConfig from "../../vite.config";
 
 const sample = [
   'it("x", async () => {',
@@ -58,5 +60,11 @@ describe("default wait limits", () => {
 
   it("passes waits with an explicit limit, and names in comments, strings and regexes", () => {
     expect(defaultWaits(explicit, "explicit.test.tsx")).toEqual([]);
+  });
+
+  // WAIT only takes effect when vitest lets a test run longer than it; at vitest's own 5 s
+  // per-test limit a 10 s wait is cut short and the flakes come back (#789).
+  it("gives every test longer than WAIT before vitest stops it", () => {
+    expect(viteConfig.test?.testTimeout).toBeGreaterThan(WAIT_MS);
   });
 });
