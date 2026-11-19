@@ -458,7 +458,7 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
         <div className="px-3 pb-3 space-y-2 border-t border-border pt-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Select value={formLabel} onValueChange={setFormLabel}>
-              <SelectTrigger className="text-sm h-8">
+              <SelectTrigger aria-label="Relationship" className="text-sm h-8">
                 <SelectValue placeholder="Select label…" />
               </SelectTrigger>
               <SelectContent>
@@ -469,6 +469,7 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
             </Select>
 
             <Input
+              aria-label="Custom label (optional)"
               placeholder="Custom label (optional)"
               value={formCustomLabel}
               onChange={(e) => setFormCustomLabel(e.target.value)}
@@ -478,7 +479,7 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Select value={formTargetType} onValueChange={(v) => { setFormTargetType(v as "contact" | "self"); setFormTargetId(""); }}>
-              <SelectTrigger className="text-sm h-8">
+              <SelectTrigger aria-label="Related to" className="text-sm h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -489,7 +490,7 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
 
             {formTargetType === "contact" && (
               <Select value={formTargetId} onValueChange={setFormTargetId}>
-                <SelectTrigger className="text-sm h-8">
+                <SelectTrigger aria-label="Person" className="text-sm h-8">
                   <SelectValue placeholder="Select person…" />
                 </SelectTrigger>
                 <SelectContent>

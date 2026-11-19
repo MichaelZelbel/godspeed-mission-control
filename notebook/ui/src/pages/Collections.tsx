@@ -254,15 +254,15 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
           </div>
 
           <div className="space-y-2">
-            <p id="collection-icon-label" className="text-sm font-medium leading-none">Icon</p>
-            <div role="group" aria-labelledby="collection-icon-label" className="flex flex-wrap gap-2">
+            <Label htmlFor="collection-icon">Icon</Label>
+            <div className="flex flex-wrap gap-2">
               {emojiOptions.map((emoji) => (
                 <button key={emoji} type="button" className={cn("flex h-9 w-9 items-center justify-center rounded-md border text-lg transition-colors hover:bg-accent", values.icon === emoji && "border-primary bg-primary/10")} onClick={() => updateValue("icon", emoji)}>
                   {emoji}
                 </button>
               ))}
             </div>
-            <Input value={values.icon} maxLength={4} onChange={(event) => updateValue("icon", event.target.value)} onBlur={validate} className="w-24" aria-label="Custom emoji" />
+            <Input value={values.icon} maxLength={4} onChange={(event) => updateValue("icon", event.target.value)} onBlur={validate} className="w-24" id="collection-icon" />
             {errors.icon && <p className="text-xs text-destructive">{errors.icon}</p>}
           </div>
 

@@ -277,8 +277,8 @@ function RuleForm({ draft, setDraft, nameProblem }: { draft: RuleFields; setDraf
         {GROUPS.map((g) => <option key={g.value} value={g.value}>{g.short}</option>)}
       </select></div>
     <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
-      <Label htmlFor="rule-always" className="leading-snug">Read before every job<span className="block text-xs font-normal text-muted-foreground">Off: read only when its subject comes up.</span></Label>
-      <Switch id="rule-always" checked={draft.always} onCheckedChange={(always) => setDraft({ ...draft, always })} />
+      <div className="leading-snug"><Label htmlFor="rule-always">Read before every job</Label><span id="rule-always-help" className="block text-xs font-normal text-muted-foreground">Off: read only when its subject comes up.</span></div>
+      <Switch id="rule-always" aria-describedby="rule-always-help" checked={draft.always} onCheckedChange={(always) => setDraft({ ...draft, always })} />
     </div>
     <div className="space-y-1.5"><Label htmlFor="rule-story">The whole story: why you gave it, and its exceptions</Label><Textarea id="rule-story" rows={10} value={draft.story} onChange={(e) => setDraft({ ...draft, story: e.target.value })} className="text-base sm:text-sm" /></div>
   </>;
