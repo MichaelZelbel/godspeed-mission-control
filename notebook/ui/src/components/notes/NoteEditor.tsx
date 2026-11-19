@@ -1815,6 +1815,20 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             ref={titleInputRef}
             value={title}
             onChange={(e) => handleTitleChange(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter ends the title and goes on in the note's text, as a
+              // person expects; without this the next words joined the title
+              // (#791). Not while an input method is still composing a word.
+              if (e.key !== "Enter" || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || e.nativeEvent.isComposing) return;
+              e.preventDefault();
+              const ed = editorRef.current;
+              if (!ed) return;
+              // focus("start") puts the cursor at the start but only moves the
+              // focus on the next frame; a fast typist's next letter would still
+              // land in the title, so the focus moves here, at once.
+              ed.commands.focus("start");
+              ed.view.focus();
+            }}
             placeholder="Untitled"
             className="w-full min-w-0 text-2xl font-bold font-display bg-transparent border-none outline-none placeholder:text-muted-foreground/40"
             disabled={note.is_trashed || note.is_external}
