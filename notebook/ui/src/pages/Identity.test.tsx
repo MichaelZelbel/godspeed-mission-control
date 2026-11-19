@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, configure, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
@@ -8,6 +8,11 @@ import Identity from "./Identity";
 import { InstructionsMoved } from "@/components/profile/InstructionsMoved";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { places, plainInline, reflow, sizeLine, sizeState, versionLine, versionWords, type RuleTile } from "@/lib/identity";
+
+// The page is large, so each role query over it is slow: "moves a removed rule" takes about 1.7 s
+// alone and 4.8 to 6.7 s with the CPUs busy, where a single findBy also ran past its 1 s default
+// (#775). Waits get 5 s here, and the page's tests 20 s.
+configure({ asyncUtilTimeout: 5_000 });
 
 vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
@@ -91,7 +96,7 @@ function open() {
   return render(<QueryClientProvider client={client}><MemoryRouter><Identity /></MemoryRouter></QueryClientProvider>);
 }
 
-describe("Godspeed's brain", () => {
+describe("Godspeed's brain", { timeout: 20_000 }, () => {
   beforeEach(() => { state = overview(); removedList = []; chatAnswer = { reply: "Done.", identity_changed: true }; serve(); window.localStorage.clear(); });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -117,7 +122,6 @@ describe("Godspeed's brain", () => {
     expect(screen.queryByText(/Removed rules/)).toBeNull();
   });
 
-  // It runs many role queries over the whole page: about 1.7 s alone, 4.8 s with the CPUs busy, past vitest's 5 s default (#775).
   it("moves a removed rule to Removed rules, opens its earlier versions there, and brings it back", async () => {
     open();
     fireEvent.click(await screen.findByRole("button", { name: /Never spend my money/ }));
@@ -134,7 +138,7 @@ describe("Godspeed's brain", () => {
     await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/restore")?.body).toMatchObject({ target: "rule:never-spend", version: "v-before" }));
     await waitFor(() => expect(screen.queryByText(/Removed rules/)).toBeNull());
     expect(await screen.findByRole("button", { name: /Never spend my money/ })).toBeVisible();
-  }, 20_000);
+  });
 
   it("numbers the rules as the server does, the kind as a tag, and keeps the one-job rules closed until asked", async () => {
     open();
