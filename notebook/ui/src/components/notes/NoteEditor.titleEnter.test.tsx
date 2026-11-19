@@ -85,9 +85,10 @@ async function titleEnterText(id: string, titleWords: string, textWords: string)
   const enter = fireEvent.keyDown(title, { key: "Enter", code: "Enter" });
   expect(enter).toBe(false); // Enter was taken by the title, not left to the browser.
 
-  // The focus is in the note's text, with the cursor at its very start.
+  // The focus is in the note's text at once (the next key a fast typist
+  // presses follows straight after Enter), with the cursor at its very start.
   const prose = document.querySelector(".ProseMirror") as HTMLElement;
-  await waitFor(() => expect(prose.contains(document.activeElement)).toBe(true));
+  expect(prose.contains(document.activeElement)).toBe(true);
   expect(editor.state.selection.from).toBe(1);
   expect(editor.state.selection.empty).toBe(true);
 
