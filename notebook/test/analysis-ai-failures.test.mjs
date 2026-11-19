@@ -13,7 +13,7 @@ const KEY='sk-fictional-refused-key-774';
 const ACTIONS=['generate-profile-suggestions','generate_collection_schema'];
 const INPUT={'generate-profile-suggestions':{},'generate_collection_schema':{prompt:'A collection for the books I read'}};
 
-async function notebookWithStandIn(t){
+async function notebookWithStandIn(t,{connect=true}={}){
   const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL','GODSPEED_MODEL_KEY','GODSPEED_MODEL'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-analysis-ai-'));
   for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
@@ -31,8 +31,8 @@ async function notebookWithStandIn(t){
   const closeEndpoint=()=>endpointOpen?new Promise(resolve=>{endpointOpen=false;endpoint.closeAllConnections?.();endpoint.close(resolve);}):undefined;
   t.after(async()=>{await service.close();await closeEndpoint();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
   const base='http://127.0.0.1:'+service.address.port;
-  const connected=await fetch(base+'/api/provider',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url:address,key:KEY,model:'fictional-model',routines:false})});
-  assert.equal(connected.status,200,await connected.clone().text());
+  if(connect){const connected=await fetch(base+'/api/provider',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url:address,key:KEY,model:'fictional-model',routines:false})});
+  assert.equal(connected.status,200,await connected.clone().text());}
   const run=async name=>{const response=await fetch(base+'/api/functions/'+name,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(INPUT[name])});return {status:response.status,body:await response.json()};};
   return {standIn,run,closeEndpoint};
 }
@@ -61,4 +61,11 @@ test('an AI whose port is closed gets the chats\' outage wording from each analy
   const {run,closeEndpoint}=await notebookWithStandIn(t);
   await closeEndpoint();
   for(const name of ACTIONS){const answer=await run(name);assertPlain(answer,AI_UNREACHABLE);assert.doesNotMatch(answer.body.error,/127\.0\.0\.1/);}
+});
+
+// With no AI connected the actions keep Godspeed's own no-AI sentence (#552), not the outage one: a
+// person who never connected an AI is told to connect one, not that it "could not be reached".
+test('with no AI connected each analysis action still says no AI is connected yet, naming Settings, Your AI',async t=>{
+  const {run}=await notebookWithStandIn(t,{connect:false});
+  for(const name of ACTIONS){const answer=await run(name);assert.notEqual(answer.status,200,name);assert.match(answer.body.error,/^No AI is connected yet\. Connect your AI service in Settings, Your AI/,name);assert.doesNotMatch(answer.body.error,/could not be reached/,name);}
 });

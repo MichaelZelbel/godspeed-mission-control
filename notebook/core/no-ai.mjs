@@ -16,12 +16,14 @@ export const NO_AI_ANALYSIS='No AI is connected yet. Connect your AI service in 
 // with AI and My Profile's suggestions said the provider's own words ("Model provider failed with
 // HTTP 401..."). They say what the chats say (server/main.mjs, #590): a refused key or sign-in, or
 // an outage, each with where to fix it. Only the category is said, never the provider's words, so
-// no status number and no key can reach the screen. A failure that is not the AI's passes as it is.
+// no status number and no key can reach the screen. A failure that is not the AI's passes as it is,
+// and so does Godspeed's own "No AI is connected yet" (or "connected only to the notebook"): those
+// say "Connect your AI service", which the pattern below would otherwise read as an outage.
 export const AI_REFUSED='Your AI key or sign-in was refused. Check it in Settings, Your AI, then try again.';
 export const AI_UNREACHABLE='Your AI could not be reached. Check its connection in Settings, Your AI, then try again.';
 const PROVIDER_FAILURE=/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d|could not be reached|did not finish within|did not answer|needs sign-in|returned no text|connection could not start/i;
 export function analysisFailure(error){
   const message=String(error?.message||error||''),kind=PROVIDER_FAILURE.test(message)?aiFailure(error):null;
-  if(!kind||message===AI_REFUSED||message===AI_UNREACHABLE)return error;
+  if(!kind||message===AI_REFUSED||message===AI_UNREACHABLE||message.startsWith(NO_AI_STATUS)||message.startsWith(SETTINGS_ONLY_AI_STATUS))return error;
   return new Error(kind==='refused'?AI_REFUSED:AI_UNREACHABLE);
 }
