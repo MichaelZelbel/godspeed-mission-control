@@ -48,6 +48,19 @@ test('a provider that stops answering is an outage within the wait, and answerin
  release();await new Promise(r=>setImmediate(r));assert.equal(provider.health(),'ready');
 });
 
+test('a timer that fires a millisecond before the clock says the wait is over still lets the next check ask again (#785)',async()=>{
+ // Timers have a granularity: the 50 ms timer can fire when Date.now() has moved only 49 ms. The
+ // clock here is held at exactly that: it moves 49 ms once the stalled request has started.
+ const realNow=Date.now,base=realNow();let now=base,checks=0;
+ Date.now=()=>now;
+ try{
+  const inner=Object.assign(async()=>'ok',{check:()=>{checks++;if(checks===1){now=base+49;return new Promise(()=>{});}return Promise.resolve();}});
+  const provider=trackAIHealth(inner,{waitMs:50,initial:'ready'});
+  await assert.rejects(provider.check(),/did not answer the connection check/);assert.equal(provider.health(),'unreachable');
+  await provider.check();assert.equal(checks,2,'the next check asks the provider again');assert.equal(provider.health(),'ready');
+ }finally{Date.now=realNow;}
+});
+
 test('checks that overlap within the wait share one request',async()=>{
  let checks=0,release;
  const inner=Object.assign(async()=>'ok',{check:()=>{checks++;return new Promise(resolve=>{release=resolve;});}});
