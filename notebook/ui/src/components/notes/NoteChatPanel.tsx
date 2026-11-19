@@ -417,7 +417,7 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
 
         {/* An open conversation keeps its replies and shows the AI's current state under them, so a
             refused key, an outage or recovery is seen without a reload (#590). */}
-        {state.messages.length > 0 && <ChatConnectionEmptyState ready={null}/>}
+        {state.messages.length > 0 && <ChatConnectionEmptyState ready={null} said={error}/>}
 
         {isLoading && (
           <div className="flex items-center gap-2">

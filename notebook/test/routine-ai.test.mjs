@@ -108,13 +108,13 @@ test('the Settings form connects the routines\' AI through the server, and leave
   assert.equal((await call('routine-ai')).data.source,'none','before: Settings says the routines have no AI');
   const connected=await call('provider',{url,key:'fictional-key',model:'fictional-model'});
   assert.equal(connected.status,200,JSON.stringify(connected.data));
-  assert.deepEqual(connected.data.provider,{configured:true,url,model:'fictional-model',key:true,routines:true});
+  assert.deepEqual(connected.data.provider,{configured:true,url,model:'fictional-model',key:true});
   assert.equal(JSON.stringify(connected.data).includes('fictional-key'),false,'the response does not expose the key');
   assert.equal(connected.data.routines.source,'settings');assert.equal(connected.data.routines.check.ok,true,'the routines reached the AI');
   assert.match(fs.readFileSync(path.join(hermesHome,'config.yaml'),'utf8'),/default: "fictional-model"/);
   // The notebook's own copy got the full address, as before.
   assert.equal(JSON.parse(fs.readFileSync(path.join(root,'.godspeed','provider.json'),'utf8')).url,url+'/chat/completions');
-  assert.deepEqual((await call('provider')).data,{configured:true,url,model:'fictional-model',key:true,routines:true});
+  assert.deepEqual((await call('provider')).data,{configured:true,url,model:'fictional-model',key:true});
   assert.equal((await call('routine-ai/check',{})).data.check.ok,true);
   // An own sign-in stays when the box is unticked: only the notebook's copy changes.
   fs.writeFileSync(path.join(hermesHome,'config.yaml'),'model:\n  provider: openai-codex\n  default: gpt-fictional\n');
@@ -133,7 +133,7 @@ test('the Settings form connects the routines\' AI through the server, and leave
   assert.notEqual(refused.status,200);assert.match(refused.data.error,/space or a quotation mark/);
  }finally{await service.close();}
  const reopened=await createService({root,port:0,device:'pc'}),reopenedBase='http://127.0.0.1:'+reopened.address.port;
- try{const response=await fetch(reopenedBase+'/api/provider'),data=await response.json();assert.deepEqual(data,{configured:true,url,model:'retained-key-model',key:true,routines:false});assert.equal(JSON.stringify(data).includes('other-key'),false);
+ try{const response=await fetch(reopenedBase+'/api/provider'),data=await response.json();assert.deepEqual(data,{configured:true,url,model:'retained-key-model',key:true});assert.equal(JSON.stringify(data).includes('other-key'),false);
   const providerFile=path.join(root,'.godspeed','provider.json');fs.writeFileSync(providerFile,'{broken');const broken=await fetch(reopenedBase+'/api/provider');assert.notEqual(broken.status,200);assert.match((await broken.json()).error,/not valid JSON/);
   fs.rmSync(providerFile);fs.mkdirSync(providerFile);const unreadable=await fetch(reopenedBase+'/api/provider');assert.notEqual(unreadable.status,200);fs.rmdirSync(providerFile);}
  finally{await reopened.close();}

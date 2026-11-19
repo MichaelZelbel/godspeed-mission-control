@@ -13,7 +13,7 @@ import {providerService} from '../../../core/provider-service.mjs';
 // backup each on their own (core/routine-ai.mjs).
 type Check={at:string;ok:boolean;reply?:string;error?:string;backup?:{ok:boolean;error?:string;model?:string}};
 export type RoutineAI={available:boolean;provider?:string|null;model?:string|null;base_url?:string|null;source?:'settings'|'hermes'|'none';key?:boolean|null;check?:Check|null};
-type SavedProvider=|{configured:false;key:false}|{configured:true;url:string;model:string;key:boolean;routines?:boolean};
+type SavedProvider=|{configured:false;key:false}|{configured:true;url:string;model:string;key:boolean};
 async function call(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 export const routineAIStatus=()=>call('routine-ai') as Promise<RoutineAI>;
 function providerResponse(value:unknown):SavedProvider{
@@ -71,7 +71,7 @@ export function ConnectAI(){
   const saved=useQuery({queryKey:['provider'],queryFn:savedProvider});
   const [service,setService]=useState('openrouter'),[address,setAddress]=useState(''),[model,setModel]=useState(''),[key,setKey]=useState('');
   const [routines,setRoutines]=useState<boolean|null>(null),[busy,setBusy]=useState(false),[checking,setChecking]=useState(false),[error,setError]=useState(''),[done,setDone]=useState('');
-  const data=status.data,useForRoutines=routines??(saved.data?.configured&&typeof saved.data.routines==='boolean'?saved.data.routines:data?.source!=='hermes');
+  const data=status.data,useForRoutines=routines??(data?.source!=='hermes');
   const filled=useRef(false);
   useEffect(()=>{if(filled.current||!saved.data)return;filled.current=true;if(!saved.data.configured)return;
     const url=saved.data.url,selected=providerService(url);
@@ -88,7 +88,7 @@ export function ConnectAI(){
     const url=service==='other'?address.trim():SERVICES.find(s=>s.id===service)!.url;
     try{const result=await call('provider',{url,key,model,routines:useForRoutines});setKey('');qc.setQueryData(['provider'],result.provider);
       if(result.routines?.available)qc.setQueryData(['routine-ai'],result.routines);
-      setDone(!useForRoutines?'Connected. The notebook uses it.':!result.routines?.available?'Connected. The chat and the notebook use it.':result.routines.check?.ok?'Connected. The routines, the chat and the notebook use it, and the routines reached it just now.':'Connected for the notebook, but the routines could not reach it: '+(result.routines.check?.error||'no answer')+'.');
+      setDone(!useForRoutines||!result.routines?.available?'Connected. The notebook uses it.':result.routines.check?.ok?'Connected. The routines, the chat and the notebook use it, and the routines reached it just now.':'Connected for the notebook, but the routines could not reach it: '+(result.routines.check?.error||'no answer')+'.');
       qc.invalidateQueries({queryKey:['candidate-status']});
     }catch(err:any){setError(err.message);}finally{setBusy(false);}};
   return <section id="connect-ai" className="border rounded p-4 space-y-4" aria-labelledby="connect-ai-title">
@@ -105,7 +105,7 @@ export function ConnectAI(){
         <Input required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></label>
       <label className="block">{canRetainKey?'Key (leave it empty to keep the saved one)':'Key'}
         <Input required={!canRetainKey} type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></label>
-      <label className="flex gap-2 items-start"><input type="checkbox" className="mt-1" checked={useForRoutines} onChange={e=>setRoutines(e.target.checked)}/><span>Use it for the daily routines and the chat too{data?.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':data?.available?'.':'. With no assistant program installed, ticked it answers the chats itself; unticked, Test and connect keeps this AI for notebook work only.'}</span></label>
+      {data?.available&&<label className="flex gap-2 items-start"><input type="checkbox" className="mt-1" checked={useForRoutines} onChange={e=>setRoutines(e.target.checked)}/><span>Use it for the daily routines and the chat too{data.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':'.'}</span></label>}
       <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect'}</Button></>}
       {done&&<p role="status">{done}</p>}
       {error&&<p role="alert" className="text-red-500">{error}</p>}

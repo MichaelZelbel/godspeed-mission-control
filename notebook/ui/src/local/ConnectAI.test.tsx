@@ -36,34 +36,11 @@ describe("the saved main AI in Settings", () => {
     "backup-ai": () => [200, { ...none, hermes: false }] as [number, unknown],
   };
 
-  it("lets an installation without an assistant keep a connection notebook-only", async () => {
-    const calls=serve({...supportingRoutes,provider:body=>[200,body?{connected:true,provider:{configured:true,url:body.url,model:body.model,key:true,routines:body.routines},routines:{available:false}}:{configured:false,key:false}]});
+  it("explains that an installation without an assistant program has no routines choice", async () => {
+    serve(supportingRoutes);
     settings();
     expect(await screen.findByText("This installation runs no daily routines and no assistant chat because no assistant program is installed.")).toBeInTheDocument();
-    const choice = screen.getByRole("checkbox", { name: /daily routines and the chat/ });
-    expect(choice).toBeChecked();
-    expect(choice).toBeEnabled();
-    expect(choice.parentElement).toHaveTextContent("ticked it answers the chats itself; unticked, Test and connect keeps this AI for notebook work only");
-    fireEvent.click(choice);
-    expect(choice).not.toBeChecked();
-    fireEvent.change(screen.getByLabelText(/Model, written/),{target:{value:"fictional/model"}});
-    fireEvent.change(screen.getByLabelText("Key"),{target:{value:"fictional-key"}});
-    fireEvent.click(screen.getByRole("button",{name:"Test and connect"}));
-    await screen.findByText("Connected. The notebook uses it.");
-    expect(calls.find(c=>c.route==="provider"&&c.body)?.body).toMatchObject({model:"fictional/model",routines:false});
-  });
-
-  it("lets an installation without an assistant connect its AI for the chats too", async () => {
-    const calls=serve({...supportingRoutes,provider:body=>[200,body?{connected:true,provider:{configured:true,url:body.url,model:body.model,key:true,routines:body.routines},routines:{available:false}}:{configured:false,key:false}]});
-    settings();
-    const choice=await screen.findByRole("checkbox",{name:/daily routines and the chat/});
-    expect(choice).toBeChecked();
-    fireEvent.change(screen.getByLabelText(/Model, written/),{target:{value:"fictional/model"}});
-    fireEvent.change(screen.getByLabelText("Key"),{target:{value:"fictional-key"}});
-    fireEvent.click(screen.getByRole("button",{name:"Test and connect"}));
-    await screen.findByText("Connected. The chat and the notebook use it.");
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(calls.find(c=>c.route==="provider"&&c.body)?.body).toMatchObject({model:"fictional/model",routines:true});
+    expect(screen.queryByRole("checkbox", { name: /daily routines and the chat/ })).toBeNull();
   });
 
   it("keeps the routines and chat choice and saves it when assistant routines are available", async () => {
@@ -84,7 +61,7 @@ describe("the saved main AI in Settings", () => {
   });
 
   it("reopens an Another service connection without exposing its saved key", async () => {
-    const saved = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true, routines: false };
+    const saved = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true };
     const calls = serve({ ...supportingRoutes, provider: body => [200, body ? { connected: true, provider: saved, routines: { available: false } } : saved] });
     const first = settings();
     await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"));
@@ -96,8 +73,7 @@ describe("the saved main AI in Settings", () => {
     await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"));
     fireEvent.click(screen.getByRole("button", { name: "Test and connect" }));
     await screen.findByText("Connected. The notebook uses it.");
-    expect(screen.getByRole("checkbox", { name: /daily routines and the chat/ })).not.toBeChecked();
-    expect(calls.find(c => c.body && c.route === "provider")?.body).toEqual({ url: saved.url, key: "", model: saved.model, routines: false });
+    expect(calls.find(c => c.body && c.route === "provider")?.body).toEqual({ url: saved.url, key: "", model: saved.model, routines: true });
   });
 
   it("keeps a new form on OpenRouter and requires a key", async () => {
@@ -161,7 +137,6 @@ describe("the saved main AI in Settings", () => {
     expect(screen.getByLabelText(/Its address/)).toHaveValue(address);
     expect(screen.getByLabelText(/Model, written/)).toHaveValue("fictional-model");
     expect(screen.getByLabelText(/leave it empty/)).toHaveValue("");
-    expect(screen.getByRole("checkbox", { name: /daily routines and the chat/ })).not.toBeChecked();
     expect(document.body).not.toHaveTextContent("fictional-secret");
     await reopened.close();await new Promise<void>(resolve => endpoint.close(() => resolve()));fs.rmSync(root, { recursive: true, force: true });
   });

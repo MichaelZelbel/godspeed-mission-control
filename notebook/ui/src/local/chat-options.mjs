@@ -1,4 +1,3 @@
-import {NO_AI_STATUS} from '../../../core/no-ai.mjs';
 
 const CHAT_OPTIONS_EVENT='godspeed:chat-options';
 let startedRequest=0,publishedRequest=0,latestOptions;
@@ -29,7 +28,7 @@ export async function loadChatOptions({fetcher=fetch,signal,timeoutMs=15000}={})
  const current=data.models.some(m=>m.id===data.current)?data.current:data.models.length===1&&data.models[0].id===''?'':null;
  if(current===null)throw Error('The configured model is not among the available choices.');
  // connected:false is the server saying no AI is connected at all (#563); any other answer is a connected AI.
- const options={current,label:data.connected===false?NO_AI_STATUS:typeof data.current==='string'?data.current:'Connected model',connected:data.connected!==false,usable:data.connected!==false&&data.usable!==false,availability:data.availability,models:data.models};
+ const options={current,label:data.connected===false?'No AI connected':typeof data.current==='string'?data.current:'Connected model',connected:data.connected!==false,usable:data.connected!==false&&data.usable!==false,availability:data.availability,models:data.models};
  // Several open surfaces can finish their five-second reads out of order. An older
  // ready answer must not overwrite a newer refusal or recovery everywhere else.
  if(request<publishedRequest)return latestOptions;

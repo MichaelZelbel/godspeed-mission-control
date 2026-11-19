@@ -41,14 +41,29 @@ export function useChatOptions(){
   return options;
 }
 
-/** The shared pre-composer state for floating, note, collection, and pop-out chat. */
-export function ChatConnectionEmptyState({ready}:{ready:React.ReactNode}){
+// Which state a reply's error already says, so the notice under a conversation does not say it twice.
+export function stateSaid(message?:string|null):ChatAIState|null{
+  const text=String(message||'');
+  if(/^No AI is connected yet/.test(text))return 'none';
+  if(/Your AI key or sign-in was refused/.test(text))return 'refused';
+  if(/Your AI could not be reached/.test(text))return 'unreachable';
+  if(/connected only to the notebook/.test(text))return 'settings-only';
+  return null;
+}
+
+/** The shared pre-composer state for floating, note, collection, and pop-out chat. Under an open
+    conversation (ready null) it is the live notice: it shows a refused key, an outage or the
+    notebook-only state as it changes, but not "no AI" (the reply already says that, as before #590)
+    and not a state the reply's error (said) already names. */
+export function ChatConnectionEmptyState({ready,said}:{ready:React.ReactNode;said?:string|null}){
   const options=useChatOptions();
   const state=chatAIState(options.data);
   if(state==='ready')return <>{ready}</>;
-  // Under an open conversation (ready null) the first read stays quiet; only a known state shows.
-  if(state==='checking')return ready===null?null:<div className="text-center text-muted-foreground text-sm py-8" role="status">Checking AI connection…</div>;
-  return <div className="text-center text-muted-foreground text-sm py-8 space-y-2" data-chat-ai-state={state}>
+  const underConversation=ready===null;
+  // Under an open conversation the first read stays quiet; only a known state shows.
+  if(state==='checking')return underConversation?null:<div className="text-center text-muted-foreground text-sm py-8" role="status">Checking AI connection…</div>;
+  if(underConversation&&(state==='none'||stateSaid(said)===state))return null;
+  return <div className={'text-center text-muted-foreground text-sm space-y-2 '+(underConversation?'py-2':'py-8')} data-chat-ai-state={state}>
     <p className="font-semibold text-foreground">{state==='none'?NO_AI_STATUS:state==='refused'?'Your AI key or sign-in was refused':state==='settings-only'?SETTINGS_ONLY_AI_STATUS:'Your AI could not be reached'}</p>
     <p>{state==='none'?'Connect an AI before you type.':state==='refused'?'Check its key or sign-in before you type.':state==='settings-only'?SETTINGS_ONLY_AI_HELP:'Check its connection before you type.'}</p>
     <Link className="underline text-primary" to="/dashboard/settings#connect-ai">Open Settings, Your AI</Link>

@@ -106,3 +106,22 @@ it('keeps an open conversation readable and shows the live state under it',async
   await vi.waitFor(()=>expect(screen.queryByText('Your AI could not be reached')).not.toBeInTheDocument());
   expect(screen.getByText('Earlier stand-in reply')).toBeInTheDocument();
 });
+
+it('under a conversation, says no repeat of the no-AI reply and nothing the reply error already says',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>response({connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]})));
+  const noAI='No AI is connected yet. Connect your AI service in Settings, Your AI, then ask Godspeed again.';
+  const {client,rerender}=wrap(<><p>My question</p><p role="alert">{noAI}</p><ChatConnectionEmptyState ready={null} said={noAI}/></>);
+  await vi.waitFor(()=>expect(client.getQueryData(['chat-options'])).toBeTruthy());
+  // The reply alone says it, under the visible question, as before #590.
+  expect(screen.getByText('My question')).toBeInTheDocument();
+  expect(screen.queryByText('Connect an AI before you type.')).not.toBeInTheDocument();
+  expect(screen.queryByRole('link',{name:'Open Settings, Your AI'})).not.toBeInTheDocument();
+  // A refused send says it once; when the state then changes to an outage, the notice says the new state.
+  const refused='Your AI key or sign-in was refused. Check it in Settings, Your AI, then try again.';
+  act(()=>{client.setQueryData(['chat-options'],{connected:true,usable:false,availability:'refused',current:'m',models:[{id:'m',efforts:[]}]});});
+  rerender(<QueryClientProvider client={client}><MemoryRouter><p>My question</p><p role="alert">{refused}</p><ChatConnectionEmptyState ready={null} said={refused}/></MemoryRouter></QueryClientProvider>);
+  expect(screen.queryByText('Check its key or sign-in before you type.')).not.toBeInTheDocument();
+  act(()=>{client.setQueryData(['chat-options'],{connected:true,usable:false,availability:'unreachable',current:'m',models:[{id:'m',efforts:[]}]});});
+  expect(await screen.findByText('Your AI could not be reached')).toBeInTheDocument();
+  expect(screen.getByText('My question')).toBeInTheDocument();
+});
