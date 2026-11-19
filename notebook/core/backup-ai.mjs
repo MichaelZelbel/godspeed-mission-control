@@ -68,8 +68,8 @@ function blockValue(lines){
  }
  return items;
 }
-export function fallbackChain(text){
- const lines=String(text||'').replace(/^\uFEFF/,'').replace(/\r\n/g,'\n').split('\n'),out=[],seen=new Set();
+export function fallbackEntries(text){
+ const lines=String(text||'').replace(/^\uFEFF/,'').replace(/\r\n/g,'\n').split('\n'),out=[];
  for(const key of ['fallback_providers','fallback_model']){
   const at=lines.findIndex(line=>new RegExp('^'+key+':(?:[ \\t]+.*)?$').test(line));
   if(at===-1)continue;
@@ -81,11 +81,13 @@ export function fallbackChain(text){
    if(!entry||typeof entry!=='object')continue;
    const provider=unquote(entry.provider),model=unquote(entry.model),base_url=unquote(entry.base_url).replace(/\/+$/,'');
    if(!provider||!model)continue;
-   const id=[provider.toLowerCase(),model.toLowerCase(),base_url.toLowerCase()].join('\n');if(seen.has(id))continue;seen.add(id);
-   out.push({provider,model,...(base_url?{base_url}:{}),key:!!(unquote(entry.api_key)||unquote(entry.key_env)||unquote(entry.api_key_env))});
+   out.push({provider,model,...(base_url?{base_url}:{}),api_key:unquote(entry.api_key),key_env:unquote(entry.key_env||entry.api_key_env)});
   }
  }
  return out;
+}
+export function fallbackChain(text){
+ const seen=new Set();return fallbackEntries(text).flatMap(({provider,model,base_url,api_key,key_env})=>{const id=[provider.toLowerCase(),model.toLowerCase(),String(base_url||'').toLowerCase()].join('\n');if(seen.has(id))return [];seen.add(id);return [{provider,model,...(base_url?{base_url}:{}),key:!!(api_key||key_env)}];});
 }
 
 // The one backup goes into Hermes as the whole fallback chain: a chain set by hand before is
