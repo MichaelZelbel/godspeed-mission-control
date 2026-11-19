@@ -44,7 +44,7 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
   // NOT written into the home here: that is the home the routines think with, and a person who
   // unticked "Use it for the daily routines and the chat too" chose not to spend that AI on them. Ticked (the box's
   // default on a fresh install), Settings writes the model into the home and the chat just works.
-  const saved=providerFile&&fs.existsSync(providerFile)?JSON.parse(fs.readFileSync(providerFile,'utf8')):null;
+  let saved=null;try{saved=providerFile?JSON.parse(fs.readFileSync(providerFile,'utf8')):null;}catch{}
   if(saved&&!input.model&&!homeHasModel(home)){
    const said=NO_MODEL_IN_HOME;
    keepAiFailure({file:keptFile,diagnostic:'The assistant\'s home ('+home+') names no model, and the AI connected in Settings was not set for the routines, which is where the assistant reads its model. Nothing was asked of the assistant.',said,extra:{exit_code:null,model:saved.model||null,conversation:String(input.conversation_id||input.note_id||'general').slice(0,80)}});

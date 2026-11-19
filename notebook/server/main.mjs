@@ -178,7 +178,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const backupFor=()=>{const saved=readBackupEndpoint(store.state);if(saved){try{return modelProvider(saved);}catch{return null;}}
     try{return routineAI&&fallbackChain(fs.readFileSync(path.join(routineAI.home,'config.yaml'),'utf8')).length?hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot}):null;}catch{return null;}};
   const guarded=main=>withBackup(main,backupFor,{state:store.state,model:()=>readBackupEndpoint(store.state)?.model});
-  if(!provider&&fs.existsSync(providerPath))provider=guarded(modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8'))));
+  // A saved connection that cannot be read leaves the notebook running with no AI connected, and
+  // Settings, Your AI, says so; the file stays for a look (#805). Until then it stopped startup.
+  if(!provider){try{const saved=readSavedProvider(providerPath);if(saved)provider=guarded(modelProvider(saved));}
+    catch(error){console.error('Godspeed Mission Control: the saved AI connection in '+providerPath+' cannot be read, so no AI is connected from it:',error.message);}}
   provider ||= guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}));
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
   // Where this notebook really runs from, for the tools (core/running-notebook.mjs): Windows only.
