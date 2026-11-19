@@ -1,4 +1,4 @@
-import { toast } from "sonner";
+import { toast, type ExternalToast } from "sonner";
 
 /** Convenience wrappers around sonner toast with standard messages. */
 
@@ -42,13 +42,13 @@ function emitBatched(
 }
 
 export const showToast = {
-  success: (message = "Changes saved successfully") =>
-    toast.success(message),
+  success: (message = "Changes saved successfully", options?: ExternalToast) =>
+    toast.success(message, options),
 
   // Keyed by its text: a failure a mutation hook reports and the calling
   // component reports again with the same words shows once, not twice.
-  error: (message = "Failed to save changes. Please try again.") =>
-    toast.error(message, { id: `error:${message}` }),
+  error: (message = "Failed to save changes. Please try again.", options?: ExternalToast) =>
+    toast.error(message, { id: `error:${message}`, ...options }),
 
   warning: (message: string) =>
     toast.warning(message),
