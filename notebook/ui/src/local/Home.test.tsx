@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
@@ -31,6 +31,8 @@ function page(withChat: boolean, context: { show: boolean; state?: string | null
       if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); context = { show: false, state: "skipped" }; }
       return new Response(JSON.stringify(context), { status: 200, headers: { "Content-Type": "application/json" } });
     }
+    // The card reads the chats' shared AI state; this stand-in derives it from the status it was given.
+    if (String(url) === "/api/chat/options") return new Response(JSON.stringify(status.runtimeConfigured ? { connected: true, usable: true, availability: "ready" } : status.aiConfigured ? { connected: true, usable: false, availability: "unreachable" } : { connected: false, usable: false, availability: "none" }), { status: 200, headers: { "Content-Type": "application/json" } });
     return new Response(JSON.stringify({ ...status, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
   }));
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -96,6 +98,8 @@ describe("the Godspeed card", () => {
     const problem = 'The assistant program set in /state/assistant.json is "/usr/bin/python3", which is not Hermes. Set "executable" in that file to your Hermes program (its name is hermes), or run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.';
     page(false, { show: false }, { runtimeConfigured: false, assistantProblem: problem });
     expect(await screen.findByText(problem)).toBeInTheDocument();
+    expect(screen.getByText("No AI is connected yet")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
     expect(screen.queryByText("Connecting…")).toBeNull();
   });
   // The sentence carries a long file path with no spaces; it wraps inside the card instead of
@@ -113,23 +117,25 @@ describe("the Godspeed card", () => {
   // is only the wait for the status (#552).
   it("says no AI is connected and links to Settings, Your AI", async () => {
     page(false, { show: false }, { runtimeConfigured: false, assistantProblem: null });
-    expect(await screen.findByText(/No AI is connected yet\./)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Connect it in Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
+    expect(await screen.findByText("No AI is connected yet")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
     expect(screen.queryByText("Connecting…")).toBeNull();
   });
   it("describes a configured but unreachable AI instead of saying none is connected", async () => {
     page(false, { show: false }, { aiConfigured: true, runtimeConfigured: false, assistantProblem: null });
-    expect(await screen.findByText(/Your AI is configured but could not be reached\./)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Check it in Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
-    expect(screen.queryByText(/No AI is connected yet\./)).toBeNull();
+    expect(await screen.findByText("Your AI could not be reached")).toBeInTheDocument();
+    expect(screen.getByText("Check its connection in Settings, Your AI.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
+    expect(screen.queryByText("No AI is connected yet")).toBeNull();
+    expect(screen.queryByText(/refused/)).toBeNull();
   });
   it("says Connecting only while the status is loading", async () => {
     let answer: (r: Response) => void = () => {};
-    vi.stubGlobal("fetch", vi.fn((url: string) => String(url) === "/api/status" ? new Promise<Response>(r => { answer = r; }) : Promise.resolve(new Response(JSON.stringify({ show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } }))));
+    vi.stubGlobal("fetch", vi.fn((url: string) => String(url) === "/api/chat/options" ? new Promise<Response>(r => { answer = r; }) : Promise.resolve(new Response(JSON.stringify({ runtimeConfigured: false, assistantProblem: null, show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } }))));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
     expect(await screen.findByText("Connecting…")).toBeInTheDocument();
-    answer(new Response(JSON.stringify({ runtimeConfigured: false, assistantProblem: null }), { status: 200, headers: { "Content-Type": "application/json" } }));
-    expect(await screen.findByText(/No AI is connected yet\./)).toBeInTheDocument();
+    answer(new Response(JSON.stringify({ connected: false, usable: false, availability: "none" }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    expect(await screen.findByText("No AI is connected yet")).toBeInTheDocument();
     expect(screen.queryByText("Connecting…")).toBeNull();
   });
   it("keeps the short status in large type", async () => {
@@ -137,9 +143,35 @@ describe("the Godspeed card", () => {
     expect((await screen.findByText("Ready to chat")).className).toContain("text-lg");
   });
   it("does not call a provider that refused its key ready", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : { error: "Model choices are unavailable" }), { status: String(url) === "/api/chat/options" ? 500 : 200, headers: { "Content-Type": "application/json" } })));
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url) === "/api/chat/options" ? { connected: true, usable: false, availability: "refused" } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
-    expect(await screen.findByText("AI unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("Your AI key or sign-in was refused")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
+    expect(screen.queryByText("Ready to chat")).toBeNull();
+  });
+  it("uses a live chat options update instead of keeping a separate ready snapshot", async () => {
+    let options = { connected: true, usable: true, availability: "ready" };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url) === "/api/chat/options" ? options : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("Ready to chat")).toBeInTheDocument();
+    options = { connected: true, usable: false, availability: "refused" };
+    act(() => { client.setQueryData(["chat-options"], options); });
+    expect(await screen.findByText("Your AI key or sign-in was refused")).toBeInTheDocument();
+    expect(screen.queryByText("Ready to chat")).toBeNull();
+  });
+  it("distinguishes an unreachable configured AI from refused credentials", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url) === "/api/chat/options" ? { connected: true, usable: false, availability: "unreachable" } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("Your AI could not be reached")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
+    expect(screen.queryByText(/refused/i)).toBeNull();
+  });
+  it("does not call a Settings-only AI ready for assistant chat", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url) === "/api/chat/options" ? { connected: true, usable: false, availability: "settings-only" } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("Your AI is connected only to the notebook")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
     expect(screen.queryByText("Ready to chat")).toBeNull();
   });
 });

@@ -1,4 +1,24 @@
+
+const CHAT_OPTIONS_EVENT='godspeed:chat-options';
+let startedRequest=0,publishedRequest=0,latestOptions;
+
+export function publishChatOptions(options){
+ if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent(CHAT_OPTIONS_EVENT,{detail:options}));
+ return options;
+}
+
+export function listenForChatOptions(listener){
+ const receive=event=>listener(event.detail);
+ window.addEventListener(CHAT_OPTIONS_EVENT,receive);
+ return()=>window.removeEventListener(CHAT_OPTIONS_EVENT,receive);
+}
+
+export function isCurrentAIError(message){
+ return /Your AI (?:key or sign-in was refused|could not be reached|is connected only to the notebook)/.test(String(message||''));
+}
+
 export async function loadChatOptions({fetcher=fetch,signal,timeoutMs=15000}={}){
+ const request=++startedRequest;
  const deadline=AbortSignal.timeout(timeoutMs),combined=signal?AbortSignal.any([signal,deadline]):deadline;
  let response;
  try{response=await fetcher('/api/chat/options',{signal:combined});}catch(error){if(signal?.aborted)throw error;throw Error('Model choices did not load. Try again.');}
@@ -8,5 +28,10 @@ export async function loadChatOptions({fetcher=fetch,signal,timeoutMs=15000}={})
  const current=data.models.some(m=>m.id===data.current)?data.current:data.models.length===1&&data.models[0].id===''?'':null;
  if(current===null)throw Error('The configured model is not among the available choices.');
  // connected:false is the server saying no AI is connected at all (#563); any other answer is a connected AI.
- return {current,label:data.connected===false?'No AI connected':typeof data.current==='string'?data.current:'Connected model',connected:data.connected!==false,usable:data.usable!==false,models:data.models};
+ const options={current,label:data.connected===false?'No AI connected':typeof data.current==='string'?data.current:'Connected model',connected:data.connected!==false,usable:data.connected!==false&&data.usable!==false,availability:data.availability,models:data.models};
+ // Several open surfaces can finish their five-second reads out of order. An older
+ // ready answer must not overwrite a newer refusal or recovery everywhere else.
+ if(request<publishedRequest)return latestOptions;
+ publishedRequest=request;latestOptions=options;
+ return publishChatOptions(options);
 }
