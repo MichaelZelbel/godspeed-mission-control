@@ -27,3 +27,18 @@ export function analysisFailure(error){
   if(!kind||message===AI_REFUSED||message===AI_UNREACHABLE||message.startsWith(NO_AI_STATUS)||message.startsWith(SETTINGS_ONLY_AI_STATUS))return error;
   return new Error(kind==='refused'?AI_REFUSED:AI_UNREACHABLE);
 }
+
+// What an AI action says when the AI answered but its answer is not in the shape the action needs
+// (#792): Suggest said "The assistant returned an invalid proposal list", Create collection with AI
+// "Return one complete JSON object", and the analysis actions "The request or a saved file was not
+// valid JSON." for an AI that answered "Connected.". It is thrown where the AI's reply is read, never
+// for a request or a saved file of the notebook's own, which keep their own messages. What was wrong
+// with the reply is kept as the error's cause, for the server log.
+export const AI_UNREADABLE='Your AI answered, but its answer could not be used. Try again, or choose another model in Settings, Your AI.';
+export const unreadableReply=cause=>new Error(AI_UNREADABLE,cause?{cause}:undefined);
+// The AI's reply as the JSON object an action asked for, fenced or not; a reply that is not one is
+// the unreadable reply above.
+export function readReply(result){
+  if(typeof result!=='string')return result;
+  try{return JSON.parse(result.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));}catch(error){throw unreadableReply(error);}
+}

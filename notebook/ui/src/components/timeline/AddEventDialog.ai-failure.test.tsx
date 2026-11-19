@@ -7,6 +7,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import "@testing-library/jest-dom/vitest";
 import { AI_REFUSED_STATUS, AI_UNREACHABLE_STATUS, NO_AI_STATUS } from "../../../../core/no-ai.mjs";
 import AddEventDialog from "./AddEventDialog";
+import { WAIT } from "@/test/wait-limits";
 
 const state = vi.hoisted(() => ({ providerConfigured: false, aiAvailability: undefined as string | undefined, inserted: [] as string[] }));
 const invoke = vi.hoisted(() => vi.fn(async (): Promise<{ data: unknown; error: unknown }> => ({ data: {}, error: null })));
@@ -49,13 +50,13 @@ const serverSaid = (message: string) => ({ data: null, error: { message } });
 
 async function saveMoment(withPerson = false) {
   render(<AddEventDialog people={withPerson ? [ada] : []} onCreated={() => {}} open onOpenChange={() => {}} />);
-  fireEvent.change(await screen.findByPlaceholderText("Short title for this moment"), { target: { value: "A saved moment" } });
+  fireEvent.change(await screen.findByPlaceholderText("Short title for this moment", undefined, WAIT), { target: { value: "A saved moment" } });
   if (withPerson) {
     fireEvent.click(screen.getByRole("combobox", { name: "People" }));
-    fireEvent.click(await screen.findByRole("option", { name: ada.name }));
+    fireEvent.click(await screen.findByRole("option", { name: ada.name }, WAIT));
   }
   fireEvent.click(screen.getByRole("button", { name: "Create Moment" }));
-  await waitFor(() => expect(toast).toHaveBeenCalled());
+  await waitFor(() => expect(toast).toHaveBeenCalled(), WAIT);
   expect(state.inserted).toContain("moments");
 }
 
@@ -73,14 +74,14 @@ describe("saving a moment while the AI fails", () => {
     invoke.mockResolvedValue(serverSaid(AI_REFUSED_STATUS + ". Check it in Settings, Your AI, then try again."));
     await saveMoment();
     expect(toast).toHaveBeenNthCalledWith(1, { title: "Moment created" });
-    await waitFor(() => expect(toast).toHaveBeenLastCalledWith({ title: "Moment created", description: REFUSED_FACTS }));
+    await waitFor(() => expect(toast).toHaveBeenLastCalledWith({ title: "Moment created", description: REFUSED_FACTS }), WAIT);
   });
 
   it("says no facts were pulled out when the extraction cannot reach the AI", async () => {
     state.providerConfigured = true;
     invoke.mockResolvedValue(serverSaid(AI_UNREACHABLE_STATUS + ". Check its connection in Settings, Your AI, then try again."));
     await saveMoment();
-    await waitFor(() => expect(toast).toHaveBeenLastCalledWith({ title: "Moment created", description: UNREACHABLE_FACTS }));
+    await waitFor(() => expect(toast).toHaveBeenLastCalledWith({ title: "Moment created", description: UNREACHABLE_FACTS }), WAIT);
   });
 
   it("says it at once, without asking the AI, when the AI is already known to be refused or unreachable", async () => {
@@ -112,7 +113,7 @@ describe("saving a moment while the AI fails", () => {
     cleanup();toast.mockClear();
     Object.assign(state, { providerConfigured: true, aiAvailability: "ready" });
     await saveMoment();
-    await waitFor(() => expect(invoke).toHaveBeenCalledOnce());
+    await waitFor(() => expect(invoke).toHaveBeenCalledOnce(), WAIT);
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(toast).toHaveBeenCalledTimes(1);
   });

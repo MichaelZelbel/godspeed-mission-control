@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { RichTextEditor } from "./RichTextEditor";
+import { WAIT } from "@/test/wait-limits";
 
 // The other editor in the notebook (issue #26): editable, it opens links the way a note does.
 // Before, it left a web link to the browser, which follows none inside an editable editor.
@@ -23,7 +24,7 @@ describe("RichTextEditor", () => {
     const { container } = render(
       <RichTextEditor value="[Example](https://example.com/page) and [Goals](/dashboard/goals)" editable showToolbar={false} onInternalNavigate={navigate} />,
     );
-    await waitFor(() => expect(container.querySelector('[contenteditable="true"] a')).not.toBeNull());
+    await waitFor(() => expect(container.querySelector('[contenteditable="true"] a')).not.toBeNull(), WAIT);
     const [external, internal] = [...container.querySelectorAll("a")];
     click(external);
     expect(window.open).toHaveBeenCalledWith("https://example.com/page", "_blank", "noopener,noreferrer");

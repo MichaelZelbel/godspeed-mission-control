@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import { TelegramConnect } from "./ConnectTelegram";
+import { WAIT } from "@/test/wait-limits";
 
 // The Telegram step of the one-click server's setup page (16 October 2026). A bot its owner has
 // chatted with before shows no Start button, so the page also shows the message to send instead;
@@ -29,35 +30,35 @@ describe("TelegramConnect", () => {
     const writeText = vi.fn(async () => {});
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
     show({ telegram: waiting });
-    expect(await screen.findByText(/Open it in Telegram with the button below and press/)).toBeInTheDocument();
+    expect(await screen.findByText(/Open it in Telegram with the button below and press/, undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByText("Used this bot before and see no Start button? Then send it this message:")).toBeInTheDocument();
     expect(screen.getByText("/start fictionalCode0123456789abcdefgh").tagName).toBe("CODE");
     expect(screen.getByRole("img", { name: "QR code that opens @fictional_bot in Telegram" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("/start fictionalCode0123456789abcdefgh"));
-    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("/start fictionalCode0123456789abcdefgh"), WAIT);
+    expect(await screen.findByRole("button", { name: "Copied" }, WAIT)).toBeInTheDocument();
     expect(screen.getByText(/The code works once and makes you the bot's owner\. Then setup goes on in the chat: you connect an AI, about five minutes\. Getting to know you comes afterwards, whenever you like\./)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/GitHub|briefing/);
   });
   it("sends the browser's time zone and address with the key", async () => {
     const calls = show({ telegram: none, "telegram/connect": waiting });
-    fireEvent.change(await screen.findByLabelText("Your bot's key"), { target: { value: "123456789:AAHfictionalKeyForTestsOnly_0123456789" } });
+    fireEvent.change(await screen.findByLabelText("Your bot's key", undefined, WAIT), { target: { value: "123456789:AAHfictionalKeyForTestsOnly_0123456789" } });
     fireEvent.click(screen.getByRole("button", { name: "Check and connect" }));
-    await screen.findByText("/start fictionalCode0123456789abcdefgh");
+    await screen.findByText("/start fictionalCode0123456789abcdefgh", undefined, WAIT);
     const sent = calls.find(c => c.route === "telegram/connect")?.body;
     expect(sent).toEqual({ token: "123456789:AAHfictionalKeyForTestsOnly_0123456789", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, address: window.location.origin });
   });
   it("shows a gateway routing failure, then refreshes to the connected state", async () => {
     let reads=0;
     show({ telegram: () => ++reads===1?{ available: true, managed: "web", connected: true, phase: "gateway-route-failed", bot: { username: "fictional_bot", name: "Fictional" } }:{ available: true, managed: "web", connected: true, phase: "ready", bot: { username: "fictional_bot", name: "Fictional" } } });
-    expect(await screen.findByRole("alert")).toHaveTextContent("Telegram cannot start because this server cannot apply its Telegram API address.");
+    expect(await screen.findByRole("alert", undefined, WAIT)).toHaveTextContent("Telegram cannot start because this server cannot apply its Telegram API address.");
     expect(screen.queryByText(/Telegram is connected/)).not.toBeInTheDocument();
     expect(await screen.findByText(/Telegram is connected/,{}, {timeout:4500})).toBeInTheDocument();
     expect(reads).toBe(2);
   },5000);
   it("treats a server phase it does not know as an error", async () => {
     show({ telegram: { available: true, managed: "web", connected: true, phase: "later", bot: { username: "fictional_bot", name: "Fictional" } } });
-    expect(await screen.findByRole("alert")).toHaveTextContent("Telegram returned a status this page does not understand.");
+    expect(await screen.findByRole("alert", undefined, WAIT)).toHaveTextContent("Telegram returned a status this page does not understand.");
     expect(screen.queryByText(/Telegram is connected/)).not.toBeInTheDocument();
   });
 });

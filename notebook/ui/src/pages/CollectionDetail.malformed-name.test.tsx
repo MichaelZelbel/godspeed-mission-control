@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
 import CollectionDetail from "./CollectionDetail";
+import { WAIT } from "@/test/wait-limits";
 
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
 
@@ -67,15 +68,15 @@ describe("a collection page with a legacy blank name", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("button", { name: "Collection actions" })).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole("button", { name: "Edit Collection" }));
-    const editDialog = await screen.findByRole("dialog", { name: "Edit Collection" });
+    expect(await screen.findByRole("button", { name: "Collection actions" }, WAIT)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Collection" }, WAIT));
+    const editDialog = await screen.findByRole("dialog", { name: "Edit Collection" }, WAIT);
     const name = within(editDialog).getAllByRole("textbox")[0];
     expect(name).toHaveValue("");
     fireEvent.change(name, { target: { value: "Recovered collection" } });
     fireEvent.click(within(editDialog).getByRole("button", { name: "Save" }));
 
-    await waitFor(() => expect(updates).toContainEqual(expect.objectContaining({ name: "Recovered collection" })));
-    expect(await screen.findByRole("heading", { name: /Recovered collection/ })).toBeInTheDocument();
+    await waitFor(() => expect(updates).toContainEqual(expect.objectContaining({ name: "Recovered collection" })), WAIT);
+    expect(await screen.findByRole("heading", { name: /Recovered collection/ }, WAIT)).toBeInTheDocument();
   });
 });

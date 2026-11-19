@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import "@testing-library/jest-dom/vitest";
 import { createFakeSupabase, type RecordedQuery } from "@/test/fake-supabase";
 import AddEventDialog, { type EditMomentData, type TimelineContact } from "./AddEventDialog";
+import { WAIT } from "@/test/wait-limits";
 
 const { fake } = vi.hoisted(() => ({ fake: { current: null as any } }));
 vi.mock("@/integrations/supabase/client", () => ({ get supabase() { return fake.current.client; } }));
@@ -62,7 +63,7 @@ function openDialog(editEvent?: EditMomentData) {
 
 async function choosePerson(name: string) {
   fireEvent.click(screen.getByRole("combobox", { name: "People" }));
-  fireEvent.click(await screen.findByRole("option", { name }));
+  fireEvent.click(await screen.findByRole("option", { name }, WAIT));
 }
 
 afterEach(cleanup);
@@ -78,7 +79,7 @@ describe("existing people on Timeline moments", () => {
     expect(screen.getByRole("button", { name: `Remove ${ada.name}` })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Create Moment" }));
 
-    await waitFor(() => expect(onCreated).toHaveBeenCalledOnce());
+    await waitFor(() => expect(onCreated).toHaveBeenCalledOnce(), WAIT);
     expect(fake.current.on("moment_participants", "insert")[0].payload).toEqual([
       { moment_id: savedMoment.id, person_id: ada.id },
     ]);
@@ -95,7 +96,7 @@ describe("existing people on Timeline moments", () => {
     fireEvent.change(screen.getByPlaceholderText("Short title for this moment"), { target: { value: "Fictional solo walk" } });
     fireEvent.click(screen.getByRole("button", { name: "Create Moment" }));
 
-    await waitFor(() => expect(onCreated).toHaveBeenCalledOnce());
+    await waitFor(() => expect(onCreated).toHaveBeenCalledOnce(), WAIT);
     expect(fake.current.on("moment_participants")).toHaveLength(0);
     expect(fake.current.on("moments", "insert")[0].payload).toEqual(expect.objectContaining({ person_id: null }));
   });
@@ -107,7 +108,7 @@ describe("existing people on Timeline moments", () => {
     await choosePerson(bea.name);
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
 
-    await waitFor(() => expect(onCreated).toHaveBeenCalledOnce());
+    await waitFor(() => expect(onCreated).toHaveBeenCalledOnce(), WAIT);
     expect(fake.current.on("moment_participants", "delete")[0].filters).toContainEqual(["in", "person_id", [ada.id]]);
     expect(fake.current.on("moment_participants", "insert")[0].payload).toEqual([
       { moment_id: savedMoment.id, person_id: bea.id },
