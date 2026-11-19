@@ -2,7 +2,7 @@ import {useEffect} from 'react';
 import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 import {CHAT_AVAILABILITIES} from '../../../../core/chat-availability.mjs';
-import {NO_AI_STATUS,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../../../../core/no-ai.mjs';
+import {AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS,NO_AI_STATUS,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../../../../core/no-ai.mjs';
 import {listenForChatOptions} from '@/local/chat-options.mjs';
 export type ChatAvailability=(typeof CHAT_AVAILABILITIES)[number];
 type ChatOptions={connected?:boolean;usable?:boolean;availability?:ChatAvailability};
@@ -64,7 +64,7 @@ export function ChatConnectionEmptyState({ready,said}:{ready:React.ReactNode;sai
   if(state==='checking')return underConversation?null:<div className="text-center text-muted-foreground text-sm py-8" role="status">Checking AI connection…</div>;
   if(underConversation&&(state==='none'||stateSaid(said)===state))return null;
   return <div className={'text-center text-muted-foreground text-sm space-y-2 '+(underConversation?'py-2':'py-8')} data-chat-ai-state={state}>
-    <p className="font-semibold text-foreground">{state==='none'?NO_AI_STATUS:state==='refused'?'Your AI key or sign-in was refused':state==='settings-only'?SETTINGS_ONLY_AI_STATUS:'Your AI could not be reached'}</p>
+    <p className="font-semibold text-foreground">{state==='none'?NO_AI_STATUS:state==='refused'?AI_REFUSED_STATUS:state==='settings-only'?SETTINGS_ONLY_AI_STATUS:AI_UNREACHABLE_STATUS}</p>
     <p>{state==='none'?'Connect an AI before you type.':state==='refused'?'Check its key or sign-in before you type.':state==='settings-only'?SETTINGS_ONLY_AI_HELP:'Check its connection before you type.'}</p>
     <Link className="underline text-primary" to="/dashboard/settings#connect-ai">Open Settings, Your AI</Link>
   </div>;
