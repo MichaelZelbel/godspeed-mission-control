@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, createRef } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, useEditorState, EditorContent } from "@tiptap/react";
 import { Markdown } from "tiptap-markdown";
 import StarterKit from "@tiptap/starter-kit";
 import UnderlineExt from "@tiptap/extension-underline";
@@ -1443,9 +1443,17 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     showToast.success("Logged as interaction");
   };
 
-  const plainText = editor?.getText() || "";
-  const wordCount = plainText.trim() ? plainText.trim().split(/\s+/).length : 0;
-  const charCount = plainText.length;
+  // Read on every change of the text: the editor does not re-render this
+  // component as the person types, so a count taken at render time stayed
+  // behind ("0 words" in a new note with several words) until a save (#809).
+  const { wordCount, charCount } = useEditorState({
+    editor,
+    selector: ({ editor: e }) => {
+      const text = e?.getText() || "";
+      const trimmed = text.trim();
+      return { wordCount: trimmed ? trimmed.split(/\s+/).length : 0, charCount: text.length };
+    },
+  }) ?? { wordCount: 0, charCount: 0 };
   const metadata = note.metadata as Record<string, unknown> | null;
   const mentionedPeople = Array.isArray(metadata?.people) ? (metadata.people as string[]) : [];
   const { data: mentionedGroupMatches = [] } = useQuery({
@@ -1702,7 +1710,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                 <DropdownMenuItem onClick={makeACopy} disabled={duplicateNote.isPending}>
                   <Copy className="mr-2 h-4 w-4" /> Make a copy
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => { navigator.clipboard.writeText(`${title}\n\n${plainText}`).then(() => showToast.success("Copied to clipboard"), () => showToast.error("Could not copy to the clipboard")); }}>
+                <DropdownMenuItem onClick={() => { navigator.clipboard.writeText(`${title}\n\n${editor?.getText() || ""}`).then(() => showToast.success("Copied to clipboard"), () => showToast.error("Could not copy to the clipboard")); }}>
                   <Copy className="mr-2 h-4 w-4" /> Copy to clipboard
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={downloadMarkdown}>
