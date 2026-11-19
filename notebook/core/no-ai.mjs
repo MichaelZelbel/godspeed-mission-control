@@ -3,6 +3,10 @@ import {aiFailure} from './ai-health.mjs';
 // words the Settings page uses ("Settings, Your AI"), so a person knows where to go (#552; until
 // 14 November 2026 it said "Choose and configure a model provider", which named no place).
 export const NO_AI_STATUS='No AI is connected yet';
+// The chats' status lines for a refused key and an outage (#590). Settings, Your AI begins its own
+// messages for the same states with them, so both say the same thing (#763).
+export const AI_REFUSED_STATUS='Your AI key or sign-in was refused';
+export const AI_UNREACHABLE_STATUS='Your AI could not be reached';
 export const SETTINGS_ONLY_AI_STATUS='Your AI is connected only to the notebook';
 export const SETTINGS_ONLY_AI_HELP='Tick “Use it for the daily routines and the chat too” in Settings, Your AI.';
 export const NO_AI_CHAT=NO_AI_STATUS+'. Connect your AI service in Settings, Your AI, then ask Godspeed again.';

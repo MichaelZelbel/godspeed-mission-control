@@ -55,9 +55,65 @@ describe("the saved main AI in Settings", () => {
   it("explains that an installation without an assistant program has no routines choice", async () => {
     serve(supportingRoutes);
     settings();
-    expect(await screen.findByText("This installation runs no daily routines and no assistant chat because no assistant program is installed.")).toBeInTheDocument();
+    expect(await screen.findByText("No assistant program is installed here. The notebook still runs its own routines, such as reminders and domain watch. Connect your AI below to add the chat and the routines that need an AI.")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("This installation runs no daily routines and no assistant chat");
     expect(screen.queryByRole("checkbox", { name: /daily routines and the chat/ })).toBeNull();
   });
+
+  // #763: with an AI connected here, the chat and the routines that need an AI use it (#590).
+  it("does not call the chat or the routines unavailable once an AI is connected without an assistant program", async () => {
+    serve({ ...supportingRoutes, provider: () => [200, { configured: true, url: "https://openrouter.ai/api/v1/chat/completions", model: "fictional/model", key: true }] });
+    settings();
+    const notice = await screen.findByText(/No assistant program is installed here/);
+    expect(notice).toHaveTextContent("The notebook runs its own routines, such as reminders and domain watch, and the AI you connected below answers the chat and the routines that need an AI.");
+    expect(document.body).not.toHaveTextContent(/runs no daily routines|no assistant chat|cannot run|unavailable|not available/i);
+  });
+
+  // #763: "Test and connect" against a real notebook server and a stand-in AI on 127.0.0.1. A refused
+  // key, an address where nothing answers and a server error each say in plain words what happened.
+  it("says plainly that the key was refused, that nothing answered, or that the service failed", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed-connect-ai-errors-"));
+    let answer = 401;
+    const endpoint = http.createServer((req, res) => { res.statusCode = answer;res.setHeader("content-type", "application/json");res.end(JSON.stringify({ error: { message: "Forbidden: raw provider text for fictional-secret-key" } })); });
+    await new Promise<void>(resolve => endpoint.listen(0, "127.0.0.1", resolve));
+    const closed = http.createServer();await new Promise<void>(resolve => closed.listen(0, "127.0.0.1", resolve));
+    const closedPort = (closed.address() as any).port;await new Promise<void>(resolve => closed.close(() => resolve()));
+    const server = await new Promise<{base:string;close:()=>Promise<void>}>((resolve, reject) => {
+      const script = `import('./server/main.mjs').then(async({createService})=>{const service=await createService({root:process.argv[1],port:0,device:'pc'});console.log(service.address.port);process.on('SIGTERM',async()=>{await service.close();process.exit(0);});})`;
+      const child = spawn(process.execPath, ["--input-type=module", "-e", script, root], { cwd: path.resolve(process.cwd(), ".."), stdio: ["ignore", "pipe", "pipe"] });
+      let stderr = "";child.stderr.on("data", data => stderr += data);child.once("error", reject);child.stdout.once("data", data => { const port = Number(String(data).trim());if(!port)return reject(new Error(stderr || "server did not start"));resolve({ base: `http://127.0.0.1:${port}`, close: () => new Promise(done => { child.once("exit", () => done());child.kill("SIGTERM"); }) }); });
+    });
+    try {
+      const nativeFetch = fetch;
+      vi.stubGlobal("fetch", (url: string, init?: RequestInit) => nativeFetch(String(url).startsWith("/api/") ? server.base + url : url, init));
+      settings();
+      await waitFor(() => expect(screen.getByLabelText("Your AI service")).toBeInTheDocument());
+      fireEvent.change(screen.getByLabelText("Your AI service"), { target: { value: "other" } });
+      fireEvent.change(screen.getByLabelText(/Model, written/), { target: { value: "fictional-model" } });
+      const attempt = async (address: string) => {
+        fireEvent.change(screen.getByLabelText(/Its address/), { target: { value: address } });
+        fireEvent.change(screen.getByLabelText("Key"), { target: { value: "fictional-secret-key" } });
+        fireEvent.click(screen.getByRole("button", { name: "Test and connect" }));
+        await waitFor(() => expect(screen.getByRole("button", { name: "Test and connect" })).toBeEnabled(), { timeout: 20000 });
+        const message = screen.getByText((_, element) => element?.getAttribute("role") === "alert" && element.tagName === "P").textContent || "";
+        for (const raw of ["HTTP", "401", "403", "500", "Forbidden", "raw provider text", "fictional-secret-key"]) expect(message).not.toContain(raw);
+        return message;
+      };
+      const stand = `http://127.0.0.1:${(endpoint.address() as any).port}/v1`;
+      answer = 401;const refused401 = await attempt(stand);
+      answer = 403;const refused403 = await attempt(stand);
+      answer = 500;const failed = await attempt(stand);
+      const unreachable = await attempt(`http://127.0.0.1:${closedPort}/v1`);
+      expect(refused401).toBe("Your AI key or sign-in was refused. The service did not accept this key. Check it, or replace it with a new key from your AI service, then try again.");
+      expect(refused403).toBe(refused401);
+      expect(unreachable.startsWith("Your AI could not be reached. ")).toBe(true);
+      expect(failed).toMatch(/had a problem on its side/);
+      expect(new Set([refused401, unreachable, failed]).size).toBe(3);
+      for (const message of [unreachable, failed]) expect(message).not.toMatch(/\b[45]\d\d\b/);
+    } finally {
+      await server.close();await new Promise<void>(resolve => endpoint.close(() => resolve()));fs.rmSync(root, { recursive: true, force: true });
+    }
+  }, 60000);
 
   it("keeps the routines and chat choice and saves it when assistant routines are available", async () => {
     const calls = serve({

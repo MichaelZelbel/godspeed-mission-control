@@ -4,7 +4,7 @@ import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
 import {listenForChatOptions,loadChatOptions} from '@/local/chat-options.mjs';
 import {CHAT_AVAILABILITY_CHANGED,type ChatAvailability} from './ChatConnectionEmptyState';
-import {SETTINGS_ONLY_AI_STATUS} from '../../../../core/no-ai.mjs';
+import {AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS,SETTINGS_ONLY_AI_STATUS} from '../../../../core/no-ai.mjs';
 
 export type ChatFile={path:string;name:string;type:string;text?:string};
 type Props={value:string;onChange:(text:string)=>void;onSend:()=>void;onStop:()=>void;busy:boolean;files:ChatFile[];onFiles:(files:ChatFile[])=>void;model:string;effort:string;onModel:(v:string)=>void;onEffort:(v:string)=>void;reply:string;context?:string;compact?:boolean;onError:(message:string)=>void};
@@ -23,7 +23,7 @@ export default function ChatComposer(p:Props){
   useEffect(()=>listenForChatOptions(data=>{setOptions(data);p.onModel(data.usable===false?'':data.current);if(data.usable===false)p.onEffort('');}),[p.onModel,p.onEffort]);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;clearTimeout(recordingTimer.current);audioRequest.current?.abort();if(recorder.current?.state==='recording')recorder.current.stop();recorder.current?.stream.getTracks().forEach(t=>t.stop());window.speechSynthesis?.cancel();};},[]);
   const noAI=options.connected===false,unusable=options.usable===false,efforts=noAI||unusable?[]:options.models.find(m=>m.id===p.model)?.efforts||[];
-  const unavailableLabel=noAI?'No AI connected':options.availability==='refused'?'Your AI key or sign-in was refused':options.availability==='settings-only'?SETTINGS_ONLY_AI_STATUS:'Your AI could not be reached';
+  const unavailableLabel=noAI?'No AI connected':options.availability==='refused'?AI_REFUSED_STATUS:options.availability==='settings-only'?SETTINGS_ONLY_AI_STATUS:AI_UNREACHABLE_STATUS;
   const unavailableModelLabel='Model: '+unavailableLabel,unavailableEffortLabel='Effort: '+unavailableLabel;
   const addFiles=async(list:FileList|File[])=>{
     const files=Array.from(list);if(p.files.length+files.length>10){p.onError('Attach up to 10 files per message');return;}
