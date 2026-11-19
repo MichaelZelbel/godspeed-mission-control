@@ -29,6 +29,18 @@ export interface PersistedChatMessage {
     title: string;
     folder_path: string;
   }>;
+  /**
+   * On a user message whose latest send got no answer: the reason the person was shown. The
+   * server keeps the field after a later reply, so read it through unansweredReason.
+   */
+  lastFailure?: string;
+}
+
+/** Why the message at `index` got no answer, while no reply follows it; else null. */
+export function unansweredReason(messages: PersistedChatMessage[], index: number): string | null {
+  const message = messages[index];
+  if (message?.role !== "user" || !message.lastFailure) return null;
+  return messages[index + 1]?.role === "assistant" ? null : message.lastFailure;
 }
 
 

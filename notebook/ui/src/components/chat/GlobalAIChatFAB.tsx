@@ -18,6 +18,7 @@ import {
   clearChatState,
   buildApiMessages,
   withSummary,
+  unansweredReason,
   NOTE_MODIFYING_TOOLS,
   NOTE_CREATING_TOOLS,
   COLLECTION_MODIFYING_TOOLS,
@@ -72,6 +73,8 @@ type PageContext={page:string;label:string;toggleEvent?:string;changedEvent?:str
 // The same conversation opened in its own window (/dashboard/chat?page=identity).
 const PAGE_CHATS:Record<string,PageContext>={identity:{page:'identity',label:BRAIN_PAGE.label}};
 export const OPEN_CHAT_EVENT="godspeed:open-chat";
+// Handed to sendMessage by a note's "Send again": sends the newest message again, without a copy.
+const RESEND=Symbol("resend");
 // Opens the floating chat when one is on the page, and sends `message` there when one is given (the
 // dashboard's "Tell Godspeed about you" sends "context"); returns false when no floating chat answered.
 export function openFloatingChat(message?:string){const event=new CustomEvent(OPEN_CHAT_EVENT,{cancelable:true,detail:{message}});window.dispatchEvent(event);return event.defaultPrevented;}
@@ -301,21 +304,24 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   );
 
   const sendMessage = useCallback(async (override?: unknown) => {
+    const resend = override === RESEND;
     // A message handed in (openFloatingChat) is sent as if typed; a click or key event is not one.
     const text = (typeof override === "string" ? override : input).trim();
-    if ((!text&&!files.length) || isLoading || clearingRef.current || requestRef.current || !session) return;
+    if (isLoading || clearingRef.current || requestRef.current || !session) return;
+    const failed = resend && unansweredReason(state.messages, state.messages.length - 1) ? state.messages.at(-1) : undefined;
+    if (resend ? !failed : !text && !files.length) return;
 
     setError(null);
     const sentKey = chatKey;
     const sentUserId = user?.id;
     const sentContext = contextKey;
-    const userMsg: ChatMessage = { role: "user", content: text||"Please describe the attached files.", attachments:files };
-    const nextState: PersistedChatState = {
+    const userMsg: ChatMessage = failed ?? { role: "user", content: text||"Please describe the attached files.", attachments:files };
+    const nextState: PersistedChatState = failed ? state : {
       ...state,
       messages: [...state.messages, userMsg],
     };
     followRef.current=true;setState(nextState);
-    setInput("");
+    if (!resend) setInput("");
     setIsLoading(true);stoppedRef.current=false;requestRef.current=crypto.randomUUID();
 
     try {
@@ -350,7 +356,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
 
 
       const { data, error: fnErr } = await supabase.functions.invoke(chatFn, {
-        body: {...invokeBody,conversation_session:state.session_id||'',message:userMsg.content,conversation_id:'notebook:'+contextKey,talk_id:talkId||undefined,page:pageChat?.page,page_label:pageChat?.label,files:files.length?files:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current},
+        body: {...invokeBody,conversation_session:state.session_id||'',message:userMsg.content,conversation_id:'notebook:'+contextKey,talk_id:talkId||undefined,page:pageChat?.page,page_label:pageChat?.label,files:userMsg.attachments?.length?userMsg.attachments:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current},
       });
 
       // A non-2xx answer (out of credits is a 402) arrives as fnErr with
@@ -439,14 +445,26 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
         window.dispatchEvent(new CustomEvent(pageChat.changedEvent ?? "godspeed:page-chat-changed", { detail: { page: pageChat.page } }));
       }
 
-      setFiles([]);
+      if (!resend) setFiles([]);
       deliver(sentKey, sentUserId, sentContext, updated);
       summarizeLater(chatFn, sentKey, sentUserId, sentContext, updated);
 
       triggerCreditsRefresh();
     } catch (err: any) {
       // The error belongs to the conversation that asked; do not show it in another.
-      if (chatKeyRef.current === sentKey){setError(stoppedRef.current?"Reply stopped.":err.message || "Something went wrong");if(!stoppedRef.current)setInput(prev=>prev||text);}
+      const shown = chatKeyRef.current === sentKey;
+      const reason: string = stoppedRef.current ? "Reply stopped." : err.message || "Something went wrong";
+      // A send that got no answer stays marked on its message, so the reason survives a reload; a
+      // conversation cleared meanwhile has no such message left to mark.
+      const cleared = (loadChatState(sentUserId, sentContext).session_id || "") !== (nextState.session_id || "");
+      if (stoppedRef.current || cleared) {
+        if (shown) setError(reason);
+      } else {
+        deliver(sentKey, sentUserId, sentContext, {
+          ...nextState,
+          messages: nextState.messages.map((m, i) => (i === nextState.messages.length - 1 ? { ...m, lastFailure: reason } : m)),
+        });
+      }
     } finally {
       setIsLoading(false);requestRef.current=null;
     }
@@ -646,8 +664,12 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                 </div>}/>
               )}
 
-              {state.messages.map((msg, i) => (
-                <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : ""}`}>
+              {state.messages.map((msg, i) => {
+                const newest = i === state.messages.length - 1;
+                const unanswered = isLoading && newest ? null : unansweredReason(state.messages, i);
+                return (
+                <div key={i}>
+                <div className={`flex gap-2 ${msg.role === "user" ? "justify-end" : ""}`}>
 
                   <div
                     className={cn(
@@ -710,11 +732,29 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                   </div>
 
                 </div>
-              ))}
+                {unanswered && (
+                  <div
+                    role={newest ? "alert" : undefined}
+                    data-chat-reply-error={newest ? "" : undefined}
+                    className="mt-1 flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-destructive text-xs"
+                  >
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span>No answer.</span>
+                    <span>{unanswered}</span>
+                    {newest && (
+                      <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => sendMessage(RESEND)} disabled={isLoading || isClearing}>
+                        Send again
+                      </Button>
+                    )}
+                  </div>
+                )}
+                </div>
+                );
+              })}
 
               {/* An open conversation keeps its replies and shows the AI's current state under them, so a
                   refused key, an outage or recovery is seen without a reload (#590). */}
-              {state.messages.length > 0 && <ChatConnectionEmptyState ready={null} said={error}/>}
+              {state.messages.length > 0 && <ChatConnectionEmptyState ready={null} said={error ?? unansweredReason(state.messages, state.messages.length - 1)}/>}
 
               {isLoading && (
                 <div className="flex items-center gap-2">
