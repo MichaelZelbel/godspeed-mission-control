@@ -188,9 +188,26 @@ test("a failed review hands its issues to the next try", async () => {
   const s = await sealed({ answer: (c) => "Here is my review:\n```json\n" + JSON.stringify({ verdict: "fail", coverage: [...c(["income", "market"]), { id: "buffer", verdict: "fail", reason: "No route for the buffer goal was weighed.", sources: [] }], issues: ["The 12 percent rise is not in the source text.", { issue: "A cheaper route was missed", link: "https://example.com/route" }] }) + "\n```" });
   assert.equal(s.r.problem, "its independent research review did not pass");
   assert.deepEqual(s.r.issues, ["The 12 percent rise is not in the source text.", "A cheaper route was missed: https://example.com/route", "buffer: No route for the buffer goal was weighed."]);
+  assert.match(fs.readFileSync(s.file, "utf8"), /^STATE: draft$/m);
+  assert.match(fs.readFileSync(s.file, "utf8"), /Independent review left these adopted goals uncovered: buffer\./);
+  assert.notEqual(s.gate(), null);
   const none = await sealed({ answer: "I think it is fine." });
   assert.match(none.r.problem, /did not answer with the JSON/);
   assert.equal(none.r.review.verdict, "fail");
+});
+
+test("an uncovered adopted goal independently keeps a passing review in draft", async () => {
+  const s = await sealed({ answer: (c) => JSON.stringify({
+    verdict: "pass",
+    coverage: [...c(["income", "market"]), { id: "buffer", verdict: "fail", reason: "No route covers this adopted goal.", sources: [] }],
+    issues: [],
+  }) });
+  assert.equal(s.r.problem, 'its independent review does not substantiate goal "buffer"');
+  assert.deepEqual(s.r.uncovered, ["buffer"]);
+  assert.deepEqual(s.r.issues, ["buffer: No route covers this adopted goal."]);
+  assert.match(fs.readFileSync(s.file, "utf8"), /^STATE: draft$/m);
+  assert.match(fs.readFileSync(s.file, "utf8"), /Independent review left these adopted goals uncovered: buffer\./);
+  assert.notEqual(s.gate(), null);
 });
 
 test("one byte changed in the preparation after the seal is refused", async () => {

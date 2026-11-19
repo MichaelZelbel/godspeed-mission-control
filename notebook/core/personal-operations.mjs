@@ -29,12 +29,14 @@ import {MANUAL_VIA} from './health-inputs.mjs';
 import {screenSuggestions,knownRecords} from './suggestion-filter.mjs';
 import {fieldList} from './fields.mjs';
 import {checkOutboundURL} from './outbound-fetch.mjs';
+import {addDomainWatch,listDomainWatches,removeDomainWatch} from './domain-watch.mjs';
 export const operationContract=`Return JSON {reply,language,notes_created?:[{title,content}],operations?:[{type,source_quote,...fields}]}. language is the two-letter code of the language the user's current message is written in (en, de, ...); write reply in that language. Use an operation only when the user's current message explicitly requests that change. source_quote must be exact user words requesting it, never a note quote. Supported operations:
 goal-add {title,measure,status?:adopted|provisional}; goal-change {id,title?,measure?,lead?:"<what is counted> | total or per week | <where it is read>",status?:adopted|provisional|paused|achieved|retired,reason}; goal-outcome {id,evidence,value?,outcome};
 goal-reading {id,value,where?,on?:YYYY-MM-DD}: the user gives a number for a supplied goal's weekly number (its lead), as a number they said ("I wrote 1,400 words this week", "14 subscribers now"). where is where they read it, in their words when they said; on only when they named another day. A number for a goal without a weekly number is not a reading: say so and ask what is counted.
 obligation-add {title,done_when,due_at?,cost?,target_at?,recurrence?:{days}}: done_when is what is true when it is finished and cost what passing due_at costs them (needed with due_at), both in the user's words; ask for either one they did not say, never invent it; obligation-complete {id,evidence}; obligation-snooze {id,until};
 coach-open {area:health|work-money|relationships,question}; coach-reply {id,content}; coach-close {id}; habit-agree {talk_id,title,agreement,check_at}; habit-observe {id,observation,answer:done|no|skip};
 journal-add {content}; journal-switch {enabled}; health-add {metric,value,unit,observed_at};
+domain-watch-add {domain}: add the domain the user explicitly asks to watch ("watch the domain example.com"); domain-watch-list {}: list watched domains when explicitly asked; domain-watch-remove {domain}: stop watching the named domain.
 memory-confirm {label,value,evidence_quote,subject_type:self|contact|entity,subject_id?:actual supplied ID,replaces_claim_id?:actual supplied current claim ID}; memory-propose {label,value,evidence_quote,subject_type:self|contact|entity,subject_id?:actual supplied ID};
 Memory must identify whose fact it is. Use self only for the user's own fact, contact for a supplied person, and entity for a supplied thing. Never save another person's fact as self. Ask when the person or thing is ambiguous or missing; never invent an ID.
 When correcting an existing remembered fact, memory-confirm MUST include replaces_claim_id from the supplied current claims. Preserve its actual attribute even if the user calls it something different. A new label does not correct an existing fact. Ask which fact when it is ambiguous; do not claim a correction without identifying the old claim.
@@ -196,6 +198,9 @@ export function personalOperation(domains,input){
   if(!Number.isInteger(input.minutes)||input.minutes<1||input.minutes>525600)throw Error('Choose the number of minutes between checks');required(input.criteria,'Meaningful change criteria');
   return addWatchTopic(store,{title,urls:[url.href],criteria:input.criteria,cadence_minutes:input.minutes,include_in_brief:input.include_in_brief===true,radar:input.radar===true,lead:input.lead===true,paused:false});
  }
+ if(type==='domain-watch-add'){const watch=addDomainWatch(store,required(input.domain,'Domain'));return {domain:watch.domain,reply:'Watching '+watch.domain+' every six hours. Godspeed will only notify you; it will never register, buy or backorder it.'};}
+ if(type==='domain-watch-list'){const watches=listDomainWatches(store);return {domains:watches,reply:watches.length?'Watching: '+watches.map(w=>w.domain).join(', ')+'.':'No domains are being watched.'};}
+ if(type==='domain-watch-remove'){const watch=removeDomainWatch(store,required(input.domain,'Domain'));return {domain:watch.domain,reply:'Stopped watching '+watch.domain+'.'};}
  if(type==='watch-change'){const topic=store.get('watch_topics',required(input.id,'Watch ID'));if(!topic)throw Error('Watch topic missing');if(typeof input.paused!=='boolean')throw Error('Choose pause or resume');return store.withLock(()=>{const job=store.get('jobs','watch-'+topic.id);store.commit([store.prepare('watch_topics',{paused:input.paused},topic),...(job?[store.prepare('jobs',{paused:input.paused},job)]:[])]);return store.get('watch_topics',topic.id);});}
  if(NATIVE.includes(type)){
   nativeArguments(input);
@@ -426,6 +431,9 @@ export function validateConversationOperations(domains,input,operations){
   'memory-propose':/\b(?:remember|save this fact|merke|speichere)\b/i,
   'routine-change':/\b(?:pause|resume|schedule|change|stop|start|pausiere|ändere)\b/i,
   'forecast-settle':/\b(?:settle|record|resolve|log|notiere)\b[\s\S]*(?:forecast|prediction|prognose)/i,
+  'domain-watch-add':/\b(?:watch|monitor)\b[\s\S]*\b(?:domain|web address)\b/i,
+  'domain-watch-list':/\b(?:list|show|which|what)\b[\s\S]*\b(?:domain|web address)/i,
+  'domain-watch-remove':/\b(?:stop|remove|delete)\b[\s\S]*\b(?:watching\s+)?(?:domain|web address)?/i,
   // "track" is the spoken word, never "log" (D-261, D-321).
   'tracker-hold':/\btrack(?:e|en|ing)?\b/i,
   // A yes may follow the answer to the one question asked with it ("250 g, and yes", D-321 step 5).
@@ -456,6 +464,7 @@ export function validateConversationOperations(domains,input,operations){
   'habit-agree':'agree|try|commit|stimme','habit-observe':'record|log|track|notiere','habit-progress':'pause|resume|restart|continue|exempt|excuse|change|hide|show|pausiere|ändere','journal-add':'journal|write|record|log|notiere|schreibe','journal-switch':'enable|disable|turn|start|stop|switch|aktiviere|deaktiviere',
   'health-add':'record|log|save|track|notiere|speichere','memory-confirm':'remember|save|correct|update|merke|speichere|korrigiere','memory-propose':'remember|save|merke|speichere',
   'routine-change':'pause|resume|schedule|change|stop|start|move|pausiere|ändere|verschiebe','forecast-settle':'settle|record|resolve|log|notiere',
+  'domain-watch-add':'watch|monitor','domain-watch-list':'list|show','domain-watch-remove':'stop|remove|delete',
   'tracker-hold':'track|tracke','tracker-create':'track|create|start|make','track':'track|tracke','tracker-correct':'change|correct|fix|delete|remove|lösche|korrigiere','headache':'track|tracke|log|record|save|note|notiere|speichere','cycle':'track|tracke|delete|remove|lösche','food':'track|tracke|remember|save|merke|speichere|delete|remove|lösche|set|change','charm':'start|stop|reset|restart|end|starte|stoppe|beende|setze'};
  const refuses=type=>{const v=verbs[type];if(!v)return false;
   return new RegExp("(?<!\\p{L})(?:do not|don.t|dont|never|must not|should not|niemals)(?!\\s+forget)\\s+(?:[\\p{L}']+\\s+){0,2}?(?:"+v+")",'iu').test(message)||new RegExp("(?<!\\p{L})(?:"+v+")\\p{L}*\\s+(?:(?:mich|mir|das|es|dies|ihn|sie|uns)\\s+)?nicht(?!\\p{L})",'iu').test(message);};
