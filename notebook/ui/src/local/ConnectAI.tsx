@@ -46,6 +46,29 @@ export function serviceName(provider?:string|null,base?:string|null){
 const when=(at:string)=>{const d=new Date(at);return isNaN(d.getTime())?at:d.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});};
 const DAY=24*3600*1000;
 
+type SpendGuard={enabled:boolean;daily_limit:number;low_balance:number;openrouter_connected:boolean;provider_message:string};
+export function spendGuardResponse(value:unknown):SpendGuard{
+  if(!value||typeof value!=='object')throw new Error('Spending protection settings could not be read.');
+  const data=value as Record<string,unknown>;
+  if(typeof data.enabled!=='boolean'||typeof data.daily_limit!=='number'||typeof data.low_balance!=='number'||typeof data.openrouter_connected!=='boolean'||typeof data.provider_message!=='string')throw new Error('Spending protection settings could not be read.');
+  return data as SpendGuard;
+}
+export function SpendGuardSettings(){
+  const query=useQuery({queryKey:['spend-guard'],queryFn:async()=>spendGuardResponse(await call('spend-guard'))});
+  const [enabled,setEnabled]=useState(true),[daily,setDaily]=useState('2'),[low,setLow]=useState('5'),[saving,setSaving]=useState(false),[message,setMessage]=useState('');
+  useEffect(()=>{if(!query.data)return;setEnabled(query.data.enabled);setDaily(String(query.data.daily_limit));setLow(String(query.data.low_balance));},[query.data]);
+  const save=async(e:React.FormEvent)=>{e.preventDefault();setSaving(true);setMessage('');try{const data=await call('spend-guard',{enabled,daily_limit:Number(daily),low_balance:Number(low)});query.refetch();setMessage(data.enabled?'Saved. OpenRouter spending protection is on.':'Saved. OpenRouter spending protection is off.');}catch(error:any){setMessage(error.message);}finally{setSaving(false);}};
+  return <form id="spend-guard" className="border-t pt-4 space-y-3" onSubmit={save} aria-label="OpenRouter spending protection">
+    <h3 className="text-lg">OpenRouter spending protection</h3>
+    <p>Godspeed checks daily spending and remaining credit once an hour. It never changes your OpenRouter limits.</p>
+    {query.data&&<p role="status">{query.data.provider_message}</p>}
+    <label className="flex gap-2"><input type="checkbox" checked={enabled} disabled={!query.data} onChange={e=>setEnabled(e.target.checked)}/>Check OpenRouter spending</label>
+    <label className="block">Tell me when today's spending is above (USD)<Input type="number" min="0" step="0.01" disabled={!query.data} value={daily} onChange={e=>setDaily(e.target.value)}/></label>
+    <label className="block">Tell me when remaining credit is below (USD)<Input type="number" min="0" step="0.01" disabled={!query.data} value={low} onChange={e=>setLow(e.target.value)}/></label>
+    <Button className="min-h-11" disabled={saving||!query.data}>{saving?'Saving…':'Save spending protection'}</Button>{message&&<p role="status">{message}</p>}
+  </form>;
+}
+
 export function RoutineAIState({status,checking,onCheck}:{status?:RoutineAI;checking:boolean;onCheck:()=>void}){
   if(status&&!status.available)return <p role="status">This installation runs no daily routines and no assistant chat because no assistant program is installed.</p>;
   if(!status)return null;
@@ -110,6 +133,7 @@ export function ConnectAI(){
       {done&&<p role="status">{done}</p>}
       {error&&<p role="alert" className="text-red-500">{error}</p>}
     </form>}
+    <SpendGuardSettings/>
     <BackupAI/>
   </section>;
 }

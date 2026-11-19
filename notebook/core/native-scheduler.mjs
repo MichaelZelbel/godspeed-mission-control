@@ -83,6 +83,8 @@ export class NativeScheduler{
  // assistant: a watch topic was never read again, and radar work stayed
  // "preparing" for ever. They run on the machine that runs the routines.
  static recordKinds=['watch','domain-watch','radar-prepare','radar-work'];
+ // The hourly OpenRouter spending check (core/spend-guard.mjs, #704) is a record routine too.
+ static{this.recordKinds.push('spend-guard');}
  constructor(store,{executable,home,device=store.device,run=runCommand,records=null,tickLimit=TICK_LIMIT,beatEvery=HEARTBEAT_EVERY,updateLimit=UPDATE_TRANSACTION_LIMIT,now=Date.now,updater=null,lifecycle=new HermesLifecycle()}){
   Object.assign(this,{store,executable,home,device,run,records,tickLimit,beatEvery,updateLimit,now,updater,lifecycle,setupAttempts:new Set()});
   if(records)records.onProgress=()=>this.onProgress?.();

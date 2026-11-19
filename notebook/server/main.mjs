@@ -75,6 +75,7 @@ import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/herm
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
 import {MEDIA_CARRY_MAX_MB,MEDIA_PRESENCE_BATCH_SIZE,MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
+import {spendGuardStatus,saveSpendGuardSettings} from '../core/spend-guard.mjs';
 
 // A backup AI is another service than the main AI, in Settings and in /backupai alike: when one
 // service fails, its other models and keys usually fail with it, and Hermes counts the same service
@@ -197,6 +198,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   if(originalRuntime&&!assistantMissing){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root,providerFile:providerPath,keptFile:path.join(store.state,KEPT_FILE),lifecycle});const scenarioReleaseUrl=process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL;const updater=new HermesUpdate({store,descriptor,ask:askDirectly,lifecycle,releaseUrl:isScenarioHermesReleaseUrl(scenarioReleaseUrl)?scenarioReleaseUrl:undefined});scheduler.updater=updater;scheduler.chatHealth=new ChatHealth({store,descriptor,lifecycle});domains.hermesUpdate=updater;domains.nativeScheduler=scheduler;query.nativeHermesHome=descriptor.home;}
   // Where the routines' AI is set: the Hermes home the routines run in (core/routine-ai.mjs).
   const routineAI=originalRuntime&&descriptor?.verified&&descriptor.home?{home:descriptor.home,state:store.state}:null;
+  const ensureSpendGuard=()=>{
+    if(store.get('jobs','spend-guard')||!spendGuardStatus(store,{hermesHome:routineAI?.home}).openrouter_connected)return;
+    store.save('jobs',{id:'spend-guard',kind:'spend-guard',owner:store.get('settings','installation')?.owner||store.device,paused:false,state:'pending',next_run:new Date().toISOString(),interval_ms:3600000});
+  };
+  ensureSpendGuard();
   // A CHATGPT PLAN SIGNED IN FROM SETTINGS (core/plan-signin.mjs), one sign-in for the main AI and the
   // backup alike. Once Hermes holds it, the plan's first model that answers is saved: as the main AI
   // (the notebook's own address then goes, so the notebook, the chat and the routines use the plan),
@@ -464,9 +470,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         await chosen({kind:'connection-test',contract:'Reply with Connected.'});
         const kept=guarded(chosen);
         atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);provider=kept;domains.provider=kept;scheduler.executor=jobExecutor(kept,query);
+        ensureSpendGuard();
         if(!routines)return send(res,200,{connected:true,provider:providerView(config),routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
         connectRoutineAI({...routineAI,config});
         return send(res,200,{connected:true,provider:providerView(config),routines:{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})}});
+      }
+      if(route==='/api/spend-guard'&&req.method==='GET')return send(res,200,spendGuardStatus(store,{hermesHome:routineAI?.home}));
+      if(route==='/api/spend-guard'&&req.method==='POST'){
+        const input=JSON.parse(await body(req,4096));saveSpendGuardSettings(store,input);return send(res,200,spendGuardStatus(store,{hermesHome:routineAI?.home}));
       }
       // The Goals page: each goal's weekly number and readings, bets and verdicts, today's decision, the
       // work and its checks, what went out, the research brief, and the routines' AI (core/goal-overview.mjs).
@@ -478,6 +489,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       const backupHome=routineAI?.home||null;
       if(route==='/api/backup-ai'&&req.method==='GET')return send(res,200,{hermes:!!backupHome,...backupStatus({home:backupHome,state:store.state})});
       if(route==='/api/backup-ai'&&req.method==='POST'){
+        // Once the backup is saved, an OpenRouter backup key starts the hourly spending check (#704).
+        res.once('finish',()=>{try{ensureSpendGuard();}catch{}});
         const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),config={url:!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions',key:typeof input.key==='string'?input.key.trim():input.key,model:typeof input.model==='string'?input.model.trim():input.model};
         const candidate=modelProvider(config);if(!candidate)throw new Error('Provide a model endpoint, key and model name');
         const entry=backupEntryFor(config);
