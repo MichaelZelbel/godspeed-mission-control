@@ -103,3 +103,30 @@ describe("a new note shows what is typed before it is saved (#809)", () => {
     expect(held.content).toBe("");
   }, 40_000);
 });
+
+// Issue #818: a note with one word said "1 words" in the footer and in the
+// note info panel.
+describe("a note with one word says 'word' (#818)", () => {
+  it("says 1 word in the footer and the note info, and words for other counts", async () => {
+    const { editor } = await openNewNote();
+    notebook.away = true;
+    const more = screen.getByTitle("More actions");
+    fireEvent.pointerDown(more, { button: 0, ctrlKey: false });
+    fireEvent.keyDown(more, { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Note info/ }, WAIT));
+    expect(screen.getByText("0 words · 0 characters")).toBeInTheDocument();
+
+    act(() => { editor.chain().focus("end").insertContent("a").run(); });
+    expect(screen.getByText("1 word")).toBeInTheDocument();
+    expect(screen.getByText("1 word · 1 character")).toBeInTheDocument();
+    expect(screen.queryByText(/\b1 words\b/)).toBeNull();
+
+    act(() => { editor.chain().insertContent("pple").run(); });
+    expect(screen.getByText("1 word")).toBeInTheDocument();
+    expect(screen.getByText("1 word · 5 characters")).toBeInTheDocument();
+
+    act(() => { editor.chain().insertContent(" tree").run(); });
+    expect(screen.getByText("2 words")).toBeInTheDocument();
+    expect(screen.getByText("2 words · 10 characters")).toBeInTheDocument();
+  }, 40_000);
+});
