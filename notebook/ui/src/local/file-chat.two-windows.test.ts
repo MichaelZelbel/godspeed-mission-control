@@ -12,7 +12,7 @@ type Chat=typeof import('./file-chat');
 type Message={role:'user'|'assistant',content:string};
 const key='note:fictional-two-windows';
 const realFetch=globalThis.fetch;
-let root='',base='',stop=async()=>{},failSaves=false;
+let root='',base='',stop=async()=>{},failSaves=false,unreachable=false;
 const chat=(...messages:Message[])=>({messages,summary:'',summarizedUpTo:0});
 const user=(content:string):Message=>({role:'user',content}),assistant=(content:string):Message=>({role:'assistant',content});
 // Each browser window loads its own copy of the module, as the note's panel and its pop-out do.
@@ -42,10 +42,11 @@ function startServer(){
 }
 
 beforeEach(async()=>{
-  toastError.mockClear();failSaves=false;
+  toastError.mockClear();failSaves=false;unreachable=false;
   root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-two-windows-'));
   await startServer();
-  vi.stubGlobal('fetch',(url:string,init?:RequestInit)=>failSaves&&url==='/api/chat-state'?Promise.resolve(new Response('{}',{status:500})):realFetch(base+url,init));
+  // The browser rejects a request to a server it cannot reach with a TypeError, "Failed to fetch".
+  vi.stubGlobal('fetch',(url:string,init?:RequestInit)=>url!=='/api/chat-state'?realFetch(base+url,init):unreachable?Promise.reject(new TypeError('Failed to fetch')):failSaves?Promise.resolve(new Response('{}',{status:500})):realFetch(base+url,init));
 });
 afterEach(async()=>{vi.unstubAllGlobals();await stop();fs.rmSync(root,{recursive:true,force:true});});
 
@@ -80,6 +81,39 @@ it('shows a failed save once and not again for the save that works after it',asy
   await vi.waitFor(async()=>expect(await stored()).toEqual([q1,a1]));
   expect(toastError).toHaveBeenCalledTimes(1);
   expect(toastError).toHaveBeenCalledWith('Conversation history was not saved. Keep this window open and retry.');
+});
+
+it('names a save that cannot reach the server the same way, once',async()=>{
+  const panel=await openWindow(),q1=user('Fictional question'),a1=assistant('Fictional answer');
+  unreachable=true;
+  panel.saveFileChat(key,chat(q1));
+  await vi.waitFor(()=>expect(toastError).toHaveBeenCalledTimes(1));
+  expect(toastError).toHaveBeenCalledWith('Conversation history was not saved. Keep this window open and retry.');
+  unreachable=false;
+  panel.saveFileChat(key,chat(q1,a1));
+  await vi.waitFor(async()=>expect(await stored()).toEqual([q1,a1]));
+  expect(toastError).toHaveBeenCalledTimes(1);
+});
+
+it('keeps each message once when both windows save a question before either hears of the other, then each saves its reply',async()=>{
+  const q1=user('Fictional first question'),a1=assistant('Fictional first answer');
+  const panel=await openWindow();
+  panel.saveFileChat(key,chat(q1,a1));
+  await vi.waitFor(async()=>expect(await stored()).toHaveLength(2));
+  const popout=await openWindow();
+  const q2=user('Fictional panel question'),a2=assistant('Fictional panel answer');
+  const q3=user('Fictional pop-out question'),a3=assistant('Fictional pop-out answer');
+  panel.saveFileChat(key,chat(q1,a1,q2));
+  popout.saveFileChat(key,chat(q1,a1,q3));
+  await vi.waitFor(()=>{expect(panel.loadFileChat(key).messages).toEqual([q1,a1,q2,q3]);expect(popout.loadFileChat(key).messages).toEqual([q1,a1,q2,q3]);});
+  // Each chat panel adds its reply to the history it held when it sent.
+  panel.saveFileChat(key,chat(q1,a1,q2,a2));
+  await vi.waitFor(()=>expect(popout.loadFileChat(key).messages).toEqual([q1,a1,q2,q3,a2]));
+  popout.saveFileChat(key,chat(q1,a1,q3,a3));
+  const all=[q1,a1,q2,q3,a2,a3];
+  await vi.waitFor(()=>{expect(panel.loadFileChat(key).messages).toEqual(all);expect(popout.loadFileChat(key).messages).toEqual(all);});
+  expect(await stored()).toEqual(all);
+  expect(toastError).not.toHaveBeenCalled();
 });
 
 it('keeps a turn whose save failed once the other window saves, and both windows show it',async()=>{

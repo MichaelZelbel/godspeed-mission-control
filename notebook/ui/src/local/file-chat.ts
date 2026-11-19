@@ -54,8 +54,9 @@ function send(key:string,state:any){
   const next=previous.catch(()=>{}).then(async()=>{
     let result;
     try{
-      const r=await fetch('/api/chat-state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({context_key:key,state})});
-      if(!r.ok)throw new Error('Conversation history was not saved. Keep this window open and retry.');
+      // A server that cannot be reached is a save that failed too, not a bare "Failed to fetch".
+      const r=await fetch('/api/chat-state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({context_key:key,state})}).catch(()=>null);
+      if(!r?.ok)throw new Error('Conversation history was not saved. Keep this window open and retry.');
       result=await r.json();
       unsaved.delete(key);
     }catch(e){unsaved.add(key);throw e;}
@@ -69,9 +70,9 @@ export function clearFileChat(key:string){
   const previous=queues.get(key)||Promise.resolve();
   const next=previous.then(async()=>{
     const expected=loadFileChat(key);
-    const r=await fetch('/api/chat-state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({context_key:key,state:{messages:[],summary:'',summarizedUpTo:0},clear:true,expected_state:expected})});
-    const result=await r.json();
-    if(!r.ok)throw new Error(result.error||'This conversation could not be cleared. Please try again.');
+    const r=await fetch('/api/chat-state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({context_key:key,state:{messages:[],summary:'',summarizedUpTo:0},clear:true,expected_state:expected})}).catch(()=>null);
+    const result=r?await r.json().catch(()=>({})):{};
+    if(!r?.ok)throw new Error(result.error||'This conversation could not be cleared. Please try again.');
     states.set(key,result.state);unsaved.delete(key);
     changed(key);
     share(key,result.state,result.revision);

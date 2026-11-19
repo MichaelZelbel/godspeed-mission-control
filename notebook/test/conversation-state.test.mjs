@@ -56,3 +56,28 @@ test('a turn sent from a second window that missed the first window\'s turn is k
   assert.deepEqual(kept.map(({role,content})=>({role,content})),[q1,a1,q2,a2,q3,a3]);
  }finally{await service.close();}
 });
+
+test('two windows that send at the same moment keep each question once, each followed by its own reply, whichever reply ends first',async()=>{
+ for(const order of [['panel','popout'],['popout','panel']]){
+  const q2='Fictional panel question',q3='Fictional pop-out question',replies={[q2]:'Fictional panel answer',[q3]:'Fictional pop-out answer'};
+  let answering='';const provider=async()=>({reply:replies[answering]});
+  const service=await createService({root:fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-same-moment-')),port:0,provider}),base='http://127.0.0.1:'+service.address.port;
+  const key='note:fictional-same-moment',m=(role,content)=>({role,content}),chat=(...messages)=>({messages,summary:'',summarizedUpTo:0});
+  const save=async state=>(await fetch(base+'/api/chat-state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({context_key:key,state})})).json();
+  const ask=async(message,request_id)=>(await fetch(base+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,conversation_id:'notebook:'+key,request_id})})).json();
+  const q1=m('user','Fictional first question'),a1=m('assistant','Fictional first answer');
+  const windows={panel:{question:m('user',q2),answer:m('assistant',replies[q2]),id:'aaaaaaaa-bbbb-cccc-dddd-333333333333'},popout:{question:m('user',q3),answer:m('assistant',replies[q3]),id:'aaaaaaaa-bbbb-cccc-dddd-444444444444'}};
+  try{
+   await save(chat(q1,a1));
+   // Each window saves its question before it hears of the other's.
+   await save(chat(q1,a1,windows.panel.question));await save(chat(q1,a1,windows.popout.question));
+   for(const name of order){
+    const w=windows[name];
+    answering=w.question.content;assert.equal((await ask(w.question.content,w.id)).data.reply,w.answer.content);
+    await save(chat(q1,a1,w.question,w.answer));
+   }
+   const kept=service.store.list('note_conversations')[0].state.messages.map(({role,content})=>({role,content}));
+   assert.deepEqual(kept,[q1,a1,windows.panel.question,windows.panel.answer,windows.popout.question,windows.popout.answer],order.join(' first, then '));
+  }finally{await service.close();}
+ }
+});

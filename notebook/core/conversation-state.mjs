@@ -59,8 +59,12 @@ export function retainCompletedConversation(store,input,result,{asyncWriter=fals
   if((input.conversation_session||'')!==(old?.state?.session_id||''))return;
   if(input.request_id&&old?.completed_request_ids?.includes(input.request_id))return;
   const state=old?.state||{messages:[],summary:'',summarizedUpTo:0},messages=[...state.messages];
-  if(messages.at(-1)?.role!=='user'||messages.at(-1)?.content!==input.message)messages.push({role:'user',content:input.message,...(input.files?.length?{attachments:input.files}:{})});
-  messages.push({role:'assistant',content:result.reply,...(result.tool_results?{toolResults:result.tool_results}:{}),...(result.notes_created?.length?{notesCreated:result.notes_created}:{})});
+  // The reply follows its own question. When another window's question was
+  // saved after it while this reply ran, the question is no longer last, and
+  // adding it again would show it twice.
+  let at=messages.findLastIndex((m,i)=>m.role==='user'&&m.content===input.message&&messages[i+1]?.role!=='assistant')+1;
+  if(!at){messages.push({role:'user',content:input.message,...(input.files?.length?{attachments:input.files}:{})});at=messages.length;}
+  messages.splice(at,0,{role:'assistant',content:result.reply,...(result.tool_results?{toolResults:result.tool_results}:{}),...(result.notes_created?.length?{notesCreated:result.notes_created}:{})});
   store.commit([store.prepare('note_conversations',{id,context_key:key,state:{...state,messages},completed_request_ids:[...(old?.completed_request_ids||[]),...(input.request_id?[input.request_id]:[])]},old)]);
  },{signal});
 }
