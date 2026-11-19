@@ -208,6 +208,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const descriptor=originalRuntime?assistant.descriptor??null:null;
   const lifecycle=originalRuntime?new HermesLifecycle():null,domains=new Domains(query,{provider}),recordRoutines=()=>new Scheduler(store,{device,executor:jobExecutor(provider,query),only:NativeScheduler.recordKinds,delivery:'notebook'}),scheduler=assistantMissing?recordRoutines():originalRuntime?new NativeScheduler(store,{...descriptor,device,lifecycle,records:recordRoutines()}):new Scheduler(store,{device,query,executor:jobExecutor(provider,query)});scheduler.onProgress=beat;scheduler.onFailure=error=>console.error('Godspeed Mission Control: a routine could not be created, the next tick tries again:',error.message);
   let chatAIUsable=!!domains.provider,chatAICheckedAt=0,chatAICheck=null;
+  // An AI connected from Settings answered its own test just now, so it is usable at once:
+  // the Dashboard, the chat and every feature reading runtimeConfigured see it without a
+  // chat having been opened first (#764). A check still running for the AI it replaced
+  // does not overwrite this.
+  const aiConnected=()=>{chatAIUsable=true;chatAICheckedAt=Date.now();};
   let workouts=null;
   const automaticUpdate=new AutomaticUpdate({store,lifecycle,start:()=>startUpdate({root:store.root})});
   domains.assistantProblem=assistantMissing?assistantProblem:null;
@@ -234,8 +239,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     connectPlanMain({...routineAI,model:found.model});
     try{fs.unlinkSync(providerPath);}catch{}
     const hermes=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});
-    provider=hermes;domains.provider=hermes;scheduler.executor=jobExecutor(hermes,query);
-    provider=trackAIHealth(hermes);domains.provider=provider;scheduler.executor=jobExecutor(provider,query);
+    provider=trackAIHealth(hermes);domains.provider=provider;scheduler.executor=jobExecutor(provider,query);aiConnected();
     await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot});
     return found;
   }}):null;
@@ -491,9 +495,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         catch(error){if(error.backupService)throw error;}
         await chosen({kind:'connection-test',contract:'Reply with Connected.'});
         const kept=guarded(chosen);
-        atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);provider=kept;domains.provider=kept;scheduler.executor=jobExecutor(kept,query);
-        // The test just above answered, so the new AI starts ready, and the next reader checks it again in five seconds (#590).
-        provider=trackAIHealth(kept,{initial:'ready'});domains.provider=provider;scheduler.executor=jobExecutor(provider,query);chatAIUsable=true;chatAICheckedAt=Date.now();
+        atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);
+        // The test just above answered, so the new AI starts ready, and the next reader checks it again in five seconds (#590, #764).
+        provider=trackAIHealth(kept,{initial:'ready'});domains.provider=provider;scheduler.executor=jobExecutor(provider,query);aiConnected();
         ensureSpendGuard();
         if(!routines)return send(res,200,{connected:true,provider:providerView(config),routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
         connectRoutineAI({...routineAI,config});
@@ -765,7 +769,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(provider?.check){
           if(!chatAICheck&&Date.now()-chatAICheckedAt>=5000){
             chatAICheckedAt=Date.now();
-            chatAICheck=(async()=>{try{await provider.check();chatAIUsable=true;}catch(error){chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}})().finally(()=>{chatAICheck=null;});
+            const checking=provider;chatAICheck=(async()=>{try{await checking.check();if(provider===checking)chatAIUsable=true;}catch(error){if(provider===checking)chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}})().finally(()=>{chatAICheck=null;});
           }
           if(chatAICheck)await chatAICheck;
         }
