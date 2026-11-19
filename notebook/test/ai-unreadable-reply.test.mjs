@@ -41,6 +41,9 @@ test('an AI answering "Connected." gets the plain unreadable-answer sentence fro
   assertUnreadable(await post('generate_collection_schema',{prompt:'A collection for the books I read'}),'Create collection with AI');
   assertUnreadable(await post('process-note',{note_id:note.id}),'process-note');
   assertUnreadable(await post('classify-profile-fact',{text:'My favourite colour is green'}),'classify-profile-fact');
+  assertUnreadable(await post('weekly-review',{}),'Weekly Review');
+  const group=service.store.save('contact_groups',{name:'Book club'});
+  for(const name of ['generate-group-briefing','suggest-group-members','suggest-group-next-step'])assertUnreadable(await post(name,{group_id:group.id}),name);
 });
 
 test('a reply that reads as JSON but is not the shape asked for gets the same sentence',async t=>{
@@ -51,6 +54,12 @@ test('a reply that reads as JSON but is not the shape asked for gets the same se
   assertUnreadable(await post('process-note',{note_id:note.id}),'process-note');
   standIn.reply='["a list, not an object"]';
   assertUnreadable(await post('generate_collection_schema',{prompt:'A collection for the books I read'}),'Create collection with AI');
+  assertUnreadable(await post('weekly-review',{}),'Weekly Review');
+  standIn.reply='{"foo":1}';
+  const group=service.store.save('contact_groups',{name:'Book club'});
+  for(const name of ['generate-group-briefing','suggest-group-next-step'])assertUnreadable(await post(name,{group_id:group.id}),name);
+  assert.equal(service.query.rows('weekly_reviews').length,0,'no review is saved from a reply that could not be used');
+  assert.equal(service.query.rows('group_briefings').length,0,'no briefing is saved from a reply that could not be used');
 });
 
 test('a request that is not valid JSON keeps the notebook\'s own message and is not called the AI\'s',async t=>{
