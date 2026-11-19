@@ -108,6 +108,8 @@ describe("the groups forms", () => {
     cleanup();
     wrap(<GoalsTab group={{ ...group, success_criteria: [{ label: "Talk often", target: 5, kind: "interaction_count", period_days: 14 }] }} />);
     fireEvent.click(screen.getByRole("button", { name: /Edit/ }));
-    expectFieldsNamed(screen.getByRole("dialog", { name: "Edit Goal" }), [...goalFields, { name: "Period days", is: isInputOfType("number") }]);
+    // An Interaction Count goal counts its current value itself, so its Current box is disabled.
+    const countedGoalFields = goalFields.map((f) => (f.name === "Current" ? { ...f, disabled: true as const } : f));
+    expectFieldsNamed(screen.getByRole("dialog", { name: "Edit Goal" }), [...countedGoalFields, { name: "Period days", is: isInputOfType("number") }]);
   });
 });

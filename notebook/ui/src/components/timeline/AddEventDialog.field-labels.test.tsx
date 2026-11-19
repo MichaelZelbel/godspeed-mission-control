@@ -51,6 +51,8 @@ function checkEveryLabel(dialog: HTMLElement) {
   // Every field a person sees has its label (the description box has only a placeholder, so it carries the name itself).
   expect(dialog.querySelectorAll("label")).toHaveLength(fields.length - 1);
   expectFieldsNamed(dialog, fields);
+  // Each field is one a person can fill in.
+  for (const field of fields) expect(within(dialog).getByLabelText(field.name, { exact: true }), `"${field.name}" is enabled`).toBeEnabled();
   expect(screen.queryByPlaceholderText("Search or type a new name…")).toBeNull();
   // The required star is beside the label, not in the name; the field says it is required.
   expect(within(dialog).getByLabelText("Title")).toHaveAttribute("aria-required", "true");
