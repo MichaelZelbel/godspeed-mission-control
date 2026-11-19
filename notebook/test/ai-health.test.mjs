@@ -39,7 +39,7 @@ test('a stopped chat request says nothing about the AI',async()=>{
 test('a provider that stops answering is an outage within the wait, and answering again is seen at the next check',async()=>{
  let checks=0,release;
  const inner=Object.assign(async()=>'ok',{check:()=>{checks++;return checks===1?new Promise(resolve=>{release=resolve;}):Promise.resolve();}});
- const provider=trackAIHealth(inner,{waitMs:50,initial:'ready'}),started=Date.now();
+ const provider=trackAIHealth(inner,{waitMs:50,firstWaitMs:50,initial:'ready'}),started=Date.now();
  await assert.rejects(provider.check(),/did not answer the connection check/);
  assert.ok(Date.now()-started<1000);assert.equal(provider.health(),'unreachable');assert.equal(checks,1);
  // The next check does not wait for the stalled request: the provider answers it at once.
@@ -55,7 +55,7 @@ test('a timer that fires a millisecond before the clock says the wait is over st
  Date.now=()=>now;
  try{
   const inner=Object.assign(async()=>'ok',{check:()=>{checks++;if(checks===1){now=base+49;return new Promise(()=>{});}return Promise.resolve();}});
-  const provider=trackAIHealth(inner,{waitMs:50,initial:'ready'});
+  const provider=trackAIHealth(inner,{waitMs:50,firstWaitMs:50,initial:'ready'});
   await assert.rejects(provider.check(),/did not answer the connection check/);assert.equal(provider.health(),'unreachable');
   await provider.check();assert.equal(checks,2,'the next check asks the provider again');assert.equal(provider.health(),'ready');
  }finally{Date.now=realNow;}
@@ -72,9 +72,35 @@ test('checks that overlap within the wait share one request',async()=>{
 test('a provider that is slow but answers gets a second more than its last answer took',async()=>{
  let checks=0;
  const inner=Object.assign(async()=>'ok',{check:()=>{checks++;return new Promise(resolve=>setTimeout(resolve,checks===1?120:80));}});
- const provider=trackAIHealth(inner,{waitMs:50});
+ const provider=trackAIHealth(inner,{waitMs:50,firstWaitMs:50});
  await assert.rejects(provider.check(),/did not answer/);await new Promise(r=>setTimeout(r,100));assert.equal(provider.health(),'ready','the slow answer arrived');
  await provider.check();assert.equal(provider.health(),'ready','the next check waits long enough');
+});
+
+test('a working AI that is slow to answer its first check reads as ready, not unreachable (#788)',async()=>{
+ const inner=Object.assign(async()=>'ok',{check:()=>new Promise(resolve=>setTimeout(resolve,150))});
+ const provider=trackAIHealth(inner,{waitMs:50,firstWaitMs:400,initial:'ready'});
+ await provider.check();assert.equal(provider.health(),'ready');
+ await provider.check();assert.equal(provider.health(),'ready','the next check waits as long as the last answer took');
+});
+
+test('a check started before an older check\'s slow answer lands waits as long as that answer took (#788)',async()=>{
+ const inner=Object.assign(async()=>'ok',{check:()=>new Promise(resolve=>setTimeout(resolve,300))});
+ const provider=trackAIHealth(inner,{waitMs:100,firstWaitMs:100});
+ await assert.rejects(provider.check(),/did not answer/);
+ // The server checks again five seconds after the last check began: here, before the first answer lands.
+ await new Promise(r=>setTimeout(r,150));
+ const second=provider.check();
+ await new Promise(r=>setTimeout(r,100));assert.equal(provider.health(),'ready','the first answer arrived');
+ await second;assert.equal(provider.health(),'ready','the second check did not time out on the shorter wait');
+});
+
+test('an AI that never answers its check reads as unreachable within the first wait',async()=>{
+ const inner=Object.assign(async()=>'ok',{check:()=>new Promise(()=>{})});
+ const provider=trackAIHealth(inner,{waitMs:50,firstWaitMs:200,initial:'ready'}),started=Date.now();
+ await assert.rejects(provider.check(),/did not answer the connection check/);
+ assert.ok(Date.now()-started<1000);assert.equal(provider.health(),'unreachable');
+ await assert.rejects(provider.check(),/did not answer the connection check/);assert.equal(provider.health(),'unreachable');
 });
 
 test('a real model provider: 401 and 403 are refusals, 500 and a closed port are outages, and no key is kept',async()=>{

@@ -11,11 +11,14 @@
 // the request's own 15 seconds: the chats read the state every second and must show a provider that
 // stopped answering within about five seconds. The request itself keeps running until its own limit;
 // a check that arrives within the wait shares it instead of asking the provider again; once the wait
-// has run out, the next check asks again.
+// has run out, the next check asks again. Until a check has answered, the wait is longer: a working
+// AI that is slow to answer its first check must not read as an outage (#788), and one that never
+// answers still reads as one within that longer wait.
 //
 // Nothing from the provider's answer is kept: only the category. Keys never reach this file.
 
 export const AI_HEALTH_WAIT_MS=3000;
+export const AI_HEALTH_FIRST_WAIT_MS=8000;
 
 const REFUSED=/HTTP (?:401|403)\b|needs sign-in|authenticationerror|invalid_api_key|incorrect api key|token expired|unauthorized|authentication failed/i;
 // Failures of the request itself, not of the AI: they say nothing about whether it can be reached.
@@ -28,13 +31,13 @@ export function aiFailure(error){
   return REFUSED.test(message)?'refused':'unreachable';
 }
 
-export function trackAIHealth(inner,{waitMs=AI_HEALTH_WAIT_MS,initial='unknown'}={}){
+export function trackAIHealth(inner,{waitMs=AI_HEALTH_WAIT_MS,firstWaitMs=AI_HEALTH_FIRST_WAIT_MS,initial='unknown'}={}){
   if(typeof inner!=='function')return inner;
   if(inner.health)return inner;
-  let state=initial,started=0,settled=0,pending=null,pendingSince=0,slowest=0;
+  let state=initial,started=0,settled=0,pending=null,pendingSince=0,slowest=null;
   // A provider that is slow but answers is given a second more than its last answer took, up to
   // the check's own 15 seconds, so it does not flicker between ready and an outage.
-  const wait=()=>Math.min(15000,Math.max(waitMs,slowest?slowest+1000:0));
+  const wait=()=>Math.min(15000,Math.max(waitMs,slowest===null?firstWaitMs:slowest?slowest+1000:0));
   const settle=(order,value)=>{if(value&&order>=settled){settled=order;state=value;}};
   const run=async input=>{
     const order=++started;
@@ -53,9 +56,14 @@ export function trackAIHealth(inner,{waitMs=AI_HEALTH_WAIT_MS,initial='unknown'}
         pending=Promise.resolve().then(()=>inner.check()).then(()=>{slowest=Date.now()-since;return {ok:true};},error=>({ok:false,error}));
         const mine=pending;mine.finally(()=>{if(pending===mine)pending=null;});
       }
-      const request=pending,left=Math.max(0,wait()-(Date.now()-pendingSince));
+      const request=pending,since=pendingSince;
       let timer;
-      const late=new Promise(resolve=>{timer=setTimeout(()=>resolve(null),left);});
+      // An older check's slow answer that lands meanwhile lengthens this check's wait as well, so this
+      // check does not time out on the shorter wait and overrule that answer (#788).
+      const late=new Promise(resolve=>{
+        const arm=deadline=>{timer=setTimeout(()=>since+wait()>deadline?arm(since+wait()):resolve(null),Math.max(0,deadline-Date.now()));};
+        arm(since+wait());
+      });
       const result=await Promise.race([request,late]).finally(()=>clearTimeout(timer));
       if(!result){
         // Its wait has run out, so the next check asks again. This does not trust the clock: a timer
