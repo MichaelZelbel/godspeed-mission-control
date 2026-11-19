@@ -17,14 +17,14 @@ function show(options:unknown){
 describe.each(surfaces)('%s pre-composer state',surface=>{
   it('names no AI and routes to Settings, Your AI',async()=>{
     show({connected:false,usable:false});
-    expect(await screen.findByText('No AI connected')).toBeInTheDocument();
+    expect(await screen.findByText('No AI is connected yet')).toBeInTheDocument();
     expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
     expect(screen.queryByText('Ordinary ready state')).not.toBeInTheDocument();
   });
-  it('replaces ready wording when the configured AI is unusable',async()=>{
-    show({connected:true,usable:false});
-    expect(await screen.findByText('Your AI could not be used')).toBeInTheDocument();
-    expect(screen.getByText(/sign-in, key, or connection/)).toBeInTheDocument();
+  it('replaces ready wording when the configured AI cannot be reached',async()=>{
+    show({connected:true,usable:false,availability:'unreachable'});
+    expect(await screen.findByText('Your AI could not be reached')).toBeInTheDocument();
+    expect(screen.getByText('Check its connection before you type.')).toBeInTheDocument();
     expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
     expect(screen.queryByText('Ordinary ready state')).not.toBeInTheDocument();
   });
@@ -32,6 +32,12 @@ describe.each(surfaces)('%s pre-composer state',surface=>{
     show({connected:true,usable:true});
     expect(await screen.findByText('Ordinary ready state')).toBeInTheDocument();
     await waitFor(()=>expect(screen.queryByText('Checking AI connection…')).not.toBeInTheDocument());
+  });
+  it('explains an AI connected only to the notebook and names the Settings box',async()=>{
+    show({connected:true,usable:false,availability:'settings-only'});
+    expect(await screen.findByText('Your AI is connected only to the notebook')).toBeInTheDocument();
+    expect(screen.getByText(/Use it for the daily routines and the chat too/)).toBeInTheDocument();
+    expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
   });
 });
 
