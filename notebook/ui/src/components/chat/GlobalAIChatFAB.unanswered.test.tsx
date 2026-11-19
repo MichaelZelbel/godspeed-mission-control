@@ -7,7 +7,7 @@ import {MemoryRouter} from 'react-router-dom';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import '@testing-library/jest-dom/vitest';
 import {GlobalAIChatFAB} from './GlobalAIChatFAB';
-import {hydrateFileChats} from '@/local/file-chat';
+import {clearFileChat,hydrateFileChats} from '@/local/file-chat';
 import {saveConversationState} from '../../../../core/conversation-state.mjs';
 
 vi.mock('sonner',()=>({toast:{error:vi.fn(),warning:vi.fn()}}));
@@ -19,7 +19,10 @@ vi.mock('@/integrations/supabase/client',()=>({supabase:{
  from:(table:string)=>row(table==='notes'?{id:'note-1',title:'Fictional note'}:null),
 }}));
 vi.mock('./ChatMarkdown',()=>({default:({children}:any)=><p>{children}</p>}));
-vi.mock('./ChatComposer',()=>({default:({value,onChange,onSend,busy}:any)=><><textarea aria-label="Message" value={value} onChange={e=>onChange(e.target.value)}/><button onClick={onSend} disabled={busy}>Send</button></>}));
+const FILE={path:'uploads/fictional.txt',name:'fictional.txt',type:'text/plain'};
+vi.mock('./ChatComposer',()=>({default:({value,onChange,onSend,onStop,busy,files,onFiles}:any)=><><textarea aria-label="Message" value={value} onChange={e=>onChange(e.target.value)}/>
+ {files.map((f:any)=><span key={f.path}>Staged {f.name}</span>)}<button onClick={()=>onFiles([...files,FILE])}>Attach</button>
+ <button onClick={busy?onStop:onSend}>{busy?'Stop':'Send'}</button></>}));
 Object.defineProperty(window,'matchMedia',{writable:true,value:()=>({matches:false,addEventListener(){},removeEventListener(){}})});
 
 // The notebook's answers to a send its AI refused or could not reach (server/main.mjs).
@@ -101,4 +104,62 @@ it.each([
  expect(screen.queryByText('No answer.')).toBeNull();
  expect(screen.queryByText(reason)).toBeNull();
  expect(conflicts).toEqual([]);
+});
+
+const savedMessages=(key:string)=>[...rows.values()].find(r=>r.context_key===key)?.state.messages;
+const deferred=()=>{let reject!:(e:unknown)=>void;const promise=new Promise((_,r)=>reject=r);return {promise,reject};};
+const refusal=()=>({data:null,error:{message:REFUSED,context:new Response(JSON.stringify({error:REFUSED}),{status:400})}});
+
+it('sends a failed message its own files again and does not attach them to the next message',async()=>{
+ invoke.mockResolvedValueOnce(refusal());
+ surfaces['the chat page'].show();
+ fireEvent.change(await screen.findByLabelText('Message'),{target:{value:QUESTION}});
+ fireEvent.click(screen.getByRole('button',{name:'Attach'}));
+ fireEvent.click(screen.getByRole('button',{name:'Send'}));
+ await screen.findByText(REFUSED,{},{timeout:1500});
+ expect(screen.queryByText('Staged fictional.txt')).toBeNull();
+
+ invoke.mockResolvedValueOnce({data:{reply:ANSWER},error:null});
+ fireEvent.click(screen.getByRole('button',{name:'Send again'}));
+ await screen.findByText(ANSWER,{},{timeout:1500});
+ expect((invoke.mock.calls.at(-1) as any)[1].body.files).toEqual([FILE]);
+ expect(screen.queryByText('Staged fictional.txt')).toBeNull();
+
+ invoke.mockResolvedValueOnce({data:{reply:'Fictional second answer'},error:null});
+ fireEvent.change(screen.getByLabelText('Message'),{target:{value:'Fictional next message'}});
+ fireEvent.click(screen.getByRole('button',{name:'Send'}));
+ await screen.findByText('Fictional second answer',{},{timeout:1500});
+ await waitFor(()=>expect(savedMessages('general')?.map((m:any)=>m.attachments)).toEqual([[FILE],undefined,[],undefined]));
+});
+
+it('does not mark a send stopped by the person as unanswered',async()=>{
+ const pending=deferred();invoke.mockReturnValueOnce(pending.promise);
+ surfaces['the chat page'].show();
+ fireEvent.change(await screen.findByLabelText('Message'),{target:{value:QUESTION}});
+ fireEvent.click(screen.getByRole('button',{name:'Send'}));
+ await waitFor(()=>expect(invoke).toHaveBeenCalled());
+ fireEvent.click(screen.getByRole('button',{name:'Stop'}));
+ await act(async()=>pending.reject(new Error('aborted')));
+ expect(await screen.findByText('Reply stopped.')).toBeInTheDocument();
+ await waitFor(()=>expect(saved('general')).toEqual([QUESTION]));
+
+ await reload('the chat page');
+ expect(await screen.findByText(QUESTION)).toBeInTheDocument();
+ expect(screen.queryByText('No answer.')).toBeNull();
+ expect(savedMessages('general')[0].lastFailure).toBeUndefined();
+});
+
+it('does not write a conversation cleared in another window back when its send fails',async()=>{
+ const pending=deferred();invoke.mockReturnValueOnce(pending.promise);
+ surfaces['the chat page'].show();
+ fireEvent.change(await screen.findByLabelText('Message'),{target:{value:QUESTION}});
+ fireEvent.click(screen.getByRole('button',{name:'Send'}));
+ await waitFor(()=>expect(saved('general')).toEqual([QUESTION]));
+ await act(async()=>{await clearFileChat('general');});
+ await act(async()=>pending.reject(new Error(REFUSED)));
+ expect(await screen.findByText(REFUSED)).toBeInTheDocument();
+ await waitFor(()=>expect(screen.queryByText(QUESTION)).toBeNull());
+ expect(screen.getByText(REFUSED)).toBeInTheDocument();
+ expect(screen.queryByText('No answer.')).toBeNull();
+ expect(saved('general')).toEqual([]);
 });

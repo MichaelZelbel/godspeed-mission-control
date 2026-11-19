@@ -321,7 +321,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
       messages: [...state.messages, userMsg],
     };
     followRef.current=true;setState(nextState);
-    if (!resend) setInput("");
+    if (!resend) {setInput("");setFiles([]);}
     setIsLoading(true);stoppedRef.current=false;requestRef.current=crypto.randomUUID();
 
     try {
@@ -445,7 +445,6 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
         window.dispatchEvent(new CustomEvent(pageChat.changedEvent ?? "godspeed:page-chat-changed", { detail: { page: pageChat.page } }));
       }
 
-      if (!resend) setFiles([]);
       deliver(sentKey, sentUserId, sentContext, updated);
       summarizeLater(chatFn, sentKey, sentUserId, sentContext, updated);
 
