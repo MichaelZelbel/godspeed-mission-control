@@ -148,7 +148,7 @@ export function QuickAddFact({ contactId, onCommit }: QuickAddFactProps) {
             if (proposal) setProposal(null);
           }}
           onKeyDown={handleKeyDown}
-          placeholder={'Add a fact… "shoe size: 38" or "loves hotpot"'}
+          placeholder={'Add a fact, like "loves hotpot"'}
           className="h-9 pl-8 pr-9 text-sm"
           aria-label="Add a fact with AI"
           aria-busy={busy}

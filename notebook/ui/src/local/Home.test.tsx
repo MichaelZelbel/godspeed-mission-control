@@ -117,6 +117,12 @@ describe("the Godspeed card", () => {
     expect(screen.getByRole("link", { name: "Connect it in Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
     expect(screen.queryByText("Connecting…")).toBeNull();
   });
+  it("describes a configured but unreachable AI instead of saying none is connected", async () => {
+    page(false, { show: false }, { aiConfigured: true, runtimeConfigured: false, assistantProblem: null });
+    expect(await screen.findByText(/Your AI is configured but could not be reached\./)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Check it in Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
+    expect(screen.queryByText(/No AI is connected yet\./)).toBeNull();
+  });
   it("says Connecting only while the status is loading", async () => {
     let answer: (r: Response) => void = () => {};
     vi.stubGlobal("fetch", vi.fn((url: string) => String(url) === "/api/status" ? new Promise<Response>(r => { answer = r; }) : Promise.resolve(new Response(JSON.stringify({ show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } }))));

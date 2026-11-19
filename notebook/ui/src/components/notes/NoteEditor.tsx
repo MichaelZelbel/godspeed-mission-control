@@ -751,6 +751,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       TaskListShortcut,
     ],
     editorProps: {
+      attributes: { "aria-label": "Note text" },
       handleClick: (_view, _pos, event) => {
         const target = event.target as HTMLElement;
         const wikilinkEl = target.closest?.(".wikilink-node") as HTMLElement | null;
