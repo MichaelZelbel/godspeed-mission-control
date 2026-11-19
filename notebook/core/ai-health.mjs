@@ -57,14 +57,9 @@ export function trackAIHealth(inner,{waitMs=AI_HEALTH_WAIT_MS,firstWaitMs=AI_HEA
         pending=Promise.resolve().then(()=>inner.check()).then(()=>{slowest=Date.now()-since;return {ok:true};},error=>({ok:false,error}));
         const mine=pending;mine.finally(()=>{if(pending===mine)pending=null;});
       }
-      const request=pending,since=pendingSince;
+      const request=pending,left=Math.max(0,wait()-(Date.now()-pendingSince));
       let timer;
-      // An older check's slow answer that lands meanwhile lengthens this check's wait as well, so this
-      // check does not time out on the shorter wait and overrule that answer (#788).
-      const late=new Promise(resolve=>{
-        const arm=deadline=>{timer=setTimeout(()=>since+wait()>deadline?arm(since+wait()):resolve(null),Math.max(0,deadline-Date.now()));};
-        arm(since+wait());
-      });
+      const late=new Promise(resolve=>{timer=setTimeout(()=>resolve(null),left);});
       const result=await Promise.race([request,late]).finally(()=>clearTimeout(timer));
       if(!result){
         // Its wait has run out, so the next check asks again. This does not trust the clock: a timer

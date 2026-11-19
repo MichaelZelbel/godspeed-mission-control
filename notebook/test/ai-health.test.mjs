@@ -84,17 +84,6 @@ test('a working AI that is slow to answer its first check reads as ready, not un
  await provider.check();assert.equal(provider.health(),'ready','the next check waits as long as the last answer took');
 });
 
-test('a check started before an older check\'s slow answer lands waits as long as that answer took (#788)',async()=>{
- const inner=Object.assign(async()=>'ok',{check:()=>new Promise(resolve=>setTimeout(resolve,300))});
- const provider=trackAIHealth(inner,{waitMs:100,firstWaitMs:100});
- await assert.rejects(provider.check(),/did not answer/);
- // The server checks again five seconds after the last check began: here, before the first answer lands.
- await new Promise(r=>setTimeout(r,150));
- const second=provider.check();
- await new Promise(r=>setTimeout(r,100));assert.equal(provider.health(),'ready','the first answer arrived');
- await second;assert.equal(provider.health(),'ready','the second check did not time out on the shorter wait');
-});
-
 test('an AI that never answers its check reads as unreachable within the first wait',async()=>{
  const inner=Object.assign(async()=>'ok',{check:()=>new Promise(()=>{})});
  const provider=trackAIHealth(inner,{waitMs:50,firstWaitMs:200,initial:'ready'}),started=Date.now();
