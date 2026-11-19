@@ -6,7 +6,7 @@ import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
 import {asksForTodaysBrief,savedBriefToday} from './briefing.mjs';
 import {NOTEBOOK_CHAT_FUNCTIONS} from './notebook-chat.mjs';
 
-const AI_ANALYSIS_ACTIONS=['generate-profile-suggestions','generate_collection_schema'];
+const AI_ANALYSIS_ACTIONS=['generate-profile-suggestions','generate_collection_schema','weekly-review','generate-group-briefing','suggest-group-members','suggest-group-next-step'];
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
 import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
@@ -281,7 +281,8 @@ export class Domains {
     return found.context?{context:found.context}:null;
   }
   // The AI actions outside the chats say a refused key or an outage in plain words, never the
-  // provider's (#774): Suggest and My Profile's suggestions, and Create collection with AI.
+  // provider's (#774): Suggest and My Profile's suggestions, Create collection with AI, Weekly Review
+  // and the group actions (#811).
   async invoke(name, input = {}) {
     if(!AI_ANALYSIS_ACTIONS.includes(name))return this.answer(name,input);
     try{return await this.answer(name,input);}catch(error){throw analysisFailure(error);}
