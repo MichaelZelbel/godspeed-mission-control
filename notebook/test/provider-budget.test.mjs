@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';import {EventEmitter} from 'node:events';import {PassThrough} from 'node:stream';
-import {providerTimeBudget,providerTimeoutMessage,jobExecutor,modelProvider,hermesProvider,hermesFailureMessage} from '../core/runtime.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';
+import {providerTimeBudget,providerTimeoutMessage,jobExecutor,modelProvider,hermesProvider,hermesFailureMessage,CONNECTION_CHECK} from '../core/runtime.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';
 import {withBackup} from '../core/backup-ai.mjs';
 test('interactive and background calls remain bounded, with no arbitrary timeout extension',()=>{
  assert.equal(providerTimeBudget({}),600000);assert.equal(providerTimeBudget({timeout_ms:300000}),300000);
@@ -16,7 +16,7 @@ test('the short suggestion budget is accepted only for drafting and aborts nativ
  try{const controller=new AbortController(),call=modelProvider({url:'http://localhost/fixture',key:'fictional',model:'fictional'})({kind:'draft-event',timeout_ms:20000,signal:controller.signal});controller.abort();await assert.rejects(call);assert.equal(observed.aborted,true);}finally{globalThis.fetch=original;}
 });
 test('the short health-check budget is accepted only for connection checks',()=>{
- assert.equal(providerTimeBudget({kind:'connection-check',timeout_ms:15000}),15000);
+ assert.equal(providerTimeBudget(CONNECTION_CHECK),CONNECTION_CHECK.timeout_ms);
  assert.throws(()=>providerTimeBudget({kind:'conversation-chat',timeout_ms:15000}),/supported/);
 });
 test('the configured model remains visible through the provider wrapper used by the server',async()=>{
