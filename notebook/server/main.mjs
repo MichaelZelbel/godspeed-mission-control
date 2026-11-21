@@ -983,7 +983,17 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>{if(!menerioImport.mutating)void syncRunner.run();},5000);}
   };
   // Private backups and Git merge workspaces are outside the watched knowledge.
-  const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,watchTree(folder,changed(name)));};
+  // A watcher that fails (the resource failures the error channel carries) is
+  // dropped here and the whole root is rebuilt: left in the map it would block
+  // the rootWatcher's re-watch route for the life of the process and the root
+  // would go dark.
+  const watchRoot=name=>{
+    const folder=path.join(store.root,name);
+    if(watchers.has(name)||!fs.existsSync(folder))return;
+    const watcher=watchTree(folder,changed(name));
+    watcher.on('error',()=>{try{watcher.close();}catch{}if(watchers.get(name)===watcher){watchers.delete(name);changed(name)('rename',null);}});
+    watchers.set(name,watcher);
+  };
   for(const name of durableRoots)watchRoot(name);
   // A manual or extra instructions changed by anything (a sync from another machine, a session, an
   // editor) bring the assistant's own identity file in step with them (assistant-soul.mjs).

@@ -30,10 +30,13 @@ export function watchTree(root, listener) {
     for (const key of [...watchers.keys()]) if (key === child || key.startsWith(child + '/')) { watchers.get(key).close(); watchers.delete(key); }
   };
   // Watch one directory. A directory that vanished between being seen and
-  // being watched is skipped, unless it is the root itself: failing to watch
-  // the root is a failure to watch anything, like fs.watch's own. Every other
-  // failure (an exhausted watch budget, out of handles) reaches the error
-  // channel, whose consumer gives up the watch, reads everything and starts again.
+  // being watched is skipped, and so is one this process cannot watch
+  // (EACCES/EPERM): a locked subfolder must not silence the tree that watches
+  // fine, and main's recursive watcher skips it the same way. Unless it is
+  // the root itself: failing to watch the root is a failure to watch anything,
+  // like fs.watch's own. Every other failure (an exhausted watch budget, out
+  // of handles) reaches the error channel, whose consumer gives up the watch,
+  // reads everything and starts again.
   const watch = (relative, announce) => {
     if (closed || watchers.has(relative)) return;
     let watcher;
@@ -44,10 +47,14 @@ export function watchTree(root, listener) {
       try { stat = fs.lstatSync(path.join(root, child)); } catch {}
       if (!stat) {
         drop(child);
-        // A watch that reports its own directory's name reports its own removal:
-        // the deleted directory's watch says its basename before it goes quiet.
-        // The path can already hold a remade directory with the old watch's inode
-        // number, so the watch itself is the only witness: watch what is there now.
+        // A watch that reports its own directory's name is not always a removal:
+        // attribute-only changes to the watched directory and the removal of a
+        // same-named child report the same basename with the directory still
+        // live. A genuine removal does report its basename before the watch
+        // goes quiet, and the path can already hold a remade directory with
+        // the old watch's inode number, so the watch itself is the only
+        // witness: watch what is there now. On a live directory the speculative
+        // re-watch only re-announces what is already there.
         if (relative !== '' && name === path.basename(relative)) { drop(relative); watch(relative, true); }
       }
       listener(event, child);
@@ -55,7 +62,7 @@ export function watchTree(root, listener) {
     }); }
     catch (error) {
       if (relative === '') throw error;
-      if (error.code !== 'ENOENT') fail(error);
+      if (error.code === 'ENOENT' || error.code === 'EACCES' || error.code === 'EPERM') return;
       return;
     }
     watcher.on('error', fail);

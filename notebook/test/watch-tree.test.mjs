@@ -31,13 +31,18 @@ test('a folder removed and remade while watching is watched again: a write insid
   }finally{watcher.close();}
 });
 
-test('a folder that cannot be watched fails loudly: the error reaches the error channel',{skip:process.platform==='darwin'||process.platform==='win32'||process.getuid?.()===0},()=>{
-  const dir=root(),errors=[];
+test('a folder that cannot be watched is skipped: the rest of the tree keeps watching and no error is reported',{skip:process.platform==='darwin'||process.platform==='win32'||process.getuid?.()===0},async()=>{
+  const dir=root(),events=[],errors=[];
   fs.mkdirSync(path.join(dir,'Locked'),0o000);
-  const watcher=watchTree(dir,()=>{});
+  fs.mkdirSync(path.join(dir,'Open'));
+  const watcher=watchTree(dir,record(events));
   try {
     watcher.on('error',error=>errors.push(error.code));
-    assert.deepEqual(errors,['EACCES']);
+    fs.writeFileSync(path.join(dir,'Open','note.md'),'# hello\n');
+    assert.equal(await until(()=>events.includes('Open/note.md')),true,'the rest of the tree keeps watching');
+    fs.writeFileSync(path.join(dir,'note.md'),'# root\n');
+    assert.equal(await until(()=>events.includes('note.md')),true,'the root itself keeps watching');
+    assert.deepEqual(errors,[],'the locked folder does not fail the tree');
   } finally { watcher.close(); fs.chmodSync(path.join(dir,'Locked'),0o700); }
 });
 
