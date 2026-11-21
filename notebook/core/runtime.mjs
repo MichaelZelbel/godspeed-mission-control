@@ -63,7 +63,16 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider,sour
       throw hermesFailure(diagnostic);
     }finally{for(const file of temporary)try{fs.unlinkSync(file);}catch{}}
   };
-  let cached,loadedAt=0;run.options=async()=>{if(cached&&Date.now()-loadedAt<300000)return cached;const {python,source}=hermesPython({executable,sourceRoot,home});if(!python)throw new Error('Model choices could not be loaded');const helper=fileURLToPath(new URL('../assistant-files/chat-options.py',import.meta.url));cached=await runChild(python,['-I',helper,source],{cwd:fs.existsSync(source)?source:home||cwd,env:assistantEnvironment({home,workspace:cwd}),timeoutMs:20000,spawnProcess}).then(result=>{if(result.code)throw Error();return JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));}).catch(()=>{throw new Error('Model choices could not be loaded');});loadedAt=Date.now();return cached;};return run;
+  let cached,loadedAt=0;run.options=async()=>{if(cached&&Date.now()-loadedAt<300000)return cached;const {python,source}=hermesPython({executable,sourceRoot,home});if(!python)throw new Error('Model choices could not be loaded');const helper=fileURLToPath(new URL('../assistant-files/chat-options.py',import.meta.url));cached=await runChild(python,['-I',helper,source],{cwd:fs.existsSync(source)?source:home||cwd,env:assistantEnvironment({home,workspace:cwd}),timeoutMs:20000,spawnProcess}).then(result=>{if(result.code)throw Error();return JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));}).catch(()=>{throw new Error('Model choices could not be loaded');});loadedAt=Date.now();return cached;};
+  // The arrival check the Dashboard asks for after a chat (#822) must be able to reach the assistant
+  // runtime too, or the card answers from the last real request and can say Ready while nothing
+  // works (#905). One billed one-turn chat, the same shape modelProvider's check bills. The check is
+  // marked billed so the chat-options route keeps its five-second pacing for it (#762/#794) and only
+  // reads that ask for a check run it.
+  const checkInput={kind:'connection-check',contract:'Reply with OK.',max_tokens:8,timeout_ms:15000};
+  run.check=async()=>{await run(checkInput);};
+  run.checkBilled=true;
+  return run;
 }
 // THE PYTHON HERMES RUNS ON, for the model list under the chat (assistant-files/chat-options.py
 // imports Hermes' own modules). Until 18 October 2026 it was looked for only where the one-click
