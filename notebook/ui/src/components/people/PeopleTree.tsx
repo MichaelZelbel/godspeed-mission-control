@@ -364,7 +364,9 @@ const GroupRow = memo(function GroupRow({
               {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
             </span>
             <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1">{group.name}</span>
+            {/* break-words: a name whose single word is wider than the row breaks inside it
+                instead of running over the member count (#867). */}
+            <span className="min-w-0 flex-1 break-words">{group.name}</span>
             <span className="text-[10px] text-muted-foreground">{node.subtreeCount}</span>
           </button>
         </ContextMenuTrigger>

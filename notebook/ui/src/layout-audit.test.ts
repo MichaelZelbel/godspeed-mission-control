@@ -119,6 +119,10 @@ async function seed(notebook: RealNotebook): Promise<Seeded> {
   // A group whose name does not fit one line on any width: a card that clips it (#867) is what the
   // audit's clipped-text rule must flag on the groups page.
   const group = await insert("contact_groups", { name: "Seed round investors for the 2027 expansion" });
+  // And one whose name holds a word no box fits, so word breaking, not wrapping between words, is
+  // what keeps it inside the card and the people tree's row (#867).
+  const unbroken = await insert("contact_groups", { name: "Donaudampfschifffahrtsgesellschaft Investoren" });
+  if (!unbroken.id) throw new Error("the unbroken-name group did not insert");
   await insert("moments", { title: "Lunch with Ada", happened_at: "2026-11-10", status: "happened", impact_level: 2, person_id: person.id, source: "manual" });
   const form = new FormData();
   form.append("file", new Blob([PIXEL, Buffer.alloc(51 * 1024 * 1024)], { type: "image/png" }), "photo.png");
@@ -387,9 +391,9 @@ describe("every page at a phone's and a desktop's width", () => {
       const context = await browser.newContext({ viewport });
       try {
         const page = await context.newPage();
-        for (const [url, text] of [["/dashboard/timeline", "Lunch with Ada"], ["/dashboard/people", "Ada Lovelace"], ["/dashboard/media", "Kept on this computer only"], ["/dashboard/notes", "Trip to Lisbon"], ["/dashboard/groups", "Seed round investors for the 2027 expansion"]]) {
+        for (const [url, ...texts] of [["/dashboard/timeline", "Lunch with Ada"], ["/dashboard/people", "Ada Lovelace"], ["/dashboard/media", "Kept on this computer only"], ["/dashboard/notes", "Trip to Lisbon"], ["/dashboard/groups", "Seed round investors for the 2027 expansion", "Donaudampfschifffahrtsgesellschaft Investoren"]]) {
           await page.goto(seededNotebook.base + url);
-          await page.getByText(text).first().waitFor({ timeout: 15_000 });
+          for (const text of texts) await page.getByText(text).first().waitFor({ timeout: 15_000 });
         }
       } finally {
         await context.close();
