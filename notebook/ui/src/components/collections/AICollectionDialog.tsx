@@ -19,6 +19,9 @@ import { cn } from "@/lib/utils";
 import type { Json } from "@/integrations/supabase/types";
 import { BRAND } from "@/lib/brand";
 import { collectionNameSchema } from "@/lib/collection-name";
+// The AI service in the words a person knows it by, and the service an address belongs to.
+import { serviceName } from "@/local/ConnectAI";
+import { providerService } from "../../../../core/provider-service.mjs";
 
 type FieldType =
   | "text"
@@ -108,6 +111,23 @@ function slugify(value: string, separator = "-") {
 
 function toFieldKey(label: string) {
   return slugify(label, "_");
+}
+
+/** The site an AI service is reached at, or empty when the address cannot be read. */
+function serviceHost(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+}
+
+/** The name of the AI service saved by its address in Settings, Your AI. */
+function savedServiceName(url: string): string | null {
+  const service = providerService(url);
+  if (service === "openrouter") return "OpenRouter";
+  if (service === "openai") return "OpenAI";
+  return serviceHost(url) || null;
 }
 
 function withIds(fields: EdgeField[]): GeneratedField[] {
@@ -226,6 +246,37 @@ export function AICollectionDialog({ open, onOpenChange, onCreated }: { open: bo
   const [refinement, setRefinement] = useState("");
   const [dirtyGenerated, setDirtyGenerated] = useState(false);
   const [nameError, setNameError] = useState("");
+  // The AI service the person connected in Settings, Your AI, named the way
+  // ConnectAI names it; null before it is read or with none connected. The
+  // notebook has no AI provider of its own (#851): the description goes to the
+  // service the person connected, under that service's own terms.
+  const [connectedService, setConnectedService] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const read = async () => {
+      let name: string | null = null;
+      try {
+        // The routine AI's answer names a sign-in of Hermes' own too ("your ChatGPT account").
+        const routines = await fetch("/api/routine-ai").then((answer) => (answer.ok ? answer.json() : null));
+        if (routines?.available && routines.source !== "none" && routines.provider) {
+          name = serviceName(routines.provider, routines.base_url);
+        }
+        if (!name) {
+          const saved = await fetch("/api/provider").then((answer) => (answer.ok ? answer.json() : null));
+          if (saved?.configured && typeof saved.url === "string" && saved.url) name = savedServiceName(saved.url);
+        }
+      } catch {
+        name = null;
+      }
+      if (!cancelled) setConnectedService(name);
+    };
+    read();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open || stage !== "input" || description.trim()) return;
@@ -382,7 +433,9 @@ export function AICollectionDialog({ open, onOpenChange, onCreated }: { open: bo
                 onChange={(event) => { setDescription(event.target.value); requestAnimationFrame(updateTextareaHeight); }}
                 onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && canGenerate) requestSchema(description); }}
               />
-              <p className="text-xs text-muted-foreground">Your description is sent to our AI provider only to design the schema. It's not used to train any model.</p>
+              <p className="text-xs text-muted-foreground">{connectedService
+                ? `Your description is sent to ${connectedService} only to design the schema, under that service's own terms.`
+                : "Your description is sent to the AI service connected in Settings, Your AI, only to design the schema, under that service's own terms."}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {examples.map((example) => (
