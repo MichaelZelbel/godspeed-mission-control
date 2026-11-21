@@ -571,7 +571,9 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                   </span>
                 )}
               </div>
-              {page&&<Button variant="ghost" className="h-11" onClick={handleClear} disabled={isLoading || isClearing}>Clear conversation</Button>}
+              {page&&<Button variant="ghost" className="h-11 hidden sm:inline-flex" onClick={handleClear} disabled={isLoading || isClearing}>Clear conversation</Button>}
+              {/* A phone's width cannot hold the label beside the title: the icon says the same thing (GlobalAIChatFAB's own trash button does the same). */}
+              {page&&<Button variant="ghost" size="icon" className="h-11 w-11 sm:hidden" onClick={handleClear} disabled={isLoading || isClearing} aria-label="Clear conversation" title="Clear conversation"><Trash2 className="h-4 w-4"/></Button>}
               {!page&&<div className="flex items-center gap-1">
                 <a className="inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded hover:bg-muted" href={popOutHref} target="_blank" rel="noreferrer" aria-label="Open chat in a new window" title="Open chat in a new window"><ExternalLink className="h-4 w-4"/></a>
                 {!embedded&&<span className="text-[10px] text-muted-foreground hidden xl:inline mr-1">Ctrl+Shift+K</span>}

@@ -290,9 +290,9 @@ export function ExportTab({ categories, facts, instructions, views, onSaveView, 
           {/* Controls */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Profile view</Label>
+              <Label htmlFor="export-view" className="text-xs text-muted-foreground">Profile view</Label>
               <Select value={viewSlug} onValueChange={setViewSlug}>
-                <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="export-view" className="text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {DEFAULT_VIEWS.map((v) => (
                     <SelectItem key={v.slug} value={v.slug}>{v.name}</SelectItem>
@@ -304,9 +304,9 @@ export function ExportTab({ categories, facts, instructions, views, onSaveView, 
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Format</Label>
+              <Label htmlFor="export-format" className="text-xs text-muted-foreground">Format</Label>
               <Select value={format} onValueChange={(v) => setFormat(v as ExportFormat)}>
-                <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="export-format" className="text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="structured">Structured text</SelectItem>
                   <SelectItem value="markdown">Markdown</SelectItem>

@@ -775,7 +775,7 @@ export default function MediaLibrary() {
             <Input aria-label="Search media"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search descriptions, text, files…"
+              placeholder="Search media…"
               className="pl-8 h-8 text-sm"
             />
             {searchQuery && (

@@ -177,7 +177,7 @@ export function ConnectAI(){
       {service==='other'&&<div><label className="block" htmlFor={id+'address'}>Its address, as the service gives it (OpenAI-compatible)</label>
         <Input id={id+'address'} required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></div>}
       <div><label className="block" htmlFor={id+'model'}>Model, written the way your service writes it</label>
-        <Input id={id+'model'} required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></div>
+        <Input id={id+'model'} required spellCheck={false} placeholder={service==='openrouter'?'vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></div>
       <div><label className="block" htmlFor={id+'key'}>{canRetainKey?'Key (leave it empty to keep the saved one)':'Key'}</label>
         <Input id={id+'key'} required={!canRetainKey} type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></div>
       {data?.available&&<div className="flex gap-2 items-start"><input id={id+'routines'} type="checkbox" className="mt-1" checked={useForRoutines} onChange={e=>setRoutines(e.target.checked)}/><label htmlFor={id+'routines'}>Use it for the daily routines and the chat too{data.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':'.'}</label></div>}
@@ -235,7 +235,7 @@ export function BackupAI(){
       {service==='other'&&<div><label className="block" htmlFor={id+'address'}>Backup AI address, as the service gives it (OpenAI-compatible)</label>
         <Input id={id+'address'} required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></div>}
       <div><label className="block" htmlFor={id+'model'}>Backup model, written the way your service writes it</label>
-        <Input id={id+'model'} required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></div>
+        <Input id={id+'model'} required spellCheck={false} placeholder={service==='openrouter'?'vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></div>
       <div><label className="block" htmlFor={id+'key'}>Backup key</label>
         <Input id={id+'key'} required type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></div>
       <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect as backup'}</Button></>}

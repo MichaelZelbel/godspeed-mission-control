@@ -7,23 +7,40 @@ import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type CDPSession, type Page } from "playwright-core";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { startNotebook, type RealNotebook } from "@/test/real-notebook";
+// The seed's habit is a coach file, the one owner of its days (habit-trackers.mjs), so it is written
+// with the coach's own writer, the way a chat's "track walk to work" makes one.
+import { addArea } from "../../../third-party/addons/godspeed-coach/lib/areas.mjs";
+import { addHabit } from "../../../third-party/addons/godspeed-coach/lib/habits.mjs";
 
-// One check over every page the router serves, at a phone's width and a desktop's width, on an empty
-// workspace and on one with a note, a person, a moment and a media item (#734). It drives the built
-// notebook in a real browser and fails on:
+// One check over every page the router serves, at 320, 375, 768 and 1280 px, on an empty workspace
+// and on one with an item of every kind the router shows a page for (note, person, moment, media,
+// group, collection with an item, world item, habit), each named in one long unbroken word and in
+// one long name with spaces (#734, #887). It drives the built notebook in a real browser and fails
+// on:
 //   - text that is cut off, an input's placeholder or value included;
-//   - text drawn under another element (what is painted at the middle of the text is something else);
+//   - text drawn under another element, a fixed or floating element included (what is painted at
+//     the middle of the text is something else);
 //   - a field with no name a screen reader can read, or a label that names no field;
-// on each page and in the dialog its main add button opens. Text cut off at one width was fixed one
-// component at a time five times (#502, #553, #573, #728, #733), and unnamed fields twice (#697, #732).
-// No page, rule or element is exempt: a false alarm is fixed in the rule, with a case below that
-// shows it.
+// on each page, in the dialog its main add button opens, and in every role=tab view on it. Text cut
+// off at one width was fixed one component at a time five times (#502, #553, #573, #728, #733), and
+// unnamed fields twice (#697, #732). No page, rule or element is exempt: a false alarm is fixed in
+// the rule, with a case below that shows it.
 
 const UI_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PAGE_AUDIT = readFileSync(fileURLToPath(new URL("./test/layout-audit-page.js", import.meta.url)), "utf8");
 
 type Finding = { rule: string; element: string };
-type Seeded = { note: string; person: string; group: string };
+type Seeded = {
+  note: string;
+  person: string;
+  group: string;
+  groupSlug: string;
+  world: string;
+  collection: string;
+  collectionSlug: string;
+  collectionItem: string;
+  habit: string;
+};
 type RouteCheck = {
   pattern: string;
   /** The addresses to open: on the empty workspace `seeded` is null. */
@@ -51,7 +68,7 @@ const ROUTES: RouteCheck[] = [
   { pattern: "/dashboard/people", urls: () => ["/dashboard/people"], addButton: "Add person" },
   { pattern: "/dashboard/people/:id", urls: (s) => [`/dashboard/people/${s ? s.person : MISSING}`] },
   { pattern: "/dashboard/world", urls: () => ["/dashboard/world"] },
-  { pattern: "/dashboard/world/:id", urls: () => [`/dashboard/world/${MISSING}`] },
+  { pattern: "/dashboard/world/:id", urls: (s) => [s ? `/dashboard/world/${s.world}` : `/dashboard/world/${MISSING}`] },
   { pattern: "/dashboard/profile", urls: () => ["/dashboard/profile"] },
   { pattern: BRAIN_PAGE.path, urls: () => [BRAIN_PAGE.path], addButton: "Add a rule" },
   { pattern: BRAIN_PAGE.oldPath, urls: () => [BRAIN_PAGE.oldPath], redirectsTo: BRAIN_PAGE.path },
@@ -59,16 +76,16 @@ const ROUTES: RouteCheck[] = [
   { pattern: "/dashboard/media", urls: () => ["/dashboard/media"] },
   { pattern: "/dashboard/review-queue", urls: () => ["/dashboard/review-queue"] },
   { pattern: "/dashboard/groups", urls: () => ["/dashboard/groups"], addButton: "New Group" },
-  { pattern: "/dashboard/groups/:slug", urls: () => [`/dashboard/groups/${MISSING}`] },
+  { pattern: "/dashboard/groups/:slug", urls: (s) => [s ? `/dashboard/groups/${s.groupSlug}` : `/dashboard/groups/${MISSING}`] },
   { pattern: "/dashboard/actions", urls: () => ["/dashboard/actions"], addButton: "Add Action" },
   { pattern: "/dashboard/activity", urls: () => ["/dashboard/activity"] },
   { pattern: "/dashboard/review", urls: () => ["/dashboard/review"] },
   { pattern: "/collections", urls: () => ["/collections"], addButton: "or create a blank collection" },
   { pattern: "/collections/templates", urls: () => ["/collections/templates"] },
-  { pattern: "/collections/:slug/schema", urls: () => [`/collections/${MISSING}/schema`] },
-  { pattern: "/collections/:slug/:itemId", urls: () => [`/collections/${MISSING}/${MISSING}`] },
-  { pattern: "/collections/:slug", urls: () => [`/collections/${MISSING}`] },
-  { pattern: "/trackers/habits/:id", urls: () => [`/trackers/habits/${MISSING}`] },
+  { pattern: "/collections/:slug/schema", urls: (s) => [`/collections/${s ? s.collectionSlug : MISSING}/schema`] },
+  { pattern: "/collections/:slug/:itemId", urls: (s) => [s ? `/collections/${s.collectionSlug}/${s.collectionItem}` : `/collections/${MISSING}/${MISSING}`] },
+  { pattern: "/collections/:slug", urls: (s) => [`/collections/${s ? s.collectionSlug : MISSING}`] },
+  { pattern: "/trackers/habits/:id", urls: (s) => [s ? `/trackers/habits/${s.habit}` : `/trackers/habits/${MISSING}`] },
   { pattern: "/dashboard/graph", urls: () => ["/dashboard/graph"] },
   { pattern: "/:name/*", urls: () => ["/timeline"], redirectsTo: "/dashboard/timeline" },
   { pattern: "*", urls: () => ["/no-such-page"] },
@@ -112,18 +129,33 @@ function buildUi(outDir: string): Promise<void> {
 // shows "Kept on this computer only", the badge #728 was about.
 const PIXEL = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
+// The seed's names. Every kind of item gets one name that is a single long word, so only word
+// breaking can keep it inside a card or row (#871), and one long name with spaces, so only
+// wrapping between words can. The collection's name is the longest the product makes: the form
+// refuses more than 60 characters.
+const UNBROKEN = "Dampfschifffahrtsgesellschaftsvorstand";
+const SPACED = "Quarterly review of the community orchard volunteers and the shared harvest ledger";
+const COLLECTION_SPACED = "Long reading list of books about cities and their makers";
+
 async function seed(notebook: RealNotebook): Promise<Seeded> {
-  const insert = (table: string, values: Record<string, unknown>) => notebook.query({ table, operation: "insert", values, selection: "id", single: true });
+  const insert = (table: string, values: Record<string, unknown>, selection = "id") => notebook.query({ table, operation: "insert", values, selection, single: true });
+  if (UNBROKEN.length < 30 || SPACED.length < 70 || COLLECTION_SPACED.length > 60) throw new Error("the seed's names are not the long names the check must see");
   const note = await insert("notes", { title: "Trip to Lisbon", content: "Book the train." });
+  await insert("notes", { title: UNBROKEN, content: "Break the word, not the page." });
+  await insert("notes", { title: SPACED, content: "Wrap between the words." });
   const person = await insert("contacts", { name: "Ada Lovelace" });
+  await insert("contacts", { name: UNBROKEN });
+  await insert("contacts", { name: SPACED });
   // A group whose name does not fit one line on any width: a card that clips it (#867) is what the
   // audit's clipped-text rule must flag on the groups page.
-  const group = await insert("contact_groups", { name: "Seed round investors for the 2027 expansion" });
+  const group = await insert("contact_groups", { name: "Seed round investors for the 2027 expansion" }, "id,slug");
   // And one whose name holds a word no box fits, so word breaking, not wrapping between words, is
   // what keeps it inside the card and the people tree's row (#867).
   const unbroken = await insert("contact_groups", { name: "Donaudampfschifffahrtsgesellschaft Investoren" });
   if (!unbroken.id) throw new Error("the unbroken-name group did not insert");
   await insert("moments", { title: "Lunch with Ada", happened_at: "2026-11-10", status: "happened", impact_level: 2, person_id: person.id, source: "manual" });
+  await insert("moments", { title: UNBROKEN, happened_at: "2026-11-11", status: "happened", impact_level: 2, person_id: person.id, source: "manual" });
+  await insert("moments", { title: SPACED, happened_at: "2026-11-12", status: "happened", impact_level: 2, person_id: person.id, source: "manual" });
   const form = new FormData();
   form.append("file", new Blob([PIXEL, Buffer.alloc(51 * 1024 * 1024)], { type: "image/png" }), "photo.png");
   form.append("path", `owner/${note.id}/photo.png`);
@@ -131,7 +163,30 @@ async function seed(notebook: RealNotebook): Promise<Seeded> {
   const upload = await response.json();
   if (!response.ok) throw new Error(`The media upload failed: ${JSON.stringify(upload)}`);
   await insert("media_analysis", { note_id: note.id, storage_path: upload.data.path, media_type: "image", original_filename: "photo.png", analysis_status: "complete", description: "A photo", topics: [] });
-  return { note: note.id, person: person.id, group: group.id };
+  // Media with no note keeps its file's own name as the card's title (MediaLibrary.tsx). Each file of
+  // its own path: rows of one path are pages of one document, not cards of their own.
+  for (const [file, name] of [[UNBROKEN, UNBROKEN], ["spaced", SPACED]] as const) {
+    const own = new FormData();
+    own.append("file", new Blob([PIXEL], { type: "image/png" }), "pixel.png");
+    own.append("path", `owner/media/${file}.png`);
+    const ownResponse = await fetch(`${notebook.base}/api/media/upload?bucket=note-attachments`, { method: "POST", body: own });
+    const ownUpload = await ownResponse.json();
+    if (!ownResponse.ok) throw new Error(`The media upload failed: ${JSON.stringify(ownUpload)}`);
+    await insert("media_analysis", { storage_path: ownUpload.data.path, media_type: "image", original_filename: `${name}.png`, analysis_status: "complete", description: "A photo", topics: [] });
+  }
+  // A collection with an item, so /collections/:slug, its /schema page and an item's own page all
+  // open on the seeded workspace: the empty collection's own empty state is what the empty
+  // workspace run already checks.
+  const collection = await insert("collections", { name: UNBROKEN, slug: UNBROKEN.toLowerCase(), visibility: "personal", field_schema: [] }, "id,slug");
+  const collectionItem = await insert("collection_items", { collection_id: collection.id, title: UNBROKEN, data: {} });
+  const spacedCollection = await insert("collections", { name: COLLECTION_SPACED, slug: COLLECTION_SPACED.toLowerCase().replace(/[^a-z0-9]+/g, "-"), visibility: "personal", field_schema: [] }, "id,slug");
+  await insert("collection_items", { collection_id: spacedCollection.id, title: SPACED, data: {} });
+  const world = await insert("entities", { name: UNBROKEN, entity_type: "place" });
+  await insert("entities", { name: SPACED, entity_type: "place" });
+  addArea(notebook.root, { slug: "health", title: "Health", rhythm: "weekly sunday", starts: "2026-11-01" });
+  const habit = await addHabit(notebook.root, { area: "health", title: SPACED, doneMeans: "walked", days: "daily" }, "2026-11-01");
+  if (!habit.file) throw new Error("the seeded habit did not get a coach file");
+  return { note: note.id, person: person.id, group: group.id, groupSlug: group.slug, world: world.id, collection: collection.id, collectionSlug: collection.slug, collectionItem: collectionItem.id, habit: `habit-health-${habit.slug}` };
 }
 
 // Loaded: no request in flight, fonts in, no sign-in or loading spinner, and no animation still on
@@ -203,6 +258,17 @@ async function auditPage(page: Page, cdp: CDPSession, base: string, url: string,
     return landed === route.redirectsTo ? [] : [{ rule: "redirect", element: `lands on ${landed}, not ${route.redirectsTo}` }];
   }
   const found = await auditShown(page, cdp);
+  // Every view the page shows through its tabs (only the page's own: a hidden tab in a dialog is
+  // not visible and is checked when that dialog opens).
+  const tabs = page.locator('[role="tab"]');
+  for (let i = 0; i < (await tabs.count()); i++) {
+    const tab = tabs.nth(i);
+    if (!(await tab.isVisible()) || (await tab.isDisabled())) continue;
+    const name = ((await tab.textContent()) ?? "").trim();
+    await tab.click();
+    await settle(page);
+    for (const f of await auditShown(page, cdp)) found.push({ ...f, element: `tab "${name}": ${f.element}` });
+  }
   if (!route.addButton) return found;
   const button = page.getByRole("button", { name: route.addButton, exact: true }).first();
   if (!(await button.count())) return [...found, { rule: "add button", element: `no button "${route.addButton}"` }];
@@ -215,11 +281,26 @@ async function auditPage(page: Page, cdp: CDPSession, base: string, url: string,
   return [...found, ...inDialog];
 }
 
-const WIDTHS = [{ width: 375, height: 812 }, { width: 1280, height: 900 }];
+const WIDTHS = [
+  { width: 320, height: 568 },
+  { width: 375, height: 812 },
+  { width: 768, height: 1024 },
+  { width: 1280, height: 900 },
+];
 
 async function auditEveryPage(browser: Browser, notebook: RealNotebook, seeded: Seeded | null, viewport: { width: number; height: number }) {
   const workspace = seeded ? "seeded" : "empty";
-  const stable = (url: string) => (seeded ? url.replace(seeded.note, "<note>").replace(seeded.person, "<person>") : url);
+  const stable = (url: string) =>
+    seeded
+      ? url
+          .replace(seeded.note, "<note>")
+          .replace(seeded.person, "<person>")
+          .replace(seeded.groupSlug, "<group>")
+          .replace(seeded.world, "<world>")
+          .replace(seeded.collectionItem, "<item>")
+          .replace(seeded.collectionSlug, "<collection>")
+          .replace(seeded.habit, "<habit>")
+      : url;
   const context = await browser.newContext({ viewport });
   try {
     const page = await context.newPage();
@@ -391,7 +472,16 @@ describe("every page at a phone's and a desktop's width", () => {
       const context = await browser.newContext({ viewport });
       try {
         const page = await context.newPage();
-        for (const [url, ...texts] of [["/dashboard/timeline", "Lunch with Ada"], ["/dashboard/people", "Ada Lovelace"], ["/dashboard/media", "Kept on this computer only"], ["/dashboard/notes", "Trip to Lisbon"], ["/dashboard/groups", "Seed round investors for the 2027 expansion", "Donaudampfschifffahrtsgesellschaft Investoren"]]) {
+        for (const [url, ...texts] of [
+          ["/dashboard/timeline", "Lunch with Ada"],
+          ["/dashboard/people", "Ada Lovelace"],
+          ["/dashboard/media", "Kept on this computer only"],
+          ["/dashboard/notes", "Trip to Lisbon"],
+          ["/dashboard/groups", "Seed round investors for the 2027 expansion", "Donaudampfschifffahrtsgesellschaft Investoren"],
+          ["/dashboard/world", UNBROKEN, SPACED],
+          ["/collections", COLLECTION_SPACED],
+          ["/dashboard/media", `${UNBROKEN}.png`],
+        ]) {
           await page.goto(seededNotebook.base + url);
           for (const text of texts) await page.getByText(text).first().waitFor({ timeout: 15_000 });
         }

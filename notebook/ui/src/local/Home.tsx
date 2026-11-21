@@ -38,7 +38,7 @@ export default function Home(){
    <div className="flex items-start gap-3"><UserRound className="h-5 w-5 mt-0.5 text-primary shrink-0" aria-hidden="true"/><div><p id="context-card-title" className="font-semibold">Tell Godspeed about you, about five minutes</p><p className="text-sm text-muted-foreground">Where you live, a little about you, and what you want help with first.</p></div></div>
    <div className="flex gap-2 shrink-0"><Button className="min-h-11 flex-1 sm:flex-none" onClick={startContext}>Start now</Button><Button variant="ghost" className="min-h-11" onClick={hideContext}>Hide</Button></div>
   </CardContent></Card>}
-  <div className="grid gap-4 sm:grid-cols-3">
+  <div className="grid gap-4 lg:grid-cols-3">
    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Notes</CardTitle><FileText className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><p className="text-3xl font-bold">{notes.isLoading?'…':notes.isError?'Unavailable':notes.data?.length||0}</p><Link className="text-sm text-primary" to="/dashboard/notes">Open notes</Link></CardContent></Card>
    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">People</CardTitle><Users className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><p className="text-3xl font-bold">{people.isLoading?'…':people.isError?'Unavailable':people.data?.count||0}</p><Link className="text-sm text-primary" to="/dashboard/people">Open people</Link></CardContent></Card>
    {/* The card reads the same shared AI state as every open chat (useChatOptions), so it cannot say

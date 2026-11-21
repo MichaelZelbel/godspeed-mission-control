@@ -37,8 +37,8 @@ export function MeaningSearch() {
       <p>Search finds every word now. Connect an embeddings service and it also finds what you meant: "knee doctor" finds a note called "Orthopäde Termin". Your notes are sent to that service to be turned into numbers; nothing else is.</p>
       <div className="flex flex-wrap gap-2">{presets.map(p => <Button key={p.label} variant="outline" size="sm" onClick={() => { setUrl(p.url); setModel(p.model); }}>{p.label}</Button>)}</div>
       <div className="grid gap-2 max-w-xl">
-        <Label htmlFor="meaning-url">Address</Label><Input id="meaning-url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://openrouter.ai/api/v1" />
-        <Label htmlFor="meaning-model">Model</Label><Input id="meaning-model" value={model} onChange={e => setModel(e.target.value)} placeholder="openai/text-embedding-3-small" />
+        <Label htmlFor="meaning-url">Address</Label><Input id="meaning-url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://…/v1" />
+        <Label htmlFor="meaning-model">Model</Label><Input id="meaning-model" value={model} onChange={e => setModel(e.target.value)} placeholder="vendor/model-name" />
         <Label htmlFor="meaning-key">Key (not needed for Ollama)</Label><Input id="meaning-key" type="password" value={key} onChange={e => setKey(e.target.value)} autoComplete="off" />
       </div>
       {error && <p role="alert" className="text-destructive">{error}</p>}
