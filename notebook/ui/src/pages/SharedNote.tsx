@@ -107,7 +107,7 @@ export default function SharedNote() {
       <SEOHead title={`${displayTitle} - Godspeed Mission Control`} description={`Shared note: ${displayTitle}`} />
       <article className="max-w-3xl mx-auto px-4 py-12">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">{displayTitle}</h1>
+          <h1 className="break-words text-3xl font-bold mb-2">{displayTitle}</h1>
           <p className="text-sm text-muted-foreground">
             Last updated {format(new Date(note.updated_at), "PPP")}
           </p>

@@ -45,6 +45,8 @@ type Seeded = {
   collectionItem: string;
   habit: string;
   habitUnbroken: string;
+  /** The token of the seeded note's public share, so /shared/:token opens the real shared page. */
+  sharedToken: string;
 };
 type RouteCheck = {
   pattern: string;
@@ -59,7 +61,7 @@ type RouteCheck = {
 const MISSING = "missing";
 const ROUTES: RouteCheck[] = [
   { pattern: "/setup", urls: () => ["/setup"] },
-  { pattern: "/shared/:token", urls: () => [`/shared/${MISSING}`] },
+  { pattern: "/shared/:token", urls: (s) => (s ? [`/shared/${s.sharedToken}`] : [`/shared/${MISSING}`]) },
   { pattern: "/", urls: () => ["/"], redirectsTo: "/dashboard" },
   { pattern: "/dashboard", urls: () => ["/dashboard"] },
   { pattern: "/dashboard/chat", urls: () => ["/dashboard/chat"] },
@@ -146,18 +148,24 @@ async function seed(notebook: RealNotebook): Promise<Seeded> {
   const insert = (table: string, values: Record<string, unknown>, selection = "id") => notebook.query({ table, operation: "insert", values, selection, single: true });
   if (UNBROKEN.length < 30 || SPACED.length < 70 || COLLECTION_SPACED.length > 60) throw new Error("the seed's names are not the long names the check must see");
   const note = await insert("notes", { title: "Trip to Lisbon", content: "Book the train." });
-  await insert("notes", { title: UNBROKEN, content: "Break the word, not the page." });
+  const sharedNote = await insert("notes", { title: UNBROKEN, content: "Break the word, not the page." });
   await insert("notes", { title: SPACED, content: "Wrap between the words." });
   const person = await insert("contacts", { name: "Ada Lovelace" });
   await insert("contacts", { name: UNBROKEN });
   await insert("contacts", { name: SPACED });
-  // A group whose name does not fit one line on any width: a card that clips it (#867) is what the
-  // audit's clipped-text rule must flag on the groups page.
-  const group = await insert("contact_groups", { name: "Seed round investors for the 2027 expansion" }, "id,slug");
-  // And one whose name holds a word no box fits, so word breaking, not wrapping between words, is
-  // what keeps it inside the card and the people tree's row (#867).
-  const unbroken = await insert("contact_groups", { name: "Donaudampfschifffahrtsgesellschaft Investoren" });
+  // A group whose name does not fit one line on any width: a card that clips or overruns it (#867) is
+  // what the audit's clipped-text rule must flag on the groups page. One name of each shape, like
+  // every other kind: the spaced one wraps between words, the unbroken one only word breaking keeps
+  // inside its card and the people tree's row (#867).
+  const group = await insert("contact_groups", { name: SPACED }, "id,slug");
+  const unbroken = await insert("contact_groups", { name: UNBROKEN });
   if (!unbroken.id) throw new Error("the unbroken-name group did not insert");
+  // A public share of one seeded note, so /shared/:token opens the real shared page, not the
+  // missing placeholder: the share link is a route the router serves, and a visitor who follows one
+  // sees a page the audit must judge too (#887).
+  const sharedToken = "layout-audit-share-token";
+  const shared = await insert("shared_notes", { note_id: sharedNote.id, share_token: sharedToken, is_active: true });
+  if (!shared.id) throw new Error("the shared-note row did not insert");
   await insert("moments", { title: "Lunch with Ada", happened_at: "2026-11-10", status: "happened", impact_level: 2, person_id: person.id, source: "manual" });
   await insert("moments", { title: UNBROKEN, happened_at: "2026-11-11", status: "happened", impact_level: 2, person_id: person.id, source: "manual" });
   await insert("moments", { title: SPACED, happened_at: "2026-11-12", status: "happened", impact_level: 2, person_id: person.id, source: "manual" });
@@ -193,7 +201,7 @@ async function seed(notebook: RealNotebook): Promise<Seeded> {
   if (!habit.file) throw new Error("the seeded habit did not get a coach file");
   const unbrokenHabit = await addHabit(notebook.root, { area: "health", title: UNBROKEN, doneMeans: "walked", days: "daily" }, "2026-11-01");
   if (!unbrokenHabit.file) throw new Error("the seeded unbroken habit did not get a coach file");
-  return { note: note.id, person: person.id, group: group.id, groupSlug: group.slug, world: world.id, collection: collection.id, collectionSlug: collection.slug, collectionItem: collectionItem.id, habit: habitId(habit), habitUnbroken: habitId(unbrokenHabit) };
+  return { note: note.id, person: person.id, group: group.id, groupSlug: group.slug, world: world.id, collection: collection.id, collectionSlug: collection.slug, collectionItem: collectionItem.id, habit: habitId(habit), habitUnbroken: habitId(unbrokenHabit), sharedToken };
 }
 
 // Loaded: no request in flight, fonts in, no sign-in or loading spinner, and no animation still on
@@ -537,8 +545,8 @@ describe("every page at a phone's and a desktop's width", () => {
           ["/dashboard/notes", "Trip to Lisbon"],
           [`/dashboard/notes/${seeded.note}`, "Book the train."],
           [`/dashboard/people/${seeded.person}`, "Ada Lovelace"],
-          [`/dashboard/groups/${seeded.groupSlug}`, "Seed round investors for the 2027 expansion"],
-          ["/dashboard/groups", "Seed round investors for the 2027 expansion", "Donaudampfschifffahrtsgesellschaft Investoren"],
+          [`/dashboard/groups/${seeded.groupSlug}`, SPACED],
+          ["/dashboard/groups", SPACED, UNBROKEN],
           [`/dashboard/world/${seeded.world}`, UNBROKEN],
           ["/dashboard/world", UNBROKEN, SPACED],
           [`/collections/${seeded.collectionSlug}`, UNBROKEN, "New Item"],
@@ -546,6 +554,7 @@ describe("every page at a phone's and a desktop's width", () => {
           [`/collections/${seeded.collectionSlug}/${seeded.collectionItem}`, UNBROKEN],
           [`/trackers/habits/${seeded.habit}`, SPACED],
           [`/trackers/habits/${seeded.habitUnbroken}`, UNBROKEN],
+          [`/shared/${seeded.sharedToken}`, UNBROKEN],
           ["/collections", COLLECTION_SPACED],
           ["/dashboard/media", `${UNBROKEN}.png`],
         ]) {
@@ -562,13 +571,12 @@ describe("every page at a phone's and a desktop's width", () => {
     }, 240_000);
   }
 
-  // The group page with a real, long name (#863): the audit above meets it only as "group not
-  // found", because the seed has no group. The seed is not given one here either: the list page's
-  // cards clip a long name at both widths, which is a fault of its own, apart from this fix, and
-  // would turn the page-wide check red for something this change does not touch. So the header is
-  // checked on its own: the audit's rules on the name and the two buttons, and the name's whole
-  // box against each button's box, at a phone's width and at 320 px, the narrowest phone the
-  // header must hold. On main this fails: the buttons squeezed the name to one letter.
+  // The group page with a real, long name (#863): the page-wide audit above opens it with the
+  // seed's own group, whose name is the long spaced one; this check gives the header a name of its
+  // own so the header is judged apart from the list, on its own: the audit's rules on the name and
+  // the two buttons, and the name's whole box against each button's box, at a phone's width and at
+  // 320 px, the narrowest phone the header must hold. On main this fails: the buttons squeezed the
+  // name to one letter.
   it("shows a group's whole name with its Add Member and Edit buttons at a phone's width", async () => {
     const name = "Seed round investors for the 2027 expansion";
     const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name }, selection: "id,slug", single: true });

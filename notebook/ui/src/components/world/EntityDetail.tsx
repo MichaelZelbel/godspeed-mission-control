@@ -194,7 +194,7 @@ export function EntityDetail({ entity, onDeleted }: EntityDetailProps) {
         </CardHeader>
         <CardContent>
           {notes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No notes mention {entity.name} yet.</p>
+            <p className="break-words text-sm text-muted-foreground">No notes mention {entity.name} yet.</p>
           ) : (
             <ul className="space-y-1.5">
               {notes.map((n) => (
