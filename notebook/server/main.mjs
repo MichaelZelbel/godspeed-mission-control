@@ -76,8 +76,9 @@ import {recordRunningNotebook} from '../core/running-notebook.mjs';
 import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/hermes-update.mjs';
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
-import {trackAIHealth,aiFailure} from '../core/ai-health.mjs';
-import {SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS,AI_CONNECTION_UNREADABLE_STATUS,AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS,AI_STALLED_STATUS,NO_AI_STATUS} from '../core/no-ai.mjs';
+import {trackAIHealth} from '../core/ai-health.mjs';
+import {SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS,NO_AI_STATUS,AI_CONNECTION_UNREADABLE_STATUS} from '../core/no-ai.mjs';
+import {plainAIError,connectionTestError} from '../core/ai-outcome.mjs';
 import {MEDIA_CARRY_MAX_MB,MEDIA_PRESENCE_BATCH_SIZE,MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
 import {spendGuardStatus,saveSpendGuardSettings} from '../core/spend-guard.mjs';
 
@@ -95,26 +96,17 @@ export const startupReadiness=publication=>{
 };
 export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
 const providerView=config=>({configured:true,url:baseAddress(config.url),model:config.model,key:!!config.key});
+// What a damaged saved connection answers with, its own sentence instead of the generic
+// invalid-JSON one (#861 review D4), naming the step that recovers it.
+const DAMAGED_PROVIDER='The saved AI connection could not be read. Connect your AI again in Settings, Your AI.';
 const readSavedProvider=file=>{
   let text;try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code==='ENOENT')return null;throw error;}
-  const config=JSON.parse(text);
-  if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error('The saved AI connection is not valid. Connect it again after checking the server log.');
+  // A damaged file is one plain log line per request, never a stack trace, and never the file's own
+  // text, which holds the key (#833).
+  let config;try{config=JSON.parse(text);}catch{console.error('Godspeed Mission Control: the saved AI connection ('+file+') is not valid JSON. Connect your AI again in Settings, Your AI.');throw new Error(DAMAGED_PROVIDER);}
+  if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error(DAMAGED_PROVIDER);
   return config;
 };
-// A failed request to the AI, said as the chats say it (#590): a refused key, an outage, or an AI that
-// took the request and stopped answering (#808), each with what to do, never the provider's words,
-// which can quote the key. Godspeed's own no-AI sentences are not provider failures, though they
-// name an "AI service". null when the error is not the AI's.
-const PROVIDER_FAILURE=/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d|could not be reached|did not finish within|did not answer|needs sign-in|returned no text|connection could not start/i;
-const plainAIFailure=error=>{
-  const message=String(error?.message||'');
-  if(message.startsWith(NO_AI_STATUS)||message.startsWith(SETTINGS_ONLY_AI_STATUS)||!PROVIDER_FAILURE.test(message))return null;
-  const kind=aiFailure(error);
-  return kind==='refused'?AI_REFUSED_STATUS+'. Check it in Settings, Your AI, then try again.':kind==='stalled'?AI_STALLED_STATUS+'. Try again in a moment, or check it in Settings, Your AI.':kind?AI_UNREACHABLE_STATUS+'. Check its connection in Settings, Your AI, then try again.':null;
-};
-// The AI actions outside the chats that say a refused key or an outage the same way (#779); Process
-// note says it in Domains.invoke, so its background run does too (#808).
-const AI_ACTIONS=['draft-event','extract-moment-profile'];
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
@@ -496,7 +488,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!auth.authorized(req)&&!accessKey)return send(res,401,{error:'Authentication required'});
         if(req.method!=='POST'){res.writeHead(405,{'Allow':'POST'});return res.end();}
         const input=JSON.parse(await body(req));if(accessKey&&input.method==='tools/call'&&!accessKey.scopes.includes(toolScope(input.params.name,input.params.arguments||{})))return send(res,403,{error:'This API key does not grant that capability'});
-        const explain=error=>{const shown=userFacing(error,[store.root,store.state,mediaRoot,uiRoot,os.homedir(),os.tmpdir()]);if(!shown||error instanceof SyntaxError)console.error('Godspeed Mission Control: MCP '+String(input.params?.name||input.method)+' failed:',error);return shown||'Something went wrong on the server. The details are in its log.';};
+        const explain=error=>{const shown=userFacing(plainAIError(error),[store.root,store.state,mediaRoot,uiRoot,os.homedir(),os.tmpdir()]);if(!shown||error instanceof SyntaxError)console.error('Godspeed Mission Control: MCP '+String(input.params?.name||input.method)+' failed:',error);return shown||'Something went wrong on the server. The details are in its log.';};
         const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes,delegated:!!accessKey&&!apiKeys.installationAssistant(accessKey),explain});if(response===null){res.writeHead(202);return res.end();}return send(res,200,response);
       }
       if(route==='/api/pair/keys'&&req.method==='GET')return send(res,200,{data:pairKeys.map(({id,created_at,revoked_at})=>({id,created_at,revoked_at:revoked_at||null}))});
@@ -547,7 +539,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const saved=readSavedProvider(providerPath);return send(res,200,saved?providerView(saved):{configured:false,key:false});
       }
       if(route==='/api/provider'&&req.method==='POST'){
-        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),saved=readSavedProvider(providerPath),submittedKey=typeof input.key==='string'?input.key.trim():input.key;
+        // Reconnecting reads over a damaged saved file as if none were saved (#861 review D4): the
+        // new connection is tested and written whole, so the log line's instruction works. The
+        // damaged file's one plain log line per request is kept by readSavedProvider.
+        let saved=null;try{saved=readSavedProvider(providerPath);}catch{saved=null;}
+        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),submittedKey=typeof input.key==='string'?input.key.trim():input.key;
         const normalizedAddress=!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions';
         const retainedKey=!submittedKey&&saved&&baseAddress(normalizedAddress)===baseAddress(saved.url)?saved.key:submittedKey;
         const config={url:normalizedAddress,key:retainedKey,model:typeof input.model==='string'?input.model.trim():input.model};
@@ -559,7 +555,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           const backups=[saved&&backupEntryFor(saved),routineAI&&fallbackChain(fs.readFileSync(path.join(routineAI.home,'config.yaml'),'utf8'))[0]];
           if(backups.some(b=>sameService(want,b)))throw Object.assign(new Error(BACKUP_SERVICE),{backupService:true});}
         catch(error){if(error.backupService)throw error;}
-        await chosen({kind:'connection-test',contract:'Reply with Connected.'});
+        // Settings' own sentence for whatever the answer says, chosen here (ai-outcome.mjs), so the
+        // provider's raw words no longer travel to the browser for it to be worded (#861).
+        try{await chosen({kind:'connection-test',contract:'Reply with Connected.'});}catch(error){throw connectionTestError(error);}
         const kept=guarded(chosen);
         atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);
         // The test just above answered, so the new AI starts ready, and the next reader checks it again in five seconds (#590, #764).
@@ -608,7 +606,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         let main=null;try{main=backupEntryFor(JSON.parse(fs.readFileSync(providerPath,'utf8')));}catch{}
         const hermesMain=backupHome?routineAIStatus(routineAI):null;
         if(sameService(entry,main)||sameService(entry,hermesMain))throw new Error(SAME_SERVICE);
-        await candidate({kind:'connection-test',contract:'Reply with Connected.'});
+        try{await candidate({kind:'connection-test',contract:'Reply with Connected.'});}catch(error){throw connectionTestError(error);}
         return send(res,200,{connected:true,hermes:!!backupHome,...connectBackupAI({home:backupHome,state:store.state,config})});
       }
       // The ChatGPT plan sign-in (planSignIn above): its state, start it for the main AI or the
@@ -887,12 +885,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});
         }catch(error){
           if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});
-          // A refused key and an outage are said apart, each with what to do (#590). Only the category is said, never the provider's words.
-          // The provider itself has already said what this failure means for the AI's availability
-          // (core/ai-health.mjs); here it is only said in plain words (#806).
-          if(isChat&&domains.provider&&!assistantMissing&&!controller.signal.aborted){const said=plainAIFailure(error);if(said)throw new Error(said);}
-          if(isChat&&domains.provider&&!assistantMissing&&!controller.signal.aborted&&/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d/i.test(error.message))throw new Error('Your AI could not be used. Check Settings, Your AI, then try again.');
-          if(AI_ACTIONS.includes(name)&&domains.provider&&!controller.signal.aborted){const said=plainAIFailure(error);if(said)throw new Error(said);}
+          // Every AI failure is already the one plain sentence a person reads: Domains.invoke
+          // translated it (core/ai-outcome.mjs), for this route and for every other one, so no
+          // route builds its own AI error text (#861). The chats' live state reads the cause where
+          // the provider is tracked (trackAIHealth): an answer the AI gave but that could not be
+          // used says nothing about whether the AI answers (ai-health.mjs aiFailure), so it is left
+          // alone here, like every other failure the route itself has already recorded.
           throw error;
         }finally{if(isChat&&id)chatRequests.delete(id);if(isSearch){req.off('aborted',abortSearch);res.off('close',abortSearch);}}
       }
@@ -912,8 +910,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // A reply already under way cannot carry an error; it is cut off instead
       // (writing headers twice stopped the server until 6 October 2026).
       if (res.headersSent) { console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed after the reply started:', e); res.destroy(); return; }
-      const shown = userFacing(e, [store.root, store.state, mediaRoot, uiRoot, os.homedir(), os.tmpdir()]);
+      // Every AI failure left says its one plain sentence here, for the routes whose errors do not
+      // pass through Domains.invoke: the browser chat, and the connection tests above (#861).
+      const shown = userFacing(plainAIError(e), [store.root, store.state, mediaRoot, uiRoot, os.homedir(), os.tmpdir()]);
       if (!shown || e instanceof SyntaxError) console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed:', e);
+      // An answer the AI gave but that could not be used leaves the operator one plain line, so the
+      // shape the provider actually answered is not lost with it (#861 review R3): the sentence the
+      // person sees says nothing about what was wrong.
+      if (e?.aiCause==='unusable') console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' could not use the AI\'s answer: '+e.message);
       send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: shown || 'Something went wrong on the server. The details are in its log.', ...(shown && e.code ? { code: e.code } : {}) });
     }
   };
