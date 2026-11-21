@@ -43,10 +43,10 @@ interface Props {
  *  - Eye + "Shown to AI"       = visible to AI (People, AI Chat, MCP)
  *  - EyeOff + "Hidden from AI" = hidden from all AI surfaces
  * Its label says the state and its name the click's effect too: a bare "AI"
- * read like an AI action (#809). Its tooltip keeps main's explanation of
- * what a click does - for a person that the hide spreads to the linked
- * notes and moments - carried now as a `title`, one tooltip like its
- * neighbours have (#890).
+ * read like an AI action (#809). Its tooltip begins with the words its
+ * name says and then keeps main's explanation of what a click does - for
+ * a person that the hide spreads to the linked notes and moments - as one
+ * `title`, like its neighbours have (#890).
  *
  * For `kind="person"` this flips `is_sensitive` (which also cascades to
  * linked notes/moments/actions). For all other kinds it flips
@@ -133,14 +133,17 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
   // The hover's explanation, restored from main: before the click it says
   // what hiding means - for a person that the hide spreads to their linked
   // notes and moments, for anything else where the item still appears and
-  // that local search still finds it (#890, loop review of 6e2572e97).
+  // that local search still finds it (#890, loop review of 6e2572e97). The
+  // tooltip leads with the words the button announces, then explains; what
+  // a click does is already in the name, so the trailing "Click to ..." of
+  // main's sentences is not repeated.
   const tooltip = optimistic
     ? kind === "person"
-      ? "Hidden from AI. Linked notes & moments are hidden too. Click to make visible."
-      : "Hidden from AI: excluded from People, the Note Graph, AI Chat and MCP. Local search still finds it. Click to make visible."
+      ? "Hidden from AI. Show to AI again. Linked notes & moments are hidden too."
+      : "Hidden from AI. Show to AI again. Excluded from People, the Note Graph, AI Chat and MCP. Local search still finds it."
     : kind === "person"
-      ? "Visible to AI. Click to hide this person and everything linked to them from all AI features."
-      : "Visible to AI: used in People profiles, the Note Graph, AI Chat, and MCP clients. Click to hide.";
+      ? "Shown to AI. Hide from AI. Click to hide this person and everything linked to them from all AI features."
+      : "Shown to AI. Hide from AI. Used in People profiles, the Note Graph, AI Chat, and MCP clients.";
 
   const Icon = pending ? Loader2 : optimistic ? EyeOff : Eye;
   const label = optimistic ? "Hidden from AI" : "Shown to AI";

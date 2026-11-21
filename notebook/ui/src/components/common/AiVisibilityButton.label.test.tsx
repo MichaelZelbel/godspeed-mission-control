@@ -64,17 +64,17 @@ async function showPerson(hidden: boolean) {
 
 it("tells a person before the click that hiding spreads to their linked notes and moments", async () => {
   await showPerson(false);
-  expect(screen.getByRole("button", { name: "Shown to AI. Hide from AI" }).getAttribute("title")).toMatch(/hide this person and everything linked to them from all AI features/);
+  expect(screen.getByRole("button", { name: "Shown to AI. Hide from AI" }).getAttribute("title")).toBe("Shown to AI. Hide from AI. Click to hide this person and everything linked to them from all AI features.");
 });
 
 it("tells a hidden person before the click that their linked notes and moments are hidden too", async () => {
   await showPerson(true);
-  expect(screen.getByRole("button", { name: "Hidden from AI. Show to AI again" }).getAttribute("title")).toMatch(/Linked notes & moments are hidden too/);
+  expect(screen.getByRole("button", { name: "Hidden from AI. Show to AI again" }).getAttribute("title")).toBe("Hidden from AI. Show to AI again. Linked notes & moments are hidden too.");
 });
 
-it("keeps main's explanation of what hiding an item means in its tooltip", async () => {
+it("keeps main's explanation of what hiding an item means in its tooltip, led by the name's words", async () => {
   await show(false);
-  expect(screen.getByRole("button", { name: "Shown to AI. Hide from AI" }).getAttribute("title")).toMatch(/used in People profiles, the Note Graph, AI Chat, and MCP clients/);
+  expect(screen.getByRole("button", { name: "Shown to AI. Hide from AI" }).getAttribute("title")).toBe("Shown to AI. Hide from AI. Used in People profiles, the Note Graph, AI Chat, and MCP clients.");
   await show(true);
-  expect(screen.getByRole("button", { name: "Hidden from AI. Show to AI again" }).getAttribute("title")).toMatch(/Local search still finds it/);
+  expect(screen.getByRole("button", { name: "Hidden from AI. Show to AI again" }).getAttribute("title")).toBe("Hidden from AI. Show to AI again. Excluded from People, the Note Graph, AI Chat and MCP. Local search still finds it.");
 });
