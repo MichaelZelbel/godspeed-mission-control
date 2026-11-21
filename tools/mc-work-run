@@ -12,8 +12,8 @@
 # whose retry day has come; never outward work, never something waiting on you), takes ONE item
 # under a lease, gives the assistant the item, the goal it serves, how that goal is won (the
 # playbook) and the newest diagnosis, and lets it work with a time limit. What the assistant
-# says it did is recorded as ATTEMPTED. Then the item's own CHECK is run, and only that check
-# makes it VERIFIED. An item that cannot be done from this machine is reported as failed with
+# says it did is recorded as ATTEMPTED. Then the item's own CHECK and, for a finished file, a
+# separate content review run. Both must pass before the register makes it VERIFIED. An item that cannot be done from this machine is reported as failed with
 # the reason, and gets its retry gap from the register, not a hammer. Then the next item.
 #
 # IT NEVER MESSAGES YOU AND IT NEVER POSTS ON ITS OWN. A finished file becomes a page only when the
@@ -22,7 +22,8 @@
 # private, and the run says why. The assistant's one sentence about it (its SAY line) stays in
 # the item's run folder, where the schedule that called this program reads it and tells you.
 #
-# WHAT IT NEEDS: node, the `mc-work` register, `mc-run` and a `work-item` recipe in your mission control.
+# WHAT IT NEEDS: node, the `mc-work` register, `mc-run`, and the `work-item` and `work-result-review`
+# recipes in your mission control.
 # `mc-goals` is used when it is there, for the goal's own words and its playbook.
 #
 # RUN IT BY HAND:        mc-work-run
@@ -224,6 +225,7 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   SHOW="$(reg work show "$ID" 2>/dev/null)"
   GOAL="$(field "$SHOW" GOAL)"
   DONE_WHEN="$(field "$SHOW" 'DONE WHEN')"
+  OWNER="$(field "$SHOW" OWNER)"
   # AN APPROVED MOVE MAY WRITE (2026-09-24). Outward work reaches the runner only once the person's
   # own words are on it (APPROVED), and only then does this one item get the tools that change
   # things outside: the rest of the run stays read-only, as before.
@@ -310,7 +312,7 @@ while IFS=$'\t' read -r ID KIND WHAT; do
       echo
       echo "## Before your final line"
       echo "Run the item's CHECK yourself, from $GODSPEED, exactly as written: $CHECK_LINE"
-      echo "It alone decides whether this item is done, and it runs again after you answer. If it does not exit 0, finish or correct your work until it does. Never change the check, and never make a thing only to satisfy it: if the work cannot be done, end with RESULT: FAILED and say why."
+      echo "It must pass, and it runs again after you answer. A separate reader also compares a finished file with DONE WHEN before it can be verified. If the check does not exit 0, finish or correct your work until it does. Never change the check, and never make a thing only to satisfy it: if the work cannot be done, end with RESULT: FAILED and say why."
     fi
   } > "$ITEMDIR/prompt.txt"
 
@@ -370,10 +372,36 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   reg work attempt "$ID" --runner "$RUNNER_NAME" --ok --result "$RESULT" 2>&1 | sed 's/^/  /'
   DONE=$((DONE + 1))
 
-  # THE CHECK, NOT THE RUNNER, SAYS DONE. Exit 0 verifies. Exit 2 means the runner said done and
+  REVIEW_ARG=""
+  RESULT_FILE="$(reg work files "$ID" 2>/dev/null | head -1)"
+  if [ "$OWNER" = "godspeed" ] && [ -n "$RESULT_FILE" ]; then
+    {
+      echo "Compare this exact result with the work item's DONE WHEN."
+      echo
+      printf '%s\n' "$SHOW"
+      echo
+      echo "RESULT FILE: $RESULT_FILE"
+      echo "RUNNER RESULT: $RESULT"
+    } > "$ITEMDIR/review-prompt.txt"
+    bash "$RUNNER" work-result-review --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt-file "$ITEMDIR/review-prompt.txt" \
+      --timeout "$ITEM_TIMEOUT" --out "$ITEMDIR/review-answer.txt" --allowed-tools "Read Grep Glob" >/dev/null 2>&1
+    REVIEW_RC=$?
+    if [ "$REVIEW_RC" -ne 0 ]; then
+      printf '{"passed":false,"reason":"the independent content reviewer ended before returning a verdict","missing":["a review of the result against DONE WHEN"]}\n' > "$ITEMDIR/review.json"
+    else
+      "$NODE" -e '
+const fs=require("fs"),input=process.argv[1],output=process.argv[2];
+let text="";try{text=fs.readFileSync(input,"utf8").trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"");const v=JSON.parse(text);if(!v||typeof v!=="object"||typeof v.passed!=="boolean"||typeof v.reason!=="string"||!v.reason.trim()||v.reason.length>500||!Array.isArray(v.missing)||v.missing.length>20||v.missing.some(x=>typeof x!=="string"||!x.trim()||x.length>300)||(v.passed&&v.missing.length)||(!v.passed&&!v.missing.length))throw Error("shape");fs.writeFileSync(output,JSON.stringify(v)+"\n");}
+catch{fs.writeFileSync(output,JSON.stringify({passed:false,reason:"the independent content reviewer returned no valid verdict",missing:["a valid review of the result against DONE WHEN"]})+"\n");}' "$ITEMDIR/review-answer.txt" "$ITEMDIR/review.json"
+    fi
+    REVIEW_ARG="$ITEMDIR/review.json"
+  fi
+
+  # THE CHECK AND CONTENT READER, NOT THE RUNNER, SAY DONE. Exit 0 verifies. Exit 2 means the runner said done and
   # the check says not: it stays attempted, on the record, for the next decision to re-plan. Exit
   # 1 means there is no check, and a person or the decision run verifies it by observation.
-  VOUT="$(reg work verify "$ID" 2>&1)"; VRC=$?
+  if [ -n "$REVIEW_ARG" ]; then VOUT="$(reg work verify "$ID" --content-review "$REVIEW_ARG" 2>&1)"; VRC=$?
+  else VOUT="$(reg work verify "$ID" 2>&1)"; VRC=$?; fi
   printf '%s\n' "$VOUT" | sed 's/^/  /'
   if [ "$VRC" -ne 0 ]; then
     log "$ID attempted, not verified (verify exit $VRC)"
