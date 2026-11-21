@@ -133,7 +133,10 @@ function TemplateCard({ template, onClick }: { template: Template; onClick: () =
       <CardHeader>
         <div className="mb-2 text-4xl" aria-hidden="true">{template.icon || "📁"}</div>
         <CardTitle className="text-base">{template.name}</CardTitle>
-        <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">{template.description || "No description"}</p>
+        {/* The whole description shows. A two-line clamp cut a third line off with no way to read it
+            on the card once the starter templates made the page tall enough to scroll (#836); the
+            layout check rightly calls that clipped. The preview sheet below still shows it too. */}
+        <p className="min-h-10 text-sm text-muted-foreground">{template.description || "No description"}</p>
       </CardHeader>
       <CardFooter className="flex flex-wrap gap-3 text-xs text-muted-foreground">
         <span>{fields.length} field{fields.length === 1 ? "" : "s"}</span>
