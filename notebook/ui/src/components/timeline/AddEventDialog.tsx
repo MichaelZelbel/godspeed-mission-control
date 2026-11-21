@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useAICreditsGate } from "@/hooks/useAICreditsGate";
+import type { AIAvailability } from "@/hooks/useAICredits";
 import { triggerCreditsRefresh } from "@/lib/credits-events";
 import { OUT_OF_CREDITS_MESSAGE, dbErrorMessage, functionErrorMessage, readFunctionError } from "@/lib/function-error";
 import { Button } from "@/components/ui/button";
@@ -63,7 +64,7 @@ const AI_FALLBACK = "The suggestion could not be made. Try again.";
 export default function AddEventDialog({ people, onCreated, editEvent, open: controlledOpen, onOpenChange }: AddEventDialogProps) {
   const { user, session } = useAuth();
   const { toast } = useToast();
-  const { checkCredits, providerConfigured, aiAvailability } = useAICreditsGate();
+  const { checkCredits, providerConfigured, aiAvailability, refetch: refetchAIStatus } = useAICreditsGate();
   const isControlled = controlledOpen !== undefined;
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isControlled ? controlledOpen : internalOpen;
@@ -305,8 +306,21 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
       // when the moment is saved (#812): the connection may have been removed or connected while the
       // tab was open, so a tab whose picture is out of date gets the answer from the extraction's
       // own reply, which names Settings, Your AI.
-      const known = providerConfigured ? null : factsNotPulledOut(aiAvailability);
-      const noneConnected = !providerConfigured && aiAvailability === "none";
+      // A cached answer that says no AI is connected is read afresh before the save skips anything
+      // (#907): connecting the AI again in Settings, Your AI leaves the tab's last poll answer
+      // standing until the next one, so a save made in between must not skip on the older picture.
+      // The status read asks the AI nothing, so a save with no AI connected still sends it nothing.
+      let statusConfigured = providerConfigured;
+      let statusAvailability = aiAvailability;
+      if (!statusConfigured && statusAvailability === "none" && refetchAIStatus) {
+        const fresh = await refetchAIStatus();
+        if (fresh.data) {
+          statusConfigured = !!fresh.data.runtimeConfigured;
+          statusAvailability = fresh.data.aiAvailability as AIAvailability | undefined;
+        }
+      }
+      const known = statusConfigured ? null : factsNotPulledOut(statusAvailability);
+      const noneConnected = !statusConfigured && statusAvailability === "none";
       if (momentId && !known && !noneConnected) {
         supabase.functions
           .invoke("extract-moment-profile", { body: { moment_id: momentId } })
