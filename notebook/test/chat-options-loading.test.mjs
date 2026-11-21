@@ -79,7 +79,8 @@ test('overlapping availability reads share a failed health check result over a c
  assert.equal((await readOptions()).usable,true);assert.equal((await readStatus()).runtimeConfigured,true);assert.equal(checks,3);
 });
 test('a refused chat returns plain guidance instead of provider diagnostics',async t=>{
- const provider=async()=>{throw Error('Model provider failed with HTTP 401: secret provider detail');};
+ // The provider throws the failure the way runtime.mjs raises it now: with its cause attached (#861).
+ const provider=async()=>{throw Object.assign(Error('Model provider failed with HTTP 401: secret provider detail'),{aiCause:'refused',aiStatus:401});};
  const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-refused-'));for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
  const {createService}=await import('../server/main.mjs');const service=await createService({root:path.join(root,'workspace'),port:0,provider});

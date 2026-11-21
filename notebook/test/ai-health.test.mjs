@@ -13,6 +13,17 @@ test('a refused key, an outage and a stall are told apart',()=>{
  assert.equal(aiFailure(Error('Use a document-capable model endpoint for PDF analysis')),null,'a request the AI cannot take says nothing about the AI');
 });
 
+// #861: the cause travels as aiCause, decided from the status, never from the message. A 500 whose
+// body mentions a refused key is an outage (#833), and an answer that could not be used says nothing.
+test('an error that carries its aiCause is read by it, whatever its message says',()=>{
+ assert.equal(aiFailure(Object.assign(Error('Model provider failed with HTTP 500: invalid_api_key was mentioned'),{aiCause:'unavailable'})),'unreachable');
+ assert.equal(aiFailure(Object.assign(Error('Anything at all'),{aiCause:'refused'})),'refused');
+ assert.equal(aiFailure(Object.assign(Error('Anything at all'),{aiCause:'stalled'})),'stalled');
+ assert.equal(aiFailure(Object.assign(Error('Anything at all'),{aiCause:'unusable'})),null);
+ assert.equal(aiFailure(Object.assign(Error('Anything at all'),{aiCause:'no-credit'})),'unreachable');
+ assert.equal(aiFailure(Object.assign(Error('Anything at all'),{aiCause:'busy'})),'unreachable');
+});
+
 test('the newest result wins, whether a check or a chat request',async()=>{
  let fail=null;
  const inner=Object.assign(async()=>{if(fail)throw Error(fail);return 'ok';},{check:async()=>{if(fail)throw Error(fail);},options:async()=>({current:'m',models:[]})});

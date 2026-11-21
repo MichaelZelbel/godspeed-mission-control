@@ -1,4 +1,5 @@
 import {runChild} from './child-process.mjs';
+import {aiFailed,answerCause,diagnosticCause,STATUS_LINE} from './ai-outcome.mjs';
 import { fileContext } from './context.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -27,7 +28,7 @@ export function isHermesExecutable(executable){return ['hermes','hermes.exe'].in
 // their reason. Only the host and port are named, never the path or the key.
 export function unreachableAI(url,cause){
   let host='';try{host=new URL(url).host;}catch{}
-  return Error((host?'The AI at '+host:'The AI')+' could not be reached. Check that this computer is online and that the AI\'s address in Settings is right.',{cause});
+  return aiFailed('unavailable',(host?'The AI at '+host:'The AI')+' could not be reached. Check that this computer is online and that the AI\'s address in Settings is right.',{detail:cause});
 }
 export function hermesProvider({executable='hermes',home,cwd,model,provider,sourceRoot,spawnProcess}={}){
   if(!isHermesExecutable(executable))throw new Error('Choose the verified Hermes runtime');
@@ -52,9 +53,11 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider,sour
       // The notebook's own one-turn calls are not a conversation with the person: a coach talk
       // waiting for their chat must not be used up here (godspeed-coach lib/context.mjs).
       const result=await runChild(executable,args,{cwd,env:{...assistantEnvironment({home,workspace:cwd}),GODSPEED_SCHEDULED_RUN:'1'},input:JSON.stringify(prompt),timeoutMs,maxBytes:1024*1024,signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The AI connection could not start');});
-      const text=hermesResponse(result.stdout);
+      const text=hermesResponse(result.stdout),diagnostic=result.stderr+'\n'+text;
       if(result.code===0&&text)return text;
-      throw new Error(hermesFailureMessage(result.stderr+'\n'+text));
+      // A program that left cleanly but said nothing usable is an unusable answer, not an outage (#861).
+      if(result.code===0)throw aiFailed('unusable',hermesFailureMessage(diagnostic));
+      throw hermesFailure(diagnostic);
     }finally{for(const file of temporary)try{fs.unlinkSync(file);}catch{}}
   };
   let cached,loadedAt=0;run.options=async()=>{if(cached&&Date.now()-loadedAt<300000)return cached;const {python,source}=hermesPython({executable,sourceRoot,home});if(!python)throw new Error('Model choices could not be loaded');const helper=fileURLToPath(new URL('../assistant-files/chat-options.py',import.meta.url));cached=await runChild(python,['-I',helper,source],{cwd:fs.existsSync(source)?source:home||cwd,env:assistantEnvironment({home,workspace:cwd}),timeoutMs:20000,spawnProcess}).then(result=>{if(result.code)throw Error();return JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));}).catch(()=>{throw new Error('Model choices could not be loaded');});loadedAt=Date.now();return cached;};return run;
@@ -119,7 +122,12 @@ export function hermesPythons({executable='hermes',sourceRoot,home,platform=proc
 }
 // The words a person sees when an AI program could not answer.
 export function childFailure(error,timeoutMs,unstarted){
-  return new Error({ABORTED:'Reply stopped',TIMEOUT:providerTimeoutMessage(timeoutMs),OUTPUT_LIMIT:'Assistant output exceeded its limit'}[error.code]||unstarted);
+  const message={ABORTED:'Reply stopped',TIMEOUT:providerTimeoutMessage(timeoutMs),OUTPUT_LIMIT:'Assistant output exceeded its limit'}[error.code]||unstarted;
+  // A stopped reply says nothing about the AI; a time budget that ran out is an outage, an answer
+  // beyond its size limit an unusable answer, a program that could not start an outage (#861).
+  // The suggestion's own 20-second budget keeps its own sentence, like the direct provider's does.
+  const cause=error.code==='ABORTED'?null:error.code==='TIMEOUT'&&timeoutMs===20000?null:error.code==='TIMEOUT'?'unavailable':error.code==='OUTPUT_LIMIT'?'unusable':'unavailable';
+  return aiFailed(cause,message);
 }
 // Hermes' waiting line: "  [tool] ( ˘⌣˘)♡ brainstorming...", a face and one word ending in dots.
 // It is the program waiting, never part of the answer, and until 9 October 2026 it ended replies
@@ -147,6 +155,11 @@ export function hermesFailureMessage(diagnostic,secrets=[]){
   const reason=providerReason(diagnostic,secrets);
   return 'The AI request failed'+(reason?' ('+reason+')':'')+'. Check the AI connection in Settings, then try again.';
 }
+// What the AI program's own output says the cause is (ai-outcome.mjs), attached to the failure it
+// is turned into. A context limit has its own sentence and says nothing about the provider: no cause.
+export function hermesFailure(diagnostic,secrets=[]){
+  return aiFailed(diagnosticCause(diagnostic),hermesFailureMessage(diagnostic,secrets));
+}
 // Anything in a line of text that could be a credential, replaced: a value named like a key, a token
 // or a password, a bearer or basic credential, a key with a well-known prefix, a long unbroken token,
 // and every literal secret the caller knows (the key Settings holds).
@@ -158,7 +171,7 @@ export function scrubCredentials(text,secrets=[]){
 // The provider's own reason out of what the AI program printed: the last line naming an HTTP 4xx or
 // 5xx status, shortened, with keys and bearer tokens replaced. Empty when there is none.
 export function providerReason(diagnostic,secrets=[]){
-  const lines=String(diagnostic||'').replace(/\x1b\[[0-9;]*m/g,'').split(/\r?\n/).map(l=>l.trim()).filter(l=>/\b(?:HTTP\s*|Error code:?\s*|status(?:_code)?[=: ]\s*)[45]\d\d\b/i.test(l));
+  const lines=String(diagnostic||'').replace(/\x1b\[[0-9;]*m/g,'').split(/\r?\n/).map(l=>l.trim()).filter(l=>STATUS_LINE.test(l));
   const line=lines.at(-1);if(!line)return '';
   return scrubCredentials(line,secrets).replace(/\s+/g,' ').slice(0,240);
 }
@@ -167,6 +180,9 @@ export function providerReason(diagnostic,secrets=[]){
 // right a minute later. 429, 502, 503 and 504 are tried twice more, after 2 and 5 seconds, unless
 // the request was stopped; any other answer, and a third failure, is said as before.
 const RETRY_STATUS=new Set([429,502,503,504]);
+// Exported for the tests: a server test that drives provider outcomes through the routes shortens
+// the waits in its own process, so a retried 5xx fails at once instead of after seven seconds.
+export const RETRY_WAITS=[2000,5000];
 // A PROVIDER THAT STOPS ANSWERING IS SAID WITHIN SECONDS (#770, 19 November 2026). A provider that
 // took the connection and never answered left a chat spinning for its whole ten minutes, while one
 // that answered HTTP 500 got the outage reply at once. A request is not streamed, so a slow answer
@@ -183,14 +199,14 @@ export const STALL_WATCH={afterMs:20000,timeoutMs:15000,everyMs:60000};
 const LOOPBACK=['127.0.0.1','localhost'];
 export function stalledAI(url,cause){
   let host='';try{host=new URL(url).host;}catch{}
-  return Object.assign(Error((host?'The model provider at '+host:'The model provider')+' stopped answering. Check that this computer is online and that the AI\'s address in Settings is right.',{cause}),{code:'AI_STALLED'});
+  return Object.assign(Error((host?'The model provider at '+host:'The model provider')+' stopped answering. Check that this computer is online and that the AI\'s address in Settings is right.',{cause}),{code:'AI_STALLED',aiCause:'stalled'});
 }
 // The connection check asks the service's key endpoint (OpenRouter's /key, anyone else's /models),
 // which costs nothing. A chat is sent only after a chat failed, until one answers again, or when that
 // endpoint cannot tell a refused key from a working one, and then at most once every 10 minutes.
 // Until 19 November 2026 every open page sent a billed chat every 5 seconds (#762).
 export const BILLED_CHECK_EVERY_MS=600000;
-export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = [2000,5000], stallWatch = STALL_WATCH } = {}) {
+export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = RETRY_WAITS, stallWatch = STALL_WATCH } = {}) {
   if(!url || !key || !model)return null;
   const parsed=new URL(url),local=LOOPBACK.includes(parsed.hostname);if(parsed.protocol!=='https:' && !local)throw new Error('Model provider requires HTTPS');
   let chatFailed=false,chatPassedAt=0,keyChecked,billedCheck=null;
@@ -220,14 +236,21 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
       let response;
       for(let attempt=0;;attempt++){
         try{response=await fetch(url,{method:'POST',headers,body:request,signal:AbortSignal.any([...stopping,AbortSignal.timeout(timeoutMs)])});}
-        catch(error){if(error.name==='TimeoutError')throw Error(providerTimeoutMessage(timeoutMs));if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
+        // A timeout keeps its own sentence when the kind has one of its own (the suggestion's 20
+        // seconds); otherwise it is an outage, said by the route's shared wording (#861).
+        catch(error){if(error.name==='TimeoutError')throw timeoutMs===20000?Error(providerTimeoutMessage(timeoutMs)):aiFailed('unavailable',providerTimeoutMessage(timeoutMs));if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
         if(response.ok||!RETRY_STATUS.has(response.status)||attempt>=retryWaits.length||signal?.aborted)break;
         await response.arrayBuffer().catch(()=>{});
         const waitStop=AbortSignal.any(stopping);
         await new Promise((resolve,reject)=>{if(waitStop.aborted)return reject(waitStop.reason);const timer=setTimeout(resolve,retryWaits[attempt]);waitStop.addEventListener('abort',()=>{clearTimeout(timer);reject(waitStop.reason);},{once:true});});
       }
-      if(!response.ok){let reason='';try{const body=await response.json();reason=String(body?.error?.message||body?.message||'').replace(/\s+/g,' ').slice(0,200);}catch{}throw new Error('Model provider failed with HTTP '+response.status+(reason?': '+reason:''));}
-      const result=await response.json(), text=result.choices?.[0]?.message?.content;if(typeof text!=='string')throw new Error('Model provider returned no text');
+      // The cause is decided here, where the status and the answer's structured fields are in hand;
+      // the message stays the provider's raw words for the log (ai-outcome.mjs).
+      if(!response.ok){let body=null;try{body=await response.json();}catch{}
+        const reason=String(body?.error?.message||body?.message||'').replace(/\s+/g,' ').slice(0,200);
+        throw aiFailed(answerCause(response.status,body),'Model provider failed with HTTP '+response.status+(reason?': '+reason:''),{status:response.status});}
+      let result;try{result=await response.json();}catch(error){throw aiFailed('unusable','Model provider answered with something that is not JSON',{detail:error});}
+      const text=result.choices?.[0]?.message?.content;if(typeof text!=='string')throw aiFailed('unusable','Model provider returned no text');
       chatFailed=false;chatPassedAt=Date.now();
       return text;
     }catch(error){
@@ -242,7 +265,7 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
   const askKeyEndpoint=async withKey=>{
     let response;
     try{response=await fetch(keyUrl,{headers:withKey?{Authorization:'Bearer '+key}:{},signal:AbortSignal.timeout(checkInput.timeout_ms)});}
-    catch(error){if(error.name==='TimeoutError')throw Error('The AI did not answer the connection check within 15 seconds.');if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
+    catch(error){if(error.name==='TimeoutError')throw aiFailed('stalled','The AI did not answer the connection check within 15 seconds.');if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
     response.body?.cancel().catch(()=>{});return response.status;
   };
   // Keep the configured identity available to the picker.
@@ -252,8 +275,8 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
       const keyless=keyChecked===undefined?await askKeyEndpoint(false):null;
       if(isRefusal(keyless))keyChecked=true;else if(isSuccess(keyless))keyChecked=false;
       const status=await askKeyEndpoint(true);
-      if(isRefusal(status)){keyChecked=true;throw Error('Model provider failed with HTTP '+status);}
-      if(status===408||status===429||status>=500)throw Error('Model provider failed with HTTP '+status);
+      if(isRefusal(status)){keyChecked=true;throw aiFailed(answerCause(status,null),'Model provider failed with HTTP '+status,{status});}
+      if(status===408||status===429||status>=500)throw aiFailed(answerCause(status,null),'Model provider failed with HTTP '+status,{status});
       if(!chatFailed&&(isSuccess(status)&&keyChecked||Date.now()-chatPassedAt<BILLED_CHECK_EVERY_MS))return;
       billedCheck??=run(checkInput).finally(()=>{billedCheck=null;});
       await billedCheck;
@@ -266,8 +289,8 @@ export function commandProvider({ command, args = [], cwd, timeoutMs = 120000 } 
   return async input=>{
     // stderr can contain credentials. Never preserve it in user records.
     const result=await runChild(command,args,{cwd,input:JSON.stringify(input)+'\n',timeoutMs,maxBytes:1024*1024}).catch(error=>{
-      if(error.code==='TIMEOUT')throw new Error('Assistant runtime timed out');if(error.code==='OUTPUT_LIMIT')throw new Error('Assistant output is too large');throw error.cause||error;});
-    if(result.code!==0)throw new Error('Assistant runtime exited with code '+result.code);
+      if(error.code==='TIMEOUT')throw aiFailed('unavailable','Assistant runtime timed out');if(error.code==='OUTPUT_LIMIT')throw aiFailed('unusable','Assistant output is too large');throw error.cause||error;});
+    if(result.code!==0)throw aiFailed('unavailable','Assistant runtime exited with code '+result.code);
     return result.stdout.trim();
   };
 }

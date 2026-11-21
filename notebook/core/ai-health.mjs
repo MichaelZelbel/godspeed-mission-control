@@ -32,6 +32,13 @@ const STALLED=/did not answer the connection check/i;
 export function aiFailure(error){
   const message=String(error?.message||error||'');
   if(NOT_THE_AI.test(message))return null;
+  // The cause travels as aiCause since #861, decided from the status at the provider, not from the
+  // message: a 500 whose body mentions a refused key is an outage, not a refusal (#833). The
+  // availability has no out-of-credit or busy state (#806), so those read as an outage here too.
+  if(error?.aiCause==='refused')return 'refused';
+  if(error?.aiCause==='stalled')return 'stalled';
+  if(error?.aiCause==='unusable')return null;
+  if(error?.aiCause)return 'unreachable';
   return REFUSED.test(message)?'refused':error?.code==='AI_STALLED'||STALLED.test(message)?'stalled':'unreachable';
 }
 
@@ -72,7 +79,7 @@ export function trackAIHealth(inner,{waitMs=AI_HEALTH_WAIT_MS,firstWaitMs=AI_HEA
         settle(order,'stalled');
         // When the slow answer does arrive, it is the newest word on the AI unless something newer settled.
         void request.then(late=>settle(order,late.ok?'ready':aiFailure(late.error)));
-        throw new Error('The AI did not answer the connection check within '+Math.round(wait()/1000)+' seconds.');
+        throw Object.assign(new Error('The AI did not answer the connection check within '+Math.round(wait()/1000)+' seconds.'),{aiCause:'stalled'});
       }
       if(result.ok){settle(order,'ready');return;}
       settle(order,aiFailure(result.error));
