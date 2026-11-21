@@ -52,3 +52,29 @@ it("says what a click did just above the switch, not in a page toast", async () 
   expect(toasts).toEqual([]);
   expect(await screen.findByRole("button", { name: "Hidden from AI. Show to AI again" }, WAIT)).toBeInTheDocument();
 });
+
+// Issue #890, loop review of 6e2572e97: when the switch gained a plain title
+// tooltip it lost main's explanation of what hiding does - for a person, that
+// the hide spreads to their linked notes and moments. These tests keep that
+// explanation in the title, for the person and for other items.
+async function showPerson(hidden: boolean) {
+  const { AiVisibilityButton } = await import("./AiVisibilityButton");
+  render(<QueryClientProvider client={new QueryClient()}><AiVisibilityButton kind="person" id="person-1" hidden={hidden} /></QueryClientProvider>);
+}
+
+it("tells a person before the click that hiding spreads to their linked notes and moments", async () => {
+  await showPerson(false);
+  expect(screen.getByRole("button", { name: "Shown to AI. Hide from AI" }).getAttribute("title")).toMatch(/hide this person and everything linked to them from all AI features/);
+});
+
+it("tells a hidden person before the click that their linked notes and moments are hidden too", async () => {
+  await showPerson(true);
+  expect(screen.getByRole("button", { name: "Hidden from AI. Show to AI again" }).getAttribute("title")).toMatch(/Linked notes & moments are hidden too/);
+});
+
+it("keeps main's explanation of what hiding an item means in its tooltip", async () => {
+  await show(false);
+  expect(screen.getByRole("button", { name: "Shown to AI. Hide from AI" }).getAttribute("title")).toMatch(/used in People profiles, the Note Graph, AI Chat, and MCP clients/);
+  await show(true);
+  expect(screen.getByRole("button", { name: "Hidden from AI. Show to AI again" }).getAttribute("title")).toMatch(/Local search still finds it/);
+});
