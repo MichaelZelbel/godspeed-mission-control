@@ -10,7 +10,7 @@ import {Download} from 'lucide-react';
 import {PersonalControl} from './PersonalControl';
 import {ConflictReview} from './ConflictReview';
 import {MeaningSearch} from './MeaningSearch';
-import {TelegramConnect,telegramStatus} from './ConnectTelegram';
+import {TelegramConnect,telegramStatus,telegramUnavailable} from './ConnectTelegram';
 import {RecordSyncForm} from './RecordSync';
 import {routineRow} from './routine-row.mjs';
 import {AboutTab} from '@/components/settings/AboutTab';
@@ -22,8 +22,11 @@ const kindOf=(k:any)=>typeof k==='string'?k:k?.kind||'';
 async function call(route:string,body?:any){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 function TelegramSettings(){
   const status=useQuery({queryKey:['telegram-status'],queryFn:telegramStatus});
-  if(!status.data?.available&&status.data?.managed!=='environment')return null;
-  return <section className="border rounded p-4 space-y-3"><h2 className="text-xl">Telegram</h2><TelegramConnect/></section>;
+  if(!status.data)return null;
+  // Where Telegram cannot be connected on this notebook the section still says so (issue #915),
+  // so the Dashboard's Telegram tile never opens a Settings page with no Telegram on it.
+  const unavailable=!status.data.available&&status.data.managed!=='environment';
+  return <section className="border rounded p-4 space-y-3"><h2 className="text-xl">Telegram</h2>{unavailable?<p>{telegramUnavailable}</p>:<TelegramConnect/>}</section>;
 }
 function WorkoutsSettings(){
   const qc=useQueryClient(),status=useQuery({queryKey:['workouts-status'],queryFn:()=>call('workouts')});

@@ -17,7 +17,7 @@ vi.mock("./Notifications", () => ({ Notifications: () => null }));
 vi.mock("@/components/settings/AboutTab", () => ({ AboutTab: () => null }));
 vi.mock("./PersonalControl", () => ({ PersonalControl: () => null }));
 vi.mock("./MeaningSearch", () => ({ MeaningSearch: () => null }));
-vi.mock("./ConnectTelegram", () => ({ TelegramConnect: () => null, telegramStatus: async () => ({ available: false }) }));
+vi.mock("./ConnectTelegram", () => ({ TelegramConnect: () => null, telegramStatus: async () => ({ available: false }), telegramUnavailable: "Telegram cannot be connected on this notebook." }));
 vi.mock("./RecordSync", () => ({ RecordSyncForm: () => null }));
 const scrolled: string[] = [];
 Element.prototype.scrollIntoView = function () { scrolled.push((this as Element).id); };

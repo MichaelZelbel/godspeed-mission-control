@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
-import { TelegramConnect } from "./ConnectTelegram";
+import ConnectTelegram, { TelegramConnect } from "./ConnectTelegram";
+
+// The one sentence the page and the Settings' Telegram section show where Telegram cannot be
+// connected on this notebook (issue #915).
+const TELEGRAM_UNAVAILABLE = "Telegram cannot be connected on this notebook; it becomes available once the assistant is installed and runs this notebook (run the Godspeed installer again to install it).";
 import { WAIT } from "@/test/wait-limits";
 
 // The Telegram step of the one-click server's setup page (16 October 2026). A bot its owner has
@@ -56,6 +61,32 @@ describe("TelegramConnect", () => {
     expect(await screen.findByText(/Telegram is connected/,{}, {timeout:4500})).toBeInTheDocument();
     expect(reads).toBe(2);
   },5000);
+  // Issue #915: where Telegram cannot be connected on this notebook the page said nothing at all
+  // (an empty card). It now says so in one sentence, and the available state keeps the BotFather
+  // steps and the key field.
+  describe("the Telegram page while Telegram is not available on this notebook", () => {
+    function showPage(telegram: Record<string, unknown>) {
+      vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+        const answer = String(url).replace(/^\/api\//, "") === "telegram" ? telegram : {};
+        return new Response(JSON.stringify(answer), { status: 200, headers: { "Content-Type": "application/json" } });
+      }));
+      render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><ConnectTelegram /></MemoryRouter></QueryClientProvider>);
+    }
+    it("says in one sentence why, and the card is never empty", async () => {
+      showPage({ available: false, managed: null, connected: false, phase: "none" });
+      const heading = await screen.findByRole("heading", { name: "Connect Telegram" }, WAIT);
+      const card = heading.closest("div.rounded-xl") as HTMLElement | null;
+      expect(card).not.toBeNull();
+      expect(await screen.findByText(TELEGRAM_UNAVAILABLE, undefined, WAIT)).toBeInTheDocument();
+      expect(card).toContainElement(screen.getByText(TELEGRAM_UNAVAILABLE));
+    });
+    it("shows the BotFather steps and the key field where Telegram is available", async () => {
+      showPage({ available: true, managed: "web", connected: false, phase: "none" });
+      expect(await screen.findByText(/In Telegram, open/, undefined, WAIT)).toBeInTheDocument();
+      expect(screen.getByText("BotFather")).toBeInTheDocument();
+      expect(screen.getByLabelText("Your bot's key")).toBeInTheDocument();
+    });
+  });
   it("treats a server phase it does not know as an error", async () => {
     show({ telegram: { available: true, managed: "web", connected: true, phase: "later", bot: { username: "fictional_bot", name: "Fictional" } } });
     expect(await screen.findByRole("alert", undefined, WAIT)).toHaveTextContent("Telegram returned a status this page does not understand.");
