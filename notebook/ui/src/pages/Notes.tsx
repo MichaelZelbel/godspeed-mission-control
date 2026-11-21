@@ -84,7 +84,7 @@ import {
   LayoutGrid,
   Loader2,
 } from "lucide-react";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile, usePanesTogether } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { showToast } from "@/lib/toast";
 import { dbErrorMessage, functionErrorMessage } from "@/lib/function-error";
@@ -125,6 +125,9 @@ export default function Notes() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  // The list beside the editor needs a wide window; below PANE_BREAKPOINT an open note takes the
+  // whole pane, as on a phone, and the editor's back button leads back to the list (#887).
+  const stacked = !usePanesTogether();
   const {setOpen:setMenuOpen}=useSidebar();
   const [chatOpen,setChatOpen]=useState(false);
   const [treeCollapsed,setTreeCollapsed]=useState(()=>window.localStorage.getItem("godspeed:notes-tree-collapsed")==="true");
@@ -836,8 +839,8 @@ export default function Notes() {
       {/* Note list panel */}
       <div className={cn(
         "shrink-0 border-r border-border flex-col bg-background min-w-0",
-        isMobile ? "w-full" : "w-72",
-        (isMobile && (selectedId||chatOpen)) || (!isMobile&&treeCollapsed) ? "hidden" : "flex"
+        stacked ? "w-full" : "w-72",
+        (stacked && (selectedId||chatOpen)) || (!stacked&&treeCollapsed) ? "hidden" : "flex"
       )}>
 
         {/* Header */}
@@ -1278,11 +1281,11 @@ export default function Notes() {
       <div className={cn(
         "flex-1 min-h-0 min-w-0 flex-col",
         isMobile&&chatOpen&&"h-[60dvh] min-h-[420px] shrink-0 flex-none",
-        isMobile && !selectedId ? "hidden" : "flex"
+        stacked && !selectedId ? "hidden" : "flex"
       )}>
         {selectedNote ? (
           <>
-            {isMobile && (
+            {stacked && (
               <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border shrink-0">
                 <Button
                   variant="ghost"

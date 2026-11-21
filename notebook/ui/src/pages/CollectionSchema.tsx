@@ -522,7 +522,7 @@ export default function CollectionSchema() {
           <p className="text-sm text-muted-foreground">
             Collections / {collection?.name} / Schema
           </p>
-          <h1 className="mt-2 text-2xl font-bold font-display">
+          <h1 className="mt-2 break-words text-2xl font-bold font-display">
             {collection?.icon} {collection?.name} - Schema
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">

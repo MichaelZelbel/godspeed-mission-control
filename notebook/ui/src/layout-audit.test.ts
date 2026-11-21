@@ -17,7 +17,8 @@ import { addHabit } from "../../../third-party/addons/godspeed-coach/lib/habits.
 // group, collection with an item, world item, habit), each named in one long unbroken word and in
 // one long name with spaces (#734, #887). It drives the built notebook in a real browser and fails
 // on:
-//   - text that is cut off, an input's placeholder or value included;
+//   - text that is cut off, an input's placeholder included (an input's value is not cut off: the
+//     input scrolls it);
 //   - text drawn under another element, a fixed or floating element included (what is painted at
 //     the middle of the text is something else);
 //   - a field with no name a screen reader can read, or a label that names no field;
@@ -47,8 +48,8 @@ type RouteCheck = {
   urls: (seeded: Seeded | null) => string[];
   /** A redirect: where it must land. The page there is checked under its own pattern. */
   redirectsTo?: string;
-  /** The accessible name of the page's main add button, when it opens a dialog. */
-  addButton?: string;
+  /** The accessible name of the page's main add button, when it opens a dialog. The first name that is on the page wins: an empty workspace shows a different one than a filled one. */
+  addButton?: string | string[];
 };
 
 const MISSING = "missing";
@@ -80,7 +81,7 @@ const ROUTES: RouteCheck[] = [
   { pattern: "/dashboard/actions", urls: () => ["/dashboard/actions"], addButton: "Add Action" },
   { pattern: "/dashboard/activity", urls: () => ["/dashboard/activity"] },
   { pattern: "/dashboard/review", urls: () => ["/dashboard/review"] },
-  { pattern: "/collections", urls: () => ["/collections"], addButton: "or create a blank collection" },
+  { pattern: "/collections", urls: () => ["/collections"], addButton: ["or create a blank collection", "New blank collection"] },
   { pattern: "/collections/templates", urls: () => ["/collections/templates"] },
   { pattern: "/collections/:slug/schema", urls: (s) => [`/collections/${s ? s.collectionSlug : MISSING}/schema`] },
   { pattern: "/collections/:slug/:itemId", urls: (s) => [s ? `/collections/${s.collectionSlug}/${s.collectionItem}` : `/collections/${MISSING}/${MISSING}`] },
@@ -270,13 +271,19 @@ async function auditPage(page: Page, cdp: CDPSession, base: string, url: string,
     for (const f of await auditShown(page, cdp)) found.push({ ...f, element: `tab "${name}": ${f.element}` });
   }
   if (!route.addButton) return found;
-  const button = page.getByRole("button", { name: route.addButton, exact: true }).first();
-  if (!(await button.count())) return [...found, { rule: "add button", element: `no button "${route.addButton}"` }];
+  const names = Array.isArray(route.addButton) ? route.addButton : [route.addButton];
+  let button = null as ReturnType<Page["getByRole"]> | null;
+  let name = "";
+  for (const candidate of names) {
+    const foundButton = page.getByRole("button", { name: candidate, exact: true }).first();
+    if (await foundButton.count()) { button = foundButton; name = candidate; break; }
+  }
+  if (!button) return [...found, { rule: "add button", element: `no button ${names.map((n) => `"${n}"`).join(" or ")}` }];
   await button.click();
   const opened = await page.getByRole("dialog").first().waitFor({ timeout: 5000 }).then(() => true, () => false);
-  if (!opened) return [...found, { rule: "add button", element: `"${route.addButton}" opened no dialog` }];
+  if (!opened) return [...found, { rule: "add button", element: `"${name}" opened no dialog` }];
   await settleAnimations(page);
-  const inDialog = (await auditShown(page, cdp)).map((f) => ({ ...f, rule: `in the "${route.addButton}" dialog: ${f.rule}` }));
+  const inDialog = (await auditShown(page, cdp)).map((f) => ({ ...f, rule: `in the "${name}" dialog: ${f.rule}` }));
   await page.keyboard.press("Escape");
   return [...found, ...inDialog];
 }
@@ -406,6 +413,15 @@ describe("the audit's rules on pages built for them", { timeout: 20_000 }, () =>
   it("reports an input whose placeholder does not fit", async () => {
     const [line] = await audit(`<input aria-label="Search" placeholder="Search every note you ever wrote" style="width:80px">`);
     expect(line).toMatch(/^clipped: input "Search": its text needs [\d.]+ px, the box has [\d.]+$/);
+  });
+
+  it("passes an input whose value is longer than its box, and still reports the placeholder", async () => {
+    // The input scrolls its own value (the group's name does this in its edit form, #887); a
+    // placeholder has nothing typed into it and nothing to scroll it into view with.
+    expect(await audit(`<input aria-label="Name" placeholder="Short" value="Supercalifragilisticexpialidociousgroupname" style="width:80px">`))
+      .toEqual([]);
+    expect(await audit(`<input aria-label="Search" placeholder="Search every note you ever wrote" value="Typed" style="width:80px">`))
+      .toHaveLength(1);
   });
 
   it("reports text with a badge drawn over it", async () => {

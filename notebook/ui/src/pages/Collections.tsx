@@ -117,7 +117,7 @@ function CollectionCard({ collection }: { collection: CollectionWithCount }) {
               <CollectionIcon icon={collection.icon} />
             </div>
             <div className="min-w-0 flex-1">
-              <CardTitle className="truncate text-base">{collection.name}</CardTitle>
+              <CardTitle className="break-words text-base">{collection.name}</CardTitle>
               <p className="mt-1 line-clamp-2 min-h-10 text-sm text-muted-foreground">
                 {collection.description || "No description"}
               </p>
@@ -152,7 +152,7 @@ function HabitCard({ habit }: { habit: HabitCardData }) {
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary" aria-hidden="true">✓</div>
             <div className="min-w-0 flex-1">
-              <CardTitle className="truncate text-base">{habit.name}</CardTitle>
+              <CardTitle className="break-words text-base">{habit.name}</CardTitle>
               <p className="mt-1 line-clamp-2 min-h-10 text-sm text-muted-foreground">
                 Habit{talksLabel(habit) ? `, ${talksLabel(habit)}` : ""}{habit.habit_status && habit.habit_status !== "active" ? `, ${habit.habit_status}` : ""}
               </p>
