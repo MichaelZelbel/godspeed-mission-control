@@ -6,8 +6,35 @@ import { randomUUID, createHash } from 'node:crypto';
 import { durable,durableRoots,durableFiles,recordsFolder,legacyRecordsFolder,isRecordPath } from '../file-policy.mjs';
 import { touchesSuggestions, suggestionChanges } from '../review-sources.mjs';
 import { encode as encodeFile, decode as decodeFile, safe as safeName, candidate, fits, folderFor, nameFor, candidateName, systemPath, isReadable, key as nameKey, childrenOf, own } from './layout.mjs';
+import { parse as parseYaml } from './yaml.mjs';
 
 export const hash = value => createHash('sha256').update(Buffer.isBuffer(value) || typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
+// The frontmatter block a record's file opens with, as layout.mjs reads it (decode()). Kept
+// here for the arriving page that carries frontmatter of its own (#897).
+const FRONTMATTER = /^---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n([\s\S]*))?$/;
+// What an arriving page holds (#897): its body, and, when the page carries frontmatter of
+// its own, the title, tags, favorite and pinned state it was written with. The note's body is
+// the text below that frontmatter, so the record's frontmatter is written around the body
+// and the file never ends up with two frontmatter blocks. Frontmatter that does not parse is
+// left out; the file's name still names the note.
+function arrivingPage(text,reason){
+  if(text.charCodeAt(0)===0xfeff)text=text.slice(1);
+  if(reason!=='Frontmatter without a record')return {content:text};
+  const match=text.match(FRONTMATTER);
+  if(!match)return {content:text};
+  // One line break the closing --- already accounts for is dropped, so the body is what the
+  // person wrote below the frontmatter, the way a record the notebook saves itself reads back.
+  const value={content:(match[2]??'').replace(/^\r?\n/,'')};
+  let data=null;try{data=parseYaml(match[1]??'');}catch{}
+  if(!data||typeof data!=='object')return value;
+  if(data.title!=null&&String(data.title).trim())value.title=String(data.title).trim();
+  const listed=Array.isArray(data.tags)?data.tags:typeof data.tags==='string'?data.tags.split(','):[];
+  const tags=listed.map(tag=>typeof tag==='string'?tag.trim():tag&&typeof tag==='object'&&typeof tag.name==='string'?tag.name.trim():'').filter(Boolean);
+  if(tags.length)value.tags=tags;
+  if(data.favorite===true)value.is_favorite=true;
+  if(data.pinned===true)value.is_pinned=true;
+  return value;
+}
 export const slug = value => String(value).normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'record';
 // For new ids and names: German letters spelled out and accents dropped, so a note called
 // "Orthopäde Termin" is orthopaede-termin-..., not orthopa-de-termin-... (6 October 2026).
@@ -327,7 +354,7 @@ export class Store {
     // workspace (16,000 files, 114 MB) a read took longer than the two
     // seconds it was allowed to be reused, so an open dashboard kept the
     // server reading for 138 of 240 seconds and the health check waited 30.
-    if (!force && this.watching && this.records) { this.readJournal(); if (!this.dirtyAll) { this.applyDirty(); this.settlePages(); return this.records; } force = true; }
+    if (!force && this.watching && this.records) { this.readJournal(); if (!this.dirtyAll) { this.applyDirty(); this.settlePages(); this.rearm(); return this.records; } force = true; }
     if (!force && this.reuseFor && this.records && !this.holding && !this.stale && Date.now() - this.scannedAt < this.reuseFor) return this.records;
     this.stale = false; this.scannedAt = Date.now(); this.dirtyAll = false; this.dirty?.clear();
     // How often the vault was actually read, which is what a save costs.
@@ -349,6 +376,7 @@ export class Store {
     this.entries=entries;
     this.derive();
     this.settlePages();
+    this.rearm();
     return this.records;
   }
   // One file as the store holds it: its text and either its record, the fact
@@ -488,6 +516,7 @@ export class Store {
   // folder as the note's folder, so nothing moves and nothing is lost.
   adoptPending(){
     const files=[...this.pendingAdoption];this.pendingAdoption.clear();this.adopting=true;
+    // True when pages became notes: the caller then re-arms the watcher (rearm).
     try{
       const records=[],paths=new Map(),kept=new Map();
       this.withLock(()=>{
@@ -502,13 +531,15 @@ export class Store {
           // note's folder. Any other folder is the note's folder as it is spelled on disk.
           const folder=parts.slice(0,-1).join('/'),trashed=folder==='Trash'||folder.startsWith('Trash/');
           let stat=null;try{stat=fs.statSync(file);}catch{continue;}
-          const value={title:parts.at(-1).replace(/\.md$/,'')||'Untitled',content:text,folder_path:(trashed?folder.slice('Trash'.length):folder).replace(/^\//,''),created_at:new Date(stat.mtimeMs).toISOString()};
+          const value={folder_path:(trashed?folder.slice('Trash'.length):folder).replace(/^\//,''),created_at:new Date(stat.mtimeMs).toISOString(),...arrivingPage(text,reason)};
+          if(!value.title)value.title=parts.at(-1).replace(/\.md$/,'')||'Untitled';
           if(trashed)value.is_trashed=true;
           const record=this.prepare('notes',value);
           records.push(record);paths.set('notes/'+record.id,relative);
         }
         if(records.length)this.commit(records,{paths,cascade:false});
       });
+      if(records.length)this.rearmWatcher=true;
       // A page left unadopted (the retired Lexicon's, a JSON one) is decided about too, so it
       // is never asked about again.
       for(const [file] of kept){const relative=posix(path.relative(this.recordsRoot,file)),k=nameKey(relative);if(!this.knownPages.has(k)){this.knownPages.set(k,relative);this.pagesDirty=true;}}
@@ -519,6 +550,17 @@ export class Store {
       for(const file of files)if(this.entries.get(file)?.document)this.pendingAdoption.add(file);
       throw error;
     }finally{this.adopting=false;}
+    return this.rearmWatcher===true;
+  }
+  // A rename that replaces an existing file (the atomic write every save and every adoption
+  // uses) makes this platform's file watcher stop reporting that path for good: an adopted
+  // note then never hears of the outside edits it exists for (#897). A watcher started while
+  // the file is already there reports it again, so a batch of adoptions is followed by one
+  // close and start. The full read that start does covers what changed while it was off.
+  rearm(){
+    if(!this.rearmWatcher||!this.watching)return;
+    this.rearmWatcher=false;
+    this.unwatch();this.watch();
   }
   persistPages(){
     if(!this.pageFile)return;

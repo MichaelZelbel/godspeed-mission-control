@@ -52,6 +52,20 @@ test('a file edited by hand (no lock, no journal) is seen once the watcher repor
   }finally{store.unwatch();}
 });
 
+test('an outside edit to a note that arrived is seen, though the adoption wrote its file by rename',async()=>{
+  const dir=root(),store=new Store(dir,{watch:true});
+  try{
+    // The adoption's atomic write replaces the page's file by rename, which on this platform
+    // makes the watcher stop reporting that path; the store re-arms its watcher after an
+    // adoption, so the outside edits an arrived note exists for are still seen (#897).
+    const other=path.join(store.recordsRoot,'Arrived.md');fs.writeFileSync(other,'# arrived words\n');
+    assert.equal(await until(()=>{store.scan();return store.list('notes').some(n=>n.title==='Arrived');}),true,'the page becomes a note');
+    const note=store.list('notes').find(n=>n.title==='Arrived'),file=store.file(note);
+    fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace('# arrived words','# arrived words quokkafern'));
+    assert.equal(await until(()=>{store.scan();return store.get('notes',note.id)?.content.includes('quokkafern');}),true,'the outside edit reaches the note without a restart');
+  }finally{store.unwatch();}
+});
+
 test('a folder renamed by hand moves every record in it, without a full read',async()=>{
   const dir=root(),store=new Store(dir,{watch:true});
   try{
