@@ -34,6 +34,14 @@ test('an older check that settles late does not overrule a newer chat result',as
  release();await check;assert.equal(provider.health(),'refused');
 });
 
+test('a chat failure recorded while a check is in flight is not overruled by that check',async()=>{
+ let release;const inner=Object.assign(async()=>{throw Error('Model provider failed with HTTP 403');},{check:()=>new Promise(resolve=>{release=resolve;})});
+ const provider=trackAIHealth(inner,{waitMs:60000});
+ const check=provider.check();await new Promise(r=>setImmediate(r));
+ provider.record(Error('Model provider failed with HTTP 403'));assert.equal(provider.health(),'refused');
+ release();await check;assert.equal(provider.health(),'refused','the older check, answered ready, does not overrule the recorded chat failure');
+});
+
 test('a stopped chat request says nothing about the AI',async()=>{
  const inner=async({signal})=>{throw signal.reason;},provider=trackAIHealth(inner,{initial:'ready'}),stop=new AbortController();stop.abort(Error('Reply stopped.'));
  await assert.rejects(provider({signal:stop.signal}));assert.equal(provider.health(),'ready');
