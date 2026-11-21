@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, Loader2, MessageSquare, Trash2 } from "lucid
 import { supabase } from "@/integrations/supabase/client";
 import { useStickyPanelPreference } from "@/hooks/useStickyPanelPreference";
 import { dbErrorMessage } from "@/lib/function-error";
+import { showDate } from "@/lib/local-date";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -30,11 +31,9 @@ export interface NoteComment {
   created_at: string;
 }
 
-// "18 Oct 2026, 14:05" in the reader's own language and clock.
+// "Nov 21, 2026, 14:05" in the shared display format.
 export function commentDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return showDate(value, "time");
 }
 // You wrote a comment made here; one your assistant or another app saved carries its own name.
 export function commentAuthor(author?: string | null): string {

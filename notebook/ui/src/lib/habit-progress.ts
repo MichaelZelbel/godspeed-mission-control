@@ -1,4 +1,5 @@
 // Dates and all progress arithmetic come from the installation, never the browser clock.
+import { showDate } from "./local-date";
 export type HabitDayStatus = "completed" | "protected" | "paused" | "notplanned" | "unknown" | "missed";
 export type HabitProgress = {
   version: 1;
@@ -25,7 +26,7 @@ export function habitDayLabel(day: { status: HabitDayStatus; answer: string | nu
   return day.status === "missed" && day.answer === null ? "Gap in record" : HABIT_DAY_LABELS[day.status];
 }
 
-// A date-only value has no browser timezone. UTC is used only to format its printed calendar date.
-export function habitDateLabel(date: string, full = false) {
-  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: full ? "long" : "short", ...(full ? { weekday: "long" as const, year: "numeric" as const } : {}) }).format(new Date(`${date}T12:00:00Z`));
+// A date-only value has no browser timezone; showDate reads it as the day it names.
+export function habitDateLabel(date: string) {
+  return showDate(date, "day");
 }

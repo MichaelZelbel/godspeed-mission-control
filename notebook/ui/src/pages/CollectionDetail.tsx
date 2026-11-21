@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { format, formatDistanceToNow, isValid, parseISO } from "date-fns";
+import { localDateISO, localTimeHM, parseInstant, showDate } from "@/lib/local-date";
 import {
   ArrowDown,
   ArrowUp,
@@ -456,28 +456,24 @@ function isLinkValue(value: unknown): value is LinkValue {
 
 function parseDate(value: unknown) {
   if (!value) return null;
-  const date =
-    typeof value === "string" ? parseISO(value) : new Date(String(value));
-  return isValid(date) ? date : null;
+  return parseInstant(value);
 }
 
 function toDateInput(value: unknown) {
   const date = parseDate(value);
-  return date ? format(date, "yyyy-MM-dd") : "";
+  return date ? localDateISO(date) : "";
 }
 
 function toTimeInput(value: unknown) {
   const date = parseDate(value);
-  return date ? format(date, "HH:mm") : "";
+  return date ? localTimeHM(date) : "";
 }
 
 function renderDate(value: unknown) {
   const date = parseDate(value);
   if (!date) return "—";
   const age = Math.abs(Date.now() - date.getTime());
-  return age <= 7 * 24 * 60 * 60 * 1000
-    ? formatDistanceToNow(date, { addSuffix: true })
-    : format(date, "MMM d, yyyy");
+  return age <= 7 * 24 * 60 * 60 * 1000 ? showDate(value, "ago") : showDate(value, "date");
 }
 
 function optionClass(value: string) {
@@ -1283,7 +1279,7 @@ export function FieldInput({
       ) : field.type === "date" ? (
         <SmartDatePicker
           value={selectedDate ?? null}
-          onChange={(date) => onChange(date ? format(date, "yyyy-MM-dd") : "")}
+          onChange={(date) => onChange(date ? localDateISO(date) : "")}
           className={inputClass}
         />
       ) : field.type === "datetime" ? (
@@ -1293,7 +1289,7 @@ export function FieldInput({
             onChange={(date) => {
               const currentTime = toTimeInput(value) || "09:00";
               onChange(
-                date ? `${format(date, "yyyy-MM-dd")}T${currentTime}` : "",
+                date ? `${localDateISO(date)}T${currentTime}` : "",
               );
             }}
             className={inputClass}
@@ -1306,7 +1302,7 @@ export function FieldInput({
               className="pl-9"
               onChange={(event) => {
                 const datePart =
-                  toDateInput(value) || format(new Date(), "yyyy-MM-dd");
+                  toDateInput(value) || localDateISO(new Date());
                 onChange(`${datePart}T${event.target.value}`);
               }}
             />
@@ -1699,7 +1695,7 @@ function ItemNotesPanel({
                         {note.title || "Untitled"}
                       </div>
                       <div className="truncate text-xs text-muted-foreground">
-                        {formatDistanceToNow(parseISO(note.updated_at), { addSuffix: true })}
+                        {showDate(note.updated_at, "ago")}
                       </div>
                     </button>
                   ))
@@ -1744,7 +1740,7 @@ function ItemNotesPanel({
                     {note.content
                       ? note.content.replace(/[#*_`>-]+/g, "").slice(0, 80)
                       : "Empty note"}{" "}
-                    · {formatDistanceToNow(parseISO(note.updated_at), { addSuffix: true })}
+                    · {showDate(note.updated_at, "ago")}
                   </div>
                 </button>
                 <DropdownMenu>
@@ -3778,9 +3774,7 @@ function CollectionDetailPage() {
                           </TableCell>
                         ))}
                         <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                          {formatDistanceToNow(new Date(item.updated_at), {
-                            addSuffix: true,
-                          })}
+                          {showDate(item.updated_at, "ago")}
                         </TableCell>
                         <TableCell onClick={(event) => event.stopPropagation()}>
                           <DropdownMenu>

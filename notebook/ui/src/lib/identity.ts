@@ -1,3 +1,5 @@
+import { localDateISO, localTimeHM, parseInstant, showDate } from "./local-date";
+
 // The talk of the page that shows who the assistant is (lib/brain-page.ts) with the notebook
 // server (notebook/core/identity-shelf.mjs). Every change goes to /api/identity/*, which writes the
 // file, keeps the earlier version and answers with what the file holds afterwards.
@@ -161,14 +163,13 @@ export const plainInline = (text?: string | null) => String(text ?? "")
   .replace(/^[*_]+(?=\S)/, "").replace(/(?<=\S)[*_]+(…?)$/, "$1");
 // When a version was made, in the reader's own words and clock.
 export function whenLabel(at: string, now = new Date()): string {
-  const date = new Date(at);
-  if (Number.isNaN(date.getTime())) return "at an unknown time";
-  const sameDay = date.toDateString() === now.toDateString();
-  const time = date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  if (sameDay) return "today at " + time;
+  const date = parseInstant(at);
+  if (!date) return "at an unknown time";
+  const time = localTimeHM(date);
+  if (localDateISO(date) === localDateISO(now)) return "today at " + time;
   const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return "yesterday at " + time;
-  return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: date.getFullYear() === now.getFullYear() ? undefined : "numeric" }) + " at " + time;
+  if (localDateISO(date) === localDateISO(yesterday)) return "yesterday at " + time;
+  return showDate(date, "date") + " at " + localTimeHM(date);
 }
 // What a version says about the change, without the machinery.
 export function versionLine(v: Version): string {

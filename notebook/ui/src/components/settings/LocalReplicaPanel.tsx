@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { showToast } from "@/lib/toast";
 import { HardDrive, RefreshCw, Wrench } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { showDate } from "@/lib/local-date";
 
 /**
  * Local replica health for the local-first (desktop / offline-core) path.
@@ -80,7 +80,7 @@ export function LocalReplicaPanel() {
           <span>
             Last sync:{" "}
             {data?.lastSyncedAt
-              ? formatDistanceToNow(new Date(data.lastSyncedAt), { addSuffix: true })
+              ? showDate(data.lastSyncedAt, "ago")
               : "unknown"}
           </span>
           <span>Pending uploads: {data?.pendingUploads ?? 0}</span>

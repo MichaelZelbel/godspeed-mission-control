@@ -18,7 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { showToast } from "@/lib/toast";
 import { dbErrorMessage, functionErrorMessage } from "@/lib/function-error";
-import { localDateISO, parseDateOnly } from "@/lib/local-date";
+import { localDateISO, showDate } from "@/lib/local-date";
 import { triggerCreditsRefresh } from "@/lib/credits-events";
 
 const PRIORITIES = ["low", "normal", "high", "urgent"] as const;
@@ -114,7 +114,7 @@ export function NextStepsSection({ group, membership }: { group: ContactGroup; m
               <div className="space-y-4">
                 <div className="space-y-2"><Label>Title</Label><Input value={form.title} onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))} placeholder="Follow up about the proposal" /></div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2"><Label>Due date</Label><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !dueDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{dueDate ? dueDate.toLocaleDateString() : "Pick a date"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={dueDate} onSelect={setDueDate} initialFocus /></PopoverContent></Popover></div>
+                  <div className="space-y-2"><Label>Due date</Label><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !dueDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{dueDate ? showDate(dueDate, "day") : "Pick a date"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={dueDate} onSelect={setDueDate} initialFocus /></PopoverContent></Popover></div>
                   <div className="space-y-2"><Label>Priority</Label><Select value={form.priority} onValueChange={(priority) => setForm((current) => ({ ...current, priority }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PRIORITIES.map((priority) => <SelectItem key={priority} value={priority} className="capitalize">{priority}</SelectItem>)}</SelectContent></Select></div>
                 </div>
                 <div className="space-y-2"><Label>Notes</Label><Textarea value={form.notes} onChange={(e) => setForm((current) => ({ ...current, notes: e.target.value }))} className="min-h-24" /></div>
@@ -126,7 +126,7 @@ export function NextStepsSection({ group, membership }: { group: ContactGroup; m
       </div>
       <div className="min-h-6">
         {isLoading ? <div className="flex h-6 items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Loading next steps...</div> : nextSteps.length === 0 ? <p className="text-sm leading-6 text-muted-foreground">No next steps yet.</p> : (
-          <div className="space-y-2">{nextSteps.map((item) => <button key={item.id} type="button" onClick={() => navigate("/dashboard/actions")} className="block w-full rounded-md border p-3 text-left text-sm hover:bg-accent"><span className="font-medium">{item.content.split("\n")[0]}</span><span className="mt-2 flex flex-wrap gap-2"><Badge variant="secondary" className="text-[10px] capitalize">{item.status}</Badge><Badge variant="outline" className="text-[10px] capitalize">{item.priority}</Badge>{item.due_date && <Badge variant="outline" className="text-[10px]">{parseDateOnly(item.due_date)?.toLocaleDateString()}</Badge>}</span></button>)}</div>
+          <div className="space-y-2">{nextSteps.map((item) => <button key={item.id} type="button" onClick={() => navigate("/dashboard/actions")} className="block w-full rounded-md border p-3 text-left text-sm hover:bg-accent"><span className="font-medium">{item.content.split("\n")[0]}</span><span className="mt-2 flex flex-wrap gap-2"><Badge variant="secondary" className="text-[10px] capitalize">{item.status}</Badge><Badge variant="outline" className="text-[10px] capitalize">{item.priority}</Badge>{item.due_date && <Badge variant="outline" className="text-[10px]">{showDate(item.due_date, "day")}</Badge>}</span></button>)}</div>
         )}
       </div>
     </div>

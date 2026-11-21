@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { formatDistanceToNow } from "date-fns";
+import { showDate } from "@/lib/local-date";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,7 +57,7 @@ const STATE_LABELS: Record<string, string> = {
   failed: "Failed",
 };
 
-const ago = (iso: string) => formatDistanceToNow(new Date(iso), { addSuffix: true });
+const ago = (iso: string) => showDate(iso, "ago");
 
 function stateVariant(state?: string): "default" | "secondary" | "destructive" | "outline" {
   if (state === "working") return "default";

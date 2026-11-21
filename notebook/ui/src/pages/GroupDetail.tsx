@@ -31,7 +31,8 @@ import { useArchiveGroup, useGroup, useRestoreGroup, useTrashGroup, useUpdateGro
 import { useGroupMemberships, useMoveMembershipStage } from "@/hooks/useGroupMemberships";
 import { toast } from "sonner";
 import { showToast } from "@/lib/toast";
-import { parseArray, pretty, relativeDate, shortDate } from "@/lib/group-utils";
+import { parseArray, pretty, relativeDate } from "@/lib/group-utils";
+import { showDate } from "@/lib/local-date";
 import { AddMemberDialog } from "@/components/groups/AddMemberDialog";
 import { BriefingTab } from "@/components/groups/BriefingTab";
 import { GoalsTab } from "@/components/groups/GoalsTab";
@@ -182,7 +183,7 @@ export default function GroupDetail() {
           </AlertDialog>
         </div>
       </div>
-      <div className="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Badge variant="secondary">{pretty(group.type)}</Badge><span>{memberships.length} member{memberships.length === 1 ? "" : "s"}</span><span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" />Created on {new Date(group.created_at).toLocaleDateString()}</span></div>
+      <div className="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Badge variant="secondary">{pretty(group.type)}</Badge><span>{memberships.length} member{memberships.length === 1 ? "" : "s"}</span><span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" />Created on {showDate(group.created_at, "date")}</span></div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex h-auto flex-wrap">{hasPipeline && <TabsTrigger value="pipeline">Pipeline</TabsTrigger>}<TabsTrigger value="briefing">Briefing</TabsTrigger><TabsTrigger value="list">List</TabsTrigger><TabsTrigger value="goals">Goals</TabsTrigger><TabsTrigger value="about">About</TabsTrigger></TabsList>
@@ -200,7 +201,7 @@ export default function GroupDetail() {
           <BriefingTab groupId={group.id} />
         </TabsContent>
         <TabsContent value="list" className="mt-0">
-          <Card><Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Status</TableHead><TableHead>Priority</TableHead><TableHead>Joined</TableHead><TableHead>Last Movement</TableHead><TableHead>Reason</TableHead></TableRow></TableHeader><TableBody>{memberships.map((membership) => <TableRow key={membership.id} className="cursor-pointer" onClick={() => setSelectedMembershipId(membership.id)}><TableCell className="font-medium">{/* A button, so the row is reachable with Tab and opens with Enter. */}<button type="button" className="rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={(event) => { event.stopPropagation(); setSelectedMembershipId(membership.id); }}>{membership.contacts?.name || "Unknown"}</button></TableCell><TableCell>{stages.find((s) => s.id === membership.status)?.label || membership.status}</TableCell><TableCell><Badge variant="secondary" className="capitalize">{membership.priority}</Badge></TableCell><TableCell>{shortDate(membership.joined_at)}</TableCell><TableCell>{relativeDate(membership.last_movement_at)}</TableCell><TableCell className="max-w-48 truncate">{membership.reason || "—"}</TableCell></TableRow>)}</TableBody></Table></Card>
+          <Card><Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Status</TableHead><TableHead>Priority</TableHead><TableHead>Joined</TableHead><TableHead>Last Movement</TableHead><TableHead>Reason</TableHead></TableRow></TableHeader><TableBody>{memberships.map((membership) => <TableRow key={membership.id} className="cursor-pointer" onClick={() => setSelectedMembershipId(membership.id)}><TableCell className="font-medium">{/* A button, so the row is reachable with Tab and opens with Enter. */}<button type="button" className="rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={(event) => { event.stopPropagation(); setSelectedMembershipId(membership.id); }}>{membership.contacts?.name || "Unknown"}</button></TableCell><TableCell>{stages.find((s) => s.id === membership.status)?.label || membership.status}</TableCell><TableCell><Badge variant="secondary" className="capitalize">{membership.priority}</Badge></TableCell><TableCell>{showDate(membership.joined_at, "date")}</TableCell><TableCell>{relativeDate(membership.last_movement_at)}</TableCell><TableCell className="max-w-48 truncate">{membership.reason || "—"}</TableCell></TableRow>)}</TableBody></Table></Card>
         </TabsContent>
         <TabsContent value="goals" className="mt-0">
           <GoalsTab group={group} />

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { localDateISO } from "@/lib/local-date";
+import { localDateISO, parseInstant } from "@/lib/local-date";
 
 export type GroupPulseItem = {
   id: string;
@@ -36,8 +36,8 @@ export function useGroupPulse() {
       return (groups || []).map((group) => {
         const groupMemberships = (memberships || []).filter((membership) => membership.group_id === group.id);
         const groupActions = ((actions || []) as any[]).filter((action) => action.metadata?.group_id === group.id);
-        const lastMovement = Math.max(new Date(group.updated_at).getTime(), ...groupMemberships.map((membership) => new Date(membership.last_movement_at).getTime()));
-        return { id: group.id, name: group.name, slug: group.slug, icon: group.icon, memberCount: groupMemberships.length, staleCount: groupMemberships.filter((membership) => new Date(membership.last_movement_at).getTime() < staleCutoff).length, dueThisWeek: groupActions.length, lastActivity: lastMovement };
+        const lastMovement = Math.max(parseInstant(group.updated_at)?.getTime() ?? 0, ...groupMemberships.map((membership) => parseInstant(membership.last_movement_at)?.getTime() ?? 0));
+        return { id: group.id, name: group.name, slug: group.slug, icon: group.icon, memberCount: groupMemberships.length, staleCount: groupMemberships.filter((membership) => (parseInstant(membership.last_movement_at)?.getTime() ?? 0) < staleCutoff).length, dueThisWeek: groupActions.length, lastActivity: lastMovement };
       }).sort((a, b) => b.lastActivity - a.lastActivity).slice(0, 3);
     },
   });

@@ -4,6 +4,7 @@ import {useQuery,useQueryClient} from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import {CartesianGrid,Line,LineChart,ResponsiveContainer,Tooltip,XAxis,YAxis} from 'recharts';
 import {AlertTriangle,CheckCircle2,CircleDashed,Clock,Send,XCircle} from 'lucide-react';
+import {parseInstant,showDate} from '@/lib/local-date';
 import {SEOHead} from '@/components/SEOHead';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
@@ -27,9 +28,9 @@ type Routine={next_run:string|null;last_run:string|null;last_status:string|null;
 type Overview={today:string;decision:{day:string;today:boolean;finished:boolean;for_you:string}|null;routines:Record<string,Routine>;going_out:{n:number;id:string;what:string;goal:string;at:string;shown:boolean}[];goals:Goal[];ai:{available:boolean;source?:string;key?:boolean|null;check?:{ok:boolean;error?:string}|null}};
 async function request(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 
-const day=(d?:string|null)=>{if(!d)return '';const t=new Date(d.length===10?d+'T12:00:00':d);return isNaN(t.getTime())?d:t.toLocaleDateString(undefined,{day:'numeric',month:'long'});};
-const shortDay=(d:string)=>{const t=new Date(d+'T12:00:00');return isNaN(t.getTime())?d:t.toLocaleDateString(undefined,{day:'numeric',month:'short'});};
-const moment=(d?:string|null)=>{if(!d)return '';const t=new Date(d);return isNaN(t.getTime())?d:t.toLocaleString(undefined,{weekday:'long',hour:'2-digit',minute:'2-digit'});};
+const day=(d?:string|null)=>{if(!d)return '';return showDate(d,'day');};
+const shortDay=(d:string)=>showDate(d,'day');
+const moment=(d?:string|null)=>{if(!d)return '';return showDate(d,'time');};
 // GOES OUT is written in UTC as YYYY-MM-DDTHH:MM.
 const goesOut=(at:string)=>moment(at.length===16?at+':00Z':at);
 const number=(v:number)=>v.toLocaleString();
@@ -50,7 +51,7 @@ function workState(w:Work):{icon:JSX.Element;text:string}{
 }
 
 function Readings({goal}:{goal:Goal}){
-  const rs=goal.readings,lastReading=rs.at(-1),weekBefore=lastReading?[...rs].reverse().find(r=>(Date.parse(lastReading.date)-Date.parse(r.date))/86400000>=7):undefined;
+  const rs=goal.readings,lastReading=rs.at(-1),weekBefore=lastReading?[...rs].reverse().find(r=>((parseInstant(lastReading.date)?.getTime()??NaN)-(parseInstant(r.date)?.getTime()??NaN))/86400000>=7):undefined;
   if(!lastReading)return <p className="text-sm text-muted-foreground">Not read yet. The morning decision reads it, or you tell it below.</p>;
   return <div className="space-y-3">
     <p><span className="text-3xl font-semibold font-display tabular-nums">{number(lastReading.value)}</span> <span className="text-sm text-muted-foreground">on {day(lastReading.date)}{weekBefore?', '+(lastReading.value-weekBefore.value>=0?'up ':'down ')+number(Math.abs(lastReading.value-weekBefore.value))+' since '+day(weekBefore.date):''}</span></p>
