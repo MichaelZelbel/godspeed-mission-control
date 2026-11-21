@@ -37,14 +37,17 @@ export function hashProblems(list,root){
 
 // The files a copy holds on disk, as paths relative to the copy. Where a repository answers —
 // this repository for the real copies, one a fixture builds for the git case below — git is asked
-// exactly as vendor-addons.py --check asks it, so files the repository ignores (node_modules,
-// __pycache__) do not count as part of a copy, a file committed here is found before it is staged,
-// and a file a re-pin dropped is not reported while its deletion is still unstaged; a folder with
-// no repository is walked instead. The walk is mapped to the separators pin.files is written in.
+// the query vendor-addons.py --check asks, with `-z` so paths are never C-quoted and a hand-added
+// file whose name git quotes is still enumerated. The child's locale is pinned to `C` so the
+// not-a-repository fallback is detected in git's untranslated message, whatever catalog the
+// machine has. There, files the repository ignores (node_modules, __pycache__) do not count as
+// part of a copy, a file committed here is found before it is staged, and a file a re-pin dropped
+// is not reported while its deletion is still unstaged; a folder with no repository is walked
+// instead. The walk is mapped to the separators pin.files is written in.
 function copyFiles(root,name){
- const listed=spawnSync('git',['ls-files','--cached','--others','--exclude-standard','--',name],{cwd:root});
+ const listed=spawnSync('git',['ls-files','-z','--cached','--others','--exclude-standard','--',name],{cwd:root,env:{...process.env,LC_ALL:'C'}});
  if(listed.error)throw listed.error;
- if(listed.status===0)return listed.stdout.toString().split('\n').filter(Boolean).map(file=>file.slice(name.length+1)).filter(file=>fs.existsSync(path.join(root,name,file)));
+ if(listed.status===0)return listed.stdout.toString().split('\0').filter(Boolean).map(file=>file.slice(name.length+1)).filter(file=>fs.existsSync(path.join(root,name,file)));
  if(!/not a git repository/i.test(listed.stderr.toString()))throw new Error(listed.stderr.toString());
  return fs.readdirSync(path.join(root,name),{recursive:true}).filter(file=>fs.statSync(path.join(root,name,file)).isFile()).map(file=>file.replaceAll('\\','/'));
 }
@@ -114,9 +117,13 @@ test('the git answer the real gate relies on names committed and added extras an
  f.pin.files=f.pin.files.filter(file=>file!=='lib/gone.mjs');
  delete f.pin.hashes['lib/gone.mjs'];
  fs.writeFileSync(path.join(f.root,'pinned-add-on/lib/untracked.mjs'),'added here by hand');
+ fs.writeFileSync(path.join(f.root,'pinned-add-on/lib/café notes.md'),'added here by hand');
+ fs.writeFileSync(path.join(f.root,'pinned-add-on/lib/say "hi".md'),'added here by hand');
  fs.writeFileSync(path.join(f.root,'pinned-add-on/lib/skipped.mjs'),'build output');
  assert.deepEqual(hashProblems(f.pins,f.root).sort(),[
+  'pinned-add-on/lib/café notes.md is present in the copy but is not among the files the add-on carries.',
   'pinned-add-on/lib/committed.mjs is present in the copy but is not among the files the add-on carries.',
+  'pinned-add-on/lib/say "hi".md is present in the copy but is not among the files the add-on carries.',
   'pinned-add-on/lib/untracked.mjs is present in the copy but is not among the files the add-on carries.'
  ]);
  assert.match(hashReport(f.pins,f.root),/own repository/);
