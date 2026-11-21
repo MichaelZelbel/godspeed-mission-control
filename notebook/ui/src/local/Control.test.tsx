@@ -17,7 +17,10 @@ vi.mock("./Notifications", () => ({ Notifications: () => null }));
 vi.mock("@/components/settings/AboutTab", () => ({ AboutTab: () => null }));
 vi.mock("./PersonalControl", () => ({ PersonalControl: () => null }));
 vi.mock("./MeaningSearch", () => ({ MeaningSearch: () => null }));
-vi.mock("./ConnectTelegram", () => ({ TelegramConnect: () => null, telegramStatus: async () => ({ available: false }), telegramUnavailable: "Telegram cannot be connected on this notebook." }));
+// The Telegram status the mocked ConnectTelegram module answers with; tests that need a reason
+// in it (issue #919) set telegramStatusData.value before rendering.
+const telegramStatusData = vi.hoisted(() => ({ value: { available: false } as Record<string, unknown> }));
+vi.mock("./ConnectTelegram", () => ({ TelegramConnect: () => null, telegramStatus: async () => telegramStatusData.value, telegramUnavailable: "Telegram cannot be connected on this notebook.", telegramSwitchedOff: "The person who runs this server has switched Telegram off; asking them to switch it on is the way to get it here." }));
 vi.mock("./RecordSync", () => ({ RecordSyncForm: () => null }));
 const scrolled: string[] = [];
 Element.prototype.scrollIntoView = function () { scrolled.push((this as Element).id); };
@@ -83,6 +86,26 @@ describe("New rules in Settings", () => {
     expect(choice("Add new rules automatically").checked).toBe(false);
     choice("Add new rules automatically").click();
     await waitFor(() => expect((fetch as ReturnType<typeof vi.fn>).mock.calls.some(([url, init]) => url === "/api/identity/rules-setting" && init?.method === "POST" && init.body === JSON.stringify({ new_rules: "automatic" }))).toBe(true), WAIT);
+  });
+});
+
+// Issue #919: where the server's operator switched Telegram off, the section says to ask them
+// instead of naming the installer, which would not turn Telegram on there. Where the assistant
+// does not run the notebook, #917's installer sentence stays.
+describe("The Telegram section where Telegram cannot be connected", () => {
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); telegramStatusData.value = { available: false }; });
+
+  it("says the operator switched Telegram off, and not the installer advice, when the status says so", async () => {
+    telegramStatusData.value = { available: false, managed: null, connected: false, phase: "none", reason: "switched-off" };
+    const { findByText, queryByText } = settings("/dashboard/settings");
+    expect(await findByText(/switched Telegram off/, undefined, WAIT)).toBeInTheDocument();
+    expect(queryByText("Telegram cannot be connected on this notebook.")).toBeNull();
+  });
+
+  it("keeps the installer advice where the assistant does not run the notebook", async () => {
+    telegramStatusData.value = { available: false, managed: null, connected: false, phase: "none", reason: "no-assistant" };
+    const { findByText } = settings("/dashboard/settings");
+    expect(await findByText("Telegram cannot be connected on this notebook.", undefined, WAIT)).toBeInTheDocument();
   });
 });
 
