@@ -145,7 +145,7 @@ export default function GroupDetail() {
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/groups")} className="mb-3"><ArrowLeft className="mr-1 h-4 w-4" />Back to Groups</Button>
-          <div className="flex items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><GroupIcon icon={group.icon} /></div><h1 className="break-words text-2xl font-display font-bold sm:truncate">{group.name}</h1></div>
+          <div className="flex items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><GroupIcon icon={group.icon} /></div>{/* min-w-0 lets the h1 shrink below its longest word, so break-words can wrap a name that is one long word (#871). */}<h1 className="min-w-0 break-words text-2xl font-display font-bold sm:truncate">{group.name}</h1></div>
         </div>
         <div className="flex flex-wrap shrink-0 items-center gap-2">
           <AddMemberDialog group={group} existingPersonIds={existingPersonIds} />
