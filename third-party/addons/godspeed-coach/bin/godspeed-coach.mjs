@@ -293,14 +293,20 @@ const commands = {
       if (f["issues-out"]) fs.writeFileSync(path.resolve(f["issues-out"]), issues.map((x) => `- ${x}\n`).join(""));
       out(`not sealed: ${problem}`, { ok: false, problem, issues }); process.exitCode = 1;
     };
-    const run = await captureRun({ marker: f.marker, startedMs: Date.parse(f.started), finishedMs: Date.parse(f.finished) });
-    if (run.problem) return fail(`the review run: ${run.problem}`, ["The review could not be checked: " + run.problem]);
+    // Where the area names no research domains no review is needed (lib/prep-evidence.mjs): the
+    // seal asks the gate alone, and the reviewer's record, its answer and the evidence are not
+    // part of that — prep-check and prep-seal say the same thing about one preparation.
+    const reviewed = researchDomains(a).length > 0;
+    const run = reviewed ? await captureRun({ marker: f.marker, startedMs: Date.parse(f.started), finishedMs: Date.parse(f.finished) }) : null;
+    if (run?.problem) return fail(`the review run: ${run.problem}`, ["The review could not be checked: " + run.problem]);
     let answer = "";
     try { answer = fs.readFileSync(path.resolve(f.answer), "utf8"); } catch { /* none */ }
     const r = sealReview({ prepFile: prepFile(a, d), area: a, evidenceFile: path.resolve(f.evidence), answer, out: path.resolve(f.out),
-      reviewer: { ...run, marker: f.marker }, reviewedAt: run.finished_at, now: at });
+      reviewer: run ? { ...run, marker: f.marker } : null, reviewedAt: run?.finished_at, now: at });
     if (r.problem) return fail(r.problem, r.issues);
-    out(`sealed: the review passed, ${r.review.coverage.length} domains and goals judged`, { ok: true, coverage: r.review.coverage.length });
+    out(reviewed ? `sealed: the review passed, ${r.review.coverage.length} domains and goals judged`
+      : "sealed: no independent review is needed for this area, the preparation is ready as it stands",
+      { ok: true, coverage: r.review?.coverage?.length ?? 0 });
   },
   gate() {
     pullQuietly(mcDir, syncMode);
