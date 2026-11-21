@@ -9,8 +9,10 @@ import { WAIT } from "@/test/wait-limits";
 
 // Issue #879 (21 November 2026): the note toolbar's icon buttons carried only
 // a `title`, no `aria-label`, so tabbing to them reached a button with an
-// empty name. These render the note editor and check every button that has a
-// tooltip also has an accessible name, saying the same as the tooltip.
+// empty name. These render the note editor and check that every button in it
+// has an accessible name, and that every button with a tooltip says the same
+// as its tooltip - including the tooltips that change with the note's state
+// (favorited, pinned, Markdown source).
 //
 // The name here is what a screen reader says from the button's own markup:
 // aria-labelledby, then aria-label, then the button's text. A `title` is
@@ -84,15 +86,17 @@ function accessibleName(button: HTMLButtonElement): string {
   return (button.textContent ?? "").trim();
 }
 
-/** Every button with a tooltip is named, and named the same as its tooltip. */
+/** Every button in scope is named; every button with a tooltip is named the same as its tooltip. */
 function expectEveryTooltipNamed(scope: Element, where: string, atLeast: number) {
-  const buttons = Array.from(scope.querySelectorAll<HTMLButtonElement>("button[title]"));
-  expect(buttons.length, `${where}: only ${buttons.length} titled buttons found`).toBeGreaterThanOrEqual(atLeast);
+  const buttons = Array.from(scope.querySelectorAll<HTMLButtonElement>("button"));
+  expect(buttons.length, `${where}: only ${buttons.length} buttons found`).toBeGreaterThanOrEqual(atLeast);
   for (const button of buttons) {
-    const title = button.getAttribute("title")!.trim();
     const name = accessibleName(button);
-    expect(name, `${where}: the button with tooltip "${title}" has no accessible name: ${button.outerHTML.slice(0, 200)}`).not.toBe("");
-    expect(name, `${where}: the button with tooltip "${title}" says "${name}" instead: ${button.outerHTML.slice(0, 200)}`).toBe(title);
+    expect(name, `${where}: a button has no accessible name: ${button.outerHTML.slice(0, 200)}`).not.toBe("");
+    const title = button.getAttribute("title")?.trim();
+    if (title !== undefined) {
+      expect(name, `${where}: the button with tooltip "${title}" says "${name}" instead: ${button.outerHTML.slice(0, 200)}`).toBe(title);
+    }
   }
 }
 
@@ -124,5 +128,13 @@ describe("Every icon button in the note toolbar has an accessible name (#879)", 
     fireEvent.click(await screen.findByRole("menuitem", { name: "Markdown source" }, WAIT));
     await waitFor(() => expect(container.querySelector('button[title="Rich text mode"]')).not.toBeNull());
     expectEveryTooltipNamed(container, "Markdown-source note toolbar", 3);
+  }, 60_000);
+
+  it("a favorited, pinned note, with its state-dependent names", async () => {
+    const id = await seedNote({ title: "Daily plan", content: "Water the plants.", is_favorite: true, is_pinned: true });
+    const { container } = await openNote(id);
+    await waitFor(() => expect(container.querySelector('button[title="Remove from favorites"]')).not.toBeNull());
+    await waitFor(() => expect(container.querySelector('button[title="Unpin"]')).not.toBeNull());
+    expectEveryTooltipNamed(container, "favorited note toolbar", 6);
   }, 60_000);
 });
