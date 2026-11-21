@@ -158,6 +158,24 @@ test('a check still running for the AI that was replaced does not turn the new o
  rejectCheck(new Error('Fictional old provider failure'));await reading;
  assert.equal((await notebook.status()).runtimeConfigured,true);
 });
+// The connect path's own connection test just answered, so the next reader asks the free key
+// endpoint at most five seconds later, not the AI again at once (#590, #764).
+test('the AI just connected is not asked again before five seconds',async t=>{
+ let now=1_000_000;const asks=[];
+ const endpoint=http.createServer(async(req,res)=>{for await(const chunk of req);asks.push(req.method);res.statusCode=200;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(req.method==='POST'?{choices:[{message:{content:'Connected.'}}]}:{}));});
+ await new Promise(resolve=>endpoint.listen(0,'127.0.0.1',resolve));
+ t.after(()=>new Promise(resolve=>endpoint.close(()=>resolve())));
+ t.mock.method(Date,'now',()=>now);
+ const {readOptions,base}=await optionsFrom(t,undefined,{defer:true});
+ const connected=await fetch(base+'/api/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'http://127.0.0.1:'+endpoint.address().port,key:'fictional-key',model:'fictional-model'})});
+ assert.equal(connected.status,200,await connected.clone().text());
+ assert.deepEqual(asks,['POST'],'only the connection test has asked');
+ const ready=await readOptions();assert.equal(ready.usable,true);assert.equal(ready.availability,'ready');
+ assert.deepEqual(asks,['POST'],'the reader right after connecting does not ask the AI again');
+ now+=5000;
+ await readOptions();
+ assert.deepEqual(asks,['POST','GET','GET'],'five seconds later the check asks the free key endpoint');
+});
 // #590: a real provider stand-in, connected through Settings, steps through every state. Each step
 // is read the way the chats, their pickers and the Dashboard card read it (/api/chat/options), and
 // a chat send says the same thing. A provider that stops answering is stalled within about five
