@@ -36,11 +36,15 @@ export class TelegramConnection{
   // On a server whose operator set the bot in its environment, or switched Telegram off,
   // the page has nothing to connect. So does any install the supervisor does not run.
   get available(){return !!this.dir&&this.originalRuntime&&!['on','off'].includes(this.mode);}
+  // Why the page cannot connect (issue #919): the operator switched Telegram off, or the
+  // assistant does not run this notebook (no GODSPEED_ORIGINAL_RUNTIME or no GODSPEED_TELEGRAM_DIR),
+  // where #917's installer advice is right. The two need different words on the page.
+  get unavailableReason(){return this.mode==='off'?'switched-off':!this.originalRuntime||!this.dir?'no-assistant':null;}
   file(name){return path.join(this.dir,name);}
   read(name){try{return JSON.parse(fs.readFileSync(this.file(name),'utf8'));}catch{return null;}}
   status(){
     if(this.mode==='on'&&this.environmentBot)return {available:false,managed:'environment',connected:true,phase:telegramPhase.ready};
-    if(!this.available)return {available:false,managed:null,connected:false,phase:telegramPhase.none};
+    if(!this.available)return {available:false,managed:null,connected:false,phase:telegramPhase.none,...(this.unavailableReason?{reason:this.unavailableReason}:{})};
     const connection=this.read('connection.json');
     if(!connection?.token)return {available:true,managed:'web',connected:false,phase:telegramPhase.none};
     const setup=this.read('setup.json')||{},mine=String(setup.bot_id||'')===String(connection.bot_id),runner=this.read('runner.json');
