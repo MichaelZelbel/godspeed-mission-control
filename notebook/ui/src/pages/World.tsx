@@ -248,9 +248,9 @@ export default function World() {
                       className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-accent/60"
                     >
                       <span className="min-w-0">
-                        <span className="block truncate">{entityLabel(entity)}</span>
+                        <span className="block break-words">{entityLabel(entity)}</span>
                         {entity.description && (
-                          <span className="block truncate text-xs text-muted-foreground">
+                          <span className="block break-words text-xs text-muted-foreground">
                             {entity.description}
                           </span>
                         )}
@@ -286,9 +286,9 @@ export default function World() {
                       {(event.happened_at || "").slice(0, 10)}
                     </span>
                     <span className="min-w-0">
-                      <span className="block truncate">{event.title}</span>
+                      <span className="block break-words">{event.title}</span>
                       {event.description && (
-                        <span className="block truncate text-xs text-muted-foreground">
+                        <span className="block break-words text-xs text-muted-foreground">
                           {event.description}
                         </span>
                       )}

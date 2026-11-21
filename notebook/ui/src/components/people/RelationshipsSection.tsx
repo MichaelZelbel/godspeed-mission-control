@@ -354,7 +354,7 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
     <div className="rounded-lg border border-border bg-card">
 
       {/* Header - same shape as every other profile section. */}
-      <div className="flex items-center gap-2 px-4 py-2.5 group">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 group">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
@@ -364,7 +364,9 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
         <Users className="h-4 w-4 text-muted-foreground shrink-0" />
-        <span className="font-medium text-sm flex-1 truncate">Relationships</span>
+        {/* The title gets its own row on a phone: at 320 px the row cannot hold the name beside the
+            count and the Add button, and truncating it would hide it (#887). */}
+        <span className="font-medium text-sm flex-auto w-full sm:w-auto truncate">Relationships</span>
         <span className="text-xs text-muted-foreground shrink-0">
           {rows.length === 1 ? "1 person" : `${rows.length} people`}
         </span>

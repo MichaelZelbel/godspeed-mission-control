@@ -41,8 +41,12 @@
   };
   // What a line draws: its glyphs, each run of them measured on its own, so the whitespace around them
   // is not. Chrome counts a wrapped line's trailing space in the line's rect and may end it one layout
-  // step (1/64 px) past the box (#746); that space draws nothing, and a glyph past the box by any amount
-  // is still found.
+  // step (1/64 px) past the box (#746); that space draws nothing. A glyph further than a pixel past a
+  // box is still found. Within a pixel, a box sized exactly to its text (a flex item squeezed to its
+  // longest word) reads that text up to a layout step past the edge under another font or browser
+  // build, though the layout put the text inside and nothing hides it (#887's CI runners), so an
+  // overshoot that close is the same fit measured twice, not a cut.
+  const FIT_NOISE = 1;
   const glyphRects = (el) => {
     const rects = [];
     for (const node of el.childNodes) {
@@ -83,13 +87,16 @@
   // with no part of a letter cut.
   const outside = (text, cut) => {
     const middle = (text.top + text.bottom) / 2;
-    return (cut.x && (text.left < cut.box.left || text.right > cut.box.right))
-      || (cut.y && (middle < cut.box.top || middle > cut.box.bottom));
+    return (cut.x && (text.left < cut.box.left - FIT_NOISE || text.right > cut.box.right + FIT_NOISE))
+      || (cut.y && (middle < cut.box.top - FIT_NOISE || middle > cut.box.bottom + FIT_NOISE));
   };
 
   const TEXT_INPUT = "input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=color])";
   const inputClipped = (input) => {
-    const shown = input.value || input.placeholder;
+    // An enabled input scrolls its own value, so a long value is not cut off; a placeholder sits
+    // in a box nothing has typed into, so there is nothing to scroll it into view with. A disabled
+    // input cannot take focus, so nothing scrolls its value: it is measured like a placeholder.
+    const shown = input.disabled ? (input.value || input.placeholder) : input.placeholder;
     if (!shown) return null;
     const style = getComputedStyle(input);
     const ruler = document.createElement("span");
@@ -104,7 +111,7 @@
     // Not input.clientWidth: on an input Chrome leaves the padding out of it.
     const room = input.getBoundingClientRect().width
       - ["borderLeftWidth", "borderRightWidth", "paddingLeft", "paddingRight"].reduce((sum, key) => sum + parseFloat(style[key]), 0);
-    return need > room ? `${describe(input)}: its text needs ${need.toFixed(1)} px, the box has ${room.toFixed(1)}` : null;
+    return need > room + FIT_NOISE ? `${describe(input)}: its text needs ${need.toFixed(1)} px, the box has ${room.toFixed(1)}` : null;
   };
 
   const elements = [...document.body.querySelectorAll("*")]
@@ -133,17 +140,49 @@
     // In the middle of its scroll areas, as far as they go: text a scroll moves under a sticky header is
     // not drawn under it, text no scroll can bring out is.
     el.scrollIntoView({ block: "center", inline: "center" });
-    for (const text of textRects(el)) {
-      const x = text.left + text.width / 2;
-      const y = text.top + text.height / 2;
-      if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue;
-      let over = null;
-      for (const hit of document.elementsFromPoint(x, y)) {
-        if (hit === el || el.contains(hit) || hit.contains(el)) break;
-        if (paints(hit)) { over = hit; break; }
+    const covered = () => {
+      for (const text of textRects(el)) {
+        const x = text.left + text.width / 2;
+        const y = text.top + text.height / 2;
+        if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue;
+        for (const hit of document.elementsFromPoint(x, y)) {
+          if (hit === el || el.contains(hit) || hit.contains(el)) break;
+          if (paints(hit)) return hit;
+        }
       }
-      if (over) { found.push({ rule: "under another element", element: `${describe(el)} under ${describe(over)}` }); break; }
+      return null;
+    };
+    let over = covered();
+    if (over) {
+      // A sticky cover sits over the top band of its scroller at every scroll; what it hides is only
+      // really buried when no scroll can put the text below it. Try the scroll that puts the element
+      // just under the cover's bottom edge and keep the finding when a line is still covered (#887).
+      let sticky = null;
+      for (let e = over; e && e !== document.body; e = e.parentElement) {
+        const position = getComputedStyle(e).position;
+        if (position === "sticky") { sticky = e; break; }
+        if (position === "fixed") break;
+      }
+      if (sticky) {
+        // The scroller that can move the text is the one the sticky cover sticks within: the nearest
+        // common scroller of the text and the cover. An inner scroller of the text alone cannot move
+        // the text out of the band the cover holds on the page (the person page's chat does this).
+        const scrollersOf = (start) => {
+          const found = [];
+          for (let e = start.parentElement; e && e !== document.body; e = e.parentElement) {
+            if (["auto", "scroll"].includes(getComputedStyle(e).overflowY)) found.push(e);
+          }
+          return found;
+        };
+        const common = scrollersOf(el).find((s) => s.contains(sticky));
+        if (common) {
+          const shift = sticky.getBoundingClientRect().bottom + 1 - el.getBoundingClientRect().top;
+          if (shift > 0) common.scrollTop = Math.max(0, common.scrollTop - shift);
+          over = covered();
+        }
+      }
     }
+    if (over) { found.push({ rule: "under another element", element: `${describe(el)} under ${describe(over)}` }); }
   }
 
   hitAll.remove();

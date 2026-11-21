@@ -303,7 +303,7 @@ export function AboutTab() {
         <h3 className="text-base font-semibold">Help</h3>
         <p>
           The user guide explains every part of Godspeed Mission Control:{" "}
-          <a className="underline" href={GUIDE_URL} target="_blank" rel="noreferrer">godspeedmissioncontrol.com/guide</a>.
+          <a className="underline [overflow-wrap:anywhere]" href={GUIDE_URL} target="_blank" rel="noreferrer">godspeedmissioncontrol.com/guide</a>.
         </p>
         <p>
           What does not work yet, and what to do instead:{" "}

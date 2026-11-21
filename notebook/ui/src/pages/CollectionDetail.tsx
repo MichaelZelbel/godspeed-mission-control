@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { usePanesTogether } from "@/hooks/use-mobile";
 import { format, formatDistanceToNow, isValid, parseISO } from "date-fns";
 import {
   ArrowDown,
@@ -750,7 +751,9 @@ function CollectionItemsTree({
   onMoveItemToFolder,
   onDuplicateItem,
   onDeleteItem,
+  className,
 }: {
+  className?: string;
   collection: Collection | null;
   folders: FolderLite[];
   treeItems: ItemLite[];
@@ -769,12 +772,15 @@ function CollectionItemsTree({
   onDuplicateItem: (itemId: string) => void;
   onDeleteItem: (itemId: string) => void;
 }) {
+  // The same breakpoint the page itself reads below: the tree's own stacked/full classes must
+  // move with the pane pair, not with a second declaration of the width (Tailwind's lg).
+  const stackedTree = !usePanesTogether();
   return (
-    <aside className="flex w-full shrink-0 flex-col border-b bg-background lg:h-full lg:w-80 lg:border-b-0 lg:border-r">
+    <aside className={cn("flex w-full shrink-0 flex-col border-b bg-background", !stackedTree && "h-full w-80 border-b-0 border-r", className)}>
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <CollectionIcon icon={collection?.icon} className="h-4 w-4" />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold font-display">
+          <div className="break-words text-sm font-semibold font-display">
             {collection?.name ?? "Collection"}
           </div>
           {/* The whole collection, not the table's current page (at most 50). */}
@@ -2083,7 +2089,7 @@ function ItemSheet({
       <div className="flex h-full min-h-0 flex-col bg-background">
         <div className="flex items-start justify-between gap-4 border-b px-6 py-4">
           <div className="min-w-0">
-            <h2 className="truncate text-xl font-semibold font-display">{title}</h2>
+            <h2 className="break-words text-xl font-semibold font-display">{title}</h2>
             <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
           </div>
           {!isCreate && item && onDuplicate && (
@@ -2490,6 +2496,9 @@ export default function CollectionDetail() {
 
 function CollectionDetailPage() {
   const { slug, itemId: routeItemId } = useParams<{ slug: string; itemId?: string }>();
+  // The tree beside the detail pane needs a wide window; below PANE_BREAKPOINT an open item takes
+  // the whole pane, as on a phone, where the tree left it unreadably narrow (#887).
+  const stackedTree = !usePanesTogether();
   const { user } = useAuth();
   // Loads depend on the id, not the user object: a token refresh must not
   // reload the page under an open editor.
@@ -3356,7 +3365,7 @@ function CollectionDetailPage() {
     );
 
   return (
-    <div className="flex h-[calc(100dvh-104px)] w-full flex-col overflow-hidden rounded-md border bg-background lg:flex-row">
+    <div className={cn("flex h-[calc(100dvh-104px)] w-full overflow-hidden rounded-md border bg-background", stackedTree ? "flex-col" : "flex-row")}>
       <SEOHead
         title={`${collection?.name ?? "Collection"} - Godspeed Mission Control`}
         noIndex
@@ -3379,11 +3388,16 @@ function CollectionDetailPage() {
         onMoveItemToFolder={handleMoveItemToFolder}
         onDuplicateItem={handleDuplicateItemFromTree}
         onDeleteItem={handleDeleteItemFromTree}
+        // The tree beside the detail needs a wide window; below PANE_BREAKPOINT an open item takes
+        // the whole pane, as on a phone, and the breadcrumb's collection link leads back (#887).
+        // With no item open the tree stacks above the collection view, which keeps every header
+        // control reachable on a phone.
+        className={stackedTree && routeItemId ? "hidden" : undefined}
       />
       <section className="min-w-0 flex-1 overflow-y-auto p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">
+          <p className="break-words text-sm text-muted-foreground">
             <Link to="/collections" className="hover:text-foreground">
               Collections
             </Link>{" "}
@@ -3406,7 +3420,7 @@ function CollectionDetailPage() {
           </p>
           {!selectedItem && (
             <>
-              <h1 className="mt-2 text-3xl font-bold font-display">
+              <h1 className="mt-2 break-words text-3xl font-bold font-display">
                 <CollectionIcon
                   icon={collection?.icon}
                   className="mr-2 inline-flex h-8 w-8 align-[-0.15em]"
@@ -3566,7 +3580,8 @@ function CollectionDetailPage() {
                   setSort(value as SortKey);
                 }}
               >
-                <SelectTrigger className="w-44">
+                {/* aria-label: the trigger shows the chosen sort, and without a name the check reads none (#887). */}
+                <SelectTrigger aria-label="Sort items" className="w-44">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

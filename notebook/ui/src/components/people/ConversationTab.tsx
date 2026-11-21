@@ -96,20 +96,21 @@ export function ConversationTab({ personId, personName, initialContext = "" }: C
     <div className="grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label>Context <span className="text-xs font-normal text-muted-foreground">optional</span></Label>
-          <Textarea value={context} maxLength={5000} rows={10} placeholder="Paste a chat excerpt, diary note, or describe what's happening." onChange={(e) => { const value = e.target.value.slice(0, 5000); setContext(value); debouncedSave({ conversation_context: value }); }} onBlur={() => blurSave({ conversation_context: context })} />
+          <Label htmlFor="conversation-context">Context <span className="text-xs font-normal text-muted-foreground">optional</span></Label>
+          <Textarea id="conversation-context" value={context} maxLength={5000} rows={10} placeholder="Paste a chat excerpt, diary note, or describe what's happening." onChange={(e) => { const value = e.target.value.slice(0, 5000); setContext(value); debouncedSave({ conversation_context: value }); }} onBlur={() => blurSave({ conversation_context: context })} />
           <div className="flex justify-between text-xs text-muted-foreground"><span>Saved to {personName} only</span><span>{context.length} / 5,000</span></div>
         </div>
         <div className="space-y-2">
-          <Label>Your Intent <span className="text-xs font-normal text-muted-foreground">optional</span></Label>
-          <Textarea value={intent} maxLength={800} rows={4} placeholder="What do you want to express or achieve?" onChange={(e) => { const value = e.target.value.slice(0, 800); setIntent(value); debouncedSave({ conversation_intent: value }); }} onBlur={() => blurSave({ conversation_intent: intent })} />
+          <Label htmlFor="conversation-intent">Your Intent <span className="text-xs font-normal text-muted-foreground">optional</span></Label>
+          <Textarea id="conversation-intent" value={intent} maxLength={800} rows={4} placeholder="What do you want to express or achieve?" onChange={(e) => { const value = e.target.value.slice(0, 800); setIntent(value); debouncedSave({ conversation_intent: value }); }} onBlur={() => blurSave({ conversation_intent: intent })} />
           <div className="flex justify-between text-xs text-muted-foreground"><span>Saved to {personName} only</span><span>{intent.length} / 800</span></div>
         </div>
         <Card>
           <CardContent className="space-y-4 pt-4">
             <div className="space-y-2">
-              <Label>Quick Tone</Label>
-              <div className="flex flex-wrap gap-2">
+              {/* A group of buttons, not a field: named as a group, so no label dangles (#887). */}
+              <span id="conversation-quick-tone" className="text-sm font-medium leading-none">Quick Tone</span>
+              <div role="group" aria-labelledby="conversation-quick-tone" className="flex flex-wrap gap-2">
                 {TONES.map((tone) => {
                   const Icon = tone.icon;
                   return <Button key={tone.value} type="button" variant={presetTone === tone.value ? "default" : "outline"} size="sm" className={cn("gap-1.5")} onClick={() => { const next = presetTone === tone.value ? "" : tone.value; setPresetTone(next); save({ conversation_preset_tone: next }); }}><Icon className="h-3.5 w-3.5" />{tone.label}</Button>;
@@ -117,8 +118,8 @@ export function ConversationTab({ personId, personName, initialContext = "" }: C
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Custom Tone</Label>
-              <Input value={customTone} placeholder="Describe your tone" onChange={(e) => { setCustomTone(e.target.value); debouncedSave({ conversation_custom_tone: e.target.value }); }} onBlur={() => blurSave({ conversation_custom_tone: customTone })} />
+              <Label htmlFor="conversation-custom-tone">Custom Tone</Label>
+              <Input id="conversation-custom-tone" value={customTone} placeholder="Describe your tone" onChange={(e) => { setCustomTone(e.target.value); debouncedSave({ conversation_custom_tone: e.target.value }); }} onBlur={() => blurSave({ conversation_custom_tone: customTone })} />
             </div>
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>{lastUpdated ? `Last updated ${new Date(lastUpdated).toLocaleString()}` : "Not saved yet"}</span>

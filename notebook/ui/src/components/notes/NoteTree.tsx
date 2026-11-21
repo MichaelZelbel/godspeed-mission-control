@@ -257,7 +257,7 @@ const FolderRow = memo(function FolderRow({
             }}
             onDrop={(event) => onDrop(node.path, event)}
             className={cn(
-              "flex h-7 w-full items-center gap-1 rounded-md px-2 text-left text-sm transition-colors hover:bg-accent/60",
+              "flex min-h-7 w-full items-center gap-1 rounded-md px-2 text-left text-sm transition-colors hover:bg-accent/60",
               !isRoot && "cursor-grab active:cursor-grabbing",
               isActive && "bg-accent text-accent-foreground",
               dragOverPath === node.path && draggingKey !== `folder:${node.path}` && "ring-2 ring-primary ring-inset bg-primary/10",
@@ -279,7 +279,7 @@ const FolderRow = memo(function FolderRow({
               {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
             </span>
             {isOpen ? <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" /> : <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />}
-            <span className="min-w-0 flex-1 truncate">{isRoot ? "All Notes" : node.name}</span>
+            <span className="min-w-0 flex-1 break-words">{isRoot ? "All Notes" : node.name}</span>
             <span className="text-[10px] text-foreground/80">{node.noteCount}</span>
           </button>
         </ContextMenuTrigger>
@@ -471,7 +471,7 @@ const NoteRow = memo(function NoteRow({
             }
           }}
           className={cn(
-            "group flex h-7 w-full items-center gap-1.5 rounded-md pr-2 text-sm transition-colors hover:bg-accent/60",
+            "group flex min-h-7 w-full items-center gap-1.5 rounded-md pr-2 text-sm transition-colors hover:bg-accent/60",
             canDrag && "cursor-grab active:cursor-grabbing",
             selectedId === note.id && !multiActive && "bg-accent text-accent-foreground",
             isMultiSelected && "bg-primary/10 hover:bg-primary/15",
@@ -495,7 +495,7 @@ const NoteRow = memo(function NoteRow({
             </span>
           )}
           <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate">{note.title || "Untitled"}</span>
+          <span className="min-w-0 flex-1 break-words">{note.title || "Untitled"}</span>
           <span className="hidden text-[10px] text-muted-foreground group-hover:inline">
             {formatDistanceToNow(new Date(note.updated_at), { addSuffix: true })}
           </span>

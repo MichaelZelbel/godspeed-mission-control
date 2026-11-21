@@ -57,9 +57,9 @@ export function RecentPeopleCard() {
                 className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
               >
                 <UserCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="truncate font-medium">{personLabel(person)}</span>
+                <span className="min-w-0 break-words font-medium">{personLabel(person)}</span>
                 {person.relationship && (
-                  <span className="truncate text-xs text-muted-foreground">{person.relationship}</span>
+                  <span className="min-w-0 break-words text-xs text-muted-foreground">{person.relationship}</span>
                 )}
                 {person.updated_at && (
                   <span className="ml-auto whitespace-nowrap text-[10px] text-muted-foreground">

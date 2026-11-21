@@ -35,7 +35,7 @@ import { PersonDocuments } from "@/components/people/PersonDocuments";
 import { PersonGroupsTab } from "@/components/people/PersonGroupsTab";
 import { personLabel } from "@/components/timeline/people";
 import { AiVisibilityButton } from "@/components/common/AiVisibilityButton";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile, usePanesTogether } from "@/hooks/use-mobile";
 import {
   useUpdatePerson,
   useDeletePerson,
@@ -60,6 +60,8 @@ interface PersonDetailProps {
 export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
   const { user } = useAuth();
   const isMobile = useIsMobile();
+  // When the tree is not beside this pane (below PANE_BREAKPOINT), the back button leads to it (#887).
+  const stacked = !usePanesTogether();
   const toggleFavorite = useToggleFavoritePerson();
   const touchPersonViewed = useTouchPersonViewed();
   const updatePerson = useUpdatePerson();
@@ -173,7 +175,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
     <div className="flex h-full min-h-0 flex-col">
       <SEOHead title={`${shownName} - People - Godspeed Mission Control`} noIndex />
 
-      {isMobile && (
+      {stacked && (
         <div className="flex items-center gap-1 border-b border-border px-2 py-1.5 shrink-0">
           <Button
             variant="ghost"
