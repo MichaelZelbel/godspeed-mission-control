@@ -76,7 +76,9 @@ describe("the saved main AI in Settings", () => {
     const calls = serve({ ...supportingRoutes, provider: () => [200, saved], "provider/remove": () => { saved = { configured: false, key: false };return [200, { removed: true, provider: saved, routines: { available: false } }]; } });
     settings();
     fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }, WAIT));
-    expect(await screen.findByRole("alertdialog", { name: "Remove your AI connection?" }, WAIT)).toBeInTheDocument();
+    const confirmation = await screen.findByRole("alertdialog", { name: "Remove your AI connection?" }, WAIT);
+    expect(confirmation).toHaveTextContent("Godspeed forgets its key and stops using this AI. The notebook, the chat and the routines that used it have no AI until you connect one again.");
+    expect(confirmation).not.toHaveTextContent(/can't be read|deletes it/);
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull(), WAIT);
     expect(calls.some(c => c.route === "provider/remove")).toBe(false);
@@ -219,6 +221,8 @@ describe("the saved main AI in Settings", () => {
     const calls = serve({ ...supportingRoutes, provider: () => [500, { error: "The saved AI connection is not valid." }], "provider/remove": () => [200, { removed: true, connected: false, provider: { configured: false, key: false }, routines: { available: false } }] });
     settings();
     fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }, WAIT));
+    // #825: the confirmation says the unreadable file is deleted and no copy is kept.
+    expect(await screen.findByRole("alertdialog", { name: "Remove your AI connection?" }, WAIT)).toHaveTextContent("The saved connection file can't be read, so Godspeed deletes it. No copy of it is kept.");
     fireEvent.click(await screen.findByRole("button", { name: "Remove" }, WAIT));
     expect(await screen.findByText("Removed. No AI is connected now. Connect one here whenever you like.", undefined, WAIT)).toBeInTheDocument();
     expect(calls.filter(c => c.route === "provider/remove")).toEqual([{ route: "provider/remove", body: {} }]);
