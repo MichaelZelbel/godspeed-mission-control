@@ -25,7 +25,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import { READING_TOOLS, researchDomains, servedGoals } from "./prep-evidence.mjs";
+import { READING_TOOLS, needsReview, researchDomains, servedGoals } from "./prep-evidence.mjs";
 import { prepProblem, readPrep } from "./prep.mjs";
 
 const sha = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
@@ -262,12 +262,11 @@ function leaveUncoveredGoalsDraft(prepFile, area, coverage) {
 
 // The review, sealed by the host: written to `out` (a candidate in the run folder), and the gate's
 // answer about it. Returns { review, problem, issues }: problem is null when the talk may open from
-// the pair; issues are what the next try must resolve. An area whose area.md names no research
-// domains is never reviewed at all (lib/prep-evidence.mjs reads no sidecar for it): the seal seals
-// nothing there and asks the gate the same question prep-check asks, so the two say the same thing
-// about one preparation — review is null, and nothing is written, where no review is needed.
+// the pair; issues are what the next try must resolve. Where no review is needed at all (needsReview)
+// the seal seals nothing and asks the gate the same question prep-check asks, so the two say the
+// same thing about one preparation — review is null, and nothing is written, there.
 export function sealReview({ prepFile, area, evidenceFile, answer, reviewer, reviewedAt, out, now = new Date() }) {
-  if (!researchDomains(area).length) {
+  if (!needsReview(area)) {
     const problem = prepProblem(readPrep(prepFile), area, now);
     return { review: null, problem, issues: problem ? [problem.replace(/^its /, "The preparation's ")] : [], uncovered: [] };
   }
