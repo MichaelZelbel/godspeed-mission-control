@@ -140,6 +140,18 @@ describe("the AI switch's message beside the open note", () => {
           const overlaps = m.message.left < m.note.right && m.note.left < m.message.right && m.message.top < m.note.bottom && m.note.top < m.message.bottom;
           if (overlaps) failures.push(`the message lies over the open note ${of}`);
           if (m.message.left < 0 || m.message.top < 0 || m.message.right > width || m.message.bottom > 800) failures.push(`the message runs off the window ${of}`);
+          // The click focuses the switch, and it stays there while the change saves and after it
+          // (its button no longer disables itself, #864), so the next Tab moves on from it.
+          // A keyboard toggle too: Enter on the focused switch shows it again, and the focus stays
+          // on the switch through that change and while it saves.
+          const switchName = (aria: string | null) => aria !== null && SWITCH.test(aria);
+          const focus = await page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? null);
+          if (!switchName(focus)) failures.push(`the click left the switch without the keyboard focus ${of}`);
+          await page.keyboard.press("Enter");
+          await page.getByText(MESSAGE).first().waitFor({ timeout: 10_000 });
+          await settleAnimations(page);
+          const focusAfter = await page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? null);
+          if (!switchName(focusAfter)) failures.push(`the keyboard toggle left the switch without the keyboard focus ${of}`);
         } finally {
           await context.close();
         }
