@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { fetchAiFootprint } from "@/hooks/useAiFootprint";
 import {
@@ -44,7 +43,8 @@ interface Props {
  *  - Eye + "Shown to AI"       = visible to AI (People, AI Chat, MCP)
  *  - EyeOff + "Hidden from AI" = hidden from all AI surfaces
  * Its label says the state and its name the click's effect too: a bare "AI"
- * read like an AI action (#809).
+ * read like an AI action (#809). Its tooltip says the same words as its name,
+ * the way the toolbar's icon buttons do (#890).
  *
  * For `kind="person"` this flips `is_sensitive` (which also cascades to
  * linked notes/moments/actions). For all other kinds it flips
@@ -128,14 +128,6 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
     }
   };
 
-  const tooltip = optimistic
-    ? kind === "person"
-      ? "Hidden from AI. Linked notes & moments are hidden too. Click to make visible."
-      : "Hidden from AI: excluded from People, the Note Graph, AI Chat and MCP. Local search still finds it. Click to make visible."
-    : kind === "person"
-      ? "Visible to AI. Click to hide this person and everything linked to them from all AI features."
-      : "Visible to AI: used in People profiles, the Note Graph, AI Chat, and MCP clients. Click to hide.";
-
   const Icon = pending ? Loader2 : optimistic ? EyeOff : Eye;
   const label = optimistic ? "Hidden from AI" : "Shown to AI";
   const action = optimistic ? "Show to AI again" : "Hide from AI";
@@ -145,36 +137,28 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
       open={confirmation !== null}
       onOpenChange={(open) => { if (!open) setConfirmation(null); }}
     >
-      <TooltipProvider delayDuration={200}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <PopoverPrimitive.Anchor asChild>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onClick}
-                aria-disabled={pending}
-                aria-busy={pending}
-                aria-label={`${label}. ${action}`}
-                className={cn(
-                  "h-7 gap-1.5 px-2 text-xs font-normal aria-disabled:opacity-50 aria-disabled:pointer-events-none",
-                  optimistic
-                    ? "text-muted-foreground border-dashed"
-                    : "text-foreground",
-                  className,
-                )}
-              >
-                <Icon className={cn("h-3.5 w-3.5", pending && "animate-spin")} />
-                {!iconOnly && <span>{label}</span>}
-              </Button>
-            </PopoverPrimitive.Anchor>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-xs">
-            {tooltip}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <PopoverPrimitive.Anchor asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onClick}
+          aria-disabled={pending}
+          aria-busy={pending}
+          title={`${label}. ${action}`}
+          aria-label={`${label}. ${action}`}
+          className={cn(
+            "h-7 gap-1.5 px-2 text-xs font-normal aria-disabled:opacity-50 aria-disabled:pointer-events-none",
+            optimistic
+              ? "text-muted-foreground border-dashed"
+              : "text-foreground",
+            className,
+          )}
+        >
+          <Icon className={cn("h-3.5 w-3.5", pending && "animate-spin")} />
+          {!iconOnly && <span>{label}</span>}
+        </Button>
+      </PopoverPrimitive.Anchor>
       <PopoverPrimitive.Portal>
         {/* Above the switch, its right edge at the switch's, 10px clear of
             it: the toolbar the switch sits in starts 6px above the button. It
