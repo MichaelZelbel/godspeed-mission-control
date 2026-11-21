@@ -880,7 +880,7 @@ export default function Notes() {
                 size="icon"
                 className="h-8 w-7 shrink-0 max-sm:h-11 max-sm:w-11"
                 title={`Sort by ${sortLabels[sortField]}${sortField === "manual" ? "" : sortDirection === "asc" ? ": ascending" : ": descending"}`}
-                aria-label={`Sort notes by ${sortLabels[sortField]}${sortField === "manual" ? "" : sortDirection === "asc" ? ", ascending" : ", descending"}`}
+                aria-label={`Sort by ${sortLabels[sortField]}${sortField === "manual" ? "" : sortDirection === "asc" ? ": ascending" : ": descending"}`}
               >
                 {sortField === "manual" ? <ArrowUpDown className="h-4 w-4" /> : sortDirection === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
               </Button>
@@ -940,7 +940,7 @@ export default function Notes() {
                 variant={hasActiveMetaFilter ? "secondary" : "ghost"}
                 size="icon"
                 className="h-8 w-7 shrink-0 max-sm:h-11 max-sm:w-11"
-                title="Tags & Insights"
+                title="Tags and insights"
                 aria-label="Tags and insights"
               >
                 <Hash className="h-4 w-4" />

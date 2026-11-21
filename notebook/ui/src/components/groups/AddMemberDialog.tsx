@@ -50,7 +50,7 @@ export function AddMemberDialog({ group, existingPersonIds }: { group: ContactGr
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild><Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" /> Add Member</Button></DialogTrigger>
-      <DialogContent>
+      <DialogContent className="grid-cols-1">
         <DialogHeader><DialogTitle>Add Members</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="relative">
@@ -62,7 +62,7 @@ export function AddMemberDialog({ group, existingPersonIds }: { group: ContactGr
               <label key={contact.id} className="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-accent">
                 <Checkbox checked={selected.includes(contact.id)} onCheckedChange={(checked) => setSelected((prev) => checked ? [...prev, contact.id] : prev.filter((id) => id !== contact.id))} />
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">{initials(personLabel(contact))}</span>
-                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{personLabel(contact)}</span><span className="block truncate text-xs text-muted-foreground">{[contact.role, contact.company].filter(Boolean).join(" · ")}</span></span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium" title={personLabel(contact)}>{personLabel(contact)}</span><span className="block truncate text-xs text-muted-foreground">{[contact.role, contact.company].filter(Boolean).join(" · ")}</span></span>
               </label>
             ))}
             {!isLoading && available.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">No available people found.</p>}
