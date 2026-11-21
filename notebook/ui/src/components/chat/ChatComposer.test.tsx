@@ -33,7 +33,7 @@ it('does not let an older options response overwrite a newer live state',async()
 it('refreshes an already-open composer when an AI is connected',async()=>{
  vi.useFakeTimers();let connected=false;
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(connected?{connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}:{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}),{headers:{'Content-Type':'application/json'}})));
- const props=show();await vi.waitFor(()=>expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('Model: No AI connected'), WAIT);
+ const props=show();await vi.waitFor(()=>expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('No AI connected'), WAIT);
  connected=true;await act(()=>vi.advanceTimersByTimeAsync(5000));
  expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('fictional-model');expect(props.onModel).toHaveBeenLastCalledWith('fictional-model');
 });
@@ -44,7 +44,7 @@ it('keeps an open chat notice and picker on the same state after reconnection',a
  const props={value:'',onChange(){},onSend(){},onStop(){},busy:false,files:[],onFiles(){},model:'',effort:'',onModel:vi.fn(),onEffort(){},reply:'',onError(){}};
  render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter><ChatConnectionEmptyState ready={<p>Ready notice</p>}/><ChatComposer {...props}/></MemoryRouter></QueryClientProvider>);
  await vi.waitFor(()=>expect(screen.getByText('Your AI key or sign-in was refused')).toBeInTheDocument(), WAIT);
- expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('Model: Your AI key or sign-in was refused');
+ expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('fictional-model');
  ready=true;await act(()=>vi.advanceTimersByTimeAsync(5000));
  await vi.waitFor(()=>expect(screen.getByText('Ready notice')).toBeInTheDocument(), WAIT);
  expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('fictional-model');
@@ -57,7 +57,7 @@ it('an open chat notice and its picker follow a refusal, an outage and recovery 
  const props={value:'',onChange(){},onSend(){},onStop(){},busy:false,files:[],onFiles(){},model:'',effort:'',onModel:vi.fn(),onEffort(){},reply:'',onError(){}};
  render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter><ChatConnectionEmptyState ready={<p>Ready notice</p>}/><ChatComposer {...props}/></MemoryRouter></QueryClientProvider>);
  await vi.waitFor(()=>expect(screen.getByText('Ready notice')).toBeInTheDocument(), WAIT);
- for(const [next,notice,picker] of [['refused','Your AI key or sign-in was refused','Model: Your AI key or sign-in was refused'],['unreachable','Your AI could not be reached','Model: Your AI could not be reached'],['ready','Ready notice','fictional-model']] as const){
+ for(const [next,notice,picker] of [['refused','Your AI key or sign-in was refused','fictional-model'],['unreachable','Your AI could not be reached','fictional-model'],['ready','Ready notice','fictional-model']] as const){
   state=next;
   // Two seconds, well inside the five the server takes between its own checks: the page reads the
   // shared state each second, and the picker refreshes as soon as that state changes.
@@ -70,7 +70,7 @@ it('an open chat notice and its picker follow a refusal, an outage and recovery 
 it('with no AI connected the model picker says so and both pickers are off',async()=>{
  answer({connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]});show();
  const model=screen.getByRole('combobox',{name:'Model'});
- await waitFor(()=>expect(model).toHaveDisplayValue('Model: No AI connected'), WAIT);
+ await waitFor(()=>expect(model).toHaveDisplayValue('No AI connected'), WAIT);
  expect(model).toBeDisabled();expect(screen.getByRole('combobox',{name:'Reasoning effort'})).toBeDisabled();
  expect(screen.queryByText('Connected model')).not.toBeInTheDocument();
 });
@@ -97,7 +97,7 @@ it('clears an already selected model when the connected AI is unusable',async()=
  await waitFor(()=>expect(props.onModel).toHaveBeenCalledWith(''), WAIT);
  expect(props.onEffort).toHaveBeenCalledWith('');
  rerender(<ChatComposer {...props} model="" effort=""/>);
- expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('Model: Your AI could not be reached');
+ expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('fictional-model');
  expect(screen.getByRole('combobox',{name:'Model'})).toBeDisabled();
 });
 
@@ -105,33 +105,36 @@ it('refreshes an already-open chat when AI availability changes',async()=>{
  vi.useFakeTimers({toFake:['setInterval','clearInterval']});let available=false;
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(available?{connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}:{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]}),{headers:{'Content-Type':'application/json'}})));
  const props=show();
- await waitFor(()=>expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('Model: No AI connected'), WAIT);
+ await waitFor(()=>expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('No AI connected'), WAIT);
  available=true;await act(async()=>{await vi.advanceTimersByTimeAsync(5000);});
  await waitFor(()=>expect(props.onModel).toHaveBeenLastCalledWith('fictional-model'), WAIT);
  expect(screen.getByRole('combobox',{name:'Model'})).toBeEnabled();
 });
 
+// #808: the pickers read "Model: Your AI could not be reached" and "Effort: Your AI could not be
+// reached". They keep naming the model and effort, switched off; the notice above says the state once.
 it.each([
  ['refused','Your AI key or sign-in was refused'],
  ['unreachable','Your AI could not be reached'],
-] as const)('an unusable AI marked %s does not present its model or effort as active',async(availability,label)=>{
+ ['settings-only','Your AI is connected only to the notebook'],
+] as const)('an AI marked %s keeps the model and effort names in its switched-off pickers and says its state once, outside them',async(availability,notice)=>{
  answer({connected:true,usable:false,availability,current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]});
- show();
+ render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter><ChatConnectionEmptyState ready={<p>Ready notice</p>}/><ChatComposer {...{value:'',onChange(){},onSend(){},onStop(){},busy:false,files:[],onFiles(){},model:'',effort:'',onModel(){},onEffort(){},reply:'',onError(){}}}/></MemoryRouter></QueryClientProvider>);
  const model=screen.getByRole('combobox',{name:'Model'}),effort=screen.getByRole('combobox',{name:'Reasoning effort'});
- await waitFor(()=>expect(model).toHaveDisplayValue('Model: '+label), WAIT);
- expect(model).toBeDisabled();expect(effort).toBeDisabled();expect(effort).toHaveDisplayValue('Effort: '+label);
- expect(model.closest('[data-chat-toolbar]')).toHaveAttribute('data-chat-unavailable','true');
- expect(screen.queryByRole('option',{name:'fictional-model'})).not.toBeInTheDocument();
+ await waitFor(()=>expect(model).toHaveDisplayValue('fictional-model'), WAIT);
+ expect(model).toBeDisabled();expect(effort).toBeDisabled();expect(effort).toHaveDisplayValue('Auto');
+ await waitFor(()=>expect(screen.getAllByText(notice)).toHaveLength(1), WAIT);
+ expect(model.closest('[data-chat-toolbar]')).not.toHaveTextContent(/Your AI|refused|could not be reached|Model:|Effort:/);
 });
 
 it.each([
- ['collection chat at 1280 px','Model: No AI connected',{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
+ ['collection chat at 1280 px','No AI connected',{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
  ['collection chat at 1280 px','claude-sonnet-4-5-20250929',{connected:true,current:'claude-sonnet-4-5-20250929',models:[{id:'claude-sonnet-4-5-20250929',efforts:[]}]}],
  ['collection chat at 1280 px','Model choices unavailable',null],
- ['full chat at 1280 px','Model: Your AI could not be reached',{connected:true,usable:false,availability:'unreachable',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
- ['pop-out chat at 720 px','Model: Your AI key or sign-in was refused',{connected:true,usable:false,availability:'refused',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
- ['Settings-only chat at 720 px','Model: Your AI is connected only to the notebook',{connected:true,usable:false,availability:'settings-only',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
- ['floating chat at 375 px','Model: No AI connected',{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
+ ['full chat at 1280 px','fictional-model',{connected:true,usable:false,availability:'unreachable',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
+ ['pop-out chat at 720 px','fictional-model',{connected:true,usable:false,availability:'refused',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
+ ['Settings-only chat at 720 px','fictional-model',{connected:true,usable:false,availability:'settings-only',current:'fictional-model',models:[{id:'fictional-model',efforts:['high']}]}],
+ ['floating chat at 375 px','No AI connected',{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}],
  ['floating chat at 375 px','claude-sonnet-4-5-20250929',{connected:true,current:'claude-sonnet-4-5-20250929',models:[{id:'claude-sonnet-4-5-20250929',efforts:[]}]}],
  ['floating chat at 375 px','Model choices unavailable',null],
 ] as const)('%s leaves the complete current Model label readable in the narrow composer',async(_surface,label,state)=>{
@@ -144,7 +147,6 @@ it.each([
  expect(css).toMatch(/@container \(max-width: 48rem\)[\s\S]*?\[data-chat-toolbar\][\s\S]*?display: grid;[\s\S]*?grid-template-columns: 2\.75rem minmax\(0, 1fr\) auto;/);
  expect(css).toMatch(/@container \(max-width: 48rem\)[\s\S]*?\[data-chat-model\][\s\S]*?grid-column: 1 \/ -1;[\s\S]*?max-width: none;[\s\S]*?width: 100%;/);
  expect(css).toMatch(/@container \(max-width: 48rem\)[\s\S]*?\[data-chat-effort\][\s\S]*?grid-column: 1 \/ -1;[\s\S]*?max-width: none;[\s\S]*?width: 100%;/);
- if(state?.usable===false)expect(css).toMatch(/\[data-chat-toolbar\]\[data-chat-unavailable\][\s\S]*?display: grid;[\s\S]*?\[data-chat-model\][\s\S]*?max-width: none;[\s\S]*?\[data-chat-effort\][\s\S]*?max-width: none;/);
  expect(container.querySelector('[data-chat-toolbar]')).toContainElement(model);
 });
 

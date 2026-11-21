@@ -130,6 +130,13 @@ describe("the Godspeed card", () => {
     expect(screen.queryByText("No AI is connected yet")).toBeNull();
     expect(screen.queryByText(/refused/)).toBeNull();
   });
+  // #808: an AI that took a request and has not answered is said as such, not as an outage.
+  it("says a stalled AI is not answering, not that it could not be reached", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: false } : String(url) === "/api/chat/options" ? { connected: true, usable: false, availability: "stalled" } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("Your AI is not answering", undefined, WAIT)).toBeInTheDocument();
+    expect(screen.queryByText(/could not be reached/)).toBeNull();
+  });
   it("says Connecting only while the status is loading", async () => {
     let answer: (r: Response) => void = () => {};
     vi.stubGlobal("fetch", vi.fn((url: string) => String(url) === "/api/chat/options" ? new Promise<Response>(r => { answer = r; }) : Promise.resolve(new Response(JSON.stringify({ runtimeConfigured: false, assistantProblem: null, show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } }))));

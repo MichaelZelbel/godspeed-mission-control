@@ -160,9 +160,9 @@ test('a check still running for the AI that was replaced does not turn the new o
 });
 // #590: a real provider stand-in, connected through Settings, steps through every state. Each step
 // is read the way the chats, their pickers and the Dashboard card read it (/api/chat/options), and
-// a chat send says the same thing. A provider that stops answering is an outage within about five
-// seconds, not a refusal, and not after the request's own 15 seconds.
-test('refused keys (401, 403) and outages (500, no answer, closed port) are told apart, and recovery shows',async t=>{
+// a chat send says the same thing. A provider that stops answering is stalled within about five
+// seconds, not a refusal or an outage (#808), and not after the request's own 15 seconds.
+test('refused keys (401, 403), outages (500, closed port) and a stall are told apart, and recovery shows',async t=>{
  let mode=200;const held=[];
  const endpoint=http.createServer(async(req,res)=>{for await(const chunk of req);if(mode==='stall'){held.push(res);return;}res.statusCode=mode;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(mode===200?{choices:[{message:{content:JSON.stringify({reply:'Stand-in answer.'})}}]}:{error:{message:'private provider detail'}}));});
  await new Promise(resolve=>endpoint.listen(0,'127.0.0.1',resolve));
@@ -182,10 +182,10 @@ test('refused keys (401, 403) and outages (500, no answer, closed port) are told
   // A chat failure is the newest word on the AI: the next read says the same at once.
   if(expected!=='ready')assert.equal((await readOptions()).availability,expected);
  }
- // The provider stops answering: within about five seconds every reader is told it is an outage.
+ // The provider stops answering: within about five seconds every reader is told it is stalled.
  mode='stall';now+=5000;const started=performance.now();
  const stalled=await readOptions();const waited=performance.now()-started;
- assert.equal(stalled.availability,'unreachable');assert.equal(stalled.usable,false);assert.ok(waited<6000,'answered after '+Math.round(waited)+' ms');
+ assert.equal(stalled.availability,'stalled');assert.equal((await readStatus()).aiAvailability,'stalled');assert.equal(stalled.usable,false);assert.ok(waited<6000,'answered after '+Math.round(waited)+' ms');
  // It answers again: the next check sees it, without waiting for the stalled request to give up.
  mode=200;now+=5000;assert.equal((await readOptions()).availability,'ready');
  // The address goes away entirely: an outage again.
