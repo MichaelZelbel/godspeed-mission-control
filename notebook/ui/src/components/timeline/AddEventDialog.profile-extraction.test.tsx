@@ -50,9 +50,13 @@ describe("moment profile extraction", () => {
     state.providerConfigured = false;
   });
 
-  it("does not request extraction when no AI is available", async () => {
+  it("asks the extraction when the moment is saved even when the tab's picture says no AI, and lets it decide (#812)", async () => {
+    // The connection may have changed while the tab was open, so the decision is the
+    // extraction's, made at save time; with none connected it answers at once, without
+    // asking any AI (core/domains.mjs).
     await saveMoment();
-    expect(invoke).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledOnce();
+    expect(invoke).toHaveBeenCalledWith("extract-moment-profile", { body: { moment_id: "moment-1" } });
   });
 
   it("keeps requesting extraction when AI is available", async () => {
