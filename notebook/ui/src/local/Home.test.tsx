@@ -215,6 +215,13 @@ describe("the Godspeed card", () => {
     const withCheck = chatUrls.filter(url => url.includes("check=1"));
     expect(withCheck).toHaveLength(1);
     expect(chatUrls.indexOf(withCheck[0])).toBeGreaterThan(0);
+    // The confirmed read consumes the chat's evidence, so a later reopen asks for no check, exactly
+    // as the first no-chat arrival does — not one per arrival for the rest of the session.
+    const readsBeforeReopen = chatUrls.length;
+    cleanup();
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
+    await waitFor(() => expect(chatUrls.length).toBeGreaterThan(readsBeforeReopen), WAIT);
+    expect(chatUrls.filter(url => url.includes("check=1"))).toHaveLength(1);
   });
   it("distinguishes an unreachable configured AI from refused credentials", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url).startsWith("/api/chat/options") ? { connected: true, usable: false, availability: "unreachable" } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
