@@ -140,12 +140,14 @@ export default function GroupDetail() {
   return (
     <div className="max-w-5xl">
       <SEOHead title={`${group.name} - Groups - Godspeed Mission Control`} noIndex />
-      <div className="mb-4 flex items-center justify-between gap-3">
+      {/* On a phone the buttons would squeeze the name down to a letter, so below sm the button
+          row drops under the name and the name wraps instead of truncating (#863). */}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/groups")} className="mb-3"><ArrowLeft className="mr-1 h-4 w-4" />Back to Groups</Button>
-          <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary"><GroupIcon icon={group.icon} /></div><h1 className="truncate text-2xl font-display font-bold">{group.name}</h1></div>
+          <div className="flex items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><GroupIcon icon={group.icon} /></div><h1 className="break-words text-2xl font-display font-bold sm:truncate">{group.name}</h1></div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap shrink-0 items-center gap-2">
           <AddMemberDialog group={group} existingPersonIds={existingPersonIds} />
           <Button variant="outline" size="sm" onClick={() => setActiveTab("about")}>Edit</Button>
           {group.archived_at ? (
