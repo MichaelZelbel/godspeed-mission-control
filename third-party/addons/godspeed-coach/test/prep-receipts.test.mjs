@@ -154,7 +154,7 @@ async function sealed({ answer, reviewerSession = "review-session", reviewedAt =
   const r = sealReview({ prepFile: m.file, area, evidenceFile, answer: text, out: reviewFile, now: NOW, reviewedAt,
     reviewer: { marker: newMarker("review"), session_id: reviewerSession, record_sha256: "b".repeat(64), assistant: "claude" } });
   const place = () => { for (const [from, to] of [[evidenceFile, m.file.replace(/\.md$/, ".evidence.json")], [reviewFile, m.file.replace(/\.md$/, ".review.json")]]) fs.copyFileSync(from, to); };
-  return { ...m, r, run, place, gate: () => prepProblem(readPrep(m.file), readArea(m.dir), NOW) };
+  return { ...m, r, run, reviewFile, place, gate: () => prepProblem(readPrep(m.file), readArea(m.dir), NOW) };
 }
 
 test("a passing review, sealed and placed beside the preparation, opens the talk", async () => {
@@ -269,8 +269,25 @@ test("an area with no research domains is not demoted by a review it never neede
   const text = fs.readFileSync(s.file, "utf8");
   assert.doesNotMatch(text, /^STATE: draft$/m);
   assert.doesNotMatch(text, /Independent review left these adopted goals uncovered/);
-  s.place();
+  assert.equal(s.gate(), null, "the gate opens the talk from the preparation alone");
+});
+
+// The two commands must agree where no review is needed: prep-check calls a ready preparation
+// usable, so prep-seal seals it too, without demanding a review answer — and both refuse it with
+// the same reason when the gate refuses it.
+test("an area with no research domains is sealed without a review answer, as prep-check reads it", async () => {
+  const s = await sealed({ answer: "", mission: { domains: false } });
+  assert.equal(s.r.problem, null, "the seal seals what prep-check calls ready");
+  assert.equal(s.r.review, null, "nothing is sealed where no review is needed");
+  assert.equal(fs.existsSync(s.reviewFile), false, "no review file is written");
   assert.equal(s.gate(), null);
+});
+
+test("where no review is needed the seal still refuses a file the gate refuses", async () => {
+  const s = await sealed({ answer: "", mission: { domains: false, state: "draft" } });
+  assert.equal(s.r.problem, "its STATE is draft, not ready");
+  assert.deepEqual(s.r.issues, ["The preparation's STATE is draft, not ready"], "prep-check's reason, in the seal's words");
+  assert.equal(s.gate(), "its STATE is draft, not ready", "the gate refuses the same file");
 });
 
 test("parseReview takes the JSON out of a fence or a sentence", () => {
@@ -303,4 +320,37 @@ test("the coach's prep-receipts and prep-seal commands write the candidates and 
   assert.equal(r3.status, 1);
   assert.match(r3.stdout, /^not sealed: its review was not recorded as an independent execution/);
   assert.match(fs.readFileSync(issues, "utf8"), /^- /);
+});
+
+// The two commands, as the person runs them: prep-check calls a ready preparation usable, so
+// prep-seal seals it too, without demanding a review answer, where the area names no research
+// domains. The seal asks for none of the review artifacts there — the review run's record, its
+// answer, the evidence and the review file are not part of the question it asks the gate.
+test("the coach's prep-seal agrees with prep-check where no review is needed", async () => {
+  const m = mission({ domains: false });
+  const env = { ...process.env, HOME: tmp("home-"), GODSPEED_NOW: NOW.toISOString(), GODSPEED_COACH_GIT_SYNC: "off" };
+  const coach = (...args) => spawnSync(process.execPath, [BIN, ...args, "--godspeed", m.root], { env, encoding: "utf8" });
+  const rundir = path.join(m.root, "routines", "coach-prep", "2026-10-21"), rv = path.join(rundir, "r.json");
+  const check = coach("prep-check", "work", "--date", "2026-10-21");
+  assert.equal(check.status, 0, check.stdout + check.stderr);
+  assert.match(check.stdout, /^ready: /);
+  const r = coach("prep-seal", "work", "--date", "2026-10-21");
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /^sealed: no independent review is needed/);
+  assert.equal(fs.existsSync(rv), false, "no review file is written");
+});
+
+// And the refuse direction, as the person runs it: a no-domain preparation the gate refuses is
+// sealed by nothing, with the same reason prep-check gives — a seal that reported success here
+// would tell the runner the preparation opens the talk while the talk-time gate refuses it.
+test("the coach's prep-seal refuses, as prep-check does, a no-domain preparation the gate refuses", async () => {
+  const m = mission({ domains: false, state: "draft" });
+  const env = { ...process.env, HOME: tmp("home-"), GODSPEED_NOW: NOW.toISOString(), GODSPEED_COACH_GIT_SYNC: "off" };
+  const coach = (...args) => spawnSync(process.execPath, [BIN, ...args, "--godspeed", m.root], { env, encoding: "utf8" });
+  const check = coach("prep-check", "work", "--date", "2026-10-21");
+  assert.equal(check.status, 1, check.stdout + check.stderr);
+  assert.match(check.stdout, /^not ready: .*its STATE is draft, not ready/);
+  const seal = coach("prep-seal", "work", "--date", "2026-10-21");
+  assert.equal(seal.status, 1, seal.stdout + seal.stderr);
+  assert.match(seal.stdout, /^not sealed: its STATE is draft, not ready/);
 });
