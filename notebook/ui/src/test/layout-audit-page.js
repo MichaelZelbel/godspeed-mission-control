@@ -149,11 +149,16 @@
     }
     return null;
   };
-  const onScreen = (el, line) => {
+  // Whether the line itself is drawn at its middle: a scroller clips hit-testing at its own edge, so
+  // a line it has scrolled past its top still answers elementsFromPoint with the ancestors above it
+  // while its layout rect sits inside the viewport — there the line paints nowhere, and only a hit
+  // on the line itself counts as shown.
+  const selfHit = (el, line) => {
     const text = textRects(el)[line];
     if (!text) return false;
     const x = text.left + text.width / 2, y = text.top + text.height / 2;
-    return x >= 0 && y >= 0 && x <= innerWidth && y <= innerHeight;
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return false;
+    return document.elementsFromPoint(x, y).some((hit) => hit === el || el.contains(hit));
   };
   // Whether some scroll of some area the line sits in shows the line clear: text a scroll moves
   // under a sticky header is not drawn under it, so a coverer found at the line's centered position
@@ -169,7 +174,7 @@
         for (let step = 0; step < 10; step++) {
           const over = shownOver(el, line);
           if (!over) {
-            const escaped = onScreen(el, line);
+            const escaped = selfHit(el, line);
             area.scrollTop = before;
             if (escaped) return true;
             break;

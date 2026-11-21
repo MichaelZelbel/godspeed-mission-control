@@ -364,6 +364,16 @@ describe("the audit's rules on pages built for them", { timeout: 20_000 }, () =>
       .toEqual(['under another element: p "Hidden behind the title" under h2 "Title"']);
   });
 
+  // Room to scroll above the scroller lets its walk carry the line past its own top edge, where the
+  // scroller clips it and hit-testing reaches only the ancestors above the scroller: the line paints
+  // nowhere at any scroll, under the header when scrolled less, clipped entirely when scrolled more.
+  // The escape must require the line itself to be hit where it stands, not a layout rect that sits
+  // inside the viewport while nothing draws it.
+  it("reports text a scroll clips out of its own scroller while it stays under a sticky header", async () => {
+    expect(await audit(`<div style="height:200px"></div><div style="height:300px;overflow:auto"><h2 style="position:sticky;top:0;margin:0;height:100px;background:white">Title</h2><p style="margin:0;margin-top:-90px">Hidden behind the title</p><div style="height:600px"></div></div>`))
+      .toEqual(['under another element: p "Hidden behind the title" under h2 "Title"']);
+  });
+
   it("passes a label tied with for, one referenced by aria-labelledby, and a field in a closed details", async () => {
     expect(await audit(`<label for="a">Name</label><input id="a"><label id="b">Strength</label><span role="slider" aria-labelledby="b" aria-valuenow="1" tabindex="0" style="display:inline-block;width:20px;height:20px;background:gray"></span><details><summary>More</summary><input></details>`))
       .toEqual([]);
