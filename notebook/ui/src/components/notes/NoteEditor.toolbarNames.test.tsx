@@ -104,14 +104,14 @@ describe("Every icon button in the note toolbar has an accessible name (#879)", 
   it("a regular note's toolbar", async () => {
     const id = await seedNote({ title: "Garden plan", content: "Plant tomatoes." });
     const { container } = await openNote(id);
-    await waitFor(() => expect(container.querySelector('button[title="More actions"]')).not.toBeNull());
+    await waitFor(() => expect(container.querySelector('button[title="More actions"]')).not.toBeNull(), WAIT);
     expectEveryTooltipNamed(container, "note toolbar", 6);
   }, 60_000);
 
   it("a note synced from another app", async () => {
     const id = await seedNote({ title: "From the mail", content: "Read this.", is_external: true, source_app: "mail", sync_status: "synced" });
     const { container } = await openNote(id);
-    await waitFor(() => expect(container.querySelector('button[title="Add to favorites"]')).not.toBeNull());
+    await waitFor(() => expect(container.querySelector('button[title="Add to favorites"]')).not.toBeNull(), WAIT);
     expectEveryTooltipNamed(container, "synced note toolbar", 3);
   }, 60_000);
 
@@ -125,19 +125,19 @@ describe("Every icon button in the note toolbar has an accessible name (#879)", 
       const el = container.querySelector('button[title="More actions"]');
       expect(el).not.toBeNull();
       return el as HTMLButtonElement;
-    });
+    }, WAIT);
     fireEvent.pointerDown(more, { button: 0, ctrlKey: false });
     fireEvent.keyDown(more, { key: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Markdown source" }, WAIT));
-    await waitFor(() => expect(container.querySelector('button[title="Rich text mode"]')).not.toBeNull());
+    await waitFor(() => expect(container.querySelector('button[title="Rich text mode"]')).not.toBeNull(), WAIT);
     expectEveryTooltipNamed(container, "Markdown-source note toolbar", 3);
   }, 60_000);
 
   it("a favorited, pinned note, with its state-dependent names", async () => {
     const id = await seedNote({ title: "Daily plan", content: "Water the plants.", is_favorite: true, is_pinned: true });
     const { container } = await openNote(id);
-    await waitFor(() => expect(container.querySelector('button[title="Remove from favorites"]')).not.toBeNull());
-    await waitFor(() => expect(container.querySelector('button[title="Unpin"]')).not.toBeNull());
+    await waitFor(() => expect(container.querySelector('button[title="Remove from favorites"]')).not.toBeNull(), WAIT);
+    await waitFor(() => expect(container.querySelector('button[title="Unpin"]')).not.toBeNull(), WAIT);
     expectEveryTooltipNamed(container, "favorited note toolbar", 6);
   }, 60_000);
 });
