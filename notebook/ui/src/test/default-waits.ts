@@ -55,7 +55,7 @@ export function blank(source: string): string {
 }
 
 /** The trimmed top-level arguments of the call whose `(` is at `open`, or null when it never closes. */
-function callArguments(text: string, open: number): string[] | null {
+export function callArguments(text: string, open: number): string[] | null {
   const list: string[] = [];
   let depth = 0;
   let start = open + 1;
