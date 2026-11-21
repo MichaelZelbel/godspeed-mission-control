@@ -77,6 +77,7 @@ export function EmbedToolbar({ editor }: EmbedToolbarProps) {
           size="icon"
           className="h-7 w-7"
           title="Embed media (image, video, PDF, audio)"
+          aria-label="Embed media (image, video, PDF, audio)"
         >
           <Paperclip className="h-3.5 w-3.5" />
         </Button>
