@@ -136,6 +136,43 @@ for spelled in "$TMP/work/link.md" "work/link.md"; do
   contains "  a passing content review verifies it ($spelled)" "$OUT" "verified by its check and content review"
 done
 
+# A folder on the way may be a symlink too, pointing outside or inside the mission control. The
+# same file is still treated the same however DONE WHEN names it (#766): both spellings are listed
+# under the steps DONE WHEN wrote, and the shell CHECK alone never verifies either.
+mkdir -p "$ALIAS_PARENT/outside-folder"
+printf '%s\n' 'the folder result lives outside' > "$ALIAS_PARENT/outside-folder/answer.md"
+ln -s "$ALIAS_PARENT/outside-folder" "$TMP/alias"
+for spelled in "$TMP/alias/answer.md" "alias/answer.md"; do
+  KEY="folder-link-case-$((++ABS_CASE))"
+  hw file --what "Describe the folder-linked result" --done-when "$spelled describes the thing outside" --check "test -s alias/answer.md" --key "$KEY" --source test >/dev/null
+  ITEM="$(idof "$KEY")"
+  check "  files lists the folder-linked result named $spelled" "$(hw files "$ITEM" 2>&1)" "alias/answer.md"
+  hw take "$ITEM" --runner claude-laptop >/dev/null
+  hw attempt "$ITEM" --runner claude-laptop --ok --result "wrote the folder-linked result" >/dev/null
+  OUT="$(hw verify "$ITEM" 2>&1)"; check "  its CHECK alone does not verify it ($spelled)" "$?" "2"
+  contains "  and it names the missing content review ($spelled)" "$OUT" "content review found missing work"
+  check "  and it stays attempted ($spelled)" "$(grep -c '^STATUS: attempted' "$TMP/work/$ITEM.md")" "1"
+  OUT="$(hw verify "$ITEM" --content-review "$TMP/review-pass.json" 2>&1)"
+  contains "  a passing content review verifies it ($spelled)" "$OUT" "verified by its check and content review"
+done
+
+# An in-root folder symlink keeps the name DONE WHEN wrote for both spellings, so the commit and
+# the page name the file the same however it is spelled (#766), and the content gate holds.
+mkdir -p "$TMP/work/plain-folder"
+printf '%s\n' 'shape only' > "$TMP/work/plain-folder/plain.md"
+ln -s "$TMP/work/plain-folder" "$TMP/alias2"
+for spelled in "$TMP/alias2/plain.md" "alias2/plain.md"; do
+  KEY="inner-link-case-$((++ABS_CASE))"
+  hw file --what "Describe the inner folder link" --done-when "$spelled describes the plain result" --check "test -s alias2/plain.md" --key "$KEY" --source test >/dev/null
+  ITEM="$(idof "$KEY")"
+  check "  files lists the inner folder link named $spelled" "$(hw files "$ITEM" 2>&1)" "alias2/plain.md"
+  hw take "$ITEM" --runner claude-laptop >/dev/null
+  hw attempt "$ITEM" --runner claude-laptop --ok --result "wrote the plain result" >/dev/null
+  OUT="$(hw verify "$ITEM" 2>&1)"; check "  its CHECK alone does not verify it ($spelled)" "$?" "2"
+  OUT="$(hw verify "$ITEM" --content-review "$TMP/review-pass.json" 2>&1)"
+  contains "  a passing content review verifies it ($spelled)" "$OUT" "verified by its check and content review"
+done
+
 hw file --what "Restart the local counter" --done-when "the counter reads 4" --check "test -f $TMP/counter-four" --key counter --source test >/dev/null
 COUNTER="$(idof counter)"; hw take "$COUNTER" --runner claude-laptop >/dev/null; hw attempt "$COUNTER" --runner claude-laptop --ok --result "counter reads 4" >/dev/null; touch "$TMP/counter-four"
 OUT="$(hw verify "$COUNTER" 2>&1)"
