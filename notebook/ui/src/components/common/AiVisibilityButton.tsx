@@ -43,8 +43,8 @@ interface Props {
  *  - Eye + "Shown to AI"       = visible to AI (People, AI Chat, MCP)
  *  - EyeOff + "Hidden from AI" = hidden from all AI surfaces
  * Its label says the state and its name the click's effect too: a bare "AI"
- * read like an AI action (#809). Its tooltip says the same words as its name,
- * the way the toolbar's icon buttons do (#890).
+ * read like an AI action (#809). Its native tooltip keeps the explanation of
+ * what hiding changes while avoiding a second floating tooltip (#890).
  *
  * For `kind="person"` this flips `is_sensitive` (which also cascades to
  * linked notes/moments/actions). For all other kinds it flips
@@ -128,9 +128,16 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
     }
   };
 
+  const tooltip = optimistic
+    ? kind === "person"
+      ? "Hidden from AI. Linked notes & moments are hidden too. Click to make visible."
+      : "Hidden from AI: excluded from People, the Note Graph, AI Chat and MCP. Local search still finds it. Click to make visible."
+    : kind === "person"
+      ? "Shown to AI. Click to hide this person and everything linked to them from all AI features."
+      : "Shown to AI: used in People profiles, the Note Graph, AI Chat, and MCP clients. Click to hide.";
+
   const Icon = pending ? Loader2 : optimistic ? EyeOff : Eye;
   const label = optimistic ? "Hidden from AI" : "Shown to AI";
-  const action = optimistic ? "Show to AI again" : "Hide from AI";
 
   return (
     <PopoverPrimitive.Root
@@ -145,8 +152,8 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
           onClick={onClick}
           aria-disabled={pending}
           aria-busy={pending}
-          title={`${label}. ${action}`}
-          aria-label={`${label}. ${action}`}
+          title={tooltip}
+          aria-label={tooltip}
           className={cn(
             "h-7 gap-1.5 px-2 text-xs font-normal aria-disabled:opacity-50 aria-disabled:pointer-events-none",
             optimistic

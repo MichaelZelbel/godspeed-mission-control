@@ -33,22 +33,34 @@ async function show(hidden: boolean) {
 
 it("says a note is shown to the AI and that a click hides it", async () => {
   await show(false);
-  const button = screen.getByRole("button", { name: "Shown to AI. Hide from AI" });
+  const button = screen.getByRole("button", { name: /^Shown to AI/ });
   expect(button).toHaveTextContent(/^Shown to AI$/);
 });
 
 it("says a hidden note is hidden from the AI and that a click shows it again", async () => {
   await show(true);
-  const button = screen.getByRole("button", { name: "Hidden from AI. Show to AI again" });
+  const button = screen.getByRole("button", { name: /^Hidden from AI/ });
   expect(button).toHaveTextContent(/^Hidden from AI$/);
+});
+
+it("explains before a click that hiding a person also hides linked notes and moments", async () => {
+  const { AiVisibilityButton } = await import("./AiVisibilityButton");
+  render(<QueryClientProvider client={new QueryClient()}><AiVisibilityButton kind="person" id="person-1" hidden={false} /></QueryClientProvider>);
+  expect(screen.getByRole("button", { name: /^Shown to AI/ }))
+    .toHaveAttribute("title", expect.stringMatching(/everything linked to them/i));
+
+  cleanup();
+  render(<QueryClientProvider client={new QueryClient()}><AiVisibilityButton kind="person" id="person-1" hidden /></QueryClientProvider>);
+  expect(screen.getByRole("button", { name: /^Hidden from AI/ }))
+    .toHaveAttribute("title", expect.stringMatching(/linked notes & moments are hidden too/i));
 });
 
 it("says what a click did just above the switch, not in a page toast", async () => {
   await show(false);
-  fireEvent.click(screen.getByRole("button", { name: /Hide from AI/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Shown to AI/ }));
   const status = await screen.findByRole("status", {}, WAIT);
   expect(status).toHaveTextContent(/^Hidden from AI - excluded from People, Graph, AI Chat & MCP$/);
   expect(status).toHaveAttribute("data-side", "top");
   expect(toasts).toEqual([]);
-  expect(await screen.findByRole("button", { name: "Hidden from AI. Show to AI again" }, WAIT)).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: /^Hidden from AI/ }, WAIT)).toBeInTheDocument();
 });
