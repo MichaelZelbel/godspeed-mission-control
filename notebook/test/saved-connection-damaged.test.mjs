@@ -53,6 +53,12 @@ test('a saved connection damaged while the notebook runs: Settings and the chats
   assert.equal(status.aiAvailability,'unreadable');assert.equal(status.runtimeConfigured,false);assert.equal(status.aiConfigured,true);
   const options=JSON.parse((await nb.get('/api/chat/options')).text);
   assert.equal(options.availability,'unreadable');assert.equal(options.usable,false);
+  // The picker names no model while the saved connection cannot be read, and reading the state
+  // spends nothing on the connection loaded before the damage.
+  assert.equal(options.current,'','the picker names no model while the connection cannot be read');
+  const beforeOptions=nb.requests.count;
+  await nb.get('/api/chat/options');
+  assert.equal(nb.requests.count,beforeOptions,'reading the state spends nothing on an unreadable connection');
   // A chat send says the sentence Settings uses and asks the loaded provider nothing.
   const before=nb.requests.count;
   const sent=await chatSend(nb);

@@ -835,6 +835,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const savedAvailability=chatAIAvailability();
         if(domains.provider&&!assistantMissing&&settingsOnlyAI()&&savedAvailability!=='unreadable'){const options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};return send(res,200,{connected:true,usable:false,availability:'settings-only',...options});}
         if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]});
+        // A saved connection Settings cannot be read (#826): it is answered here, before anything is
+        // asked of the connection loaded before the damage. It names no model (the saved one cannot
+        // be read), and nothing is spent on it, not even the paced check.
+        if(savedAvailability==='unreadable')return send(res,200,{connected:true,usable:false,availability:'unreadable',current:'',models:[{id:'',efforts:[]}]});
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
         if(provider?.check){
           // A read may ask for a fresh check (the Dashboard's arrival, #822): it still shares the

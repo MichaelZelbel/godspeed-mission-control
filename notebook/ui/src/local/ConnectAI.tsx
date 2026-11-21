@@ -117,12 +117,22 @@ export function RoutineAIState({status,checking,onCheck,connected=false}:{status
 export function ConnectAI(){
   const qc=useQueryClient(),id=useId();
   const status=useQuery({queryKey:['routine-ai'],queryFn:routineAIStatus});
-  const saved=useQuery({queryKey:['provider'],queryFn:savedProvider});
+  // The saved file is read again while this page is open (#826): a connection damaged or repaired
+  // on disk reaches it within one status refresh, the same five seconds the chat reads keep.
+  const saved=useQuery({queryKey:['provider'],queryFn:savedProvider,refetchInterval:5000,refetchIntervalInBackground:true});
   const [service,setService]=useState('openrouter'),[address,setAddress]=useState(''),[model,setModel]=useState(''),[key,setKey]=useState('');
   const [routines,setRoutines]=useState<boolean|null>(null),[busy,setBusy]=useState(false),[checking,setChecking]=useState(false),[error,setError]=useState(''),[done,setDone]=useState('');
   const data=status.data,useForRoutines=routines??(data?.source!=='hermes');
-  const filled=useRef(false);
-  useEffect(()=>{if(filled.current||!saved.data)return;filled.current=true;if(!saved.data.configured)return;
+  // The form is filled from the saved connection, and filled again only when that connection itself
+  // changes on disk (a repair or a replacement while the page is open, #826). While it stays the
+  // same, text the person is editing is never dropped.
+  const loaded=useRef<string>();
+  useEffect(()=>{
+    if(!saved.data)return;
+    const signature=JSON.stringify(saved.data);
+    if(signature===loaded.current)return;
+    loaded.current=signature;
+    if(!saved.data.configured)return;
     const url=saved.data.url,selected=providerService(url);
     setService(selected);setAddress(selected==='other'?url:'');setModel(saved.data.model||'');
   },[saved.data]);
