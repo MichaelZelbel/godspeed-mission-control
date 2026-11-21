@@ -46,6 +46,25 @@ test('a folder that cannot be watched is skipped: the rest of the tree keeps wat
   } finally { watcher.close(); fs.chmodSync(path.join(dir,'Locked'),0o700); }
 });
 
+test('a watch construction failure that is not a skip reaches the error channel',{skip:process.platform==='darwin'||process.platform==='win32'},async()=>{
+  const dir=root(),errors=[];
+  fs.mkdirSync(path.join(dir,'Broken'));
+  fs.mkdirSync(path.join(dir,'Open'));
+  // Patch the module-bound fs.watch so one subdirectory cannot be watched for
+  // a reason that is not a skip (an exhausted watch budget). The error handler
+  // is attached after construction, the way every consumer of watchTree does
+  // it, so the delivery must be replayed to it.
+  const realWatch=fs.watch;
+  fs.watch=(p,...rest)=>{if(String(p).endsWith('Broken')){const error=new Error('the watch budget is exhausted');error.code='ENOSPC';throw error;}return realWatch(p,...rest);};
+  try{
+    const watcher=watchTree(dir,()=>{});
+    try{
+      watcher.on('error',error=>errors.push(error.code));
+      assert.equal(await until(()=>errors.includes('ENOSPC')),true,'the construction failure is delivered to the error handler attached after construction');
+    }finally{watcher.close();}
+  }finally{fs.watch=realWatch;}
+});
+
 test('a folder replaced by rename over itself is watched again: a write inside it is reported',async()=>{
   const dir=root(),events=[];
   const watcher=watchTree(dir,record(events));
