@@ -28,20 +28,31 @@ async function chatOptions({check}:{check?:boolean}={}){
   return options;
 }
 
+// A chat surface's read is the evidence that a chat has used the shared state since the Dashboard
+// last confirmed the AI (#822): only then does the next confirming arrival ask for a check, so a
+// Dashboard reached with no chat asks for none, exactly as it did before.
+let chatReadSinceConfirm=false;
+
 export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}={}){
   const queryClient=useQueryClient();
   // A surface that arrives wants the AI confirmed afresh, not the warm state an open chat kept
-  // (#822): its first read asks the server to run the check even inside the five-second pacing
-  // (#794). The flag rides the first read only, and comes back if that read fails so the arrival
-  // still gets confirmed.
+  // (#822): when a chat has read the shared state since the last confirmation, its first read asks
+  // the server to run the check even inside the five-second pacing (#794). The flag rides the first
+  // read only, and comes back if that read fails so the arrival still gets confirmed.
   const confirm=useRef(confirmOnMount);
   // All chat surfaces and the Dashboard in this window share this query, so one poll publishes one
   // settled state to them. The server checks the AI at most every five seconds and otherwise answers
   // from that check, so reading each second costs no AI request and keeps a change inside about five
   // seconds of that check (#590).
   const options=useQuery<ChatOptions>({queryKey:['chat-options'],queryFn:async()=>{
-    const check=confirm.current;confirm.current=false;
-    try{return await chatOptions(check?{check:true}:{});}catch(error){confirm.current=check;throw error;}
+    if(!confirmOnMount)chatReadSinceConfirm=true;
+    const check=confirm.current&&chatReadSinceConfirm;
+    confirm.current=false;
+    try{
+      const read=await chatOptions(check?{check:true}:{});
+      if(check)chatReadSinceConfirm=false;
+      return read;
+    }catch(error){confirm.current=check;throw error;}
   },refetchInterval:1000,refetchIntervalInBackground:true});
   useEffect(()=>listenForChatOptions((next:ChatOptions)=>queryClient.setQueryData(['chat-options'],next)),[queryClient]);
   // A picker that just read a newer state asks the shared query to read it too (#667).

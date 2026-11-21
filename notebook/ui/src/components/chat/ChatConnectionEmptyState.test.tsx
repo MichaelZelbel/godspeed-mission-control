@@ -57,25 +57,31 @@ it('knows a stalled reply already says the stall, so the notice under it does no
   expect(stateSaid('Your AI is not answering. Try again in a moment, or check it in Settings, Your AI.')).toBe('stalled');
 });
 
-// #822: the Dashboard's arrival read asks for a check. Its flag rides the first read only, and
-// comes back when that read fails, so the arrival still gets confirmed.
+// #822: the Dashboard's arrival read asks for a check only once a chat has read the shared state
+// since the last confirmation. Its flag rides the first read only, and comes back when that read
+// fails, so the arrival still gets confirmed.
 it('rides the check flag on the first read only, and gets it back when that read fails',async()=>{
-  const calls:string[]=[];let broken=true;
+  const calls:string[]=[];let broken=false;
   vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
     calls.push(String(url));
     if(broken)throw Error('Could not read AI connection status');
     return new Response(JSON.stringify({connected:true,usable:true,availability:'ready'}),{status:200,headers:{'Content-Type':'application/json'}});
   }));
   const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
-  // The cache holds an answer, so the read the mount makes is the confirmation read.
-  client.setQueryData(['chat-options'],{connected:true,usable:true,availability:'ready'});
+  // A chat surface reads the shared state; that is what lets the next arrival confirm afresh.
+  function Chat(){useChatOptions();return null;}
+  const chat=render(<QueryClientProvider client={client}><MemoryRouter><Chat/></MemoryRouter></QueryClientProvider>);
+  await waitFor(()=>expect(calls.length).toBeGreaterThan(0),WAIT);
+  expect(calls[0]).not.toContain('check=1');
+  chat.unmount();
+  broken=true;
   function Probe(){useChatOptions({confirmOnMount:true});return null;}
   render(<QueryClientProvider client={client}><MemoryRouter><Probe/></MemoryRouter></QueryClientProvider>);
-  await waitFor(()=>expect(calls.length).toBeGreaterThan(0),WAIT);
-  expect(calls[0]).toContain('check=1');
+  await waitFor(()=>expect(calls.length).toBeGreaterThan(1),WAIT);
+  expect(calls[calls.length-1]).toContain('check=1');
   broken=false;
   await client.refetchQueries({queryKey:['chat-options']});
-  expect(calls[1]).toContain('check=1');
+  expect(calls[calls.length-1]).toContain('check=1');
   await client.refetchQueries({queryKey:['chat-options']});
-  expect(calls[2]).not.toContain('check=1');
+  expect(calls[calls.length-1]).not.toContain('check=1');
 });

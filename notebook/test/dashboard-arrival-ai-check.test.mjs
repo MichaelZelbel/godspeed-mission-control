@@ -43,6 +43,24 @@ test('inside the five-second window a plain read asks the AI nothing while a Das
  assert.equal(ai.state.checks,before+2,'a plain read after the fresh check still keeps the pacing');
 });
 
+// #822 acceptance item 1: the fresh check after a chat must hold on every repeat, not just some —
+// ten arrivals in one run, each inside the warm window, each checking the AI and answering from it.
+// (The first check read also refreshes the cached model list, so it probes the key endpoint twice;
+// later repeats probe once for the check.)
+test('the arrival check holds on 10 out of 10 repeats in one run',async t=>{
+ const ai=await standIn(t),page=await notebook(t);
+ assert.equal((await page.connect(ai.url)).status,200);
+ for(let i=1;i<=10;i++){
+  const before=ai.state.checks;
+  const warm=await page.options();
+  assert.equal(warm.usable,true);
+  assert.equal(ai.state.checks,before,'repeat '+i+': the warm-window read asked the AI nothing');
+  const confirmed=await page.options('?check=1');
+  assert.equal(confirmed.usable,true);
+  assert.ok(ai.state.checks>before,'repeat '+i+': the arrival read checked the AI and answered from it');
+ }
+});
+
 test('reads that ask for a check share the check already in flight',async t=>{
  const ai=await standIn(t),page=await notebook(t);
  assert.equal((await page.connect(ai.url)).status,200);
