@@ -38,18 +38,23 @@ export function hashProblems(list,root){
 // The files a copy holds on disk, as paths relative to the copy. Where a repository answers —
 // this repository for the real copies, one a fixture builds for the git case below — git is asked
 // the query vendor-addons.py --check asks, with `-z` so paths are never C-quoted and a hand-added
-// file whose name git quotes is still enumerated. The child's locale is pinned to `C` so the
-// not-a-repository fallback is detected in git's untranslated message, whatever catalog the
-// machine has. There, files the repository ignores (node_modules, __pycache__) do not count as
-// part of a copy, a file committed here is found before it is staged, and a file a re-pin dropped
-// is not reported while its deletion is still unstaged; a folder with no repository is walked
-// instead. The walk is mapped to the separators pin.files is written in.
+// file whose name git quotes is still enumerated. The answer is read back as strict UTF-8: a name
+// that is not valid UTF-8 can only have been written by hand, since the vendoring script never
+// carries one, and it is named as an error instead of being silently dropped. The child's locale
+// is pinned to `C` so the not-a-repository fallback is detected in git's untranslated message,
+// whatever catalog the machine has. There, files the repository ignores (node_modules,
+// __pycache__) do not count as part of a copy, a file committed here is found before it is
+// staged, and a file a re-pin dropped is not reported while its deletion is still unstaged; a
+// folder with no repository is walked instead. The walk is mapped to the separators pin.files is
+// written in.
 function copyFiles(root,name){
  const listed=spawnSync('git',['ls-files','-z','--cached','--others','--exclude-standard','--',name],{cwd:root,env:{...process.env,LC_ALL:'C'}});
  if(listed.error)throw listed.error;
- if(listed.status===0)return listed.stdout.toString().split('\0').filter(Boolean).map(file=>file.slice(name.length+1)).filter(file=>fs.existsSync(path.join(root,name,file)));
- if(!/not a git repository/i.test(listed.stderr.toString()))throw new Error(listed.stderr.toString());
- return fs.readdirSync(path.join(root,name),{recursive:true}).filter(file=>fs.statSync(path.join(root,name,file)).isFile()).map(file=>file.replaceAll('\\','/'));
+ let answer;
+ try{answer=new TextDecoder('utf-8',{fatal:true}).decode(listed.stdout);}
+ catch(error){throw new Error(`git listed a file in ${path.join(root,name)} whose name is not valid UTF-8, so the file cannot be named here: the copy holds a file the add-on does not carry, or has otherwise drifted. ${WAY}`);}
+ if(listed.status!==0){if(!/not a git repository/i.test(listed.stderr.toString()))throw new Error(listed.stderr.toString());return fs.readdirSync(path.join(root,name),{recursive:true}).filter(file=>fs.statSync(path.join(root,name,file)).isFile()).map(file=>file.replaceAll('\\','/'));}
+ return answer.split('\0').filter(Boolean).map(file=>file.slice(name.length+1)).filter(file=>fs.existsSync(path.join(root,name,file)));
 }
 
 export const hashReport=(list,root)=>{const problems=hashProblems(list,root);return problems.length?problems.join('\n')+'\n\n'+WAY:'';};
@@ -106,9 +111,11 @@ test('a file added to the copy that the add-on does not carry is named with the 
 // The added-file kind above is caught by the walk; in this repository it is the git answer that
 // catches it, so the git query itself is pinned down here: a committed extra and an untracked one
 // are named, an ignored file is not counted, and a file the index still holds after a re-pin
-// dropped it is not reported while its deletion is unstaged.
+// dropped it is not reported while its deletion is unstaged. Git quotes exactly the names Windows
+// reserves, so the quoted-name member is written and expected only where that name can exist.
 test('the git answer the real gate relies on names committed and added extras and not ignored or dropped files',()=>{
  const f=fixture();
+ const quoted=process.platform==='win32'?[]:['say "hi".md'];
  fs.writeFileSync(path.join(f.root,'.gitignore'),'skipped.mjs\n');
  fs.writeFileSync(path.join(f.root,'pinned-add-on/lib/committed.mjs'),'committed but not carried');
  const git=(...args)=>{const run=spawnSync('git',args,{cwd:f.root});if(run.status!==0)throw new Error(run.stderr.toString());};
@@ -118,15 +125,33 @@ test('the git answer the real gate relies on names committed and added extras an
  delete f.pin.hashes['lib/gone.mjs'];
  fs.writeFileSync(path.join(f.root,'pinned-add-on/lib/untracked.mjs'),'added here by hand');
  fs.writeFileSync(path.join(f.root,'pinned-add-on/lib/café notes.md'),'added here by hand');
- fs.writeFileSync(path.join(f.root,'pinned-add-on/lib/say "hi".md'),'added here by hand');
+ for(const file of quoted)fs.writeFileSync(path.join(f.root,'pinned-add-on/lib',file),'added here by hand');
  fs.writeFileSync(path.join(f.root,'pinned-add-on/lib/skipped.mjs'),'build output');
  assert.deepEqual(hashProblems(f.pins,f.root).sort(),[
   'pinned-add-on/lib/café notes.md is present in the copy but is not among the files the add-on carries.',
   'pinned-add-on/lib/committed.mjs is present in the copy but is not among the files the add-on carries.',
-  'pinned-add-on/lib/say "hi".md is present in the copy but is not among the files the add-on carries.',
+  ...quoted.map(file=>`pinned-add-on/lib/${file} is present in the copy but is not among the files the add-on carries.`),
   'pinned-add-on/lib/untracked.mjs is present in the copy but is not among the files the add-on carries.'
  ]);
  assert.match(hashReport(f.pins,f.root),/own repository/);
+});
+
+// The last member of the same class: a hand-added name that is not even valid UTF-8. Git reads the
+// copy by raw bytes, so the enumeration has to turn such a name into a loud failure naming the
+// copy, not drop it. Such a name cannot be created on Windows, whose file names are always valid
+// UTF-8, so the case asks its question only where one can exist.
+test('a file added to the copy whose name is not valid UTF-8 is caught, not silently dropped',()=>{
+ if(process.platform==='win32')return;
+ const f=fixture();
+ const git=(...args)=>{const run=spawnSync('git',args,{cwd:f.root});if(run.status!==0)throw new Error(run.stderr.toString());};
+ git('init');
+ fs.writeFileSync(Buffer.from(path.join(f.root,'pinned-add-on/lib/latin1-éname.md'),'latin1'),'added here by hand');
+ assert.throws(()=>hashProblems(f.pins,f.root),error=>{
+  assert.match(error.message,/not valid UTF-8/);
+  assert.match(error.message,/pinned-add-on/);
+  assert.match(error.message,/own repository/);assert.match(error.message,/re-pin/);
+  return true;
+ });
 });
 
 test('an add-on carried in this repository is not asked for hashes',()=>{
