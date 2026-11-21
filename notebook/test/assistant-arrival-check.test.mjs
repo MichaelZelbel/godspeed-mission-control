@@ -38,6 +38,8 @@ async function notebook(t,{mode='working'}={}){
 
 test('a plain read asks the assistant nothing while the Dashboard arrival read checks it once',async t=>{
  const page=await notebook(t);
+ let now=Date.now();
+ t.mock.method(Date,'now',()=>now);
  const arrival=await page.options('?check=1');
  assert.equal(arrival.usable,true);
  assert.equal(page.turns(),1,'the arrival read sent one billed check turn');
@@ -45,7 +47,9 @@ test('a plain read asks the assistant nothing while the Dashboard arrival read c
  assert.equal(plain.usable,true);
  assert.equal(page.turns(),1,'a plain read sent nothing');
  for(let read=0;read<5;read++)await page.options();
- assert.equal(page.turns(),1,'plain reads never run the billed check, however long the last one was ago');
+ now+=5001;
+ await page.options();
+ assert.equal(page.turns(),1,'plain reads never run the billed check, not even past the five seconds the free check waits for');
 });
 
 test('ten Dashboard arrivals each check the assistant once and answer from it',async t=>{
