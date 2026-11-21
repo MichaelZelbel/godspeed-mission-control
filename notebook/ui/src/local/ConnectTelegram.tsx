@@ -12,6 +12,9 @@ import {knownTelegramPhase, telegramPollingPhases} from '../../../shared/telegra
 // and in Settings. The key goes to this server only (notebook/server/telegram-connect.mjs); the
 // bot's link carries a one-time code, so whoever opens it from this page becomes its owner.
 type Status={available:boolean;managed:'web'|'environment'|null;connected:boolean;phase:unknown;bot?:{username:string;name:string};link?:string;start_message?:string;owner?:string|null};
+// What the page says where Telegram cannot be connected on this notebook (issue #915), instead of
+// an empty card: the same one sentence on the Telegram page and in the Settings' Telegram section.
+export const telegramUnavailable='Telegram cannot be connected on this notebook; it becomes available once the assistant is installed and runs this notebook (run the Godspeed installer again to install it).';
 function record(value:unknown):value is Record<string,unknown>{return !!value&&typeof value==='object'&&!Array.isArray(value);}
 function stringOrNull(value:unknown):string|null|undefined{if(typeof value==='string')return value;if(value===null)return null;}
 async function call(route:string,body?:unknown):Promise<unknown>{const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data:unknown=await r.json(),message=record(data)&&typeof data.error==='string'?data.error:'Telegram did not answer as expected.';if(!r.ok)throw new Error(message);return data;}
@@ -57,7 +60,7 @@ export function TelegramConnect({welcome=false,onContinue}:{welcome?:boolean;onC
   if(query.isLoading)return <p role="status">Checking Telegram…</p>;
   if(query.isError)return <p role="alert">Telegram's status could not be read. <button className="underline" onClick={()=>query.refetch()}>Try again</button></p>;
   if(data?.managed==='environment')return <p>Telegram is set up by this server's own settings.</p>;
-  if(!data?.available)return null;
+  if(!data?.available)return <p>{telegramUnavailable}</p>;
   const continueButton=welcome&&onContinue&&<Button variant={phase==='none'||phase==='refused'?'ghost':'default'} className="min-h-11" onClick={onContinue}>{phase==='none'||phase==='refused'?'Skip for now':'Continue to your notebook'}</Button>;
   const form=<form className="space-y-3" onSubmit={connect}>
     <ol className="list-decimal pl-5 space-y-2">
