@@ -3,11 +3,18 @@ import {momentDraft} from './moment-draft.mjs';
 import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
 import {startCharmJudgement} from './charm-judgement.mjs';
 import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
-import {asksForTodaysBrief,savedBriefToday} from './briefing.mjs';
+import {asksForTodaysBrief,briefing,briefingDay,savedBriefToday} from './briefing.mjs';
 import {NOTEBOOK_CHAT_FUNCTIONS} from './notebook-chat.mjs';
 
 const AI_ANALYSIS_ACTIONS=['generate-profile-suggestions','generate_collection_schema','process-note'];
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
+const briefingCreations=new WeakMap();
+async function createBriefingOnce(store,requestedAt,create){
+ const prior=briefingCreations.get(store)||Promise.resolve();
+ const creation=prior.catch(()=>{}).then(async()=>{const saved=savedBriefToday(store,requestedAt);if(!saved.note&&!saved.hidden)await create();});
+ briefingCreations.set(store,creation);
+ try{return await creation;}finally{if(briefingCreations.get(store)===creation)briefingCreations.delete(store);}
+}
 import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
 import {NOTE_TYPES,processNote} from './proposals.mjs';
@@ -310,7 +317,13 @@ export class Domains {
       if(!input.message)input={...input,message:input.messages?.filter(m=>m.role==='user').at(-1)?.content||''};
     }
     if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode!=='summarize'&&asksForTodaysBrief(input.message)){
-      const saved=savedBriefToday(this.store).note;
+      const requestedAt=new Date(),day=briefingDay(this.store,requestedAt);
+      let today=savedBriefToday(this.store,requestedAt),saved=today.note;
+      if(name==='conversation-chat'&&!saved&&!today.hidden&&this.provider){
+        await createBriefingOnce(this.store,requestedAt,()=>briefing({id:'brief-chat-'+hash([input.request_id||input.conversation_id||'conversation',day])},{store:this.store,query:this.query,provider:this.provider,now:requestedAt}));
+        today=savedBriefToday(this.store,requestedAt);saved=today.note;
+      }
+      if(today.hidden)return {reply:''};
       if(saved){
         const reply=String(saved.content||'');
         await this.store.saveAsync('conversation_messages',{role:'assistant',content:reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'morning-brief'},undefined,{signal:input.signal});

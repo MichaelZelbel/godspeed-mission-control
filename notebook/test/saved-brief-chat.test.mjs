@@ -13,7 +13,19 @@ import {Telegram} from '../core/telegram.mjs';
 const CHAT_SURFACES=['conversation-chat','note-chat','collection-chat'];
 assert.deepEqual(new Set(CHAT_SURFACES),new Set(NOTEBOOK_CHAT_FUNCTIONS),'saved brief cases must cover every notebook chat surface');
 
-const saved='Saved filtered briefing.\n\nNext: exact allowed next step.\n\nCharm Challenge: exact line.';
+const acceptedSentences=[
+ 'No fresh health observations are recorded.',
+ 'The fictional launch plan is ready for review.',
+ 'The first checklist covers the opening task.',
+ 'The second checklist covers the follow-up.',
+ 'The schedule keeps the fictional deadline visible.',
+ 'The notes name the next decision.',
+ 'The draft keeps the agreed scope.',
+ 'The review can happen in the notebook.',
+ 'Nothing in this fictional plan has been sent.',
+ 'Next: review the fictional launch plan.',
+];
+const saved=acceptedSentences.join('\n\n');
 const savedWithoutChallenge='Saved filtered briefing.\n\nNext: exact allowed next step.';
 const day=()=>new Date().toISOString().slice(0,10);
 const saveBrief=(store,content=saved)=>store.save('notes',{title:'Your morning briefing',content,source_app:'morning-brief',brief_day:day()});
@@ -52,16 +64,70 @@ test('all chat surfaces preserve a saved brief without adding a Charm Challenge'
  assert.equal(calls,0);
 });
 
-test('a brief request without a saved briefing keeps ordinary chat behavior',async t=>{
+test('a complex create and repeat request preserves every accepted sentence in one canonical briefing',async t=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-new-brief-chat-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
- const calls=[],provider=async input=>{calls.push(input.kind);return {reply:'The ordinary chat answer'};};
+ store.save('settings',{id:'installation',timezone:'UTC'});store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const calls=[],provider=async input=>{calls.push(input.kind);return input.kind==='brief-verification'?{passed:true,reason:'Fictional briefing checked.'}:saved;};
  const domains=new Domains(query,{provider});
- for(const [name,input] of chatInputs(store)){
-  const result=await domains.invoke(name,{...input,request_id:'brief-first-'+name,message:"today's brief"});
-  assert.equal(result.reply,'The ordinary chat answer');
- }
- assert.equal(store.list('notes').filter(note=>note.source_app==='morning-brief').length,0);
- assert.deepEqual(calls,CHAT_SURFACES);
+ const first=await domains.invoke('conversation-chat',{conversation_id:'notebook:first',request_id:'brief-first',message:"Please create today's morning briefing"});
+ const again=await domains.invoke('conversation-chat',{conversation_id:'notebook:first',request_id:'brief-again',message:"Please repeat today's morning briefing"});
+ const briefs=store.list('notes').filter(note=>note.source_app==='morning-brief');
+ assert.equal(briefs.length,1);assert.equal(first.reply,briefs[0].content);assert.equal(again.reply,briefs[0].content);
+ for(const sentence of acceptedSentences)assert.ok(briefs[0].content.includes(sentence),sentence);
+ assert.ok(calls.includes('brief-verification'));assert.equal(calls.includes('conversation-chat'),false);
+});
+
+test('a hidden briefing keeps every chat surface silent without creating a replacement',async t=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hidden-brief-chat-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
+ const hidden=saveBrief(store);store.save('notes',{id:hidden.id,ai_visibility:'hidden'});let calls=0;
+ const domains=new Domains(query,{provider:async()=>{calls++;return saved;}});
+ for(const [name,input] of chatInputs(store))assert.equal((await domains.invoke(name,{...input,message:"today's brief"})).reply,'');
+ assert.equal(calls,0);
+ assert.deepEqual(store.list('notes').filter(note=>note.source_app==='morning-brief').map(note=>note.id),[hidden.id]);
+});
+
+test('concurrent first requests share one checked saved briefing',async t=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-concurrent-brief-chat-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
+ store.save('settings',{id:'installation',timezone:'UTC'});store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ let startedResolve,releaseResolve,writes=0;const started=new Promise(resolve=>{startedResolve=resolve;}),release=new Promise(resolve=>{releaseResolve=resolve;});
+ const drafts=[saved,'Different accepted briefing.\n\nNext: a different step.'];
+ const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fictional briefing checked.'};if(input.phase==='thin-repair')return drafts[0];const draft=drafts[writes++];startedResolve();await release;return draft;};
+ const domains=new Domains(query,{provider}),first=domains.invoke('conversation-chat',{conversation_id:'notebook:first',request_id:'concurrent-one',message:"today's brief"});
+ await started;
+ const second=domains.invoke('conversation-chat',{conversation_id:'notebook:second',request_id:'concurrent-two',message:"today's brief"});
+ await new Promise(resolve=>setImmediate(resolve));releaseResolve();
+ const replies=await Promise.all([first,second]),briefs=store.list('notes').filter(note=>note.source_app==='morning-brief');
+ const jobs=new Set(store.list('job_receipts').filter(receipt=>receipt.kind==='brief-verification').map(receipt=>receipt.job_id));
+ assert.equal(jobs.size,1);assert.equal(briefs.length,1);assert.deepEqual(replies.map(result=>result.reply),[briefs[0].content,briefs[0].content]);
+});
+
+test('concurrent requests on adjacent local days create their own briefing',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-11-17T23:59:00Z')});
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-midnight-brief-chat-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
+ store.save('settings',{id:'installation',timezone:'UTC'});store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const source=store.save('notes',{title:'Checked contribution',content:'Use this checked contribution.'});
+ store.save('lead_entries',{title:'Checked contribution',content:source.content,note_id:source.id,status:'ready',delivery_day:'2026-11-17'});
+ let startedResolve,releaseResolve,writes=0;const started=new Promise(resolve=>{startedResolve=resolve;}),release=new Promise(resolve=>{releaseResolve=resolve;});
+ const draft='Adjacent-day briefing.\n\nNext: finish the current step.';
+ const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fictional briefing checked.'};if(input.kind!=='morning-brief'||input.phase==='thin-repair')return draft;writes++;if(writes===1){startedResolve();await release;}return draft;};
+ const domains=new Domains(query,{provider}),previous=domains.invoke('conversation-chat',{conversation_id:'notebook:previous',request_id:'midnight-previous',message:"today's brief"});
+ await started;t.mock.timers.setTime(Date.parse('2026-11-18T00:01:00Z'));
+ const currentRequest=domains.invoke('conversation-chat',{conversation_id:'notebook:current',request_id:'midnight-current',message:"today's brief"});
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(writes,1);
+ releaseResolve();const [before,current]=await Promise.all([previous,currentRequest]),briefs=store.list('notes').filter(note=>note.source_app==='morning-brief');
+ assert.ok(writes>=2);assert.deepEqual(new Set(briefs.map(note=>note.brief_day)),new Set(['2026-11-17','2026-11-18']));
+ assert.equal(before.reply,briefs.find(note=>note.brief_day==='2026-11-17').content);assert.equal(current.reply,briefs.find(note=>note.brief_day==='2026-11-18').content);
+});
+
+test('a rejected creation releases its claim so the next request retries',async t=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-retry-brief-chat-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
+ store.save('settings',{id:'installation',timezone:'UTC'});store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ let attempts=0,fail=true;const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fictional briefing checked.'};if(input.kind!=='morning-brief'||input.phase==='thin-repair')return saved;attempts++;if(fail)throw Error('Temporary briefing failure');return saved;};
+ const domains=new Domains(query,{provider});
+ await assert.rejects(domains.invoke('conversation-chat',{conversation_id:'notebook:retry',request_id:'retry-one',message:"today's brief"}),/Temporary briefing failure/);
+ const failedAttempts=attempts;fail=false;
+ const retried=await domains.invoke('conversation-chat',{conversation_id:'notebook:retry',request_id:'retry-two',message:"today's brief"}),briefs=store.list('notes').filter(note=>note.source_app==='morning-brief');
+ assert.ok(attempts>failedAttempts);assert.equal(briefs.length,1);assert.equal(retried.reply,briefs[0].content);
 });
 
 test('candidate Telegram reports a definitely incomplete long saved brief',async t=>{
@@ -128,12 +194,17 @@ test('candidate Telegram delivers a long saved brief in full',async t=>{
  assert.equal(sent.length,2);assert.equal(sent.join(''),longSaved);assert.match(sent.at(-1),/Charm Challenge: exact final line\.$/);
 });
 
-test('both notebook chat endpoints return the same saved brief',async t=>{
- let calls=0;const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-saved-brief-endpoints-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
- const service=await createService({root,port:0,provider:async()=>{calls++;return {reply:'Substitute'};}}),base='http://127.0.0.1:'+service.address.port;t.after(()=>service.close());saveBrief(service.store);
+test('saved record and both notebook chat endpoints agree after complex creation and repeat',async t=>{
+ const calls=[],root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-saved-brief-endpoints-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const provider=async input=>{calls.push(input.kind);return input.kind==='brief-verification'?{passed:true,reason:'Fictional briefing checked.'}:saved;};
+ const service=await createService({root,port:0,provider}),base='http://127.0.0.1:'+service.address.port;t.after(()=>service.close());
+ service.store.save('settings',{id:'installation',timezone:'UTC'});service.store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  const post=async(route,body)=>{const response=await fetch(base+route,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});assert.equal(response.status,200);return response.json();};
- const standard=await post('/api/functions/conversation-chat',{conversation_id:'notebook:panel',message:"today's brief",request_id:'01234567-1234-4234-8234-012345678901'});
- const browser=await post('/api/browser-chat',{message:'mein Morgenbriefing',request_id:'01234567-1234-4234-8234-012345678902'});
- assert.equal(standard.data.reply,saved);assert.equal(browser.reply,saved);assert.equal(calls,0);
+ const standard=await post('/api/functions/conversation-chat',{conversation_id:'notebook:panel',message:"Please prepare today's morning briefing",request_id:'01234567-1234-4234-8234-012345678901'});
+ const browser=await post('/api/browser-chat',{message:"Please repeat today's morning briefing",request_id:'01234567-1234-4234-8234-012345678902'});
+ const briefs=service.query.rows('notes').filter(note=>note.source_app==='morning-brief');assert.equal(briefs.length,1);
+ assert.equal(standard.data.reply,briefs[0].content);assert.equal(browser.reply,briefs[0].content);
+ for(const sentence of acceptedSentences)assert.ok(briefs[0].content.includes(sentence),sentence);
+ assert.ok(calls.includes('brief-verification'));assert.equal(calls.includes('conversation-chat'),false);
  assert.equal(service.query.rows('conversation_messages').filter(message=>message.role==='assistant'&&message.content===saved).length,2);
 });

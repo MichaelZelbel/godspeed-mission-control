@@ -43,6 +43,7 @@ export const BRIEFING_SOURCE_TABLES=Object.freeze(Object.keys(BRIEFING_SOURCE_SE
 // commits after local midnight must not move; notes saved before that field have only created_at.
 const briefedOn=(note,zone)=>note.source_app==='morning-brief'&&(note.brief_day||(note.created_at&&dayOf(new Date(note.created_at),zone)));
 const installationZone=store=>store.get('settings','installation')?.timezone||'UTC';
+export const briefingDay=(store,now=new Date())=>dayOf(now,installationZone(store));
 // The notes that may say whose a trip or appointment of today is (#386): one naming today, or a date
 // range holding it, and anything written in the last three days.
 const DAY_RANGE=/(\d{4}-\d{2}-\d{2})\s*(?:-|–|to|bis|until)\s*(\d{4}-\d{2}-\d{2})/gi;
@@ -56,7 +57,7 @@ function notesAboutDay(rows,today,nowMs){
 // Today's saved briefing note as the assistant may see it; hidden is true when a note for today
 // exists but the person has hidden it, so that nothing is written beside it.
 export function savedBriefToday(store,now=new Date()){
- const zone=installationZone(store),today=dayOf(now,zone),query=new QueryService(store);
+ const zone=installationZone(store),today=briefingDay(store,now),query=new QueryService(store);
  const mine=rows=>rows.filter(n=>briefedOn(n,zone)===today).at(-1);
  if(!mine(query.rows('notes')))return {note:null,hidden:false};
  const note=mine(visibleRows(query,'notes'));
@@ -125,7 +126,7 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
  if(watch.length)await procedure({id:job.id+'-sources',kind:'watch',topic_ids:watch.map(t=>t.id)},{store,query,provider});
  const rehearsals=visibleRows(query,'job_receipts').filter(r=>r.kind==='brief-rehearsal').slice(-2);
  const previousNotes=visibleRows(query,'notes').filter(n=>n.source_app==='morning-brief').slice(-3);
- const zone=installationZone(store),today=dayOf(now,zone),dayNotes=notesAboutDay(visibleRows(query,'notes'),today,now.getTime());
+ const zone=installationZone(store),today=briefingDay(store,now),dayNotes=notesAboutDay(visibleRows(query,'notes'),today,now.getTime());
  const context={goals:visibleRows(query,'goals').filter(g=>['active','adopted'].includes(g.status)),decisions:visibleRows(query,'decisions').slice(-10),work:visibleRows(query,'work_items').slice(-20),deadlines:visibleRows(query,'deadlines').filter(d=>d.status!=='closed'),health:visibleRows(query,'health_observations').filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000),episodes:visibleRows(query,'health_episodes').filter(h=>Date.parse(h.onset_at)>=Date.now()-30*86400000),medications:visibleRows(query,'medications').filter(h=>Date.parse(h.taken_at)>=Date.now()-30*86400000),source_receipts:[],previous:previousNotes.map(n=>({id:n.id,title:n.title,content:n.content,created_at:n.created_at,verification_id:n.verification_id,delivery_verification_id:n.delivery_verification_id})),rehearsals:rehearsals.map(r=>({id:r.id,state:r.state,error:r.error,result:r.result,finished_at:r.finished_at}))};
  const health=currentHealth(query,{now:now.getTime()});context.health=health.observations;context.health_freshness=health;
  const unknownColumns=unknownHealthColumns(health);
