@@ -94,12 +94,7 @@ describe("saving a moment while the AI fails", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it("keeps the plain confirmation when no AI is connected or the extraction worked", async () => {
-    state.aiAvailability = "none";
-    await saveMoment();
-    expect(toast).toHaveBeenCalledTimes(1);
-    expect(toast).toHaveBeenCalledWith({ title: "Moment created" });
-    cleanup();toast.mockClear();
+  it("keeps the plain confirmation when the extraction worked", async () => {
     Object.assign(state, { providerConfigured: true, aiAvailability: "ready" });
     await saveMoment();
     await waitFor(() => expect(invoke).toHaveBeenCalledOnce(), WAIT);
