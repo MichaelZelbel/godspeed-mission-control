@@ -148,7 +148,8 @@ test('processing settings written in part before the first run keep what was wri
 // 401: Invalid key"), which the note's badge shows as its tooltip. It keeps the plain sentence.
 test('a refused key is kept in plain words for the note\'s badge, never the provider\'s',async()=>{
   const {store,query,domains}=setup(),processing=new NoteProcessing({store,query,domains,device:'vps'});
-  domains.provider=async()=>{throw new Error('Model provider failed with HTTP 401: Invalid key');};
+  // The way runtime.mjs raises the failure now: with its cause attached (#861).
+  domains.provider=async()=>{throw Object.assign(new Error('Model provider failed with HTTP 401: Invalid key'),{aiCause:'refused',aiStatus:401});};
   await processing.tick({now:Date.now()-1000});
   const note=store.save('notes',{title:'Climbing',content:'Fictional Ana and I go climbing on Monday the 12th.'});
   const failed=await processing.tick({now:Date.parse(note.updated_at)+180000});
