@@ -31,7 +31,7 @@ import { PeopleTree } from "@/components/people/PeopleTree";
 import { PersonDetail } from "@/components/people/PersonDetail";
 import { MergePersonDialog } from "@/components/people/MergePersonDialog";
 import { personLabel } from "@/components/timeline/people";
-import { useIsMobile, usePanesTogether } from "@/hooks/use-mobile";
+import { usePanesTogether } from "@/hooks/use-mobile";
 import { useGroups, useCreateGroup, useUpdateGroup, useArchiveGroup, useRestoreGroup } from "@/hooks/useGroups";
 import { useAllMemberships, useAddMembership, useRemoveMembership } from "@/hooks/useGroupMemberships";
 import {
@@ -48,7 +48,6 @@ export default function People() {
   const { id: routePersonId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const isMobile = useIsMobile();
   // A person beside the tree needs a wide window; below PANE_BREAKPOINT the person takes the whole
   // pane, as on a phone, and the tree's back button leads back (#887).
   const stacked = !usePanesTogether();
@@ -223,7 +222,7 @@ export default function People() {
       <div
         className={cn(
           "shrink-0 flex-col border-r border-border bg-background min-w-0",
-          isMobile ? "w-full" : "w-72",
+          stacked ? "w-full" : "w-72",
           stacked && selectedPersonId ? "hidden" : "flex",
         )}
       >

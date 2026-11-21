@@ -89,10 +89,10 @@
 
   const TEXT_INPUT = "input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=color])";
   const inputClipped = (input) => {
-    // Only the placeholder is measured: a value longer than the box is not cut off, because the
-    // input scrolls it (every text input does). A placeholder sits in a box nothing has typed into,
-    // so there is nothing to scroll it into view with.
-    const shown = input.placeholder;
+    // An enabled input scrolls its own value, so a long value is not cut off; a placeholder sits
+    // in a box nothing has typed into, so there is nothing to scroll it into view with. A disabled
+    // input cannot take focus, so nothing scrolls its value: it is measured like a placeholder.
+    const shown = input.disabled ? (input.value || input.placeholder) : input.placeholder;
     if (!shown) return null;
     const style = getComputedStyle(input);
     const ruler = document.createElement("span");

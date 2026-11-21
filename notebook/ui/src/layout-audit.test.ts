@@ -11,14 +11,17 @@ import { startNotebook, type RealNotebook } from "@/test/real-notebook";
 // with the coach's own writer, the way a chat's "track walk to work" makes one.
 import { addArea } from "../../../third-party/addons/godspeed-coach/lib/areas.mjs";
 import { addHabit } from "../../../third-party/addons/godspeed-coach/lib/habits.mjs";
+// The id the product serves a habit under is the tracker's own (`habit-<area>-<slug>`), so the
+// seed reads it from there instead of re-declaring the format.
+import { habitId } from "../../core/habit-trackers.mjs";
 
 // One check over every page the router serves, at 320, 375, 768 and 1280 px, on an empty workspace
 // and on one with an item of every kind the router shows a page for (note, person, moment, media,
 // group, collection with an item, world item, habit), each named in one long unbroken word and in
 // one long name with spaces (#734, #887). It drives the built notebook in a real browser and fails
 // on:
-//   - text that is cut off, an input's placeholder included (an input's value is not cut off: the
-//     input scrolls it);
+//   - text that is cut off, an input's placeholder included (an enabled input's value is not cut
+//     off: the input scrolls it; a disabled input cannot scroll, so its value counts);
 //   - text drawn under another element, a fixed or floating element included (what is painted at
 //     the middle of the text is something else);
 //   - a field with no name a screen reader can read, or a label that names no field;
@@ -41,6 +44,7 @@ type Seeded = {
   collectionSlug: string;
   collectionItem: string;
   habit: string;
+  habitUnbroken: string;
 };
 type RouteCheck = {
   pattern: string;
@@ -86,7 +90,7 @@ const ROUTES: RouteCheck[] = [
   { pattern: "/collections/:slug/schema", urls: (s) => [`/collections/${s ? s.collectionSlug : MISSING}/schema`] },
   { pattern: "/collections/:slug/:itemId", urls: (s) => [s ? `/collections/${s.collectionSlug}/${s.collectionItem}` : `/collections/${MISSING}/${MISSING}`] },
   { pattern: "/collections/:slug", urls: (s) => [`/collections/${s ? s.collectionSlug : MISSING}`] },
-  { pattern: "/trackers/habits/:id", urls: (s) => [s ? `/trackers/habits/${s.habit}` : `/trackers/habits/${MISSING}`] },
+  { pattern: "/trackers/habits/:id", urls: (s) => (s ? [`/trackers/habits/${s.habit}`, `/trackers/habits/${s.habitUnbroken}`] : [`/trackers/habits/${MISSING}`]) },
   { pattern: "/dashboard/graph", urls: () => ["/dashboard/graph"] },
   { pattern: "/:name/*", urls: () => ["/timeline"], redirectsTo: "/dashboard/timeline" },
   { pattern: "*", urls: () => ["/no-such-page"] },
@@ -187,7 +191,9 @@ async function seed(notebook: RealNotebook): Promise<Seeded> {
   addArea(notebook.root, { slug: "health", title: "Health", rhythm: "weekly sunday", starts: "2026-11-01" });
   const habit = await addHabit(notebook.root, { area: "health", title: SPACED, doneMeans: "walked", days: "daily" }, "2026-11-01");
   if (!habit.file) throw new Error("the seeded habit did not get a coach file");
-  return { note: note.id, person: person.id, group: group.id, groupSlug: group.slug, world: world.id, collection: collection.id, collectionSlug: collection.slug, collectionItem: collectionItem.id, habit: `habit-health-${habit.slug}` };
+  const unbrokenHabit = await addHabit(notebook.root, { area: "health", title: UNBROKEN, doneMeans: "walked", days: "daily" }, "2026-11-01");
+  if (!unbrokenHabit.file) throw new Error("the seeded unbroken habit did not get a coach file");
+  return { note: note.id, person: person.id, group: group.id, groupSlug: group.slug, world: world.id, collection: collection.id, collectionSlug: collection.slug, collectionItem: collectionItem.id, habit: habitId(habit), habitUnbroken: habitId(unbrokenHabit) };
 }
 
 // Loaded: no request in flight, fonts in, no sign-in or loading spinner, and no animation still on
@@ -307,6 +313,7 @@ async function auditEveryPage(browser: Browser, notebook: RealNotebook, seeded: 
           .replace(seeded.collectionItem, "<item>")
           .replace(seeded.collectionSlug, "<collection>")
           .replace(seeded.habit, "<habit>")
+          .replace(seeded.habitUnbroken, "<habit>")
       : url;
   const context = await browser.newContext({ viewport });
   try {
@@ -416,11 +423,18 @@ describe("the audit's rules on pages built for them", { timeout: 20_000 }, () =>
   });
 
   it("passes an input whose value is longer than its box, and still reports the placeholder", async () => {
-    // The input scrolls its own value (the group's name does this in its edit form, #887); a
-    // placeholder has nothing typed into it and nothing to scroll it into view with.
+    // An enabled input scrolls its own value (the group's name does this in its edit form, #887);
+    // a placeholder has nothing typed into it and nothing to scroll it into view with.
     expect(await audit(`<input aria-label="Name" placeholder="Short" value="Supercalifragilisticexpialidociousgroupname" style="width:80px">`))
       .toEqual([]);
     expect(await audit(`<input aria-label="Search" placeholder="Search every note you ever wrote" value="Typed" style="width:80px">`))
+      .toHaveLength(1);
+  });
+
+  it("reports a disabled input whose value is longer than its box", async () => {
+    // A disabled input cannot take focus, so nothing scrolls its value into view: it is measured
+    // like a placeholder (the settings page's disabled email field, #887).
+    expect(await audit(`<input aria-label="Email" value="ada.lovelace@looming-largescaleanalyticalengine.works" disabled style="width:80px">`))
       .toHaveLength(1);
   });
 
@@ -499,7 +513,9 @@ describe("every page at a phone's and a desktop's width", () => {
     }, 240_000);
 
     it(`finds nothing cut off, covered or unnamed on a seeded workspace at ${viewport.width} px`, async () => {
-      // A seed that did not show would make this a second empty run.
+      // A seed that did not show would make this a second empty run. Every seeded detail route
+      // shows the item it was seeded with, not its missing state: a stale id would make the audit
+      // below audit a "not found" page, which none of its rules would report.
       const context = await browser.newContext({ viewport });
       try {
         const page = await context.newPage();
@@ -508,13 +524,23 @@ describe("every page at a phone's and a desktop's width", () => {
           ["/dashboard/people", "Ada Lovelace"],
           ["/dashboard/media", "Kept on this computer only"],
           ["/dashboard/notes", "Trip to Lisbon"],
-          ["/dashboard/groups", "Seed round investors for the 2027 expansion", "Donaudampfschifffahrtsgesellschaft Investoren"],
+          [`/dashboard/notes/${seeded.note}`, "Book the train."],
+          [`/dashboard/people/${seeded.person}`, "Ada Lovelace"],
+          [`/dashboard/groups/${seeded.groupSlug}`, "Seed round investors for the 2027 expansion"],
+          [`/dashboard/world/${seeded.world}`, UNBROKEN],
           ["/dashboard/world", UNBROKEN, SPACED],
+          [`/collections/${seeded.collectionSlug}`, UNBROKEN],
+          [`/collections/${seeded.collectionSlug}/schema`, UNBROKEN],
+          [`/collections/${seeded.collectionSlug}/${seeded.collectionItem}`, UNBROKEN],
+          [`/trackers/habits/${seeded.habit}`, SPACED],
+          [`/trackers/habits/${seeded.habitUnbroken}`, UNBROKEN],
           ["/collections", COLLECTION_SPACED],
           ["/dashboard/media", `${UNBROKEN}.png`],
         ]) {
           await page.goto(seededNotebook.base + url);
-          for (const text of texts) await page.getByText(text).first().waitFor({ timeout: 15_000 });
+          // The first match in the DOM may be a hidden pane (a tree beside the open detail), so a
+          // visible one is what proves the page shows the item.
+          for (const text of texts) await page.getByText(text).filter({ visible: true }).first().waitFor({ timeout: 15_000 });
         }
       } finally {
         await context.close();

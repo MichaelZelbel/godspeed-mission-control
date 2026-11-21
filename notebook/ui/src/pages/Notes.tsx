@@ -835,7 +835,7 @@ export default function Notes() {
       <SEOHead title="Notes - Godspeed Mission Control" noIndex />
 
 
-      {!isMobile&&treeCollapsed&&<div className="w-11 shrink-0 border-r border-border"><Button variant="ghost" size="icon" className="h-11 w-11" aria-label="Expand notes tree" title="Expand notes tree" onClick={toggleTree}><ChevronRight className="h-4 w-4"/></Button></div>}
+      {!stacked&&treeCollapsed&&<div className="w-11 shrink-0 border-r border-border"><Button variant="ghost" size="icon" className="h-11 w-11" aria-label="Expand notes tree" title="Expand notes tree" onClick={toggleTree}><ChevronRight className="h-4 w-4"/></Button></div>}
       {/* Note list panel */}
       <div className={cn(
         "shrink-0 border-r border-border flex-col bg-background min-w-0",
@@ -845,7 +845,7 @@ export default function Notes() {
 
         {/* Header */}
         <div className="flex flex-nowrap items-center gap-0.5 px-2 py-1 border-b border-border shrink-0" aria-label="Notes navigation">
-          {!isMobile && <Button variant="ghost" size="icon" className="h-8 w-6 shrink-0" aria-label="Collapse notes tree" title="Collapse notes tree" onClick={toggleTree}><ChevronLeft className="h-4 w-4" /></Button>}
+          {!stacked && <Button variant="ghost" size="icon" className="h-8 w-6 shrink-0" aria-label="Collapse notes tree" title="Collapse notes tree" onClick={toggleTree}><ChevronLeft className="h-4 w-4" /></Button>}
           <div className="flex shrink-0 items-center gap-1 px-1 text-xs font-medium tabular-nums text-muted-foreground" title={`${searchMode ? "Search notes" : "Notes"}: ${counts.all}`}>
             <FileText className="h-3.5 w-3.5" aria-hidden="true" />
             <span aria-label={`${counts.all} notes`}>{counts.all}</span>

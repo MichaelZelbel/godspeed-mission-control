@@ -772,8 +772,11 @@ function CollectionItemsTree({
   onDuplicateItem: (itemId: string) => void;
   onDeleteItem: (itemId: string) => void;
 }) {
+  // The same breakpoint the page itself reads below: the tree's own stacked/full classes must
+  // move with the pane pair, not with a second declaration of the width (Tailwind's lg).
+  const stackedTree = !usePanesTogether();
   return (
-    <aside className={cn("flex w-full shrink-0 flex-col border-b bg-background lg:h-full lg:w-80 lg:border-b-0 lg:border-r", className)}>
+    <aside className={cn("flex w-full shrink-0 flex-col border-b bg-background", !stackedTree && "h-full w-80 border-b-0 border-r", className)}>
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <CollectionIcon icon={collection?.icon} className="h-4 w-4" />
         <div className="min-w-0 flex-1">
@@ -3362,7 +3365,7 @@ function CollectionDetailPage() {
     );
 
   return (
-    <div className="flex h-[calc(100dvh-104px)] w-full flex-col overflow-hidden rounded-md border bg-background lg:flex-row">
+    <div className={cn("flex h-[calc(100dvh-104px)] w-full overflow-hidden rounded-md border bg-background", stackedTree ? "flex-col" : "flex-row")}>
       <SEOHead
         title={`${collection?.name ?? "Collection"} - Godspeed Mission Control`}
         noIndex
@@ -3387,9 +3390,11 @@ function CollectionDetailPage() {
         onDeleteItem={handleDeleteItemFromTree}
         // The tree beside the detail needs a wide window; below PANE_BREAKPOINT an open item takes
         // the whole pane, as on a phone, and the breadcrumb's collection link leads back (#887).
-        className={stackedTree && routeItemId ? "hidden" : "h-full"}
+        // With no item open the tree stacks above the collection view, which keeps every header
+        // control reachable on a phone.
+        className={stackedTree && routeItemId ? "hidden" : undefined}
       />
-      <section className={cn("min-w-0 flex-1 overflow-y-auto p-6", stackedTree && !routeItemId && "hidden")}>
+      <section className="min-w-0 flex-1 overflow-y-auto p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <p className="break-words text-sm text-muted-foreground">
