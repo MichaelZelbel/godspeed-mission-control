@@ -160,11 +160,20 @@
         if (position === "fixed") break;
       }
       if (sticky) {
-        const scroller = [...(function* () { for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) yield e; })()]
-          .find((e) => ["auto", "scroll"].includes(getComputedStyle(e).overflowY));
-        if (scroller) {
+        // The scroller that can move the text is the one the sticky cover sticks within: the nearest
+        // common scroller of the text and the cover. An inner scroller of the text alone cannot move
+        // the text out of the band the cover holds on the page (the person page's chat does this).
+        const scrollersOf = (start) => {
+          const found = [];
+          for (let e = start.parentElement; e && e !== document.body; e = e.parentElement) {
+            if (["auto", "scroll"].includes(getComputedStyle(e).overflowY)) found.push(e);
+          }
+          return found;
+        };
+        const common = scrollersOf(el).find((s) => s.contains(sticky));
+        if (common) {
           const shift = sticky.getBoundingClientRect().bottom + 1 - el.getBoundingClientRect().top;
-          if (shift > 0) scroller.scrollTop = Math.max(0, scroller.scrollTop - shift);
+          if (shift > 0) common.scrollTop = Math.max(0, common.scrollTop - shift);
           over = covered();
         }
       }
