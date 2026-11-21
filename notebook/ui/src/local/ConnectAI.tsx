@@ -5,8 +5,6 @@ import {Input} from '@/components/ui/input';
 import {AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger} from '@/components/ui/alert-dialog';
 import {AlertTriangle,CheckCircle2,Loader2} from 'lucide-react';
 import {providerService} from '../../../core/provider-service.mjs';
-import {aiFailure} from '../../../core/ai-health.mjs';
-import {AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS} from '../../../core/no-ai.mjs';
 
 // Settings > Your AI (18 October 2026). What the person connects here powers the notebook and, unless
 // they untick it, the daily routines and the chat too (notebook/core/routine-ai.mjs): every installer
@@ -46,25 +44,10 @@ export function serviceName(provider?:string|null,base?:string|null){
   if((provider==='custom'||provider==='api')&&base){try{return new URL(base).hostname;}catch{}}
   return provider||'an AI service';
 }
-// WHAT "TEST AND CONNECT" SAYS WHEN THE AI DID NOT ANSWER (#763). The server passes on the provider's
-// own failure ("Model provider failed with HTTP 403: Forbidden"); a person reads instead what happened
-// and what to do, in the chats' words for the same states (core/no-ai.mjs). The provider's text is
-// dropped: it can quote part of the key. Anything that is not a provider failure (a refusal of the
-// form itself, a timeout already said plainly) is shown as the server wrote it.
-export const KEY_REFUSED=AI_REFUSED_STATUS+'. The service did not accept this key. Check it, or replace it with a new key from your AI service, then try again.';
-export const AI_UNREACHABLE=AI_UNREACHABLE_STATUS+'. Nothing answered at its address. Check that this computer is online and that the address is right, then try again.';
-export const AI_SERVICE_FAILED='Your AI service had a problem on its side and did not answer. Your key was not refused. Try again in a few minutes.';
-export const AI_REQUEST_LIMITED='Your AI service turned the request away for now, often because of a usage limit or no credit left. Check your account with the service, then try again.';
-export const AI_REQUEST_REJECTED='Your AI service did not accept the request. Check the model name and the address, then try again.';
-export function connectionError(message:string){
-  const failed=/Model provider failed with HTTP (\d{3})/.exec(message),status=failed?Number(failed[1]):0;
-  if(failed&&aiFailure(message)==='refused'||/needs sign-in/i.test(message))return KEY_REFUSED;
-  if(/could not be reached|fetch failed/i.test(message))return AI_UNREACHABLE;
-  if(status>=500)return AI_SERVICE_FAILED;
-  if(status===429)return AI_REQUEST_LIMITED;
-  if(status)return AI_REQUEST_REJECTED;
-  return message;
-}
+// WHAT "TEST AND CONNECT" SAYS WHEN THE AI DID NOT ANSWER (#763, #861). The server picks the
+// sentence from the AI's outcome (core/ai-outcome.mjs connectionTestError) and answers with it, so
+// what arrives is already what a person reads; the provider's raw words never travel here. Anything
+// that is not the AI (a refusal of the form itself) is shown as the server wrote it.
 const when=(at:string)=>{const d=new Date(at);return isNaN(d.getTime())?at:d.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});};
 const DAY=24*3600*1000;
 
@@ -139,7 +122,7 @@ export function ConnectAI(){
       if(result.routines?.available)qc.setQueryData(['routine-ai'],result.routines);
       setDone(!useForRoutines||!result.routines?.available?'Connected. The notebook uses it.':result.routines.check?.ok?'Connected. The routines, the chat and the notebook use it, and the routines reached it just now.':'Connected for the notebook, but the routines could not reach it: '+(result.routines.check?.error||'no answer')+'.');
       qc.invalidateQueries({queryKey:['candidate-status']});
-    }catch(err:any){setError(connectionError(err.message));}finally{setBusy(false);}};
+    }catch(err:any){setError(err.message);}finally{setBusy(false);}};
   // Removing the saved connection (#779): the server forgets its key, here and in Hermes when it was
   // written there, and the form asks for a new one.
   const [removing,setRemoving]=useState(false);
@@ -219,7 +202,7 @@ export function BackupAI(){
     try{qc.setQueryData(['backup-ai'],await call('backup-ai',{url,key,model}));setKey('');setModel('');
       setDone('Connected as your backup. It answered a test just now, and it steps in only when your main AI fails.');
       qc.invalidateQueries({queryKey:['routine-ai']});
-    }catch(err:any){setError(connectionError(err.message));}finally{setBusy(false);}};
+    }catch(err:any){setError(err.message);}finally{setBusy(false);}};
   const remove=async()=>{setRemoving(true);setError('');setDone('');
     try{qc.setQueryData(['backup-ai'],await call('backup-ai/remove',{}));setDone('The backup is removed. When your main AI fails, the work waits for it again.');qc.invalidateQueries({queryKey:['routine-ai']});}
     catch(err:any){setError(err.message);}finally{setRemoving(false);}};

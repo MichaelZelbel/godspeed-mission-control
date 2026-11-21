@@ -42,7 +42,7 @@ globalThis.ResizeObserver ??= NoResize as any;
 const REFUSED_FACTS = "No facts were pulled out of it. " + AI_REFUSED_STATUS + ". Check it in Settings, Your AI.";
 const UNREACHABLE_FACTS = "No facts were pulled out of it. " + AI_UNREACHABLE_STATUS + ". Check its connection in Settings, Your AI.";
 const STALLED_FACTS = "No facts were pulled out of it. " + AI_STALLED_STATUS + ". Try again in a moment, or check it in Settings, Your AI.";
-// What the server answers for the extraction (server/main.mjs plainAIFailure).
+// What the server answers for the extraction (core/ai-outcome.mjs plainAIError).
 const serverSaid = (message: string) => ({ data: null, error: { message } });
 
 async function saveMoment() {

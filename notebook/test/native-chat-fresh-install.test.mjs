@@ -124,7 +124,9 @@ test('through the chat door a failure is a plain sentence with a next step, neve
     const answer=await fetch(base+'/api/browser-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'hello',request_id:'fictional-failing'})});
     assert.equal(answer.status,400);
     const {error}=await answer.json();
-    assert.match(error,/Check the AI connection in Settings, then try again\.$/);
+    // The route answers with the shared sentence for an AI that cannot be reached (core/ai-outcome.mjs,
+    // #861), not the AI program's own generic failure line it used to pass through.
+    assert.equal(error,'Your AI could not be reached. Check its connection in Settings, Your AI, then try again.');
     assert.doesNotMatch(error,/something broke inside|retained for investigation/);
   }finally{await s.close();}
 });

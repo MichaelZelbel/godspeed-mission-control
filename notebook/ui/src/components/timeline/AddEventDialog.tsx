@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useAICreditsGate } from "@/hooks/useAICreditsGate";
+import type { AIAvailability } from "@/hooks/useAICredits";
 import { triggerCreditsRefresh } from "@/lib/credits-events";
 import { OUT_OF_CREDITS_MESSAGE, dbErrorMessage, functionErrorMessage, readFunctionError } from "@/lib/function-error";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import ImportanceSlider from "./ImportanceSlider";
 import { UNNAMED_PERSON } from "./people";
-import { aiFailureKind, factsNotPulledOut, filledOnOpen, mergeSuggestion, newPeopleToCreate, noAiFacts } from "./moment-form.mjs";
+import { NO_AI_FACTS, aiFailureKind, factsNotPulledOut, filledOnOpen, mergeSuggestion, newPeopleToCreate, noAiFacts } from "./moment-form.mjs";
 
 export interface TimelineContact {
   id: string;
@@ -63,7 +64,7 @@ const AI_FALLBACK = "The suggestion could not be made. Try again.";
 export default function AddEventDialog({ people, onCreated, editEvent, open: controlledOpen, onOpenChange }: AddEventDialogProps) {
   const { user, session } = useAuth();
   const { toast } = useToast();
-  const { checkCredits, providerConfigured, aiAvailability } = useAICreditsGate();
+  const { checkCredits, providerConfigured, aiAvailability, refetch: refetchAIStatus } = useAICreditsGate();
   const isControlled = controlledOpen !== undefined;
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isControlled ? controlledOpen : internalOpen;
@@ -299,12 +300,28 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
       // the AI refused the key or could not be reached, the confirmation says no facts were (#779).
       const saved = isEditMode ? "Moment updated" : "Moment created";
       // A refused, unreachable or stalled AI the tab already knows about keeps its at-once answer
-      // (#796). Whether an AI is connected at all is decided when the moment is saved (#812), from
-      // the extraction's own answer: the connection may have been removed or connected while the
-      // tab was open, so the tab's cached picture is not what decides. With none connected the
-      // extraction answers at once with the shared no-AI sentence, which names Settings, Your AI.
-      const known = providerConfigured ? null : factsNotPulledOut(aiAvailability);
-      if (momentId && !known) {
+      // (#796). With no AI connected at all (the tab's own status, refreshed every few seconds) no
+      // extraction is asked for (#881): the person still sees the #812 line, without a request that
+      // can only fail. When the tab's picture still says an AI is connected, the extraction decides
+      // when the moment is saved (#812): the connection may have been removed or connected while the
+      // tab was open, so a tab whose picture is out of date gets the answer from the extraction's
+      // own reply, which names Settings, Your AI.
+      // A cached answer that says no AI is connected is read afresh before the save skips anything
+      // (#907): connecting the AI again in Settings, Your AI leaves the tab's last poll answer
+      // standing until the next one, so a save made in between must not skip on the older picture.
+      // The status read asks the AI nothing, so a save with no AI connected still sends it nothing.
+      let statusConfigured = providerConfigured;
+      let statusAvailability = aiAvailability;
+      if (!statusConfigured && statusAvailability === "none" && refetchAIStatus) {
+        const fresh = await refetchAIStatus();
+        if (fresh.data) {
+          statusConfigured = !!fresh.data.runtimeConfigured;
+          statusAvailability = fresh.data.aiAvailability as AIAvailability | undefined;
+        }
+      }
+      const known = statusConfigured ? null : factsNotPulledOut(statusAvailability);
+      const noneConnected = !statusConfigured && statusAvailability === "none";
+      if (momentId && !known && !noneConnected) {
         supabase.functions
           .invoke("extract-moment-profile", { body: { moment_id: momentId } })
           .then(({ error }) => {
@@ -314,7 +331,8 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
           })
           .catch(() => {});
       }
-      toast(known ? { title: saved, description: known } : { title: saved });
+      const savedDescription = known || (noneConnected ? NO_AI_FACTS : null);
+      toast(savedDescription ? { title: saved, description: savedDescription } : { title: saved });
       setOpen(false);
       onCreated();
 
