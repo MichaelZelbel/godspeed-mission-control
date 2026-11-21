@@ -43,6 +43,18 @@ test('a suggestion fills the empty fields beside the filled ones', () => {
   assert.ok(!changed.includes('dateStart') && !changed.includes('impactLevel'));
 });
 
+test('a moment saved without scores leaves them open to a suggestion, and its saved scores are its own', () => {
+  const sparse = {title: 'Sparse', description: null, happened_at: '2026-10-05T00:00:00+00:00', happened_end: null, status: 'past_fact', impact_level: null, confidence_date: null, confidence_truth: null};
+  assert.deepEqual(filledOnOpen(sparse), {title: true, dateStart: true, dateEnd: false, status: true, impactLevel: false, confDate: false, confTruth: false});
+  const form = {title: sparse.title, dateStart: '2026-10-05', dateEnd: '', status: 'past_fact', impactLevel: null, confDate: null, confTruth: null, matchedPeople: []};
+  const merged = mergeSuggestion(form, filledOnOpen(sparse), draft, people).form;
+  assert.equal(merged.dateStart, '2026-10-05', 'the saved day stays');
+  assert.deepEqual([merged.impactLevel, merged.confDate, merged.confTruth], [1, 9, 8], 'the missing scores are gaps the suggestion fills');
+  const undated = {...sparse, happened_at: null};
+  assert.equal(filledOnOpen(undated).dateStart, false, 'a moment with no day at all leaves its date open too');
+  assert.equal(mergeSuggestion({...form, dateStart: ''}, filledOnOpen(undated), draft, people).form.dateStart, '2026-10-09');
+});
+
 test('a cleared start date counts as empty again, and an end date never lands before the start', () => {
   const cleared = {...blank, dateStart: ''};
   assert.equal(mergeSuggestion(cleared, {...filledOnOpen(null), dateStart: true}, draft, people).form.dateStart, '2026-10-09');

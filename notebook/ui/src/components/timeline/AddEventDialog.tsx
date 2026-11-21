@@ -78,9 +78,11 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
   const [dateStart, setDateStart] = useState(today);
   const [dateEnd, setDateEnd] = useState("");
   const [status, setStatus] = useState("unknown");
-  const [impactLevel, setImpactLevel] = useState(1);
-  const [confDate, setConfDate] = useState(5);
-  const [confTruth, setConfTruth] = useState(5);
+  // Null means the moment has no such score saved and the person has not set
+  // one: the slider's label reads Not set, and saving writes null again.
+  const [impactLevel, setImpactLevel] = useState<number | null>(1);
+  const [confDate, setConfDate] = useState<number | null>(5);
+  const [confTruth, setConfTruth] = useState<number | null>(5);
   const [matchedPeople, setMatchedPeople] = useState<string[]>([]);
   const [suggestedNewPeople, setSuggestedNewPeople] = useState<string[]>([]);
   const [selectedNewPeople, setSelectedNewPeople] = useState<string[]>([]);
@@ -106,21 +108,26 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
     newPeopleLabel: `${fieldId}-new-people-label`,
   };
   const focusOnly = (id: string) => (e: MouseEvent) => { e.preventDefault(); document.getElementById(id)?.focus(); };
+  // The edit of a moment with no day at all may stay undated: its Start Date
+  // opens empty and saving without touching it writes no date. A dated moment
+  // still needs one, as its * says.
+  const dateOptional = isEditMode && !editEvent?.happened_at;
 
   useEffect(() => {
     if (!open) return;
     if (editEvent) {
       setTitle(editEvent.title);
       setDescription(editEvent.description || "");
-      // A dateless or scoreless moment opens with the new-moment starting
-      // values instead of crashing (filledOnOpen keeps an empty start date
-      // open to a suggestion, but marks the score sliders as the moment's own).
-      setDateStart(editEvent.happened_at ? editEvent.happened_at.split("T")[0] : today);
+      // A dateless or scoreless moment opens with empty fields instead of
+      // made-up ones: no start date and sliders labelled Not set, so saving
+      // without touching them keeps the moment as it was. filledOnOpen leaves
+      // those gaps open to a suggestion, like any other empty field.
+      setDateStart(editEvent.happened_at ? editEvent.happened_at.split("T")[0] : "");
       setDateEnd(editEvent.happened_end ? editEvent.happened_end.split("T")[0] : "");
       setStatus(editEvent.status);
-      setImpactLevel(editEvent.impact_level ?? 1);
-      setConfDate(editEvent.confidence_date ?? 5);
-      setConfTruth(editEvent.confidence_truth ?? 5);
+      setImpactLevel(editEvent.impact_level);
+      setConfDate(editEvent.confidence_date);
+      setConfTruth(editEvent.confidence_truth);
       setMatchedPeople(editEvent.participantIds || []);
     } else {
       setTitle("");
@@ -219,14 +226,17 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
   };
 
   const handleSave = async () => {
-    if (!user || !title.trim() || !dateStart) return;
+    if (!user || !title.trim() || (!dateStart && !dateOptional)) return;
     setSaving(true);
     try {
+      // A date or score the moment is missing and the person has not set
+      // saves as null, so an edit of an undated or sparse moment leaves its
+      // gaps as they are instead of dating it today with made-up scores.
       const momentPayload = {
         user_id: user.id,
         title: title.trim(),
         description: description.trim() || null,
-        happened_at: dateStart,
+        happened_at: dateStart || null,
         happened_end: dateEnd || null,
         status,
         impact_level: impactLevel,
@@ -378,14 +388,14 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2"><Label id={ids.confDateLabel} onClick={focusOnly(ids.confDate)}>Confidence (Date): {confDate}</Label><Slider value={[confDate]} onValueChange={([v]) => { setConfDate(v); markFilled("confDate"); }} min={0} max={10} step={1} thumbProps={{ id: ids.confDate, "aria-labelledby": ids.confDateLabel }} /></div>
+          <div className="space-y-2"><Label id={ids.confDateLabel} onClick={focusOnly(ids.confDate)}>Confidence (Date): {confDate ?? "Not set"}</Label><Slider value={[confDate ?? 5]} onValueChange={([v]) => { setConfDate(v); markFilled("confDate"); }} min={0} max={10} step={1} thumbProps={{ id: ids.confDate, "aria-labelledby": ids.confDateLabel }} /></div>
         </div>
         <ImportanceSlider value={impactLevel} onChange={(v) => { setImpactLevel(v); markFilled("impactLevel"); }} />
-        <div className="space-y-2"><Label id={ids.confTruthLabel} onClick={focusOnly(ids.confTruth)}>Confidence (Truth): {confTruth}</Label><Slider value={[confTruth]} onValueChange={([v]) => { setConfTruth(v); markFilled("confTruth"); }} min={0} max={10} step={1} thumbProps={{ id: ids.confTruth, "aria-labelledby": ids.confTruthLabel }} /></div>
+        <div className="space-y-2"><Label id={ids.confTruthLabel} onClick={focusOnly(ids.confTruth)}>Confidence (Truth): {confTruth ?? "Not set"}</Label><Slider value={[confTruth ?? 5]} onValueChange={([v]) => { setConfTruth(v); markFilled("confTruth"); }} min={0} max={10} step={1} thumbProps={{ id: ids.confTruth, "aria-labelledby": ids.confTruthLabel }} /></div>
         <div className="space-y-2"><Label htmlFor={peopleFieldId} onClick={focusOnly(peopleFieldId)} className="text-xs">People</Label><PeopleMultiSelect id={peopleFieldId} people={people} value={matchedPeople} onChange={setMatchedPeople} newNames={typedNewPeople} onNewNamesChange={setTypedNewPeople} /></div>
         {suggestedNewPeople.length > 0 && <div className="space-y-2"><p id={ids.newPeopleLabel} className="text-xs font-medium leading-none text-muted-foreground">Add new people (not yet in your list)</p><div role="group" aria-labelledby={ids.newPeopleLabel} className="space-y-1.5">{suggestedNewPeople.map((name) => <label key={name} className="flex items-center gap-2 cursor-pointer"><Checkbox checked={selectedNewPeople.includes(name)} onCheckedChange={(checked) => setSelectedNewPeople((prev) => checked ? [...prev, name] : prev.filter((n) => n !== name))} /><span className="text-sm">{name}</span></label>)}</div></div>}
       </div>
-      <DialogFooter><Button onClick={handleSave} disabled={saving || !title.trim() || !dateStart}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{isEditMode ? "Save Changes" : "Create Moment"}</Button></DialogFooter>
+      <DialogFooter><Button onClick={handleSave} disabled={saving || !title.trim() || (!dateStart && !dateOptional)}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{isEditMode ? "Save Changes" : "Create Moment"}</Button></DialogFooter>
     </DialogContent>
   );
 
