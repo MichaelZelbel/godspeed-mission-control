@@ -413,8 +413,19 @@ describe("the audit's rules on pages built for them", { timeout: 20_000 }, () =>
     expect(await audit(sizedParagraph(13, 1 / 64))).toEqual([]);
   });
 
-  it("reports a wrapped line whose last glyph runs 1/64 px past its box", async () => {
-    expect(await audit(sizedParagraph(4, 1 / 64))).toEqual(['clipped: p "Kept on this computer only"']);
+  // A glyph further than a pixel past its box is cut off. Within a pixel, a box sized exactly to its
+  // text reads it up to a layout step (1/64 px) past the edge under another font or browser build,
+  // though the layout put the text inside and nothing hides it (#887's CI runners' fonts), so the
+  // rule holds that close for a fit. One word on its own, so no other word can overflow the box:
+  // half a pixel past is such a fit, 2 px past is a cut.
+  it("reports a word that sticks out 2 px past its box and passes one within a pixel", async () => {
+    const word = (past: number) => `<p id="w" style="margin:0">alphabet</p><script>
+      const p = document.getElementById("w"), range = document.createRange();
+      range.selectNodeContents(p.firstChild);
+      p.style.width = (range.getBoundingClientRect().width - ${past}) + "px";
+    </script>`;
+    expect(await audit(word(2))).toEqual(['clipped: p "alphabet"']);
+    expect(await audit(word(0.5))).toEqual([]);
   });
 
   it("reports an input whose placeholder does not fit", async () => {
