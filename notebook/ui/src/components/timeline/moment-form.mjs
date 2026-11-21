@@ -2,7 +2,7 @@
 // apart from the dialog so it can be tested with node --test
 // (notebook/test/moment-form.test.mjs).
 
-import { AI_REFUSED_STATUS, AI_STALLED_STATUS, AI_UNREACHABLE_STATUS, NO_AI_STATUS } from '../../../../core/no-ai.mjs';
+import { AI_BUSY, AI_BUSY_STATUS, AI_NO_CREDIT, AI_NO_CREDIT_STATUS, AI_REFUSED_STATUS, AI_STALLED, AI_STALLED_STATUS, AI_UNREACHABLE_STATUS, NO_AI_STATUS } from '../../../../core/no-ai.mjs';
 
 const DAY = /^(\d{4}-\d{2}-\d{2})/;
 
@@ -130,13 +130,15 @@ export function newPeopleToCreate(suggested = [], typed = []) {
   return out;
 }
 
-// What the server says when the AI refused the key, could not be reached or stopped answering
-// (server/main.mjs plainAIFailure): 'refused', 'unreachable', 'stalled', or null.
+// What the server says when the AI fails, by its status line (core/no-ai.mjs, decided in
+// core/ai-outcome.mjs): 'refused', 'unreachable', 'stalled', 'no-credit', 'busy', or null.
 export function aiFailureKind(message) {
   const text = String(message ?? '');
   if (text.startsWith(AI_REFUSED_STATUS)) return 'refused';
   if (text.startsWith(AI_UNREACHABLE_STATUS)) return 'unreachable';
   if (text.startsWith(AI_STALLED_STATUS)) return 'stalled';
+  if (text.startsWith(AI_NO_CREDIT_STATUS)) return 'no-credit';
+  if (text.startsWith(AI_BUSY_STATUS)) return 'busy';
   return null;
 }
 
@@ -145,7 +147,11 @@ export function aiFailureKind(message) {
 export function factsNotPulledOut(kind) {
   if (kind === 'refused') return 'No facts were pulled out of it. ' + AI_REFUSED_STATUS + '. Check it in Settings, Your AI.';
   if (kind === 'unreachable') return 'No facts were pulled out of it. ' + AI_UNREACHABLE_STATUS + '. Check its connection in Settings, Your AI.';
-  if (kind === 'stalled') return 'No facts were pulled out of it. ' + AI_STALLED_STATUS + '. Try again in a moment, or check it in Settings, Your AI.';
+  // The stalled sentence is the shared one (AI_STALLED, core/no-ai.mjs), so a reword there keeps
+  // this notice and the Groups button's reason saying the same words (#861 review R8).
+  if (kind === 'stalled') return 'No facts were pulled out of it. ' + AI_STALLED;
+  if (kind === 'no-credit') return 'No facts were pulled out of it. ' + AI_NO_CREDIT;
+  if (kind === 'busy') return 'No facts were pulled out of it. ' + AI_BUSY;
   return null;
 }
 
