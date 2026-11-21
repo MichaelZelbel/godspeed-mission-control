@@ -311,11 +311,45 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // A file is opened before the reply starts, so a missing one is a 404, and a
   // read that fails halfway ends that one reply. Until 6 October 2026 either
   // stopped the whole server (an 'error' nobody listened for).
-  async function sendFile(res, file, headers, missing) {
+  async function sendFile(res, req, file, headers, missing) {
     let handle; try { handle = await fs.promises.open(file, 'r'); } catch { return missing ? missing() : send(res, 404, { error: 'This file is missing.' }); }
     let size; try { size = (await handle.stat()).size; } catch (error) { await handle.close().catch(() => {}); throw error; }
-    res.writeHead(200, { ...headers, 'Content-Length': size });
-    pipeline(handle.createReadStream(), res, error => { if (error) res.destroy(); });
+    // A browser may ask for part of a file (`Range: bytes=a-b`, `bytes=a-` or
+    // `bytes=-n`): audio and video players scrub by fetching the piece they
+    // need, and Safari asks for a byte range before it plays anything, so a
+    // server that answers every request with the whole file cannot be played
+    // from at all there (#889). A well-formed range the file cannot satisfy,
+    // such as a start past its end, is refused with 416 and the file's size;
+    // anything else that is not a plain single range (a malformed header,
+    // several ranges at once, a start after the end inside the header) is
+    // ignored, and the whole file goes out as before, which the standard lets
+    // a server do. The access checks ran before sendFile, so a range changes
+    // nothing about who may read the file.
+    let start = 0, end = size - 1, ranged = false, unsatisfiable = false;
+    const asked = /^\s*bytes=(\d*)-(\d*)\s*$/.exec(String(req.headers.range || ''));
+    if (asked && size > 0) {
+      const a = asked[1], b = asked[2];
+      if (a === '' && b !== '') { if (Number(b) > 0) { start = Math.max(0, size - Number(b)); ranged = true; } else unsatisfiable = true; }
+      else if (a !== '' && (b === '' || Number(b) >= Number(a))) {
+        if (Number(a) < size) { start = Number(a); end = b === '' ? size - 1 : Math.min(Number(b), size - 1); ranged = true; }
+        else unsatisfiable = true;
+      }
+    } else if (asked && size === 0) unsatisfiable = true;
+    if (unsatisfiable) { await handle.close().catch(() => {}); return send(res, 416, { error: 'The requested part of this file does not exist.' }, { 'Content-Range': 'bytes */' + size, 'Accept-Ranges': 'bytes' }); }
+    // The browser can give up on a page file at any moment: before the reply
+    // starts, between opening the file and piping it, or part way through.
+    // Piping into a reply that is already gone throws
+    // (ERR_STREAM_UNABLE_TO_PIPE), and until 21 November 2026 nothing caught
+    // that throw in a server process that was not started from main.mjs
+    // itself (the screen tests and the layout audit start it that way), so
+    // the process ended and every open tab lost the notebook while pages
+    // were still loading. The reply is already beyond saving, so it only
+    // ends here, and the server answers everyone else.
+    if (res.destroyed) { await handle.close().catch(() => {}); return; }
+    res.writeHead(ranged ? 206 : 200, { ...headers, ...(ranged ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}), 'Content-Length': ranged ? end - start + 1 : size, 'Accept-Ranges': 'bytes' });
+    const stream = ranged ? handle.createReadStream({ start, end }) : handle.createReadStream();
+    try { pipeline(stream, res, error => { if (error) res.destroy(); }); }
+    catch { stream.destroy(); res.destroy(); await handle.close().catch(() => {}); }
   }
   async function body(req, limit = 2 * 1024 * 1024) {
     let size = 0; const chunks = [];
@@ -454,7 +488,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/media/offline'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['all','selected'].includes(input.offline))throw new Error('Choose all or selected media');const config=mediaSync.config();if(!config)throw new Error('Pair this device first');atomic(mediaSync.configPath,JSON.stringify({...config,offline:input.offline,selected:input.selected||[]}));return send(res,200,{ok:true});}
       if(route==='/api/media/manifest')return send(res,200,{data:mediaSync.manifest()});
       if(route==='/api/media/tombstone'&&req.method==='POST'){const input=JSON.parse(await body(req)),old=mediaSync.manifest().find(m=>m.path===input.path);if(!old||old.sha256!==input.sha256||!input.removed_at||!Number.isFinite(Date.parse(input.removed_at)))throw new Error('This removal does not match the saved media version');atomic(path.join(mediaRoot,hash(old.path)+'.mapping.json'),JSON.stringify({...old,removed_at:input.removed_at}));return send(res,200,{ok:true});}
-      if(route.startsWith('/api/media/blob/')&&req.method==='GET'){const filename=mediaFileName(decodeURIComponent(route.slice('/api/media/blob/'.length)));if(!mediaSync.manifest().some(m=>m.file===filename&&!m.removed_at))return send(res,404,{error:'Unknown media object'});return sendFile(res,path.join(mediaRoot,filename),{'Content-Type':'application/octet-stream','X-Content-Type-Options':'nosniff'});}
+      if(route.startsWith('/api/media/blob/')&&req.method==='GET'){const filename=mediaFileName(decodeURIComponent(route.slice('/api/media/blob/'.length)));if(!mediaSync.manifest().some(m=>m.file===filename&&!m.removed_at))return send(res,404,{error:'Unknown media object'});return sendFile(res,req,path.join(mediaRoot,filename),{'Content-Type':'application/octet-stream','X-Content-Type-Options':'nosniff'});}
       if(route==='/api/media/transfer'&&req.method==='POST'){
         const input=JSON.parse(await body(req,140*1024*1024)),mapping=input.mapping,data=Buffer.from(input.data,'base64');
         if(hash(data)!==mapping.sha256||data.length!==mapping.size)throw new Error('Transfer integrity mismatch');
@@ -763,7 +797,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!found)return send(res,404,{error:'Media not found'});
         if(found.removed)return send(res,404,{error:'Media removed'});
         const keptElsewhere=()=>{res.writeHead(404,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>File kept on another computer</title><body style="font-family:system-ui,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1rem;line-height:1.5"><h1 style="font-size:1.3rem">This file is kept on the computer where it was added.</h1><p>Open it on that computer, or make the file smaller than '+MEDIA_CARRY_MAX_MB+' MB so it can travel to this one.</p></body></html>');};
-        return sendFile(res, found.file, { 'Content-Type': found.mapping.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }, found.mapping.size>CARRY_LIMIT ? keptElsewhere : null);
+        return sendFile(res, req, found.file, { 'Content-Type': found.mapping.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }, found.mapping.size>CARRY_LIMIT ? keptElsewhere : null);
       }
       if(route==='/api/media/kept-here'&&req.method==='GET')return send(res,200,{data:keptHere(media)});
       if(route==='/api/media/kept-elsewhere'&&req.method==='GET')return send(res,200,{data:keptElsewhere(media)});
@@ -780,7 +814,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]});
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
         if(provider?.check){
-          if(!chatAICheck&&Date.now()-lastChatCheckAt>=5000){
+          // A read may ask for a fresh check (the Dashboard's arrival, #822): it still shares the
+          // in-flight check, but jumps the five-second pacing other reads keep (#794).
+          if(!chatAICheck&&(url.searchParams.has('check')||Date.now()-lastChatCheckAt>=5000)){
             lastChatCheckAt=Date.now();
             chatAICheck=(async()=>{try{await provider.check();}catch(error){console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}})().finally(()=>{chatAICheck=null;});
           }
@@ -840,7 +876,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       const cache = file.startsWith(path.join(uiRoot,'assets')+path.sep) ? 'public, max-age=31536000, immutable' : 'no-cache';
       // Only the notebook itself may frame its pages: another site could show
       // them in a frame made to look like something else (7 October 2026).
-      return sendFile(res, file, { 'Content-Type': mime, 'Cache-Control': cache, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"frame-ancestors 'self'",'X-Frame-Options':'SAMEORIGIN' });
+      return sendFile(res, req, file, { 'Content-Type': mime, 'Cache-Control': cache, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"frame-ancestors 'self'",'X-Frame-Options':'SAMEORIGIN' });
     } catch (e) {
       // A reply already under way cannot carry an error; it is cut off instead
       // (writing headers twice stopped the server until 6 October 2026).

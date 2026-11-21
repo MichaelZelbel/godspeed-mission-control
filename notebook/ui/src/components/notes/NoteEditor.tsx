@@ -1559,14 +1559,14 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </>
           ) : (
             <>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"} aria-label={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
                 <Star className={cn("h-4 w-4", note.is_favorite && "fill-warning text-warning")} />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"} aria-label={note.is_pinned ? "Unpin" : "Pin to top"}>
                 <Pin className={cn("h-4 w-4", note.is_pinned && "text-primary")} />
               </Button>
               {!note.is_external && (
-                <Button variant="ghost" size="icon" className={cn("h-8 w-8", sourceMode && "bg-accent text-accent-foreground")} onClick={toggleSourceMode} title={sourceMode ? "Rich text mode" : "Markdown source"}>
+                <Button variant="ghost" size="icon" className={cn("h-8 w-8", sourceMode && "bg-accent text-accent-foreground")} onClick={toggleSourceMode} title={sourceMode ? "Rich text mode" : "Markdown source"} aria-label={sourceMode ? "Rich text mode" : "Markdown source"}>
                   <Code2 className="h-4 w-4" />
                 </Button>
               )}
@@ -1625,10 +1625,10 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           }}
           quickActions={
             <>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"} aria-label={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
                 <Star className={cn("h-3.5 w-3.5", note.is_favorite && "fill-warning text-warning")} />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"} aria-label={note.is_pinned ? "Unpin" : "Pin to top"}>
                 <Pin className={cn("h-3.5 w-3.5", note.is_pinned && "text-primary")} />
               </Button>
               {sharedNote?.is_active && (
@@ -1649,6 +1649,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                 className="h-7 w-7"
                 onClick={() => window.open(`/dashboard/notes/${note.id}`, "_blank")}
                 title="Open in new tab"
+                aria-label="Open in new tab"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
               </Button>
@@ -1658,6 +1659,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                 className="h-7 w-7 hover:text-destructive"
                 onClick={moveToTrash}
                 title="Move to trash"
+                aria-label="Move to trash"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
@@ -1666,7 +1668,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           noteActions={
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7" title="More actions">
+                <Button variant="ghost" size="icon" className="h-7 w-7" title="More actions" aria-label="More actions">
                   <MoreHorizontal className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
