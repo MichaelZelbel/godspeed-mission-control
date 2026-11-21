@@ -18,6 +18,21 @@ export const SETTINGS_ONLY_AI_HELP='Tick “Use it for the daily routines and th
 export const NO_AI_CHAT=NO_AI_STATUS+'. Connect your AI service in Settings, Your AI, then ask Godspeed again.';
 export const NO_AI_ANALYSIS='No AI is connected yet. Connect your AI service in Settings, Your AI, before analysis.';
 
+// What an AI action that is neither a chat nor an analysis says when no AI is connected (#886):
+// Weekly Review said "Connect a model before generating a review" and a person's "Add a fact"
+// said "Connect an assistant before classifying a fact", which named no place. Their tails ("before
+// analysis", "then ask Godspeed again") would not fit, so they share this plain sentence.
+export const NO_AI_CONNECT=NO_AI_STATUS+'. Connect your AI service in Settings, Your AI.';
+
+// True when a failed request's answer says no AI is connected, in the server's own words ("Connect
+// a model before...", "Connect an assistant before...", "Connect your chosen assistant before...")
+// or the shared ones. A screen whose picture of the connection is a few seconds old, because the
+// connection was just removed, can still show the shared line instead of the server's (#886).
+export function noAiAnswer(message){
+  const text=String(message??'').trim();
+  return text.startsWith(NO_AI_STATUS)||/^Connect (a model|an assistant|your chosen assistant) before /.test(text);
+}
+
 // What an AI route answers with when the AI fails (#774): a refused key or sign-in, an outage, a
 // stalled AI, an answer that could not be used, no credit left, or a busy or limited service
 // (#861). Each begins with its status line, the pattern the browser matches on
