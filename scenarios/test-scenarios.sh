@@ -5606,6 +5606,64 @@ for scenario in "${BASH_SCENARIOS[@]}"; do
   esac
 done
 
+# ============================================================ executable scenarios
+# A workflow that runs scenarios/<file> as its own command (not through bash, node or python3) needs
+# that file executable in the git index; a 100644 copy stops the nightly job with exit code 126
+# before the scenario starts (#849).
+section "the scenarios the workflows run directly are executable"
+
+direct_scenario_files() { # <repo root>: the scenario files a workflow runs as its own command
+  local wf
+  for wf in "$1"/.github/workflows/*; do
+    [ -f "$wf" ] || continue
+    sed -n -E \
+      -e 's/^[[:space:]]*-[[:space:]]+run:[[:space:]]+(scenarios\/[A-Za-z0-9._-]+).*/\1/p' \
+      -e 's/^[[:space:]]*run:[[:space:]]+(scenarios\/[A-Za-z0-9._-]+).*/\1/p' \
+      -e 's/^[[:space:]]+(scenarios\/[A-Za-z0-9._-]+).*/\1/p' "$wf"
+  done | sort -u
+}
+direct_scenarios_not_executable() { # <repo root>: the directly run scenarios whose index mode is not 100755
+  local repo=$1 file mode
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    mode=$(git -C "$repo" ls-files -s "$file" 2>/dev/null | awk '{print $1}')
+    [ "$mode" = 100755 ] || printf '%s\n' "$file"
+  done < <(direct_scenario_files "$1")
+}
+DIRECT_RUN=$(direct_scenario_files "$ROOT" | tr '\n' ' ')
+DIRECT_BAD=$(direct_scenarios_not_executable "$ROOT" | tr '\n' ' ')
+if [ -n "$DIRECT_RUN" ] && [ -z "$DIRECT_BAD" ]; then
+  ok "every scenario a workflow runs directly is executable in the index ($DIRECT_RUN)"
+else
+  bad "a workflow runs scenarios it cannot execute directly (run: $DIRECT_RUN; not 100755: $DIRECT_BAD)"
+fi
+
+# The check itself, proved on a copy: a workflow that runs scenarios/<file> as its own command
+# fails the check while that file sits in the index as 100644, and passes once it is 100755.
+EXEC_REPO="$TMP/exec-repo"
+mkdir -p "$EXEC_REPO/.github/workflows" "$EXEC_REPO/scenarios"
+printf 'on: push\njobs:\n  one:\n    runs-on: ubuntu-latest\n    steps:\n      - run: scenarios/first.sh bash scenarios/second.sh\n' >"$EXEC_REPO/.github/workflows/one.yml"
+printf '#!/usr/bin/env bash\n' >"$EXEC_REPO/scenarios/first.sh"
+printf '#!/usr/bin/env bash\n' >"$EXEC_REPO/scenarios/second.sh"
+git -C "$EXEC_REPO" init -q
+git -C "$EXEC_REPO" add -A
+if [ "$(direct_scenarios_not_executable "$EXEC_REPO")" = 'scenarios/first.sh' ]; then
+  ok 'the check refuses a 100644 copy of a directly run scenario'
+else
+  bad 'the check did not refuse a 100644 copy of a directly run scenario'
+fi
+if ! direct_scenarios_not_executable "$EXEC_REPO" | grep -Fx 'scenarios/second.sh' >/dev/null; then
+  ok 'the check does not refuse a scenario the workflow runs through bash'
+else
+  bad 'the check refused a scenario the workflow runs through bash'
+fi
+git -C "$EXEC_REPO" update-index --chmod=+x scenarios/first.sh scenarios/second.sh
+if [ -z "$(direct_scenarios_not_executable "$EXEC_REPO")" ]; then
+  ok 'the check passes a 100755 copy of a directly run scenario'
+else
+  bad 'the check did not pass a 100755 copy of a directly run scenario'
+fi
+
 # ================================================================ which stage a run proves
 # stage-for-run.sh: a stage given is that stage; none given is this commit's own build.
 section "stage-for-run.sh: which stage a run proves"
