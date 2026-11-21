@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { usePanesTogether } from "@/hooks/use-mobile";
 import { format, formatDistanceToNow, isValid, parseISO } from "date-fns";
 import {
   ArrowDown,
@@ -750,7 +751,9 @@ function CollectionItemsTree({
   onMoveItemToFolder,
   onDuplicateItem,
   onDeleteItem,
+  className,
 }: {
+  className?: string;
   collection: Collection | null;
   folders: FolderLite[];
   treeItems: ItemLite[];
@@ -770,7 +773,7 @@ function CollectionItemsTree({
   onDeleteItem: (itemId: string) => void;
 }) {
   return (
-    <aside className="flex w-full shrink-0 flex-col border-b bg-background lg:h-full lg:w-80 lg:border-b-0 lg:border-r">
+    <aside className={cn("flex w-full shrink-0 flex-col border-b bg-background lg:h-full lg:w-80 lg:border-b-0 lg:border-r", className)}>
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <CollectionIcon icon={collection?.icon} className="h-4 w-4" />
         <div className="min-w-0 flex-1">
@@ -2490,6 +2493,9 @@ export default function CollectionDetail() {
 
 function CollectionDetailPage() {
   const { slug, itemId: routeItemId } = useParams<{ slug: string; itemId?: string }>();
+  // The tree beside the detail pane needs a wide window; below PANE_BREAKPOINT an open item takes
+  // the whole pane, as on a phone, where the tree left it unreadably narrow (#887).
+  const stackedTree = !usePanesTogether();
   const { user } = useAuth();
   // Loads depend on the id, not the user object: a token refresh must not
   // reload the page under an open editor.
@@ -3379,11 +3385,14 @@ function CollectionDetailPage() {
         onMoveItemToFolder={handleMoveItemToFolder}
         onDuplicateItem={handleDuplicateItemFromTree}
         onDeleteItem={handleDeleteItemFromTree}
+        // The tree beside the detail needs a wide window; below PANE_BREAKPOINT an open item takes
+        // the whole pane, as on a phone, and the breadcrumb's collection link leads back (#887).
+        className={stackedTree && routeItemId ? "hidden" : "h-full"}
       />
-      <section className="min-w-0 flex-1 overflow-y-auto p-6">
+      <section className={cn("min-w-0 flex-1 overflow-y-auto p-6", stackedTree && !routeItemId && "hidden")}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">
+          <p className="break-words text-sm text-muted-foreground">
             <Link to="/collections" className="hover:text-foreground">
               Collections
             </Link>{" "}
@@ -3566,7 +3575,8 @@ function CollectionDetailPage() {
                   setSort(value as SortKey);
                 }}
               >
-                <SelectTrigger className="w-44">
+                {/* aria-label: the trigger shows the chosen sort, and without a name the check reads none (#887). */}
+                <SelectTrigger aria-label="Sort items" className="w-44">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

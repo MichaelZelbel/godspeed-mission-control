@@ -130,13 +130,13 @@ const ItemRow = memo(function ItemRow({
             handlers.onSelectItem(item.id);
           }}
           className={cn(
-            "group flex h-7 w-full items-center gap-1.5 rounded-md pr-2 text-sm transition-colors hover:bg-accent/60 cursor-grab active:cursor-grabbing",
+            "group flex min-h-7 w-full items-center gap-1.5 rounded-md pr-2 text-sm transition-colors hover:bg-accent/60 cursor-grab active:cursor-grabbing",
             isSelected && "bg-accent text-accent-foreground",
             draggingKey === `item:${item.id}` && "opacity-40",
           )}
           style={{ paddingLeft: `${basePad + depth * depthStep}px` }}
         >
-          <span className="min-w-0 flex-1 truncate">{title}</span>
+          <span className="min-w-0 flex-1 break-words">{title}</span>
           <button
             type="button"
             onClick={(event) => {
