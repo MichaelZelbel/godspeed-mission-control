@@ -162,25 +162,39 @@ const NAMED_FILE_EXT = /\.(md|csv|json|txt|html)$/i;
 const fileOnDisk = (written, root) => {
   let c = written.replace(/^["'`(\[<]+/, '').replace(/[.,;:)"'`\]>]+$/, '');
   if (!/[\\/]/.test(c) || !NAMED_FILE_EXT.test(c)) return '';
-  let absolute = false, realRoot = '';
+  let realRoot = '';
   if (/^([\\/]|[A-Za-z]:[\\/])/.test(c)) {
     // Compare the places on disk, not their spellings. Installed workspaces can be reached through
     // a symlink (for example the stable Godspeed folder pointing at the current installation), and
     // an absolute DONE WHEN written through that name must not evade the same review as a relative
-    // path. Only the deepest folder of the path that is there as written is resolved on disk; the
-    // steps after it keep the lookup below, so other capitals and trailing dots or spaces are found
-    // as for a relative path (#571), also in the steps that name the mission control itself.
+    // path. Of the written path only a folder at or above the mission control is resolved on disk,
+    // never a step at or below it: a result file may be a symlink, and a folder on the way may be
+    // one too, so resolving either here would read the place it points to, outside or inside,
+    // instead of the steps the relative spelling of the same file keeps — or drop the file
+    // altogether and let its shell CHECK alone verify it (#766). The steps inside the mission
+    // control, the last one included, keep the lookup below, so other capitals and trailing dots
+    // or spaces are found as for a relative path (#571), also in the steps that name the mission
+    // control itself.
     try { realRoot = fs.realpathSync(root); } catch (e) { return ''; }
     const drive = (c.match(/^[A-Za-z]:/) || [''])[0];
     const steps = pathParts(c.slice(drive.length));
     if (steps.includes('..')) return '';
     let real = '', rest = [];
-    for (let i = steps.length; i >= 0 && !real; i--) {
-      try { real = fs.realpathSync(path.join(drive + path.sep, ...steps.slice(0, i))); rest = steps.slice(i); } catch (e) { /* a shorter start */ }
+    for (let i = steps.length - 1; i >= 0 && !real; i--) {
+      let at; try { at = fs.realpathSync(path.join(drive + path.sep, ...steps.slice(0, i))); } catch (e) { continue; /* a shorter start */ }
+      // A resolved folder is accepted only at or above the mission control: a step inside it is
+      // left to the walk below, however it is spelled, because it may be a symlink to a folder
+      // outside, which would drop the file and let its shell CHECK alone verify it, or a symlink
+      // to a folder inside, which would name the file after the place it points to instead of the
+      // steps DONE WHEN wrote (#766). Shortening keeps going until the folder found is the
+      // mission control itself or a folder holding it.
+      const down = path.relative(at, realRoot);
+      if (down.startsWith('..') || path.isAbsolute(down)) continue;
+      real = at; rest = steps.slice(i);
     }
     if (!real) return '';
     let rel = path.relative(realRoot, real);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    if (rel) {
       // The mission control may lie below that folder, its own steps spelled with other capitals.
       const down = path.relative(real, realRoot);
       if (!down || down.startsWith('..') || path.isAbsolute(down)) return '';
@@ -189,7 +203,6 @@ const fileOnDisk = (written, root) => {
       rest = rest.slice(want.length); rel = '';
     }
     c = [...pathParts(rel), ...rest].join('/');
-    absolute = true;
   }
   const parts = pathParts(c);
   if (!parts.length || parts.includes('..')) return '';
@@ -202,9 +215,10 @@ const fileOnDisk = (written, root) => {
     out.push(name); dir = path.join(dir, name);
   }
   try {
+    // statSync follows a final symlink, so a result reached through one is a file here whatever it
+    // points at, and it is named the same however DONE WHEN spells it (#766). What the relative
+    // spelling commits and publishes for such a file, the absolute one commits and publishes too.
     if (!fs.statSync(dir).isFile()) return '';
-    // A symlink inside the mission control must not make a file outside it count.
-    if (absolute) { const rel = path.relative(realRoot, fs.realpathSync(dir)); if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return ''; }
     return out.join('/');
   } catch (e) { return ''; }
 };
