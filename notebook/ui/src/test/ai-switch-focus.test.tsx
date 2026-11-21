@@ -11,7 +11,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
-import { TEST_MS, WAIT } from "./wait-limits";
+import { TEST_MS, WAIT } from "./wait-limits"; // TEST_MS bounds each test, WAIT is the wait every waitFor passes.
 
 let resolveSave: (() => void) | null = null;
 vi.mock("@/integrations/supabase/client", () => ({
