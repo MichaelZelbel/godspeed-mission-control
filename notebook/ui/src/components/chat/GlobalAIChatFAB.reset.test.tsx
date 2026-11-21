@@ -39,7 +39,8 @@ beforeEach(async()=>{
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 
 it('keeps the transcript until Clear is confirmed by the server and sends the new session thereafter',async()=>{
- fireEvent.click(screen.getByRole('button',{name:'Clear conversation'}));
+ // The phone's icon button and the wide screen's labelled one share the name (GlobalAIChatFAB #887).
+fireEvent.click(screen.getAllByRole('button',{name:'Clear conversation'})[0]);
  fireEvent.click(await screen.findByRole('button',{name:'Clear'}, WAIT));
  await waitFor(()=>expect(finish).toBeTypeOf('function'), WAIT);
  expect(screen.getByText('Fictional earlier answer')).toBeInTheDocument();
@@ -56,7 +57,8 @@ it('keeps the transcript until Clear is confirmed by the server and sends the ne
 });
 
 it('keeps the transcript and shows the reason when the server refuses Clear',async()=>{
- fireEvent.click(screen.getByRole('button',{name:'Clear conversation'}));
+ // The phone's icon button and the wide screen's labelled one share the name (GlobalAIChatFAB #887).
+fireEvent.click(screen.getAllByRole('button',{name:'Clear conversation'})[0]);
  fireEvent.click(await screen.findByRole('button',{name:'Clear'}, WAIT));
  await waitFor(()=>expect(screen.getByRole('button',{name:'Send'})).toBeDisabled(), WAIT);
  finish(response({error:'Conversation changed before clearing. Reopen it and review the current history.'},409));

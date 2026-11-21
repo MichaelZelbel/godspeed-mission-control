@@ -20,7 +20,7 @@ vi.mock('@/components/chat/GlobalAIChatFAB',()=>({GlobalAIChatFAB:()=>null}));
 vi.mock('@/components/notes/NoteEditor',()=>({NoteEditor:()=>null}));
 vi.mock('@/components/notes/NoteList',()=>({NoteList:()=>null}));
 vi.mock('@/components/ui/sidebar',()=>({useSidebar:()=>({setOpen:vi.fn()})}));
-vi.mock('@/hooks/use-mobile',()=>({useIsMobile:()=>false}));
+vi.mock('@/hooks/use-mobile',()=>({useIsMobile:()=>false,usePanesTogether:()=>true}));
 vi.mock('@/lib/flags',()=>({OFFLINE_CORE:false}));
 vi.mock('@/integrations/supabase/client',()=>({supabase:{from:()=>{const q:any={select:()=>q,order:()=>q,eq:()=>q,then:(resolve:any)=>Promise.resolve({data:[],error:null}).then(resolve)};return q;}}}));
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as any;

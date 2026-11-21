@@ -9,10 +9,11 @@ export const PANE_BREAKPOINT = 1024;
 
 export function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = React.useState(() =>
-    typeof window !== "undefined" && window.matchMedia(query).matches
+    typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(query).matches
   );
 
   React.useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
     const mql = window.matchMedia(query);
     const onChange = () => setMatches(mql.matches);
     mql.addEventListener("change", onChange);
