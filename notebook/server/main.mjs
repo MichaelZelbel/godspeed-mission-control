@@ -815,7 +815,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]});
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
         if(provider?.check){
-          if(!chatAICheck&&Date.now()-lastChatCheckAt>=5000){
+          // A read may ask for a fresh check (the Dashboard's arrival, #822): it still shares the
+          // in-flight check, but jumps the five-second pacing other reads keep (#794).
+          if(!chatAICheck&&(url.searchParams.has('check')||Date.now()-lastChatCheckAt>=5000)){
             lastChatCheckAt=Date.now();
             chatAICheck=(async()=>{try{await provider.check();}catch(error){console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}})().finally(()=>{chatAICheck=null;});
           }

@@ -82,6 +82,9 @@ export function ToolbarButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
+      // An icon-only button needs a name a screen reader says; a tooltip alone
+      // is dropped (the toolbar's buttons read back as empty, issue #879).
+      aria-label={title}
     >
       {children}
     </Button>
@@ -207,7 +210,7 @@ export function ColorGroup({ editor }: GroupProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-7 w-7" title="Text color">
+        <Button variant="ghost" size="icon" className="h-7 w-7" title="Text color" aria-label="Text color">
           <span className="text-xs font-bold" style={{ color: editor.getAttributes("textStyle").color || "inherit" }}>A</span>
         </Button>
       </DropdownMenuTrigger>
@@ -308,6 +311,7 @@ export function InsertGroup({
             size="icon"
             className={`h-7 w-7 ${editor.isActive("link") ? "bg-accent text-accent-foreground" : ""}`}
             title="Insert link"
+            aria-label="Insert link"
             onClick={() => {
               const existing = editor.getAttributes("link").href || "";
               setLinkUrl(existing);
