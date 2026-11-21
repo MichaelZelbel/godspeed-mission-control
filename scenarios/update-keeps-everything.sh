@@ -50,7 +50,8 @@
 #                                     cron/jobs.json and `cron list`, whether its .env names a Telegram
 #                                     bot (never what it says), the routing table as the scheduler's
 #                                     home keys it, and gates.json (night-tidy-gates.mjs), which says
-#                                     which gate the next tick stops at; gates.json is in the step log too
+#                                     what followChatTidy does if the tick reaches it, which gate
+#                                     stops the tidy-up; gates.json is in the step log too
 #   tidy-watch.txt                    every five seconds of the two ticks, how many tidy-ups there are
 #   journal.txt                       the notebook service's journal from the first update to the end
 SCENARIO=update-keeps-everything

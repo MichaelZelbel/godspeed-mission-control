@@ -39,6 +39,10 @@ function routeTelegramChat(home){
 }
 async function installed(t,hermesOptions){
  const root=temporary(t),home=path.join(root,'.hermes-home');installStarter(root);fs.mkdirSync(home,{recursive:true});
+ // The machine's own name, the way the notebook server writes it on first start (device-id.mjs):
+ // the gates read it to say the owns gate, the tick's first one.
+ fs.mkdirSync(path.join(root,'.godspeed'),{recursive:true});
+ fs.writeFileSync(path.join(root,'.godspeed','device.json'),JSON.stringify({id:'pc',created_at:new Date().toISOString()})+'\n');
  fs.writeFileSync(path.join(home,'config.yaml'),'model:\n  default: x\n');
  const hermes=fakeHermes(home,hermesOptions);
  const notebook=()=>{const failures=[],scheduler=new NativeScheduler(new Store(root,{device:'pc'}),{home,executable:'hermes',device:'pc',run:hermes.run});scheduler.onFailure=error=>failures.push(error.message);return {scheduler,failures};};
@@ -110,6 +114,19 @@ test('a create the chat app refuses after an update is reported, and the next ti
  after.scheduler.lastTick=0;await after.scheduler.tick();
  assert.equal(nightTidyGates(machine).outcome,'job-present');
  assert.equal(tidies(machine.hermes).length,1);
+});
+
+test('a machine that does not run the routines is said by the gates, and the tick makes nothing',async t=>{
+ const machine=await installed(t);
+ routeTelegramChat(machine.home);
+ await machine.before.scheduler.transfer('other-pc');
+ const seen=await twoTicks('not this machine',machine,machine.notebook());
+ assert.deepEqual(seen.map(g=>g.outcome),['not-owner','not-owner']);
+ assert.equal(seen.at(-1).installation_owner,'other-pc');
+ assert.equal(seen.at(-1).device,'pc');
+ assert.equal(seen.at(-1).owns,false);
+ assert.equal(tidies(machine.hermes).length,0,'the tick on this machine makes nothing');
+ assert.equal(machine.hermes.created.filter(name=>name===CHAT_TIDY_JOB).length,0,'Hermes was never asked to make it here');
 });
 
 test('with no chat app, or a chat routed under another spelling of the home, the gates say no chat app',async t=>{
