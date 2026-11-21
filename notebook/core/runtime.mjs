@@ -280,7 +280,7 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
   const askKeyEndpoint=async withKey=>{
     let response;
     try{response=await fetch(keyUrl,{headers:withKey?{Authorization:'Bearer '+key}:{},signal:AbortSignal.timeout(CONNECTION_CHECK.timeout_ms)});}
-    catch(error){if(error.name==='TimeoutError')throw aiFailed('stalled','The AI did not answer the connection check within 15 seconds.');if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
+    catch(error){if(error.name==='TimeoutError')throw aiFailed('stalled',`The AI did not answer the connection check within ${CONNECTION_CHECK.timeout_ms/1000} seconds.`);if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
     response.body?.cancel().catch(()=>{});return response.status;
   };
   // Keep the configured identity available to the picker.
