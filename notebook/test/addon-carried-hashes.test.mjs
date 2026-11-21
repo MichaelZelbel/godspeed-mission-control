@@ -35,14 +35,18 @@ export function hashProblems(list,root){
  return problems;
 }
 
-// The files a copy holds on disk. In this repository git answers, as vendor-addons.py --check asks
-// it, so files the repository ignores (node_modules, __pycache__) do not count as part of a copy;
-// a throwaway folder has no repository, so the walk answers there.
+// The files a copy holds on disk, as paths relative to the copy. Where a repository answers —
+// this repository for the real copies, one a fixture builds for the git case below — git is asked
+// exactly as vendor-addons.py --check asks it, so files the repository ignores (node_modules,
+// __pycache__) do not count as part of a copy, a file committed here is found before it is staged,
+// and a file a re-pin dropped is not reported while its deletion is still unstaged; a folder with
+// no repository is walked instead. The walk is mapped to the separators pin.files is written in.
 function copyFiles(root,name){
- if(root!==addonsRoot)return fs.readdirSync(path.join(root,name),{recursive:true}).filter(file=>fs.statSync(path.join(root,name,file)).isFile());
- const listed=spawnSync('git',['ls-files','--cached','--others','--exclude-standard','--',`third-party/addons/${name}`],{cwd:product});
- if(listed.status!==0)throw new Error(listed.stderr.toString());
- return listed.stdout.toString().split('\n').filter(Boolean).map(file=>file.slice(`third-party/addons/${name}/`.length));
+ const listed=spawnSync('git',['ls-files','--cached','--others','--exclude-standard','--',name],{cwd:root});
+ if(listed.error)throw listed.error;
+ if(listed.status===0)return listed.stdout.toString().split('\n').filter(Boolean).map(file=>file.slice(name.length+1)).filter(file=>fs.existsSync(path.join(root,name,file)));
+ if(!/not a git repository/i.test(listed.stderr.toString()))throw new Error(listed.stderr.toString());
+ return fs.readdirSync(path.join(root,name),{recursive:true}).filter(file=>fs.statSync(path.join(root,name,file)).isFile()).map(file=>file.replaceAll('\\','/'));
 }
 
 export const hashReport=(list,root)=>{const problems=hashProblems(list,root);return problems.length?problems.join('\n')+'\n\n'+WAY:'';};
@@ -94,6 +98,28 @@ test('a file added to the copy that the add-on does not carry is named with the 
  const report=hashReport(f.pins,f.root);
  assert.match(report,/pinned-add-on\/lib\/extra\.mjs is present in the copy but is not among the files the add-on carries\./);
  assert.match(report,/own repository/);assert.match(report,/re-pin/);
+});
+
+// The added-file kind above is caught by the walk; in this repository it is the git answer that
+// catches it, so the git query itself is pinned down here: a committed extra and an untracked one
+// are named, an ignored file is not counted, and a file the index still holds after a re-pin
+// dropped it is not reported while its deletion is unstaged.
+test('the git answer the real gate relies on names committed and added extras and not ignored or dropped files',()=>{
+ const f=fixture();
+ fs.writeFileSync(path.join(f.root,'.gitignore'),'skipped.mjs\n');
+ fs.writeFileSync(path.join(f.root,'pinned-add-on/lib/committed.mjs'),'committed but not carried');
+ const git=(...args)=>{const run=spawnSync('git',args,{cwd:f.root});if(run.status!==0)throw new Error(run.stderr.toString());};
+ git('init');git('config','user.email','fixture@example.com');git('config','user.name','fixture');git('add','.');git('commit','--quiet','--message','pin');
+ fs.unlinkSync(path.join(f.root,'pinned-add-on/lib/gone.mjs'));
+ f.pin.files=f.pin.files.filter(file=>file!=='lib/gone.mjs');
+ delete f.pin.hashes['lib/gone.mjs'];
+ fs.writeFileSync(path.join(f.root,'pinned-add-on/lib/untracked.mjs'),'added here by hand');
+ fs.writeFileSync(path.join(f.root,'pinned-add-on/lib/skipped.mjs'),'build output');
+ assert.deepEqual(hashProblems(f.pins,f.root).sort(),[
+  'pinned-add-on/lib/committed.mjs is present in the copy but is not among the files the add-on carries.',
+  'pinned-add-on/lib/untracked.mjs is present in the copy but is not among the files the add-on carries.'
+ ]);
+ assert.match(hashReport(f.pins,f.root),/own repository/);
 });
 
 test('an add-on carried in this repository is not asked for hashes',()=>{
