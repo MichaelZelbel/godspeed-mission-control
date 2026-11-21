@@ -38,9 +38,15 @@ test('a file edited by hand (no lock, no journal) is seen once the watcher repor
     const note=store.save('notes',{id:'hand',title:'Hand',content:'before'}),file=store.file(note);
     fs.writeFileSync(file,encode({...note,content:'edited in Obsidian'}));
     assert.equal(await until(()=>store.get('notes','hand').content==='edited in Obsidian'),true);
-    // A new page and a removed one.
+    // A page that arrives from outside becomes a note: its words, name and place are kept
+    // and the notebook gives it frontmatter, so it is listed and searched like any note (#897).
     const other=path.join(store.recordsRoot,'Ideas','Owner page.md');fs.mkdirSync(path.dirname(other),{recursive:true});fs.writeFileSync(other,'# my own words\n');
-    assert.equal(await until(()=>{store.scan();return store.documents.has(other);}),true,'an owner page is noticed');
+    assert.equal(await until(()=>{store.scan();return store.list('notes').some(n=>n.title==='Owner page');}),true,'an arriving page becomes a note');
+    const adopted=fs.readFileSync(other,'utf8');
+    assert.match(adopted,/^---/,'the file gains the record\'s frontmatter in place');
+    assert.match(adopted,/---\n# my own words\n$/,'the page\'s words are kept whole as the body');
+    assert.equal(store.get('notes',store.list('notes').find(n=>n.title==='Owner page').id).folder_path,'Ideas','the page stays in its folder');
+    assert.ok(![...store.documents].some(f=>f===other),'it is a note now, not a page');
     fs.unlinkSync(file);
     assert.equal(await until(()=>!store.get('notes','hand')),true,'a deleted file is gone from the view');
   }finally{store.unwatch();}

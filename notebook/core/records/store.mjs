@@ -327,7 +327,7 @@ export class Store {
     // workspace (16,000 files, 114 MB) a read took longer than the two
     // seconds it was allowed to be reused, so an open dashboard kept the
     // server reading for 138 of 240 seconds and the health check waited 30.
-    if (!force && this.watching && this.records) { this.readJournal(); if (!this.dirtyAll) { this.applyDirty(); return this.records; } force = true; }
+    if (!force && this.watching && this.records) { this.readJournal(); if (!this.dirtyAll) { this.applyDirty(); this.settlePages(); return this.records; } force = true; }
     if (!force && this.reuseFor && this.records && !this.holding && !this.stale && Date.now() - this.scannedAt < this.reuseFor) return this.records;
     this.stale = false; this.scannedAt = Date.now(); this.dirtyAll = false; this.dirty?.clear();
     // How often the vault was actually read, which is what a save costs.
@@ -347,7 +347,9 @@ export class Store {
     const prior=this.entries||new Map(),entries=new Map();
     for(const [file,name] of files){const entry=this.readEntry(file,name,prior.get(file));if(entry)entries.set(file,entry);}
     this.entries=entries;
-    return this.derive();
+    this.derive();
+    this.settlePages();
+    return this.records;
   }
   // One file as the store holds it: its text and either its record, the fact
   // that it is an owner's own page, or the problem that keeps it from being
@@ -362,7 +364,7 @@ export class Store {
       // An owner's own page in the notebook folder is not a record. A file
       // that held a record a moment ago and lost its frontmatter is.
       if(error.code==='NOT_RECORD'&&(previous?.record||previous?.lost))return {name,text,lost:true,problem:'This file held a record and lost its frontmatter'};
-      if(error.code==='NOT_RECORD')return {name,text,document:true};
+      if(error.code==='NOT_RECORD')return {name,text,document:true,reason:error.message};
       return {name,text,problem:error.message};
     }
   }
@@ -388,6 +390,20 @@ export class Store {
       }catch(e){problems.push({file,error:e.message});}
     }
     this.records = records; this.fileOf = fileOf; this.keyOfUid = keyOfUid; this.pathIndex = pathIndex; this.keyOfFile = keyOfFile; this.documents = documents; this.problems = problems; this.lastScan = new Date().toISOString();
+    // A page without a record's frontmatter that the notebook has not decided about yet (897):
+    // one that arrives from outside becomes a note, one the notebook saw before it first looked
+    // stays the owner's own page. Nothing here writes; the adoption happens in settlePages(),
+    // which never runs under the writer lock a save or a commit is holding.
+    if(this.watching&&this.knownPages){
+      const seen=new Set();
+      for(const [file,entry] of this.entries)if(entry.document){
+        const relative=posix(path.relative(this.recordsRoot,file)),k=nameKey(relative);seen.add(k);
+        if(this.knownPages.has(k))continue;
+        if(this.adoptablePage(entry))this.pendingAdoption?.add(file);
+        else{this.knownPages.set(k,relative);this.pagesDirty=true;}
+      }
+      if(this.knownPages.size>seen.size)for(const k of [...this.knownPages.keys()])if(!seen.has(k)){this.knownPages.delete(k);this.pagesDirty=true;}
+    }
     const checked=integrity([...records.values()]);this.integrityFor=records;this.integrityNow=checked;
     this.problems.push(...referenceProblems(checked),...this.setAsideProblems());
     this.byTypeCache=null;this.byTypeFor=records;
@@ -424,6 +440,13 @@ export class Store {
     if(this.watching)return;
     this.dirty=new Set();this.dirtyAll=false;
     this.journalFile=path.join(this.state,'changes.log');
+    // The pages the notebook has already decided about (#897): a page without a record's
+    // frontmatter that the notebook saw before its first look at this machine stays the
+    // owner's own page; anything that arrives after that becomes a note. Kept per machine
+    // in the state folder, never carried between them.
+    this.pageFile=path.join(this.state,'owner-pages.json');
+    this.knownPages=new Map();this.pendingAdoption=new Set();this.adopting=false;this.pagesDirty=false;this.pagesKnown=false;
+    try{const saved=JSON.parse(fs.readFileSync(this.pageFile,'utf8'));if(saved&&saved.format===1&&Array.isArray(saved.pages)){for(const page of saved.pages)this.knownPages.set(nameKey(String(page)),String(page));this.pagesKnown=true;}}catch{}
     // Watch first, then note the journal, then read everything: a change made
     // in between is at worst read twice, never missed.
     const start=()=>{
@@ -434,9 +457,73 @@ export class Store {
     };
     fs.mkdirSync(this.recordsRoot,{recursive:true});start();
     this.journalAt=this.journalPosition();
-    this.scan(true);this.watching=true;
+    // Watching is said before the first read so that the pages it finds are decided about
+    // here (a page that arrived while the notebook was stopped becomes a note now).
+    this.watching=true;this.scan(true);
   }
-  unwatch(){this.watching=false;clearTimeout(this.rewatch);try{this.watcher?.close();}catch{}this.watcher=null;}
+  unwatch(){this.watching=false;clearTimeout(this.rewatch);try{this.watcher?.close();}catch{}this.watcher=null;if(this.pagesDirty)this.persistPages();}
+  // A page (a Markdown file without a record's frontmatter) the notebook would make a note of:
+  // one the person or a tool wrote into the notes folder, never one in the system folder and
+  // never a page of the retired Lexicon, which stays the owner's own page for good.
+  adoptablePage(entry){
+    return entry.document&&entry.name.endsWith('.md')&&!entry.name.split('/').includes('_system')
+      &&(entry.reason==='No frontmatter'||entry.reason==='Frontmatter without a record');
+  }
+  // Runs after a read that may have found pages. Never under the writer lock and never twice
+  // at once: a save's scan calls here while the lock is held and lets a later scan decide.
+  settlePages(){
+    if(!this.watching||this.adopting||this.holding||!this.entries)return;
+    if(!this.pagesKnown){
+      // The first look on this machine: the pages already here are recorded and left as they
+      // are, so an update never rewrites them; what arrives from now on becomes a note.
+      for(const [file,entry] of this.entries)if(entry.document){const relative=posix(path.relative(this.recordsRoot,file));this.knownPages.set(nameKey(relative),relative);}
+      this.pagesKnown=true;this.pendingAdoption.clear();this.persistPages();
+      return;
+    }
+    if(this.pendingAdoption.size){try{this.adoptPending();}catch{}}
+    else if(this.pagesDirty)this.persistPages();
+  }
+  // Makes the queued pages notes. Each page's words, name and place are kept: the record is
+  // written into the very file, with the page's whole text as the note's body and the file's
+  // folder as the note's folder, so nothing moves and nothing is lost.
+  adoptPending(){
+    const files=[...this.pendingAdoption];this.pendingAdoption.clear();this.adopting=true;
+    try{
+      const records=[],paths=new Map(),kept=new Map();
+      this.withLock(()=>{
+        for(const file of files){
+          const entry=this.entries.get(file);
+          if(!entry||!entry.document)continue; // gone, or a record's file now
+          let text=null;try{text=fs.readFileSync(file,'utf8');}catch{continue;}
+          let reason=null;try{decode(text,file);}catch(error){if(error.code==='NOT_RECORD')reason=error.message;}
+          if(!reason||!this.adoptablePage({document:true,name:entry.name,reason})){kept.set(file,entry);continue;}
+          const relative=posix(path.relative(this.recordsRoot,file)),parts=relative.split('/');
+          // A page in Trash/ was trashed where it was written; the rest of its folder is the
+          // note's folder. Any other folder is the note's folder as it is spelled on disk.
+          const folder=parts.slice(0,-1).join('/'),trashed=folder==='Trash'||folder.startsWith('Trash/');
+          let stat=null;try{stat=fs.statSync(file);}catch{continue;}
+          const value={title:parts.at(-1).replace(/\.md$/,'')||'Untitled',content:text,folder_path:(trashed?folder.slice('Trash'.length):folder).replace(/^\//,''),created_at:new Date(stat.mtimeMs).toISOString()};
+          if(trashed)value.is_trashed=true;
+          const record=this.prepare('notes',value);
+          records.push(record);paths.set('notes/'+record.id,relative);
+        }
+        if(records.length)this.commit(records,{paths,cascade:false});
+      });
+      // A page left unadopted (the retired Lexicon's, a JSON one) is decided about too, so it
+      // is never asked about again.
+      for(const [file] of kept){const relative=posix(path.relative(this.recordsRoot,file)),k=nameKey(relative);if(!this.knownPages.has(k)){this.knownPages.set(k,relative);this.pagesDirty=true;}}
+      this.persistPages();
+    }catch(error){
+      // The workspace was being written, or the write was refused: the pages stay queued for
+      // the next read to try again, and no page is left half decided about.
+      for(const file of files)if(this.entries.get(file)?.document)this.pendingAdoption.add(file);
+      throw error;
+    }finally{this.adopting=false;}
+  }
+  persistPages(){
+    if(!this.pageFile)return;
+    try{atomic(this.pageFile,JSON.stringify({format:1,pages:[...this.knownPages.values()].sort()})+'\n');this.pagesDirty=false;}catch{}
+  }
   // A path relative to notebook/; null means "something changed, I cannot
   // say what" (an overflowing watcher), which costs one full read.
   touched(name){
