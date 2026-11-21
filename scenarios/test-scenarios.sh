@@ -6166,5 +6166,16 @@ else
   bad "scenario-verdict.mjs: its node --test cases fail"
 fi
 
+# A note file that arrives in the notes folder from outside becomes a note (#897). The test that
+# proves it starts a real notebook and writes pages into its folder while it runs, so it belongs
+# in this gate, which every pull request runs, and not only in the notebook's own suite.
+section "note-file-arrival.test.mjs: a note file that arrives becomes a note (#897)"
+if node "$ROOT/notebook/scripts/run-tests.mjs" "$ROOT/notebook/test/note-file-arrival.test.mjs" >"$TMP/note-file-arrival.log" 2>&1; then
+  ok "note-file-arrival.test.mjs: its cases pass"
+else
+  cat "$TMP/note-file-arrival.log"
+  bad "note-file-arrival.test.mjs: its cases fail"
+fi
+
 printf '\n%s of %s pass.\n' "$PASS" "$((PASS + FAIL))"
 [ "$FAIL" -eq 0 ]
