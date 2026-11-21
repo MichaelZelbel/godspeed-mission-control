@@ -255,6 +255,40 @@ describe("the saved main AI in Settings", () => {
     expect(screen.getByLabelText("Key")).toBeRequired();
   });
 
+  it("clears the connection message when the saved AI becomes unreadable on the open page", async () => {
+    vi.useFakeTimers();
+    try {
+      let damaged = false;
+      let saved: unknown = { configured: false, key: false };
+      serve({
+        ...supportingRoutes,
+        provider: body => {
+          if (damaged) return [500, { error: "The saved AI connection is not valid." }];
+          if (!body) return [200, saved];
+          saved = { configured: true, url: body.url, model: body.model, key: true };
+          return [200, { provider: saved, routines: { available: false } }];
+        },
+      });
+      settings();
+      await vi.waitFor(() => expect(screen.getByLabelText("Key")).toBeInTheDocument(), WAIT);
+      fireEvent.change(screen.getByLabelText(/Model, written/), { target: { value: "fictional/model" } });
+      fireEvent.change(screen.getByLabelText("Key"), { target: { value: "fictional-key" } });
+      fireEvent.click(screen.getByRole("button", { name: "Test and connect" }));
+      const success = "Connected. The notebook uses it.";
+      await vi.waitFor(() => expect(screen.getByText(success)).toBeInTheDocument(), WAIT);
+
+      damaged = true;
+      await act(() => vi.advanceTimersByTimeAsync(5000));
+      await vi.waitFor(() => expect(screen.getByText(/The saved AI connection could not be read/)).toBeInTheDocument(), WAIT);
+      expect(screen.queryByText(success)).not.toBeInTheDocument();
+
+      damaged = false;
+      await act(() => vi.advanceTimersByTimeAsync(5000));
+      await vi.waitFor(() => expect(screen.getByRole("button", { name: "Test and connect" })).toBeInTheDocument(), WAIT);
+      expect(screen.queryByText(success)).not.toBeInTheDocument();
+    } finally { vi.useRealTimers(); }
+  });
+
   it("says the notebook keeps the AI it had before when one is left after removal", async () => {
     let saved: unknown = { configured: true, url: "https://openrouter.ai/api/v1/chat/completions", model: "fictional/model", key: true };
     serve({ ...supportingRoutes, provider: () => [200, saved], "provider/remove": () => { saved = { configured: false, key: false };return [200, { removed: true, connected: true, provider: saved, routines: { available: false } }]; } });
