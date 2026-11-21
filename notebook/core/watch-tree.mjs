@@ -15,12 +15,13 @@ export function watchTree(root, listener) {
   if (process.platform === 'darwin' || process.platform === 'win32') return fs.watch(root, {recursive: true}, listener);
   const watchers = new Map(); // relative directory -> its fs.watch
   const errorHandlers = [];
-  let closed = false;
+  let closed = false, lastError = null;
   const fail = error => {
     if (closed) return;
     closed = true;
     for (const watcher of watchers.values()) { try { watcher.close(); } catch {} }
     watchers.clear();
+    lastError = error;
     for (const handler of errorHandlers) handler(error);
   };
   // A directory that was renamed or removed: its watchers are dead and its
@@ -30,7 +31,9 @@ export function watchTree(root, listener) {
   };
   // Watch one directory. A directory that vanished between being seen and
   // being watched is skipped, unless it is the root itself: failing to watch
-  // the root is a failure to watch anything, like fs.watch's own.
+  // the root is a failure to watch anything, like fs.watch's own. Every other
+  // failure (an exhausted watch budget, out of handles) reaches the error
+  // channel, whose consumer gives up the watch, reads everything and starts again.
   const watch = (relative, announce) => {
     if (closed || watchers.has(relative)) return;
     let watcher;
@@ -39,12 +42,20 @@ export function watchTree(root, listener) {
       const child = relative ? relative + '/' + name : name;
       let stat = null;
       try { stat = fs.lstatSync(path.join(root, child)); } catch {}
-      if (!stat) drop(child);
+      if (!stat) {
+        drop(child);
+        // A watch that reports its own directory's name reports its own removal:
+        // the deleted directory's watch says its basename before it goes quiet.
+        // The path can already hold a remade directory with the old watch's inode
+        // number, so the watch itself is the only witness: watch what is there now.
+        if (relative !== '' && name === path.basename(relative)) { drop(relative); watch(relative, true); }
+      }
       listener(event, child);
       if (stat?.isDirectory() && !stat.isSymbolicLink() && !watchers.has(child)) watch(child, true);
     }); }
     catch (error) {
       if (relative === '') throw error;
+      if (error.code !== 'ENOENT') fail(error);
       return;
     }
     watcher.on('error', fail);
@@ -72,7 +83,7 @@ export function watchTree(root, listener) {
       watchers.clear();
     },
     on(event, handler) {
-      if (event === 'error') errorHandlers.push(handler);
+      if (event === 'error') { errorHandlers.push(handler); if (lastError) handler(lastError); }
       return this;
     },
   };
