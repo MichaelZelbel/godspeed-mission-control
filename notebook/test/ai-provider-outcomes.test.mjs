@@ -22,8 +22,10 @@ const RAW=/HTTP|\b[1-5]\d\d\b|Model provider|provider wording|Incorrect API key|
 
 // The stand-in AI. Every error body carries its provider wording and the key, so a leg that lets
 // either through is caught. "network" cuts the connection, "hang" takes it and never answers.
+// It counts every request it receives (state.calls), so the route test can prove a function the
+// dispatch declares false never reaches it (#900).
 function standIn(t){
-  const state={mode:'ok'};
+  const state={mode:'ok',calls:0};
   const ERROR_BODIES={
     refused401:[401,{error:{message:'Incorrect API key provided: '+KEY+' (provider wording)'}}],
     refused403:[403,{error:{message:'Forbidden, provider wording '+KEY}}],
@@ -40,6 +42,7 @@ function standIn(t){
     badModel:[400,{error:{message:'The model fictional-model does not exist, provider wording '+KEY}}],
   };
   const server=http.createServer((req,res)=>{
+    state.calls++;
     req.on('error',()=>{});
     if(state.mode==='network'){res.socket?.destroy();return;}
     if(state.mode==='hang')return;
@@ -211,6 +214,9 @@ test('a function the dispatch does not serve AI for never reaches the AI',async 
   const nonAI=Object.keys(AI_DISPATCH).filter(name=>!AI_DISPATCH[name]);
   assert.ok(nonAI.length>0);
   ai.set('refused401');
+  // The count is already above zero from the connection the notebook's setup made, so a stub whose
+  // counting broke fails here and the loop below cannot pass for nothing (#900).
+  assert.ok(Number.isInteger(ai.state.calls)&&ai.state.calls>0,'the stub counts its requests');
   for(const name of nonAI){
     const before=ai.state.calls;
     try{await service.domains.invoke(name,{});}catch{}
