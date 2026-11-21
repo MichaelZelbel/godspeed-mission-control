@@ -9,7 +9,7 @@ import {LEGACY_DEVICE} from '../device-id.mjs';
 // No goal-decision or goal-work (18 October 2026): a goal's loop is the original assistant's
 // (mc-research, mc-decide, mc-work-run, run by Hermes' routines), the one every installation runs.
 export const kinds = ['habit-check', 'coaching', 'deadline-reminder', 'profiling', 'review', 'morning-brief', 'audit', 'memory-review', 'watch',...procedureKinds];
-const restartableReads=new Set(['disk-check','health-summary','watch','domain-watch','portfolio','connection-check','audit','selftest','job-check']);
+const restartableReads=new Set(['disk-check','health-summary','watch','domain-watch','portfolio','connection-check','audit','selftest','job-check','spend-guard']);
 // Checks that usually find nothing: a run of one that says nothing leaves no receipt (finish below).
 const quietReads=new Set([...restartableReads,'coach-tick','journal-tick','coach-cycle','deadline-reminder']);
 // The longest a job is taken to be working: a routine makes up to five AI calls of five minutes.
@@ -132,14 +132,37 @@ export class Scheduler {
     });
     if(!receipt)return null;this.onProgress?.();
     let result;
+    let deliverySet=false;
     try {
       if (!this.executor) throw new Error('No assistant runtime configured');
       // The work beats the heartbeat while it is inside its time limit.
       result=await beatWhile(this.executor(job,{settings,store:this.store}),()=>this.onProgress?.(),{limitMs:this.jobLimit,every:this.beatEvery});
       await this.store.waitForWriter();
       if(!result?.verified)throw new Error('The executor returned no verified result');
+      // A result of several saved messages (record_ids, a domain sweep's batches) is sent one
+      // message at a time, and the list is kept on the run's receipt first, so a message this
+      // run never tried is still known when a later batch's delivery is uncertain and the run
+      // stops: the next run sends it (domain-watch.mjs, pendingDeliveries). An uncertain one
+      // is never sent again (telegram.mjs).
+      if((this.delivery||settings.delivery)==='telegram'&&!result.silent&&Array.isArray(result.record_ids)){
+        if(!this.deliver)throw new Error('Connect Telegram before choosing to get results there');
+        await this.store.saveAsync('job_receipts',{id:receipt.id,delivery_record_ids:result.record_ids});
+        deliverySet=true;
+        for(const recordId of result.record_ids)await this.deliver(receipt.id,{...result,record_id:recordId});
+      }else
       if((this.delivery||settings.delivery)==='telegram'&&!result.silent){if(!this.deliver)throw new Error('Connect Telegram before choosing to get results there');await this.deliver(receipt.id,result);}
     } catch(e) {
+      // A set of saved messages whose delivery became uncertain partway keeps its schedule: the
+      // uncertain message is never sent again (Telegram's own receipt for it refuses), and the
+      // next run at the usual time sends the messages this run never handed over
+      // (domain-watch.mjs, pendingDeliveries); a slot moved later meanwhile is kept. Until 18 November 2026 the run paused the job for
+      // a review nothing offered, so those messages were never sent.
+      if(deliverySet&&e.code==='OUTWARD_UNCERTAIN')try{
+        await this.store.waitForWriter();
+        await this.store.saveAsync('job_receipts',{id:receipt.id,state:'failed',error:e.message,finished_at:new Date().toISOString()});
+        await this.store.withLockAsync(()=>{const current=this.store.get('jobs',job.id);if(current){let next=null;if(!(Date.parse(current.next_run)>Date.parse(job.next_run)))try{next=nextCalendarRun(current,settings.timezone,now);}catch{}this.store.commit([this.store.prepare('jobs',{state:'failed',last_outcome:'One message may not have reached Telegram. It stays in your notebook and is not sent again; the messages after it are sent on the next run.',last_run:new Date(now).toISOString(),...(next?{next_run:next}:{})},current)]);}});
+        return {id:job.id,state:'failed',error:e.message};
+      }catch{}
       const retry=(job.retry_count||0)+1,needsReview=e.code==='OUTWARD_UNCERTAIN'||retry>=(job.max_retries||3);
       try{
         await this.store.waitForWriter();
@@ -163,6 +186,10 @@ export class Scheduler {
     // A read that found nothing to say leaves no receipt: the job's next run
     // records that it ran. After a failure the next success keeps its receipt,
     // the evidence a repair waits for.
+    // A run that worked around a problem (a domain sweep where no registry answered for a
+    // domain, domain-watch.mjs) keeps its receipt, the run's outcome that names the problem,
+    // even when it had nothing to send.
+    if(Array.isArray(result?.lookup_failures)&&result.lookup_failures.length)result={...result,silent:false};
     const quiet=quietReads.has(job.kind)&&!job.outward&&!recovery&&result.silent&&!result.record_id&&!(job.retry_count>0)&&(job.last_outcome===undefined||job.last_outcome==='verified');
     let next,invalid=null;
     await this.store.withLockAsync(()=>{

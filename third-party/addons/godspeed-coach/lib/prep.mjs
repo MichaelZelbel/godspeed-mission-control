@@ -54,16 +54,18 @@ export function readPrep(file) {
 
 // Why a prepared talk cannot open a talk, in words; null when it can. Ready means STATE ready with
 // an opening and a talk card, and for this area when the file names one. `opts` goes to
-// researchEvidenceProblem.
+// researchEvidenceProblem; `opts.files` names other sidecars to check (the candidates in the run
+// folder, before the host moves them beside the preparation).
 export function prepProblem(p, area = null, now = clockNow(), opts = {}) {
   if (!p) return "there is no such file";
   if (area && p.head.AREA && p.head.AREA.trim().toLowerCase() !== area.slug) return `it is for the ${p.head.AREA.trim()} talk, not the ${area.title} talk`;
+  if (p.state === "draft" && /Independent review left these adopted goals uncovered:/i.test(p.text)) return "its independent research review did not pass";
   if (p.state !== "ready") return `its STATE is ${p.state || "missing"}, not ready`;
   const empty = [["The opening", p.opening], ["Talk card", p.card]].filter(([, v]) => !v).map(([k]) => `"${k}"`);
   if (empty.length) return `its section${empty.length > 1 ? "s" : ""} ${empty.join(" and ")} ${empty.length > 1 ? "are" : "is"} empty`;
   const at = preparedAt(p);
   if (at && at.getTime() > now.getTime() + 60_000) return "its PREPARED time is in the future";
-  return researchEvidenceProblem(p, area, now, null, opts);
+  return researchEvidenceProblem(p, area, now, opts.files || null, opts);
 }
 
 // The day of another talk of this area that already opened with this preparation's opening, or null.

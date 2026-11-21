@@ -2,7 +2,8 @@ import {useEffect,useRef,useState} from 'react';
 import {Plus,ArrowUp,Square,Mic,Volume2,VolumeX,X,FileText,Loader2} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
-import {loadChatOptions} from '@/local/chat-options.mjs';
+import {listenForChatOptions,loadChatOptions} from '@/local/chat-options.mjs';
+import {CHAT_AVAILABILITY_CHANGED,type ChatAvailability} from './ChatConnectionEmptyState';
 
 export type ChatFile={path:string;name:string;type:string;text?:string};
 type Props={value:string;onChange:(text:string)=>void;onSend:()=>void;onStop:()=>void;busy:boolean;files:ChatFile[];onFiles:(files:ChatFile[])=>void;model:string;effort:string;onModel:(v:string)=>void;onEffort:(v:string)=>void;reply:string;context?:string;compact?:boolean;onError:(message:string)=>void};
@@ -10,12 +11,20 @@ export default function ChatComposer(p:Props){
   const picker=useRef<HTMLInputElement>(null),recorder=useRef<MediaRecorder|null>(null),recordingTimer=useRef<ReturnType<typeof setTimeout>>(),audioRequest=useRef<AbortController|null>(null),playbackUtterance=useRef<SpeechSynthesisUtterance|null>(null),mounted=useRef(true),draft=useRef(p.value);
   draft.current=p.value;
   const [uploading,setUploading]=useState(false),[listening,setListening]=useState(false),[transcribing,setTranscribing]=useState(false),[speaking,setSpeaking]=useState(false),[dragging,setDragging]=useState(false);
-  const [options,setOptions]=useState<{current:string;label?:string;connected?:boolean;usable?:boolean;models:Array<{id:string;efforts:string[]}>}>({current:'',models:[]});
+  const [options,setOptions]=useState<{current:string;label?:string;connected?:boolean;usable?:boolean;availability?:ChatAvailability;models:Array<{id:string;efforts:string[]}>}>({current:'',models:[]});
   const [modelError,setModelError]=useState(''),[modelAttempt,setModelAttempt]=useState(0);
   const canRecord=!!navigator.mediaDevices?.getUserMedia&&typeof MediaRecorder!=='undefined';
-  useEffect(()=>{let alive=true;const request=new AbortController();setModelError('');loadChatOptions({signal:request.signal}).then(data=>{if(alive){setOptions(data);p.onModel(data.current);}}).catch(e=>{if(alive)setModelError(e.message||'Model choices could not be loaded. Try again.');});return()=>{alive=false;request.abort();};},[modelAttempt]);
+  useEffect(()=>{let alive=true,request:AbortController|undefined;
+    const refresh=()=>{request?.abort();const currentRequest=request=new AbortController();setModelError('');loadChatOptions({signal:currentRequest.signal}).then(data=>{if(alive){setOptions(data);p.onModel(data.usable===false?'':data.current);if(data.usable===false)p.onEffort('');}}).catch(e=>{if(alive&&!currentRequest.signal.aborted)setModelError(e.message||'Model choices could not be loaded. Try again.');});};
+    refresh();const interval=window.setInterval(refresh,5000);window.addEventListener(CHAT_AVAILABILITY_CHANGED,refresh);
+    return()=>{alive=false;window.clearInterval(interval);window.removeEventListener(CHAT_AVAILABILITY_CHANGED,refresh);request?.abort();};
+  },[modelAttempt]);
+  useEffect(()=>listenForChatOptions(data=>{setOptions(data);p.onModel(data.usable===false?'':data.current);if(data.usable===false)p.onEffort('');}),[p.onModel,p.onEffort]);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;clearTimeout(recordingTimer.current);audioRequest.current?.abort();if(recorder.current?.state==='recording')recorder.current.stop();recorder.current?.stream.getTracks().forEach(t=>t.stop());window.speechSynthesis?.cancel();};},[]);
-  const noAI=options.connected===false,efforts=noAI?[]:options.models.find(m=>m.id===p.model)?.efforts||[];
+  const noAI=options.connected===false,unusable=options.usable===false,efforts=noAI||unusable?[]:options.models.find(m=>m.id===p.model)?.efforts||[];
+  // An AI that cannot answer keeps its model's name in the picker, which is off; the chat's notice
+  // (ChatConnectionEmptyState) says why, once (#808).
+  const unusableModel=noAI?'No AI connected':options.current||options.label||'Connected model';
   const addFiles=async(list:FileList|File[])=>{
     const files=Array.from(list);if(p.files.length+files.length>10){p.onError('Attach up to 10 files per message');return;}
     if(files.reduce((n,f)=>n+f.size,0)>20*1024*1024){p.onError('Choose files totaling at most 20 MB');return;}
@@ -62,8 +71,8 @@ export default function ChatComposer(p:Props){
     <div className="flex flex-nowrap items-center gap-1 px-2 pb-2" data-chat-toolbar>
       <input ref={picker} type="file" multiple className="hidden" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.txt,.md,.csv,.json,.log,.xml,.html,.yaml,.yml" aria-label="Choose attachments" onChange={e=>{if(e.target.files)void addFiles(e.target.files);}}/>
       <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" data-chat-attachment aria-label="Add files" title="Add images, PDFs, or text files" disabled={p.busy||uploading} onClick={()=>picker.current?.click()}>{uploading?<Loader2 className="h-5 w-5 animate-spin"/>:<Plus className="h-5 w-5"/>}</Button>
-      <select aria-label="Model" title={p.model} data-chat-model className="h-11 flex-1 basis-0 rounded-md bg-transparent text-xs px-1 min-w-0 max-w-40 focus-visible:outline focus-visible:outline-primary" disabled={p.busy||noAI||options.usable===false||!options.models.length} value={p.model} onChange={e=>{p.onModel(e.target.value);p.onEffort('');}}>{!options.models.length&&<option value="">{modelError?'Model choices unavailable':'Loading models...'}</option>}{options.models.map(m=><option key={m.id} value={m.id}>{noAI?'No AI connected':m.id||options.label||'Connected model'}</option>)}</select>
-      <select aria-label="Reasoning effort" title={p.effort||'Automatic effort'} data-chat-effort className="h-11 flex-1 basis-0 min-w-0 rounded-md bg-transparent text-xs px-1 max-w-24" value={p.effort} disabled={p.busy||!efforts.length} onChange={e=>p.onEffort(e.target.value)}><option value="">Auto</option>{efforts.map(e=><option key={e} value={e}>{e==='none'?'None':e[0].toUpperCase()+e.slice(1)}</option>)}</select>
+      <select aria-label="Model" title={unusable?unusableModel:p.model} data-chat-model className="h-11 flex-1 basis-0 rounded-md bg-transparent text-xs px-1 min-w-0 max-w-40 focus-visible:outline focus-visible:outline-primary" disabled={p.busy||noAI||unusable||!options.models.length} value={unusable?'':p.model} onChange={e=>{p.onModel(e.target.value);p.onEffort('');}}>{unusable?<option value="">{unusableModel}</option>:!options.models.length&&<option value="">{modelError?'Model choices unavailable':'Loading models...'}</option>}{!unusable&&options.models.map(m=><option key={m.id} value={m.id}>{noAI?'No AI connected':m.id||options.label||'Connected model'}</option>)}</select>
+      <select aria-label="Reasoning effort" title={p.effort||'Automatic effort'} data-chat-effort className="h-11 flex-1 basis-0 min-w-0 rounded-md bg-transparent text-xs px-1 max-w-24" value={unusable?'':p.effort} disabled={p.busy||unusable||!efforts.length} onChange={e=>p.onEffort(e.target.value)}><option value="">Auto</option>{efforts.map(e=><option key={e} value={e}>{e==='none'?'None':e[0].toUpperCase()+e.slice(1)}</option>)}</select>
       <div className="flex shrink-0 items-center ml-auto" data-chat-actions>
         <Button variant="ghost" size="icon" className={'h-11 w-11 '+(listening?'text-red-500':'')} aria-pressed={listening} aria-label={transcribing?'Transcribing recording':listening?'Stop dictation':'Dictate message'} title={canRecord?'Dictate message':'Microphone access requires HTTPS or localhost'} disabled={!canRecord||p.busy||transcribing} onClick={()=>void dictate()}>{transcribing?<Loader2 className="h-4 w-4 animate-spin"/>:<Mic className="h-4 w-4"/>}</Button>
         <Button variant="ghost" size="icon" className={'h-11 w-11 '+(speaking?'text-primary':'')} aria-pressed={speaking} aria-label={speaking?'Stop reading aloud':'Read last reply aloud'} title={window.speechSynthesis?(speaking?'Stop reading aloud':'Read last reply aloud'):'Playback is unavailable in this browser'} disabled={!p.reply||!window.speechSynthesis} onClick={playback}>{speaking?<Volume2 className="h-4 w-4"/>:<VolumeX className="h-4 w-4"/>}</Button>

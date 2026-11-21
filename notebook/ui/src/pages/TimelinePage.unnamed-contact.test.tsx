@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
 import TimelinePage from "./TimelinePage";
+import { WAIT } from "@/test/wait-limits";
 
 // A contact record with no name, as the notebook's files and store allow.
 const contacts = [{ id: "c-named", name: "Ada", relationship: null }, { id: "c-nameless", relationship: null }, { id: "c-nameless-2", relationship: null }];
@@ -39,22 +40,22 @@ describe("the timeline with a contact that has no name", () => {
   afterEach(() => { cleanup(); inserts.length = 0; });
   it("renders, lets named and unnamed people be picked, and saves their original ids", async () => {
     render(<MemoryRouter><TimelinePage /></MemoryRouter>);
-    fireEvent.click((await screen.findAllByRole("button", { name: /Add Moment/ }))[0]);
-    fireEvent.change(await screen.findByPlaceholderText("Short title for this moment"), { target: { value: "Met up" } });
+    fireEvent.click((await screen.findAllByRole("button", { name: /Add Moment/ }, WAIT))[0]);
+    fireEvent.change(await screen.findByPlaceholderText("Short title for this moment", undefined, WAIT), { target: { value: "Met up" } });
 
-    await waitFor(() => expect(screen.getByText("People")).toBeInTheDocument());
-    fireEvent.click(await screen.findByText("Add person"));
-    fireEvent.click(await screen.findByText("Ada"));
+    await waitFor(() => expect(screen.getByText("People")).toBeInTheDocument(), WAIT);
+    fireEvent.click(await screen.findByText("Add person", undefined, WAIT));
+    fireEvent.click(await screen.findByText("Ada", undefined, WAIT));
     // The picker stays open: pick the two unnamed people, who share a label.
-    const unnamed = await screen.findAllByText("Unnamed person");
+    const unnamed = await screen.findAllByText("Unnamed person", undefined, WAIT);
     expect(unnamed).toHaveLength(2);
     fireEvent.click(unnamed[0]);
     // Picked, it moves up to "Selected"; the other is the last match, in "All people".
-    const rest = await screen.findAllByText("Unnamed person");
+    const rest = await screen.findAllByText("Unnamed person", undefined, WAIT);
     fireEvent.click(rest[rest.length - 1]);
 
     fireEvent.click(screen.getByRole("button", { name: /Create/ }));
-    await waitFor(() => expect(inserts.some((i) => i.table === "moment_participants")).toBe(true));
+    await waitFor(() => expect(inserts.some((i) => i.table === "moment_participants")).toBe(true), WAIT);
     const saved = inserts.find((i) => i.table === "moment_participants")!.values.map((v: any) => v.person_id).sort();
     expect(saved).toEqual(["c-named", "c-nameless", "c-nameless-2"]);
   });

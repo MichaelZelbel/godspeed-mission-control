@@ -154,20 +154,20 @@ export default function WeeklyReview() {
     <div className="max-w-3xl">
       <SEOHead title="Weekly Review - Godspeed Mission Control" noIndex />
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-display font-bold">Weekly Review</h1>
           <p className="text-sm text-muted-foreground mt-1">
             AI-powered analysis of your captured thoughts
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Select
             value={reviewDays}
             onValueChange={setReviewDays}
             disabled={generateReview.isPending}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[180px]" aria-label="Review period">
               <SelectValue placeholder="Generate review" />
             </SelectTrigger>
             <SelectContent>

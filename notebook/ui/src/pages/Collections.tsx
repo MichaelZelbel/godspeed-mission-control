@@ -254,8 +254,8 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
           </div>
 
           <div className="space-y-2">
-            <Label>Icon</Label>
-            <div className="flex flex-wrap gap-2">
+            <p id="collection-icon-label" className="text-sm font-medium leading-none">Icon</p>
+            <div role="group" aria-labelledby="collection-icon-label" className="flex flex-wrap gap-2">
               {emojiOptions.map((emoji) => (
                 <button key={emoji} type="button" className={cn("flex h-9 w-9 items-center justify-center rounded-md border text-lg transition-colors hover:bg-accent", values.icon === emoji && "border-primary bg-primary/10")} onClick={() => updateValue("icon", emoji)}>
                   {emoji}
@@ -273,8 +273,8 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
           </div>
 
           <div className="space-y-2">
-            <Label>Visibility</Label>
-            <RadioGroup value={values.visibility} onValueChange={(value) => updateValue("visibility", value as "private" | "personal")}>
+            <p id="collection-visibility-label" className="text-sm font-medium leading-none">Visibility</p>
+            <RadioGroup aria-labelledby="collection-visibility-label" value={values.visibility} onValueChange={(value) => updateValue("visibility", value as "private" | "personal")}>
               <Label className="flex items-center gap-2 rounded-md border p-3"><RadioGroupItem value="private" /> Private (only me)</Label>
               <Label className="flex items-center gap-2 rounded-md border p-3"><RadioGroupItem value="personal" /> Personal (visible to my AI agents)</Label>
             </RadioGroup>
@@ -395,11 +395,14 @@ export default function Collections() {
   const charm = useMemo(() => charmShelf(collections, charmListed, lastWhen, new Date()), [collections, charmListed, lastWhen]);
   const hasTrackers = shelf.trackers.length + shelf.resting.length + habits.active.length + habits.resting.length + charm.active.length + charm.resting.length > 0;
   const resting = shelf.resting.length + habits.resting.length + charm.resting.length;
+  // The header's actions show whenever the empty state, which has its own, does not: habits or
+  // trackers from tracker-list with no collection yet still need a way to create one.
+  const showHeader = hasCollections || (hasTrackers && !isLoading && !loadFailed);
 
   return (
     <div className="w-full max-w-6xl">
       <SEOHead title="Collections - Godspeed Mission Control" noIndex />
-      {hasCollections && (
+      {showHeader && (
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold font-display">Collections</h1>
           <div className="flex flex-wrap items-center gap-2">

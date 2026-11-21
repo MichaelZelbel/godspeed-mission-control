@@ -19,6 +19,7 @@ import { NoteTree } from "@/components/notes/NoteTree";
 import { GlobalAIChatFAB } from "@/components/chat/GlobalAIChatFAB";
 import { useSidebar } from "@/components/ui/sidebar";
 import { NoteEditor } from "@/components/notes/NoteEditor";
+import { useTypedTitles } from "@/hooks/useUnsavedNotes";
 
 
 import { Button } from "@/components/ui/button";
@@ -114,6 +115,7 @@ const defaultDirections: Record<SortField, SortDirection> = {
 };
 
 const SORT_STORAGE_KEY = "menerio:notelist:sort";
+const NO_RESULTS: SemanticSearchResult[] = [];
 
 export default function Notes() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -192,6 +194,9 @@ export default function Notes() {
   } = useNotes("all");
   const { data: favNotes = [] } = useNotes("favorites");
   const { data: trashNotes = [] } = useNotes("trash");
+  // The sidebar shows a title as it is typed, before its save lands (#809).
+  const listedNotes = useTypedTitles(allNotes);
+  const listedFavNotes = useTypedTitles(favNotes);
   const createNote = useCreateNote();
   const updateNote = useUpdateNote();
   const ilikeSearch = useIlikeSearch();
@@ -653,10 +658,11 @@ export default function Notes() {
     return semanticResults || keywordResults;
   }, [searchMode, searchQuery, searchType, semanticResults, keywordResults]);
 
+  const listedSearchResults = useTypedTitles(searchResults ?? NO_RESULTS);
   const currentNotes = useMemo(() => {
     let notes: (Note | SemanticSearchResult)[];
-    if (searchMode && searchResults) notes = searchResults;
-    else notes = allNotes;
+    if (searchMode && searchResults) notes = listedSearchResults;
+    else notes = listedNotes;
 
 
     if (entityFilter) {
@@ -711,7 +717,7 @@ export default function Notes() {
       return dir * (aTs - bTs);
     });
     return sorted;
-  }, [allNotes, searchMode, searchResults, entityFilter, topicFilter, personFilter, metaTypeFilter, sortField, sortDirection]);
+  }, [listedNotes, searchMode, searchResults, listedSearchResults, entityFilter, topicFilter, personFilter, metaTypeFilter, sortField, sortDirection]);
 
   // The open note is fetched as a single row so it is always fresh without
   // refetching the whole (potentially very large) notes list. The list copy is
@@ -912,9 +918,10 @@ export default function Notes() {
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="w-72 p-3 space-y-3">
-              <p className="text-xs font-medium text-muted-foreground">Create folder</p>
+              <label htmlFor="notes-new-folder-path" className="block text-xs font-medium text-muted-foreground">Folder name</label>
               <div className="flex gap-2">
                 <Input
+                  id="notes-new-folder-path"
                   value={newFolderPath}
                   onChange={(e) => setNewFolderPath(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") createFolder(); }}
@@ -1259,7 +1266,7 @@ export default function Notes() {
             onDeleteNotePermanently={handleDeleteNotePermanently}
             sortField={sortField === "manual" ? "updated_at" : sortField}
             sortDirection={sortDirection}
-            favoriteNotes={favNotes}
+            favoriteNotes={listedFavNotes}
             trashedNotes={trashNotes}
           />
 
@@ -1370,6 +1377,7 @@ export default function Notes() {
             }
           }}
           placeholder="Folder name"
+          aria-label="Folder name"
         />
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>

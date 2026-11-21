@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useId,useState} from 'react';
 import {Link} from 'react-router-dom';
 import {useQuery,useQueryClient} from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
@@ -162,13 +162,14 @@ function GoalCard({goal,data,operation,busy}:{goal:Goal;data:Overview;operation:
   </Card>;
 }
 
-function NameTheNumber({goal,operation,busy}:{goal:Goal;operation:(input:any)=>Promise<boolean>;busy:boolean}){
+export function NameTheNumber({goal,operation,busy}:{goal:Goal;operation:(input:any)=>Promise<boolean>;busy:boolean}){
   const [what,setWhat]=useState(''),[kind,setKind]=useState('total'),[where,setWhere]=useState('');
+  const howId=useId();
   return <div className="space-y-3">
     <p className="text-sm">No weekly number yet: the one number, counted every week, that shows whether the work moves this goal. The morning decision names one from the research, or you name it here.</p>
     <form className="grid gap-3 sm:grid-cols-3" onSubmit={e=>{e.preventDefault();operation({type:'goal-change',id:goal.id,lead:[what,kind,where].map(s=>s.trim().replace(/\|/g,'/')).join(' | '),reason:'Named on the Goals page'});}}>
       <label className="space-y-1 text-sm font-medium">What is counted<Input className="text-base" required value={what} onChange={e=>setWhat(e.target.value)} placeholder="for example: training sessions"/></label>
-      <label className="space-y-1 text-sm font-medium">How<select className="block w-full min-h-11 rounded-md border bg-background px-3 text-base" value={kind} onChange={e=>setKind(e.target.value)}><option value="total">In total</option><option value="per week">Each week</option></select></label>
+      <div className="space-y-1 text-sm font-medium"><label htmlFor={howId}>How</label><select id={howId} className="block w-full min-h-11 rounded-md border bg-background px-3 text-base" value={kind} onChange={e=>setKind(e.target.value)}><option value="total">In total</option><option value="per week">Each week</option></select></div>
       <label className="space-y-1 text-sm font-medium">Where it is read<Input className="text-base" required value={where} onChange={e=>setWhere(e.target.value)} placeholder="for example: I count them"/></label>
       <Button className="min-h-11 sm:col-span-3 sm:justify-self-start" disabled={busy}>Name the weekly number</Button>
     </form>
@@ -180,7 +181,7 @@ function FirstOrNextGoal({first,operation,busy,onFirst}:{first:boolean;operation
   return <Card><CardHeader><CardTitle className="text-xl">{first?'Your first goal':'Add a goal'}</CardTitle></CardHeader><CardContent>
     <form className="space-y-3" onSubmit={async e=>{e.preventDefault();const saved=first?await onFirst(title.trim()):await operation({type:'goal-add',title:title.trim(),measure:measure.trim()});if(saved){setTitle('');setMeasure('');}}}>
       {first&&<p className="text-sm">Your first goal starts the routines: research at night, a decision each morning, the work during the day. You can also say it in the chat: "Make this a goal: …".</p>}
-      <label className="block space-y-1 text-sm font-medium">What do you want to reach?<Input className="text-base" required value={title} onChange={e=>setTitle(e.target.value)} placeholder="Finish the first draft of my novel by March"/></label>
+      <label className="block space-y-1 text-sm font-medium">What do you want to reach?<Input className="text-base" required value={title} onChange={e=>setTitle(e.target.value)} placeholder="Finish my novel by March"/></label>
       {!first&&<label className="block space-y-1 text-sm font-medium">How will you know it is reached?<Input className="text-base" required value={measure} onChange={e=>setMeasure(e.target.value)}/></label>}
       <Button className="min-h-11" disabled={busy}>{first?'Start':'Add this goal'}</Button>
     </form>

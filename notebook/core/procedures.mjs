@@ -13,9 +13,12 @@ import {currentHealth} from './health-inputs.mjs';
 import {prepareRadarWork,applyRadarWork} from './radar-work.mjs';
 import {missingRuns} from './missing-runs.mjs';
 import {outboundFetch} from './outbound-fetch.mjs';
+import {runSpendGuard} from './spend-guard.mjs';
+import {runDomainWatches} from './domain-watch.mjs';
 export {procedureKinds} from './jobs/kinds.mjs';
-export async function procedure(job,{store,query,provider}){
+export async function procedure(job,{store,query,provider,fetcher}){
   const kind=job.kind;let result;
+  if(kind==='spend-guard')return runSpendGuard({store,hermesHome:query.nativeHermesHome});
   if(kind==='radar-prepare')return prepareRadarWork(job,{store,query,provider});
   if(kind==='radar-work')return applyRadarWork(job,{store,query});
   if(kind==='subscription-review'){
@@ -65,7 +68,8 @@ export async function procedure(job,{store,query,provider}){
     for(const repair of query.rows('work_items').filter(w=>w.kind==='repair'&&w.state!=='verified')){const failure=repair.failure_id&&store.get('job_receipts',repair.failure_id),passed=repair.missing_receipt_id?store.get('job_receipts',repair.missing_receipt_id):query.rows('job_receipts').find(r=>r.job_id===repair.job_id&&r.state==='verified'&&r.started_at>failure?.started_at);if(passed?.state==='verified')store.save('work_items',{id:repair.id,state:'verified',evidence:passed.id});}
     if(!added.length&&!result.problems.length&&!result.overdue.length)return {verified:true,silent:true,repair_items:0};
   }
-  else if(kind==='portfolio'||kind==='watch'||kind==='domain-watch'){
+  else if(kind==='domain-watch')return runDomainWatches({store,fetcher});
+  else if(kind==='portfolio'||kind==='watch'){
     const topics=kind==='portfolio'?visibleRows(query,'collections').filter(c=>c.name==='Links').flatMap(c=>visibleRows(query,'collection_items').filter(i=>i.collection_id===c.id).map(i=>({id:i.id,url:i.data.url}))):visibleRows(query,'watch_topics').filter(t=>!t.paused&&(!job.topic_ids||job.topic_ids.includes(t.id)));result=[];
     for(const topic of topics){
      if(kind!=='portfolio'&&topic.next_run_at&&Date.parse(topic.next_run_at)>Date.now()&&!job.force_sources)continue;
@@ -131,7 +135,7 @@ export async function procedure(job,{store,query,provider}){
     result=candidates.filter(c=>!store.get('notifications','attention-'+hash(c))).slice(0,3);if(!result.length)return {verified:true,silent:true};
     const note=store.prepare('notes',{title:'Work needing your attention',content:result.map(c=>c.title+(c.state==='verified'?' is ready to review.':c.state==='needs_review'?' needs a review.':' needs your approval.')).join('\n'),source_app:kind,attention_items:result});store.withLock(()=>store.commit([note,...result.map(c=>store.prepare('notifications',{id:'attention-'+hash(c),record_id:note.id,status:'ready'}))]));return {verified:true,record_id:note.id,delivery:'notebook'};
   }
-  else if(['spend-guard','board-export','browser-post'].includes(kind))result=await new Domains(query,{provider}).invoke('run-connector',{name:kind,payload:job.payload,approval_id:job.approval_id});
+  else if(['board-export','browser-post'].includes(kind))result=await new Domains(query,{provider}).invoke('run-connector',{name:kind,payload:job.payload,approval_id:job.approval_id});
   else{
     if(!provider)throw new Error('Configure an assistant for this routine');
     const contracts={'brief-review':'Critique the most recent saved brief against its actual sources, voice rules and prior deliveries. Return concrete unsupported claims or a clear pass. Do not send a replacement.','conversation-review':'Check whether the most recent saved delivered message is present in conversation history. Quote only actual saved text.','lead':'Prepare one clear relatable post or reply using recent original work and verified source observations. Never invent personal experiences. Do not publish. If none is ready, save the reason.','radar':'Compare the newest recorded source observations with the goals. Prepare at most one proposal with evidence, cost and reversible trial.','memory-capture':'Review explicitly supplied conversations and propose source-quoted lasting facts for review. Never sweep unrelated account files.'};

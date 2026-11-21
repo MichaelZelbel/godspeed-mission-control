@@ -50,6 +50,7 @@ const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 
 import ChatComposer, {type ChatFile} from "./ChatComposer";
 import {ChatConnectionEmptyState} from "./ChatConnectionEmptyState";
+import {isCurrentAIError,listenForChatOptions} from "@/local/chat-options.mjs";
 import { useChatEntryInView } from "./chat-entry";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { personLabel } from "@/components/timeline/people";
@@ -98,6 +99,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   const [isClearing, setIsClearing] = useState(false);
   const clearingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(()=>listenForChatOptions(options=>{if(options.usable)setError(previous=>isCurrentAIError(previous)?null:previous);}),[]);
   const [sizeMode, setSizeModeState] = useState<SizeMode>(() => embedded ? "docked" : loadSizeMode());
   const scrollRef = useRef<HTMLDivElement>(null);
   const followRef=useRef(true);
@@ -320,9 +322,13 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
       const apiMessages = buildApiMessages(nextState);
       const chatFn = collectionId ? "collection-chat" : noteId ? "note-chat" : "conversation-chat";
       // Flush the open editor's pending autosave so the agent edits on top of
-      // the user's newest text (and knows which version it is based on).
+      // the user's newest text (and knows which version it is based on). The
+      // chat in its own window (/dashboard/chat?note=...) has no editor to ask:
+      // waiting for one held every send there for the whole flush timeout, with
+      // the reply spinning and nothing sent to the AI (#758). The note's own
+      // window saves its text as the person types, as it always did.
       const flushed =
-        noteId && !collectionId
+        noteId && !collectionId && !page
           ? await flushNoteSave(noteId)
           : { updatedAt: null, content: null };
       const invokeBody = collectionId
@@ -444,7 +450,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
     } finally {
       setIsLoading(false);requestRef.current=null;
     }
-  }, [input, files, model, effort, isLoading, session, state, noteId, personId,talkId, pageChat, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
+  }, [input, files, model, effort, isLoading, session, state, page, noteId, personId,talkId, pageChat, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
 
   // A message handed in with openFloatingChat goes out once the panel is open and free; after a
   // moment, so the conversation the panel just loaded is the one it is added to.
@@ -706,6 +712,10 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                 </div>
               ))}
 
+              {/* An open conversation keeps its replies and shows the AI's current state under them, so a
+                  refused key, an outage or recovery is seen without a reload (#590). */}
+              {state.messages.length > 0 && <ChatConnectionEmptyState ready={null} said={error}/>}
+
               {isLoading && (
                 <div className="flex items-center gap-2">
 
@@ -716,7 +726,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
               )}
 
               {error && (
-                <div className="flex items-center gap-2 text-destructive text-xs bg-destructive/10 rounded-lg px-3 py-2">
+                <div role="alert" data-chat-reply-error className="flex items-center gap-2 text-destructive text-xs bg-destructive/10 rounded-lg px-3 py-2">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span>{error}</span>
                 </div>

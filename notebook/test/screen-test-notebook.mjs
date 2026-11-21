@@ -3,13 +3,13 @@
 // addresses, which the screen tests' bundler rewrites. It lives here, not in
 // ui/, because the UI's Docker build copies only what the UI itself imports.
 //
-//   node screen-test-notebook.mjs <empty workspace folder>
+//   node screen-test-notebook.mjs <empty workspace folder> [built UI folder]
 //
 // Prints one line, "listening <port>", and runs until it is stopped.
 import {createService} from '../server/main.mjs';
 
-const [root] = process.argv.slice(2);
-const service = await createService({root, host: '127.0.0.1', port: 0, device: 'screen-test'});
+const [root, uiRoot] = process.argv.slice(2);
+const service = await createService({root, uiRoot, host: '127.0.0.1', port: 0, device: 'screen-test'});
 process.stdout.write('listening ' + service.address.port + '\n');
 const stop = async () => { try { await service.close(); } finally { process.exit(0); } };
 process.on('SIGTERM', stop);

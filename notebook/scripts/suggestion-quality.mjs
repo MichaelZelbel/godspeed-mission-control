@@ -310,7 +310,7 @@ async function replay({store, query, entries, history, fields, opt, labels, acce
         if (variant === 'current' && previous && textOf(previous) === textOf(version)) { totals.repeats++; body.push('- ' + r.at.slice(0, 16) + ': the same text as the run before, not asked (a repeat the processing fix prevents)'); continue; }
         let answer;
         try { answer = readAnswer(await provider(noteRequest(then, store, version, {today, contract})), then, store, version, {today, cites}); }
-        catch (error) { totals.failed++; body.push('- ' + r.at.slice(0, 16) + ': not processed (' + String(error.message).slice(0, 120) + ')'); if (access.stopped) break; continue; }
+        catch (error) { totals.failed++; body.push('- ' + r.at.slice(0, 16) + ': not processed (' + String(error.cause?.message || error.message).slice(0, 120) + ')'); if (access.stopped) break; continue; }
         // Before: what the check until 23 October 2026 let through (the same exact answer, a Never Again).
         const seen = new Set(then.rows('review_queue').map(x => x.fingerprint).filter(Boolean)), before = [];
         for (const s of answer.shaped.filter(Boolean)) { const f = hash([note.uid, s.type, s.payload]); if (seen.has(f) || ['add_claim', 'add_profile_entry'].includes(s.type) && factSuppressed(then, {...factSubject(s.payload), value: String(s.payload.value).trim()})) continue; seen.add(f); before.push(s); }

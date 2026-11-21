@@ -5,9 +5,9 @@ import {MemoryRouter} from 'react-router-dom';
 import {focusManager,QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import '@testing-library/jest-dom/vitest';
 import {GlobalAIChatFAB} from './GlobalAIChatFAB';
-import {NoteChatPanel} from '@/components/notes/NoteChatPanel';
 import {CollectionChatPanel} from '@/components/collections/CollectionChatPanel';
 import {ChatConnectionEmptyState} from './ChatConnectionEmptyState';
+import { WAIT } from "@/test/wait-limits";
 
 vi.mock('sonner',()=>({toast:{error:vi.fn(),warning:vi.fn()}}));
 vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:{id:'owner'},session:{user:{id:'owner'}}})}));
@@ -19,11 +19,12 @@ vi.mock('./ChatMarkdown',()=>({default:({children}:any)=><p>{children}</p>}));
 Object.defineProperty(window,'matchMedia',{writable:true,value:()=>({matches:false,addEventListener(){},removeEventListener(){}})});
 
 const response=(value:unknown)=>new Response(JSON.stringify(value),{status:200,headers:{'Content-Type':'application/json'}});
-const wrap=(node:React.ReactNode,path='/dashboard')=>render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter initialEntries={[path]}>{node}</MemoryRouter></QueryClientProvider>);
+const wrap=(node:React.ReactNode,path='/dashboard')=>{const client=new QueryClient({defaultOptions:{queries:{retry:false}}});return {client,...render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[path]}>{node}</MemoryRouter></QueryClientProvider>)};};
 const surfaces=[
   ['floating',()=>{wrap(<GlobalAIChatFAB/>);fireEvent.click(screen.getByRole('button',{name:'Chat with Godspeed'}));}],
   ['pop-out',()=>wrap(<GlobalAIChatFAB page/>,'/dashboard/chat')],
-  ['note',()=>wrap(<NoteChatPanel note={{id:'note-1',title:'Fictional note',content:''} as any} onClose={()=>{}} onNoteChanged={()=>{}}/>)],
+  // The note chat is the one the Notes page mounts next to an open note (#809).
+  ['note',()=>{wrap(<GlobalAIChatFAB embedded noteTitle="Fictional note"/>,'/dashboard/notes/note-1');act(()=>{window.dispatchEvent(new Event('godspeed:toggle-note-chat'));});expect(screen.getByText('Godspeed / Fictional note')).toBeInTheDocument();}],
   ['collection',()=>wrap(<CollectionChatPanel collectionId="collection-1" collectionName="Fictional collection" onClose={()=>{}} onCollectionChanged={()=>{}}/>)],
 ] as const;
 
@@ -36,28 +37,92 @@ it('refreshes an open chat in the background when AI availability changes',async
   let options={connected:false,usable:false};
   vi.stubGlobal('fetch',vi.fn(async()=>response(options)));
   wrap(<ChatConnectionEmptyState ready={<div>Ready to chat</div>}/>);
-  await vi.waitFor(()=>expect(screen.getByText('No AI connected')).toBeInTheDocument());
+  await vi.waitFor(()=>expect(screen.getByText('No AI is connected yet')).toBeInTheDocument(), WAIT);
 
   options={connected:true,usable:true};
   await act(()=>vi.advanceTimersByTimeAsync(5000));
   expect(screen.getByText('Ready to chat')).toBeInTheDocument();
 
-  options={connected:true,usable:false};
+  options={connected:true,usable:false,availability:'unreachable'} as typeof options;
   await act(()=>vi.advanceTimersByTimeAsync(5000));
-  expect(screen.getByText('Your AI could not be used')).toBeInTheDocument();
+  expect(screen.getByText('Your AI could not be reached')).toBeInTheDocument();
+});
+
+it('replaces stale unavailable guidance when an open composer recovers the AI',async()=>{
+  let options={connected:true,usable:false};
+  vi.stubGlobal('fetch',vi.fn(async()=>response(options)));
+  wrap(<ChatConnectionEmptyState ready={<div>Ready to chat</div>}/>);
+  await vi.waitFor(()=>expect(screen.getByText('Your AI could not be reached')).toBeInTheDocument(), WAIT);
+  options={connected:true,usable:true};
+  await act(async()=>window.dispatchEvent(new Event('chat-ai-options-changed')));
+  await vi.waitFor(()=>expect(screen.getByText('Ready to chat')).toBeInTheDocument(), WAIT);
 });
 
 for(const [name,show] of surfaces){
   it(`${name} shows setup guidance with no AI`,async()=>{
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]}):response({data:[]})));
-    show();expect(await screen.findByText('No AI connected')).toBeInTheDocument();expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
+    show();expect(await screen.findByText('No AI is connected yet', undefined, WAIT)).toBeInTheDocument();expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
   });
-  it(`${name} replaces ready wording when configured AI is unusable`,async()=>{
-    vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:true,usable:false,current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}):response({data:[]})));
-    show();expect(await screen.findByText('Your AI could not be used')).toBeInTheDocument();expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toBeInTheDocument();
+  it(`${name} explains when the configured AI refuses its key or sign-in`,async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:true,usable:false,availability:'refused',current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}):response({data:[]})));
+    show();expect(await screen.findByText('Your AI key or sign-in was refused', undefined, WAIT)).toBeInTheDocument();expect(screen.queryByText('Your AI could not be reached')).not.toBeInTheDocument();expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toBeInTheDocument();
+  });
+  it(`${name} keeps unreachable AI separate from refused credentials`,async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:true,usable:false,availability:'unreachable',current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}):response({data:[]})));
+    show();expect(await screen.findByText('Your AI could not be reached', undefined, WAIT)).toBeInTheDocument();expect(screen.queryByText(/refused/i)).not.toBeInTheDocument();
   });
   it(`${name} retains its ready empty state with usable AI`,async()=>{
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response({connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}):response({data:[]})));
-    show();expect(await screen.findByTestId('composer')).toBeInTheDocument();expect(screen.queryByText('Your AI could not be used')).not.toBeInTheDocument();expect(screen.queryByText('No AI connected')).not.toBeInTheDocument();
+    show();expect(await screen.findByTestId('composer', undefined, WAIT)).toBeInTheDocument();expect(screen.queryByText('Your AI could not be reached')).not.toBeInTheDocument();expect(screen.queryByText('No AI is connected yet')).not.toBeInTheDocument();
   });
 }
+
+it('an open note chat with an earlier reply shows a later refused-key state',async()=>{
+  let options={connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]};
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response(options):response({data:[]})));
+  const {client}=wrap(<ChatConnectionEmptyState ready={<div>Earlier stand-in reply</div>}/>);
+  expect(await screen.findByText('Earlier stand-in reply', undefined, WAIT)).toBeInTheDocument();
+  options={...options,usable:false,availability:'refused'} as typeof options;
+  act(()=>{client.setQueryData(['chat-options'],options);});
+  expect(await screen.findByText('Your AI key or sign-in was refused', undefined, WAIT)).toBeInTheDocument();
+  expect(screen.queryByText('Earlier stand-in reply')).not.toBeInTheDocument();
+  expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toBeInTheDocument();
+});
+
+it('keeps an open conversation readable and shows the live state under it',async()=>{
+  let options:Record<string,unknown>={connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]};
+  vi.stubGlobal('fetch',vi.fn(async()=>response(options)));
+  const {client}=wrap(<><p>Earlier stand-in reply</p><ChatConnectionEmptyState ready={null}/></>);
+  // The first read is still pending: nothing extra appears under the conversation.
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  await vi.waitFor(()=>expect(client.getQueryData(['chat-options'])).toBeTruthy(), WAIT);
+  for(const [availability,text] of [['refused','Your AI key or sign-in was refused'],['unreachable','Your AI could not be reached']] as const){
+    options={...options,usable:false,availability};
+    act(()=>{client.setQueryData(['chat-options'],options);});
+    expect(await screen.findByText(text, undefined, WAIT)).toBeInTheDocument();
+    expect(screen.getByText('Earlier stand-in reply')).toBeInTheDocument();
+  }
+  options={...options,usable:true,availability:'ready'};
+  act(()=>{client.setQueryData(['chat-options'],options);});
+  await vi.waitFor(()=>expect(screen.queryByText('Your AI could not be reached')).not.toBeInTheDocument(), WAIT);
+  expect(screen.getByText('Earlier stand-in reply')).toBeInTheDocument();
+});
+
+it('under a conversation, says no repeat of the no-AI reply and nothing the reply error already says',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>response({connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]})));
+  const noAI='No AI is connected yet. Connect your AI service in Settings, Your AI, then ask Godspeed again.';
+  const {client,rerender}=wrap(<><p>My question</p><p role="alert">{noAI}</p><ChatConnectionEmptyState ready={null} said={noAI}/></>);
+  await vi.waitFor(()=>expect(client.getQueryData(['chat-options'])).toBeTruthy(), WAIT);
+  // The reply alone says it, under the visible question, as before #590.
+  expect(screen.getByText('My question')).toBeInTheDocument();
+  expect(screen.queryByText('Connect an AI before you type.')).not.toBeInTheDocument();
+  expect(screen.queryByRole('link',{name:'Open Settings, Your AI'})).not.toBeInTheDocument();
+  // A refused send says it once; when the state then changes to an outage, the notice says the new state.
+  const refused='Your AI key or sign-in was refused. Check it in Settings, Your AI, then try again.';
+  act(()=>{client.setQueryData(['chat-options'],{connected:true,usable:false,availability:'refused',current:'m',models:[{id:'m',efforts:[]}]});});
+  rerender(<QueryClientProvider client={client}><MemoryRouter><p>My question</p><p role="alert">{refused}</p><ChatConnectionEmptyState ready={null} said={refused}/></MemoryRouter></QueryClientProvider>);
+  expect(screen.queryByText('Check its key or sign-in before you type.')).not.toBeInTheDocument();
+  act(()=>{client.setQueryData(['chat-options'],{connected:true,usable:false,availability:'unreachable',current:'m',models:[{id:'m',efforts:[]}]});});
+  expect(await screen.findByText('Your AI could not be reached', undefined, WAIT)).toBeInTheDocument();
+  expect(screen.getByText('My question')).toBeInTheDocument();
+});

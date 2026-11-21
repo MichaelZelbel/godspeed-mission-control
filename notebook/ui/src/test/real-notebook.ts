@@ -25,9 +25,12 @@ export interface RealNotebook {
 
 const helper = fileURLToPath(new globalThis.URL("../../../test/screen-test-notebook.mjs", import.meta.url).href);
 
-export async function startNotebook(): Promise<RealNotebook> {
+/** `uiRoot`: a built UI for the notebook to serve, for tests that drive the whole app in a browser. */
+export async function startNotebook({ uiRoot }: { uiRoot?: string } = {}): Promise<RealNotebook> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed-screen-"));
-  const child: ChildProcess = spawn(process.execPath, [helper, root], { stdio: ["ignore", "pipe", "pipe"] });
+  const args = uiRoot ? [helper, root, uiRoot] : [helper, root];
+  const child: ChildProcess = spawn(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"] });
+  let stopping = false;
   const port = await new Promise<number>((resolve, reject) => {
     let out = "";
     let err = "";
@@ -37,7 +40,12 @@ export async function startNotebook(): Promise<RealNotebook> {
       if (match) resolve(Number(match[1]));
     });
     child.stderr!.on("data", (chunk) => { err += chunk; });
-    child.on("exit", (code) => reject(new Error(`The test notebook stopped (${code}): ${err.slice(-500)}`)));
+    child.on("exit", (code, signal) => {
+      const stopped = `The test notebook stopped (${code ?? signal}): ${err.slice(-2000)}`;
+      reject(new Error(stopped));
+      // After it started nothing else would say why its pages stopped answering (#775).
+      if (!stopping) console.error(stopped);
+    });
   });
   const base = `http://127.0.0.1:${port}`;
   const realFetch = globalThis.fetch.bind(globalThis);
@@ -65,6 +73,7 @@ export async function startNotebook(): Promise<RealNotebook> {
       return fs.readdirSync(folder).filter((name) => name.endsWith(".json")).map((name) => JSON.parse(fs.readFileSync(path.join(folder, name), "utf8")));
     },
     stop: async () => {
+      stopping = true;
       if (child.exitCode === null) {
         const exited = new Promise((resolve) => child.once("exit", resolve));
         child.kill();

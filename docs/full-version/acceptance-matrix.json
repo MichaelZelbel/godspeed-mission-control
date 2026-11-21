@@ -2218,17 +2218,19 @@
       "key": "procedure:spend-guard",
       "kind": "procedure",
       "name": "spend-guard",
-      "trigger": "Selected schedule or command spend-guard",
-      "durable_state": "Schedule, receipts and affected files",
-      "execution": "notebook/core/procedures.mjs / runtime.mjs",
-      "activation": "Explicit user choice; inspect installed schedules and settings",
-      "permissions": "Authenticated owner; outward changes require exact approval",
+      "trigger": "Hourly native record routine",
+      "durable_state": "Secret-free aggregate observation, independent notice timestamps, schedule and receipts",
+      "execution": "notebook/core/spend-guard.mjs through procedures.mjs",
+      "activation": "On by default and silent without an OpenRouter key; configurable in Settings",
+      "permissions": "Authenticated owner; read-only OpenRouter key and credits endpoints",
       "dependencies": [],
-      "criterion": "Read a chosen provider balance; thresholds are configured by the owner. Verify the spend-guard result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
-      "status": "source only",
-      "evidence": [],
+      "criterion": "Sum daily use across unique held OpenRouter keys, warn for daily spend and the lowest remaining credit at most once per kind in six hours, and retain no credential outside its private source. Settings change both thresholds and can stop all calls; failed or absent-key samples stay silent.",
+      "status": "tested",
+      "evidence": [
+        "notebook/test/spend-guard.test.mjs"
+      ],
       "required": true,
-      "target_test": "Exercise spend-guard through its installed entry point and check actual results after restart"
+      "target_test": "Stub both OpenRouter reads and verify aggregation, settings, failure silence, six-hour restart throttling and credential exclusion"
     },
     {
       "key": "procedure:do-you-copy",
@@ -2305,8 +2307,11 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Read owner-selected authoritative domain registration endpoints; do not buy domains. Verify the domain-watch result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "notebook/test/domain-watch.test.mjs: add, list, archive and restore through one six-hour sweeper; exact RDAP endpoints and headers; fallback; a lookup that fails on every server keeps the last state, sends no notice, is named in the run's outcome and is retried at the next six-hour slot through the real scheduler tick, for more runs than max_retries without pausing the sweeper, and one always-failing domain does not stop a healthy one being checked and noticed; baseline, changed, return-to-registered and unchanged states; bounded Telegram batches deliver every transition once; after one delivered batch and an uncertain next batch, the next run delivers the rest exactly once; chat add, list and remove; Settings add, list and remove through the running server",
+        "notebook/ui/src/local/PersonalControl.domain-watch.test.tsx: Settings lists domain state, says when no registry answered, and submits add and remove operations"
+      ],
       "required": true,
       "target_test": "Exercise domain-watch through its installed entry point and check actual results after restart"
     },
