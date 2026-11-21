@@ -42,7 +42,9 @@ function ownerChatScopes(home){
 
 // The machine's own name, the way the notebook server names itself (device-id.mjs): GODSPEED_DEVICE
 // first, then the .godspeed/device.json the notebook wrote on its first start. The gates never write
-// one: a machine with neither has not started its notebook yet.
+// one: a machine with neither has not started its notebook yet. `env` is where GODSPEED_DEVICE is
+// read from, the process's own by default: on a real machine that is what the scheduler reads too,
+// and the tests pass an empty one so what they say does not depend on the machine the tests run on.
 function deviceOf(root,env=process.env){
  const named=String(env.GODSPEED_DEVICE||'').trim();
  if(named&&named!==LEGACY_DEVICE)return named;
@@ -62,10 +64,10 @@ function installationOwner(root){
  return null;
 }
 
-export function nightTidyGates({root,home}){
+export function nightTidyGates({root,home,env=process.env}){
  const store={root,state:path.join(root,'.godspeed')};
  const starter=starterBorn(root),machine=readMachineRecord(store)?.state||'none';
- const device=deviceOf(root),owner=installationOwner(root),owns=owner==null||owner===device;
+ const device=deviceOf(root,env),owner=installationOwner(root),owns=owner==null||owner===device;
  const telegram=telegramInHermes(home),routed=routedOwnerChats(home);
  const entry=readNotebookRoutines(store).jobs.find(j=>j.key==='chat-tidy')||null;
  let jobs,jobsError=null;

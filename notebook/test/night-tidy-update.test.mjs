@@ -4,6 +4,12 @@ import {NativeScheduler} from '../core/native-scheduler.mjs';import {Store} from
 import {runCommand} from '../core/child-process.mjs';import {CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,readNotebookRoutines} from '../core/notebook-routines.mjs';
 import {nightTidyGates} from '../../scenarios/night-tidy-gates.mjs';
 
+// The gates read the machine's own name from the environment first (GODSPEED_DEVICE), the way the
+// notebook server names itself. The test passes an empty environment so what they say here is what
+// the fixture built, not what the machine running the tests happens to name itself: in the CI image
+// GODSPEED_DEVICE is set, and a test that read it would call every tick not-owner.
+const gates=({root,home})=>nightTidyGates({root,home,env:{}});
+
 // THE NIGHT CHAT TIDY-UP ACROSS AN UPDATE (#721). On 18 November 2026 update-keeps-everything found
 // no tidy-up after an update for a person whose chat is on Telegram, and every gate on the way to
 // making it returns without a word. An update leaves the mission control's folder and the
@@ -55,8 +61,8 @@ async function twoTicks(label,{root,home,hermes},{scheduler,failures}){
  const seen=[];
  for(const tick of [1,2]){
   scheduler.lastTick=0;await scheduler.tick();
-  const gates=nightTidyGates({root,home});seen.push(gates);
-  console.log(`${label}, tick ${tick}: ${JSON.stringify(gates)}`);
+  const said=gates({root,home});seen.push(said);
+  console.log(`${label}, tick ${tick}: ${JSON.stringify(said)}`);
   if(failures.length)console.log(`${label}, tick ${tick}, what the scheduler reported: ${failures.join(' | ')}`);
  }
  assert.equal(seen.at(-1).tidy_jobs.length,tidies(hermes).length,'the gates read the same jobs file the scheduler wrote');
@@ -66,7 +72,7 @@ async function twoTicks(label,{root,home,hermes},{scheduler,failures}){
 test('after an update, a person whose chat is on Telegram has the night chat tidy-up within two ticks, once',async t=>{
  const machine=await installed(t);
  routeTelegramChat(machine.home);
- const before=nightTidyGates(machine);
+ const before=gates(machine);
  console.log('before the update: '+JSON.stringify(before));
  assert.equal(before.routed_owner_chats,1,'the routing table names the owner chat under the scheduler\'s own scope');
  const seen=await twoTicks('after the update',machine,machine.notebook());
@@ -106,13 +112,13 @@ test('a create the chat app refuses after an update is reported, and the next ti
  routeTelegramChat(machine.home);
  const after=machine.notebook();
  after.scheduler.lastTick=0;await after.scheduler.tick();
- const refused=nightTidyGates(machine);
+ const refused=gates(machine);
  console.log('after the update, the create refused: '+JSON.stringify(refused)+'; the scheduler reported: '+after.failures.join(' | '));
  assert.equal(refused.outcome,'would-create','nothing is remembered for a create that failed');
  assert.ok(after.failures.some(message=>/Hermes could not create it/.test(message)),'the failed create reaches onFailure, which the service logs');
  refusing=false;
  after.scheduler.lastTick=0;await after.scheduler.tick();
- assert.equal(nightTidyGates(machine).outcome,'job-present');
+ assert.equal(gates(machine).outcome,'job-present');
  assert.equal(tidies(machine.hermes).length,1);
 });
 
@@ -132,13 +138,13 @@ test('a machine that does not run the routines is said by the gates, and the tic
 test('with no chat app, or a chat routed under another spelling of the home, the gates say no chat app',async t=>{
  const machine=await installed(t);
  await twoTicks('no chat app yet',machine,machine.notebook());
- assert.equal(nightTidyGates(machine).outcome,'no-chat-app');
+ assert.equal(gates(machine).outcome,'no-chat-app');
  assert.equal(tidies(machine.hermes).length,0);
  // A chat routed under another spelling of the home is one the scheduler does not see.
  const elsewhere=path.join(machine.root,'elsewhere'),db=new DatabaseSync(path.join(machine.home,'state.db'));
  db.exec('create table gateway_routing(scope text, session_key text, entry_json text)');
  db.prepare('insert into gateway_routing values (?,?,?)').run(path.join(elsewhere,'sessions'),'agent:main:telegram:dm:4242','{}');db.close();
- const gates=nightTidyGates(machine);
- assert.equal(gates.outcome,'no-chat-app');
- assert.deepEqual(gates.owner_chat_scopes,[path.join(elsewhere,'sessions')]);
+ const said=gates(machine);
+ assert.equal(said.outcome,'no-chat-app');
+ assert.deepEqual(said.owner_chat_scopes,[path.join(elsewhere,'sessions')]);
 });
