@@ -117,6 +117,25 @@ for spelled in "$TMP/work/Cover.md" "$TMP/WORK./cover.md" "$(dirname "$TMP" | tr
   contains "  naming the missing review" "$OUT" "content review found missing work"
 done
 
+# A result file may be a symlink to a file outside the mission control. The same file is treated
+# the same however DONE WHEN names it (#766): both spellings are listed for the commit and the page,
+# and the shell CHECK alone never verifies either; the content review is asked for just the same.
+printf '%s\n' 'the real result lives outside' > "$ALIAS_PARENT/outside-result.md"
+ln -s "$ALIAS_PARENT/outside-result.md" "$TMP/work/link.md"
+for spelled in "$TMP/work/link.md" "work/link.md"; do
+  KEY="link-case-$((++ABS_CASE))"
+  hw file --what "Describe the linked result" --done-when "$spelled describes the thing outside" --check "test -s work/link.md" --key "$KEY" --source test >/dev/null
+  ITEM="$(idof "$KEY")"
+  check "  files lists the linked result named $spelled" "$(hw files "$ITEM" 2>&1)" "work/link.md"
+  hw take "$ITEM" --runner claude-laptop >/dev/null
+  hw attempt "$ITEM" --runner claude-laptop --ok --result "wrote the linked result" >/dev/null
+  OUT="$(hw verify "$ITEM" 2>&1)"; check "  its CHECK alone does not verify it ($spelled)" "$?" "2"
+  contains "  and it names the missing content review ($spelled)" "$OUT" "content review found missing work"
+  check "  and it stays attempted ($spelled)" "$(grep -c '^STATUS: attempted' "$TMP/work/$ITEM.md")" "1"
+  OUT="$(hw verify "$ITEM" --content-review "$TMP/review-pass.json" 2>&1)"
+  contains "  a passing content review verifies it ($spelled)" "$OUT" "verified by its check and content review"
+done
+
 hw file --what "Restart the local counter" --done-when "the counter reads 4" --check "test -f $TMP/counter-four" --key counter --source test >/dev/null
 COUNTER="$(idof counter)"; hw take "$COUNTER" --runner claude-laptop >/dev/null; hw attempt "$COUNTER" --runner claude-laptop --ok --result "counter reads 4" >/dev/null; touch "$TMP/counter-four"
 OUT="$(hw verify "$COUNTER" 2>&1)"
