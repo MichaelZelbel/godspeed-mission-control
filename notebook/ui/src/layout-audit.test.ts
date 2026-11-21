@@ -429,6 +429,13 @@ describe("the audit's rules on pages built for them", { timeout: 20_000 }, () =>
       .toEqual(['under another element: p "A paragraph" under span ""']);
   });
 
+  it("reports text a fixed element draws over, the floating chat button included", async () => {
+    // A fixed cover sits over the window at every scroll, so the sticky-header scroll cannot move
+    // the text out from under it: the floating chat button over a card is what this reports (#887).
+    expect(await audit(`<div style="height:550px"></div><p style="margin:0">A paragraph</p><button style="position:fixed;bottom:10px;left:0;width:200px;height:60px;background:red">Chat</button>`))
+      .toEqual(['under another element: p "A paragraph" under button "Chat"']);
+  });
+
   it("reports a field with no name and a label that names no field", async () => {
     expect(await audit(`<input><label>Lonely</label>`)).toEqual(['no name: input ""', 'label names no field: label "Lonely"']);
   });
