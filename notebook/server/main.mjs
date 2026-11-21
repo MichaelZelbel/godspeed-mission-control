@@ -77,7 +77,7 @@ import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/herm
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
 import {trackAIHealth,aiFailure} from '../core/ai-health.mjs';
-import {SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS,AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS,AI_STALLED_STATUS,NO_AI_STATUS} from '../core/no-ai.mjs';
+import {SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS,AI_CONNECTION_UNREADABLE_STATUS,AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS,AI_STALLED_STATUS,NO_AI_STATUS} from '../core/no-ai.mjs';
 import {MEDIA_CARRY_MAX_MB,MEDIA_PRESENCE_BATCH_SIZE,MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
 import {spendGuardStatus,saveSpendGuardSettings} from '../core/spend-guard.mjs';
 
@@ -101,6 +101,11 @@ const readSavedProvider=file=>{
   if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error('The saved AI connection is not valid. Connect it again after checking the server log.');
   return config;
 };
+// Whether a saved AI connection exists but cannot be read (Settings' own reading of the file). The
+// one availability the chats read asks this too (#826): while the notebook runs, the chats and
+// Settings then both say the saved connection cannot be read, a file repaired or replaced on disk
+// lets the surfaces agree again without a restart, and no provider call is spent on any of it.
+const savedProviderUnreadable=file=>{try{readSavedProvider(file);return false;}catch{return true;}};
 // A failed request to the AI, said as the chats say it (#590): a refused key, an outage, or an AI that
 // took the request and stopped answering (#808), each with what to do, never the provider's words,
 // which can quote the key. Godspeed's own no-AI sentences are not provider failures, though they
@@ -233,10 +238,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // An AI connected in Settings for the notebook only, while Hermes, which answers the chats, has no
   // AI of its own: the chats and the card say so, with the step that changes it (#590).
   const settingsOnlyAI=()=>{if(!routineAI||!fs.existsSync(providerPath))return false;try{return routineAIStatus(routineAI).source==='none';}catch{return false;}};
-  // The one availability every surface reads (#806): the provider's newest result, or 'none' with
-  // no AI connected. 'unknown' (connected, nothing asked yet) reads as ready, so a saved working
+  // The one availability every surface reads (#806): the provider's newest result, 'none' with no
+  // AI connected, or 'unreadable' when the saved connection exists but cannot be read (#826).
+  // 'unknown' (connected, nothing asked yet) reads as ready, so a saved working
   // connection and one just connected in Settings are usable before the first check or chat (#764).
-  const chatAIAvailability=()=>{if(!domains.provider)return 'none';const health=provider?.health?.();return chatAvailability(!health||health==='unknown'?'ready':health);};
+  const chatAIAvailability=()=>{if(!domains.provider)return 'none';if(savedProviderUnreadable(providerPath))return 'unreadable';const health=provider?.health?.();return chatAvailability(!health||health==='unknown'?'ready':health);};
   const ensureSpendGuard=()=>{
     if(store.get('jobs','spend-guard')||!spendGuardStatus(store,{hermesHome:routineAI?.home}).openrouter_connected)return;
     store.save('jobs',{id:'spend-guard',kind:'spend-guard',owner:store.get('settings','installation')?.owner||store.device,paused:false,state:'pending',next_run:new Date().toISOString(),interval_ms:3600000});
@@ -788,7 +794,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       // With no AI connected (the same test as runtimeConfigured in /api/status), the picker says so instead of naming a "Connected model" (#563).
       if(route==='/api/chat/options'&&req.method==='GET'){
-        if(domains.provider&&!assistantMissing&&settingsOnlyAI()){const options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};return send(res,200,{connected:true,usable:false,availability:'settings-only',...options});}
+        if(domains.provider&&!assistantMissing&&settingsOnlyAI()&&chatAIAvailability()!=='unreadable'){const options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};return send(res,200,{connected:true,usable:false,availability:'settings-only',...options});}
         if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]});
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
         if(provider?.check){
@@ -807,6 +813,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         // A chat summary is read-only (Domains.summarizeChat): no message, receipt or retained conversation.
         const isChat=NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode!=='summarize',id=isChat?input.request_id:undefined;
         if(isChat&&domains.provider&&!assistantMissing&&settingsOnlyAI())throw new Error(SETTINGS_ONLY_AI_STATUS+'. '+SETTINGS_ONLY_AI_HELP);
+        // A saved connection the notebook can no longer read (#826): the chat says what Settings
+        // says instead of asking the provider loaded before the file was damaged.
+        if(isChat&&domains.provider&&!assistantMissing&&chatAIAvailability()==='unreadable')throw new Error(AI_CONNECTION_UNREADABLE_STATUS);
         if(isChat&&id&&(!/^[a-f0-9-]{36}$/.test(id)||chatRequests.has(id)))throw new Error('Invalid chat request');
         const receiptId=isChat&&id?'chat-request-'+id:null,requestHash=hash({name,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
         if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,{data:previous.result,error:null});throw Error('This interrupted chat request needs review before replay');}

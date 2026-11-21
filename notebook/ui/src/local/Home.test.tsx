@@ -182,4 +182,13 @@ describe("the Godspeed card", () => {
     expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
     expect(screen.queryByText("Ready to chat")).toBeNull();
   });
+  // #826: the saved connection exists but cannot be read, so the card says what Settings says.
+  it("says the saved connection cannot be read when its file is damaged", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: false } : String(url) === "/api/chat/options" ? { connected: true, usable: false, availability: "unreadable" } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("The saved AI connection could not be read.", undefined, WAIT)).toBeInTheDocument();
+    expect(screen.getByText("Remove the saved connection in Settings, Your AI, to connect one again.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
+    expect(screen.queryByText("Ready to chat")).toBeNull();
+  });
 });

@@ -6,7 +6,7 @@ import {AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,Alert
 import {AlertTriangle,CheckCircle2,Loader2} from 'lucide-react';
 import {providerService} from '../../../core/provider-service.mjs';
 import {aiFailure} from '../../../core/ai-health.mjs';
-import {AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS} from '../../../core/no-ai.mjs';
+import {AI_CONNECTION_UNREADABLE_STATUS,AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS} from '../../../core/no-ai.mjs';
 
 // Settings > Your AI (18 October 2026). What the person connects here powers the notebook and, unless
 // they untick it, the daily routines and the chat too (notebook/core/routine-ai.mjs): every installer
@@ -20,11 +20,11 @@ type SavedProvider=|{configured:false;key:false}|{configured:true;url:string;mod
 async function call(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 export const routineAIStatus=()=>call('routine-ai') as Promise<RoutineAI>;
 function providerResponse(value:unknown):SavedProvider{
-  if(!value||typeof value!=='object')throw new Error('The saved AI connection could not be read.');
+  if(!value||typeof value!=='object')throw new Error(AI_CONNECTION_UNREADABLE_STATUS);
   const data=value as Record<string,unknown>;
   if(data.configured===false&&data.key===false)return {configured:false,key:false};
   if(data.configured===true&&typeof data.url==='string'&&typeof data.model==='string'&&typeof data.key==='boolean')return data as SavedProvider;
-  throw new Error('The saved AI connection could not be read.');
+  throw new Error(AI_CONNECTION_UNREADABLE_STATUS);
 }
 const savedProvider=async()=>providerResponse(await call('provider'));
 // THE CHOICES, the same for the main AI and the backup (22 October 2026, discussion #20): a key of
@@ -169,7 +169,7 @@ export function ConnectAI(){
   return <section id="connect-ai" className="border rounded p-4 space-y-4" aria-labelledby="connect-ai-title">
     <h2 id="connect-ai-title" className="text-xl">Your AI</h2>
     {status.isLoading?<p role="status">Reading which AI your routines use…</p>:<RoutineAIState status={data} checking={checking} onCheck={check} connected={!!saved.data?.configured}/>}
-    {saved.error?<div className="space-y-3"><p role="alert" className="text-red-500">The saved AI connection could not be read. The form is unavailable so it cannot be overwritten. Remove it to connect one again.</p>{removeControl}{done&&<p role="status">{done}</p>}{error&&<p role="alert" className="text-red-500">{error}</p>}</div>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
+    {saved.error?<div className="space-y-3"><p role="alert" className="text-red-500">{AI_CONNECTION_UNREADABLE_STATUS} The form is unavailable so it cannot be overwritten. Remove it to connect one again.</p>{removeControl}{done&&<p role="status">{done}</p>}{error&&<p role="alert" className="text-red-500">{error}</p>}</div>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
       <p>Connect the AI account you pay for. The key stays on this device and never goes into your notes.</p>
       <div><label className="block" htmlFor={id+'service'}>Your AI service</label>
         <select id={id+'service'} className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!data?.available).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>

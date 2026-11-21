@@ -11,6 +11,9 @@ export const AI_UNREACHABLE_STATUS='Your AI could not be reached';
 // outage (#808).
 export const AI_STALLED_STATUS='Your AI is not answering';
 export const SETTINGS_ONLY_AI_STATUS='Your AI is connected only to the notebook';
+// What Settings, Your AI says when the saved AI connection exists but cannot be read (#826), and
+// what the chats say for the same state, so the two agree while the notebook runs.
+export const AI_CONNECTION_UNREADABLE_STATUS='The saved AI connection could not be read.';
 export const SETTINGS_ONLY_AI_HELP='Tick “Use it for the daily routines and the chat too” in Settings, Your AI.';
 export const NO_AI_CHAT=NO_AI_STATUS+'. Connect your AI service in Settings, Your AI, then ask Godspeed again.';
 export const NO_AI_ANALYSIS='No AI is connected yet. Connect your AI service in Settings, Your AI, before analysis.';

@@ -2,7 +2,7 @@ import {useEffect} from 'react';
 import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 import {CHAT_AVAILABILITIES} from '../../../../core/chat-availability.mjs';
-import {AI_REFUSED_STATUS,AI_STALLED_STATUS,AI_UNREACHABLE_STATUS,NO_AI_STATUS,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../../../../core/no-ai.mjs';
+import {AI_CONNECTION_UNREADABLE_STATUS,AI_REFUSED_STATUS,AI_STALLED_STATUS,AI_UNREACHABLE_STATUS,NO_AI_STATUS,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../../../../core/no-ai.mjs';
 import {listenForChatOptions} from '@/local/chat-options.mjs';
 export type ChatAvailability=(typeof CHAT_AVAILABILITIES)[number];
 type ChatOptions={connected?:boolean;usable?:boolean;availability?:ChatAvailability};
@@ -12,7 +12,7 @@ export function chatAIState(options?:ChatOptions):ChatAIState{
   if(!options)return 'checking';
   if(options.connected===false)return 'none';
   if(options.usable!==false)return 'ready';
-  return options.availability==='refused'||options.availability==='stalled'||options.availability==='settings-only'?options.availability:'unreachable';
+  return options.availability==='refused'||options.availability==='stalled'||options.availability==='settings-only'||options.availability==='unreadable'?options.availability:'unreachable';
 }
 
 // Open pickers read their own model list; they refresh as soon as the shared state changes, so a
@@ -49,6 +49,7 @@ export function stateSaid(message?:string|null):ChatAIState|null{
   if(/Your AI could not be reached/.test(text))return 'unreachable';
   if(/Your AI is not answering/.test(text))return 'stalled';
   if(/connected only to the notebook/.test(text))return 'settings-only';
+  if(text.startsWith(AI_CONNECTION_UNREADABLE_STATUS))return 'unreadable';
   return null;
 }
 
@@ -65,8 +66,8 @@ export function ChatConnectionEmptyState({ready,said}:{ready:React.ReactNode;sai
   if(state==='checking')return underConversation?null:<div className="text-center text-muted-foreground text-sm py-8" role="status">Checking AI connection…</div>;
   if(underConversation&&(state==='none'||stateSaid(said)===state))return null;
   return <div className={'text-center text-muted-foreground text-sm space-y-2 '+(underConversation?'py-2':'py-8')} data-chat-ai-state={state}>
-    <p className="font-semibold text-foreground">{state==='none'?NO_AI_STATUS:state==='refused'?AI_REFUSED_STATUS:state==='stalled'?AI_STALLED_STATUS:state==='settings-only'?SETTINGS_ONLY_AI_STATUS:AI_UNREACHABLE_STATUS}</p>
-    <p>{state==='none'?'Connect an AI before you type.':state==='refused'?'Check its key or sign-in before you type.':state==='stalled'?'It took a request and has not answered yet. Wait a moment, or check it before you type.':state==='settings-only'?SETTINGS_ONLY_AI_HELP:'Check its connection before you type.'}</p>
+    <p className="font-semibold text-foreground">{state==='none'?NO_AI_STATUS:state==='refused'?AI_REFUSED_STATUS:state==='stalled'?AI_STALLED_STATUS:state==='settings-only'?SETTINGS_ONLY_AI_STATUS:state==='unreadable'?AI_CONNECTION_UNREADABLE_STATUS:AI_UNREACHABLE_STATUS}</p>
+    <p>{state==='none'?'Connect an AI before you type.':state==='refused'?'Check its key or sign-in before you type.':state==='stalled'?'It took a request and has not answered yet. Wait a moment, or check it before you type.':state==='settings-only'?SETTINGS_ONLY_AI_HELP:state==='unreadable'?'Remove it in Settings, Your AI, to connect one again.':'Check its connection before you type.'}</p>
     <Link className="underline text-primary" to="/dashboard/settings#connect-ai">Open Settings, Your AI</Link>
   </div>;
 }
