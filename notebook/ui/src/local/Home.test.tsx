@@ -139,7 +139,7 @@ describe("the Godspeed card", () => {
   });
   it("says Connecting only while the status is loading", async () => {
     let answer: (r: Response) => void = () => {};
-    vi.stubGlobal("fetch", vi.fn((url: string) => String(url) === "/api/chat/options" ? new Promise<Response>(r => { answer = r; }) : Promise.resolve(new Response(JSON.stringify({ runtimeConfigured: false, assistantProblem: null, show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } }))));
+    vi.stubGlobal("fetch", vi.fn((url: string) => String(url).startsWith("/api/chat/options") ? new Promise<Response>(r => { answer = r; }) : Promise.resolve(new Response(JSON.stringify({ runtimeConfigured: false, assistantProblem: null, show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } }))));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
     expect(await screen.findByText("Connecting…", undefined, WAIT)).toBeInTheDocument();
     answer(new Response(JSON.stringify({ connected: false, usable: false, availability: "none" }), { status: 200, headers: { "Content-Type": "application/json" } }));
@@ -167,6 +167,23 @@ describe("the Godspeed card", () => {
     act(() => { client.setQueryData(["chat-options"], options); });
     expect(await screen.findByText("Your AI key or sign-in was refused", undefined, WAIT)).toBeInTheDocument();
     expect(screen.queryByText("Ready to chat")).toBeNull();
+  });
+  // Arriving here after a note's chat confirms the AI afresh (#822): the first read asks the server
+  // to run its check even when the chat kept the five-second window warm, so the card shows a state
+  // the AI just confirmed, not one it last knew. Later reads keep the pacing (#794).
+  it("asks the AI afresh when it arrives after a chat used the shared state", async () => {
+    const chatUrls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).startsWith("/api/chat/options")) chatUrls.push(String(url));
+      return new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url).startsWith("/api/chat/options") ? { connected: true, usable: true, availability: "ready" } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // The note's chat has already used the shared state, so the cache holds its answer.
+    client.setQueryData(["chat-options"], { connected: true, usable: true, availability: "ready" });
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("Ready to chat", undefined, WAIT)).toBeInTheDocument();
+    expect(chatUrls[0]).toContain("check=1");
+    expect(chatUrls.slice(1).every(url => !url.includes("check=1"))).toBe(true);
   });
   it("distinguishes an unreachable configured AI from refused credentials", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url) === "/api/chat/options" ? { connected: true, usable: false, availability: "unreachable" } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
