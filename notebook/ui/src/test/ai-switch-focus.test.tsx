@@ -11,7 +11,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
-import { TEST_MS } from "./wait-limits";
+import { TEST_MS, WAIT } from "./wait-limits";
 
 let resolveSave: (() => void) | null = null;
 vi.mock("@/integrations/supabase/client", () => ({
@@ -58,7 +58,7 @@ it(
     // Space on the switch, the click a browser makes of its keyup.
     fireEvent.keyDown(switchButton, { key: " ", code: "Space", charCode: 32 });
     fireEvent.click(switchButton);
-    await waitFor(() => expect(switchButton).toHaveAttribute("aria-disabled", "true"));
+    await waitFor(() => expect(switchButton).toHaveAttribute("aria-disabled", "true"), WAIT);
     expect(switchButton).toHaveAttribute("aria-busy", "true");
     expect(document.activeElement).toBe(switchButton);
 
@@ -80,7 +80,7 @@ it(
     switchButton.focus();
     fireEvent.keyDown(switchButton, { key: " ", code: "Space", charCode: 32 });
     fireEvent.click(switchButton);
-    await waitFor(() => expect(switchButton).toHaveAttribute("aria-disabled", "true"));
+    await waitFor(() => expect(switchButton).toHaveAttribute("aria-disabled", "true"), WAIT);
 
     // The switch is focusable: nothing removed it from the tab order, so the browser's next Tab
     // moves from it to the control after it.
