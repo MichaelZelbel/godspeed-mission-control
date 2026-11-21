@@ -306,8 +306,20 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   async function sendFile(res, file, headers, missing) {
     let handle; try { handle = await fs.promises.open(file, 'r'); } catch { return missing ? missing() : send(res, 404, { error: 'This file is missing.' }); }
     let size; try { size = (await handle.stat()).size; } catch (error) { await handle.close().catch(() => {}); throw error; }
+    // The browser can give up on a page file at any moment: before the reply
+    // starts, between opening the file and piping it, or part way through.
+    // Piping into a reply that is already gone throws
+    // (ERR_STREAM_UNABLE_TO_PIPE), and until 21 November 2026 nothing caught
+    // that throw in a server process that was not started from main.mjs
+    // itself (the screen tests and the layout audit start it that way), so
+    // the process ended and every open tab lost the notebook while pages
+    // were still loading. The reply is already beyond saving, so it only
+    // ends here, and the server answers everyone else.
+    if (res.destroyed) { await handle.close().catch(() => {}); return; }
     res.writeHead(200, { ...headers, 'Content-Length': size });
-    pipeline(handle.createReadStream(), res, error => { if (error) res.destroy(); });
+    const stream = handle.createReadStream();
+    try { pipeline(stream, res, error => { if (error) res.destroy(); }); }
+    catch { stream.destroy(); res.destroy(); await handle.close().catch(() => {}); }
   }
   async function body(req, limit = 2 * 1024 * 1024) {
     let size = 0; const chunks = [];
@@ -778,7 +790,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]});
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
         if(provider?.check){
-          if(!chatAICheck&&Date.now()-lastChatCheckAt>=5000){
+          // A read may ask for a fresh check (the Dashboard's arrival, #822): it still shares the
+          // in-flight check, but jumps the five-second pacing other reads keep (#794).
+          if(!chatAICheck&&(url.searchParams.has('check')||Date.now()-lastChatCheckAt>=5000)){
             lastChatCheckAt=Date.now();
             chatAICheck=(async()=>{try{await provider.check();}catch(error){console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}})().finally(()=>{chatAICheck=null;});
           }

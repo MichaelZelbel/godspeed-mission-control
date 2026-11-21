@@ -439,6 +439,54 @@ describe("every page at a phone's and a desktop's width", () => {
     expect(failures, failures.join("\n")).toEqual([]);
   }, 60_000);
 
+  // The dashboard's top bar at 320 px, the narrowest phone the header must hold (#868): on main the
+  // bar's other controls squeezed the search box to 77 px wide, and the box's own paddings left
+  // 5 px of that for text, so the placeholder "Search" clipped. The page-wide check above meets the bar only at 375 and
+  // 1280 px, where the box still fits, so the box is checked on its own here, on a page every
+  // dashboard page shares: the audit's rules on the search box, and the audit's own room measure
+  // (the box less its borders and paddings) against the width its text needs.
+  it("shows the top bar's search box with room for its text at 320 px", async () => {
+    const failures: string[] = [];
+    for (const viewport of [{ width: 375, height: 812 }, { width: 320, height: 568 }]) {
+      const context = await browser.newContext({ viewport });
+      try {
+        const page = await context.newPage();
+        const cdp = await context.newCDPSession(page);
+        await page.goto(`${empty.base}/dashboard`);
+        await settle(page);
+        // Only the top bar's search box: a fault anywhere else on the page at 320 px is apart from
+        // this fix, as a group card's clipped name was (#867).
+        const found = (await auditShown(page, cdp)).filter((f) => f.element.startsWith('input "Search'));
+        failures.push(...found.map((f) => `${viewport.width} px, ${f.rule}: ${f.element}`));
+        const room = await page.evaluate(() => {
+          const input = document.querySelector<HTMLInputElement>('input[aria-label="Search notes"]');
+          if (!input) return null;
+          const style = getComputedStyle(input);
+          const ruler = document.createElement("span");
+          for (const key of ["fontFamily", "fontSize", "fontWeight", "fontStyle", "letterSpacing", "textTransform", "fontStretch", "wordSpacing"]) {
+            (ruler.style as any)[key] = style[key];
+          }
+          Object.assign(ruler.style, { position: "absolute", whiteSpace: "pre", visibility: "hidden" });
+          ruler.textContent = input.value || input.placeholder || "";
+          document.body.appendChild(ruler);
+          const need = ruler.getBoundingClientRect().width;
+          ruler.remove();
+          // Not input.clientWidth: on an input Chrome leaves the padding out of it.
+          const spare = input.getBoundingClientRect().width
+            - ["borderLeftWidth", "borderRightWidth", "paddingLeft", "paddingRight"].reduce((sum, key) => sum + parseFloat((style as any)[key]), 0);
+          return { need, spare };
+        });
+        if (!room) failures.push(`${viewport.width} px: the search box is missing`);
+        else if (room.need > room.spare) {
+          failures.push(`${viewport.width} px: clipped: the search box's text needs ${room.need.toFixed(1)} px, the box has ${room.spare.toFixed(1)}`);
+        }
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 60_000);
+
   // A name that is one long word with no spaces (#871): break-words alone does not let a flex item
   // shrink below its longest word, so on main the name runs past the screen edge instead of
   // wrapping. Checked at 320 px, the narrowest phone the header must hold, and at 375 px, the width

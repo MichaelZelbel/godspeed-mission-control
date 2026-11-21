@@ -4,7 +4,7 @@ import {render,screen,waitFor,cleanup} from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {MemoryRouter} from 'react-router-dom';
-import {ChatConnectionEmptyState,chatAIState,stateSaid} from './ChatConnectionEmptyState';
+import {ChatConnectionEmptyState,chatAIState,useChatOptions,stateSaid} from './ChatConnectionEmptyState';
 import { WAIT } from "@/test/wait-limits";
 
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
@@ -55,4 +55,33 @@ it('preserves a ready state when connection checking is unavailable',()=>{
 
 it('knows a stalled reply already says the stall, so the notice under it does not repeat it',()=>{
   expect(stateSaid('Your AI is not answering. Try again in a moment, or check it in Settings, Your AI.')).toBe('stalled');
+});
+
+// #822: the Dashboard's arrival read asks for a check only once a chat has read the shared state
+// since the last confirmation. Its flag rides the first read only, and comes back when that read
+// fails, so the arrival still gets confirmed.
+it('rides the check flag on the first read only, and gets it back when that read fails',async()=>{
+  const calls:string[]=[];let broken=false;
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
+    calls.push(String(url));
+    if(broken)throw Error('Could not read AI connection status');
+    return new Response(JSON.stringify({connected:true,usable:true,availability:'ready'}),{status:200,headers:{'Content-Type':'application/json'}});
+  }));
+  const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+  // A chat surface reads the shared state; that is what lets the next arrival confirm afresh.
+  function Chat(){useChatOptions();return null;}
+  const chat=render(<QueryClientProvider client={client}><MemoryRouter><Chat/></MemoryRouter></QueryClientProvider>);
+  await waitFor(()=>expect(calls.length).toBeGreaterThan(0),WAIT);
+  expect(calls[0]).not.toContain('check=1');
+  chat.unmount();
+  broken=true;
+  function Probe(){useChatOptions({confirmOnMount:true});return null;}
+  render(<QueryClientProvider client={client}><MemoryRouter><Probe/></MemoryRouter></QueryClientProvider>);
+  await waitFor(()=>expect(calls.length).toBeGreaterThan(1),WAIT);
+  expect(calls[calls.length-1]).toContain('check=1');
+  broken=false;
+  await client.refetchQueries({queryKey:['chat-options']});
+  expect(calls[calls.length-1]).toContain('check=1');
+  await client.refetchQueries({queryKey:['chat-options']});
+  expect(calls[calls.length-1]).not.toContain('check=1');
 });
