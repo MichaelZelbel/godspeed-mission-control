@@ -396,6 +396,49 @@ describe("every page at a phone's and a desktop's width", () => {
     }, 240_000);
   }
 
+  // The group page with a real, long name (#863): the audit above meets it only as "group not
+  // found", because the seed has no group. The seed is not given one here either: the list page's
+  // cards clip a long name at both widths, which is a fault of its own, apart from this fix, and
+  // would turn the page-wide check red for something this change does not touch. So the header is
+  // checked on its own: the audit's rules on the name and the two buttons, and the name's whole
+  // box against each button's box, at a phone's width and at 320 px, the narrowest phone the
+  // header must hold. On main this fails: the buttons squeezed the name to one letter.
+  it("shows a group's whole name with its Add Member and Edit buttons at a phone's width", async () => {
+    const name = "Seed round investors for the 2027 expansion";
+    const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name }, selection: "id,slug", single: true });
+    expect(group?.slug ?? null).toBeTruthy();
+    const failures: string[] = [];
+    for (const viewport of [{ width: 375, height: 812 }, { width: 320, height: 568 }]) {
+      const context = await browser.newContext({ viewport });
+      try {
+        const page = await context.newPage();
+        const cdp = await context.newCDPSession(page);
+        await page.goto(`${seededNotebook.base}/dashboard/groups/${group.slug}`);
+        await settle(page);
+        // The audit's rules, read only on the name and the two buttons.
+        const headerNames = [`h1 "${name}"`, 'button "Add Member"', 'button "Edit"'];
+        const found = (await auditShown(page, cdp)).filter((f) => headerNames.some((n) => f.element.startsWith(n)));
+        failures.push(...found.map((f) => `${viewport.width} px, ${f.rule}: ${f.element}`));
+        // And the boxes themselves: the name's whole box against each button's whole box.
+        const overlap = await page.evaluate((nm) => {
+          const h1 = [...document.querySelectorAll("h1")].find((e) => e.textContent === nm);
+          const button = (t) => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === t);
+          if (!h1 || !button("Add Member") || !button("Edit")) return "the name or a button is missing";
+          const intersect = (a, b) => !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+          const box = (e) => e.getBoundingClientRect();
+          for (const t of ["Add Member", "Edit"]) {
+            if (intersect(box(h1), box(button(t)))) return `"${t}" overlaps the name`;
+          }
+          return box(h1).left >= 0 && box(h1).right <= innerWidth ? null : "the name runs past the screen";
+        }, name);
+        if (overlap) failures.push(`${viewport.width} px: ${overlap}`);
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 60_000);
+
   // The dashboard's top bar at 320 px, the narrowest phone the header must hold (#868): on main the
   // bar's other controls squeezed the search box to 77 px wide, and the box's own paddings left
   // 5 px of that for text, so the placeholder "Search" clipped. The page-wide check above meets the bar only at 375 and
