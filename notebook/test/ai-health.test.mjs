@@ -11,6 +11,7 @@ test('a refused key, an outage and a stall are told apart',()=>{
  assert.equal(aiFailure(Error('The AI did not answer the connection check within 3 seconds.')),'stalled');
  assert.equal(aiFailure(Object.assign(Error('The model provider at example.test stopped answering.'),{code:'AI_STALLED'})),'stalled');
  assert.equal(aiFailure(Error('Use a document-capable model endpoint for PDF analysis')),null,'a request the AI cannot take says nothing about the AI');
+ for(const message of ['Godspeed is updating; try the chat again in a moment.','The assistant is updating; try the chat again in a moment.','Assistant output exceeded its limit','The Godspeed assistant could not start'])assert.equal(aiFailure(Error(message)),null,message);
 });
 
 test('the newest result wins, whether a check or a chat request',async()=>{

@@ -241,6 +241,12 @@ test('the original runtime Hermes chats feed the one state: a refused chat is no
  setMode('refused');
  const refused=await chat();assert.equal(refused.status,400,refused.text);assert.match(refused.text,/Your AI key or sign-in was refused/);
  both(await readOptions(),await readStatus(),'refused','after the refused chat');
+ // A chat refused because an update holds the lifecycle says nothing about the AI: the surfaces
+ // keep the newest real result, here still 'refused', instead of reading an outage (#806).
+ const release=service.scheduler.lifecycle.acquire('assistant update');
+ const updating=await chat();assert.equal(updating.status,400,updating.text);assert.match(updating.text,/The assistant is updating/);
+ both(await readOptions(),await readStatus(),'refused','after the chat the updating assistant refused');
+ release();
  setMode('working');
  const sent=await chat();assert.equal(sent.status,200,sent.text);assert.match(sent.text,/A reply from the fake assistant/);
  both(await readOptions(),await readStatus(),'ready','after the chat that answered');

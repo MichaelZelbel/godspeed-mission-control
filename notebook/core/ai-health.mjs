@@ -24,8 +24,10 @@ export const AI_HEALTH_WAIT_MS=3000;
 export const AI_HEALTH_FIRST_WAIT_MS=8000;
 
 const REFUSED=/HTTP (?:401|403)\b|needs sign-in|authenticationerror|invalid_api_key|incorrect api key|token expired|unauthorized|authentication failed/i;
-// Failures of the request itself, not of the AI: they say nothing about whether it can be reached.
-const NOT_THE_AI=/document-capable model endpoint|Reply stopped/i;
+// Failures that say nothing about whether the AI can be reached: a request the AI cannot take, a
+// chat the person stopped, a chat an update holds the door for (#806's recorded chats), an answer
+// longer than the limit, and an assistant program that never started.
+const NOT_THE_AI=/document-capable model endpoint|Reply stopped|is updating; try the chat again in a moment|Assistant output exceeded its limit|The Godspeed assistant could not start/i;
 const STALLED=/did not answer the connection check/i;
 
 /** What a failed provider request says about the AI: 'refused', 'unreachable', 'stalled', or null (nothing). */
