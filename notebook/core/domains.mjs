@@ -63,7 +63,13 @@ function json(result){return typeof result==='string'?JSON.parse(result.trim().r
 function cites(source,quote){return typeof source==='string'?source.includes(quote):source&&typeof source==='object'?Object.values(source).some(value=>cites(value,quote)):false;}
 // A review saved earlier is normalised the same way; a reply from the AI that cannot be one is the
 // AI's unreadable reply (no-ai.mjs), not an internal message.
-function reviewData(value,fail){if(fail&&(!value||typeof value!=='object'||Array.isArray(value)))throw fail('review');fail??=field=>new Error('The review returned an invalid '+field+' list');const result={...value};for(const field of ['themes','open_loops','connections','gaps','people_summary']){if(typeof result[field]==='string'&&field==='gaps')result[field]=[result[field]];if(result[field]==null)result[field]=[];if(!Array.isArray(result[field]))throw fail(field);}return result;}
+function reviewData(value,fail){if(fail&&(!value||typeof value!=='object'||Array.isArray(value)))throw fail('review');if(fail&&!reviewContent(value))throw fail('content');fail??=field=>new Error('The review returned an invalid '+field+' list');const result={...value};for(const field of ['themes','open_loops','connections','gaps','people_summary']){if(typeof result[field]==='string'&&field==='gaps')result[field]=[result[field]];if(result[field]==null)result[field]=[];if(!Array.isArray(result[field]))throw fail(field);}return result;}
+// A review from the AI says something: a summary, or at least one entry in one of its lists. An
+// answer with neither, such as {"foo":1}, saved an empty review as if it had worked (#807).
+function reviewContent(value){return typeof value.week_summary==='string'&&value.week_summary.trim()!==''||['themes','open_loops','connections','gaps','people_summary'].some(field=>Array.isArray(value[field])&&value[field].length>0||field==='gaps'&&typeof value[field]==='string'&&value[field].trim()!=='');}
+// Create collection with AI needs a collection with a name and at least one field it can show; an
+// answer without them, such as {"foo":1}, was returned as the schema (#807).
+function collectionSchema(value){return !!value.collection&&typeof value.collection==='object'&&!Array.isArray(value.collection)&&typeof value.collection.name==='string'&&value.collection.name.trim()!==''&&Array.isArray(value.field_schema)&&value.field_schema.length>0&&value.field_schema.every(field=>field&&typeof field==='object'&&!Array.isArray(field)&&typeof field.key==='string'&&field.key.trim()!==''&&typeof field.label==='string'&&typeof field.type==='string');}
 // The group actions' reply: the object their contract asks for, or the AI's unreadable reply.
 function groupReply(name,value){
   const object=value&&typeof value==='object'&&!Array.isArray(value);
@@ -652,6 +658,7 @@ export class Domains {
         try{
           structured=contracts[name]?json(response):typeof response==='object'?response:{reply:response};
           if(!structured||typeof structured!=='object'||Array.isArray(structured))throw Error('Return one complete JSON object');
+          if(name==='generate_collection_schema'&&!collectionSchema(structured))throw Error('Return {collection:{name,...},field_schema:[...]} with a collection name and at least one field');
           if(name==='conversation-chat'){
             const requested=String(input.message||''),reply=String(structured.reply||'');
             const memoryRequest=/^(?:(?:please|bitte)\s+)?(?:remember\b|(?:correct|update|replace)\b[\s\S]*\b(?:remembered|memory|preference|fact)\b|(?:merke|korrigiere)\b)/i.test(requested);
