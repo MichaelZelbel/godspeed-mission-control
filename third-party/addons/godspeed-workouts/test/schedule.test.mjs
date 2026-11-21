@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { systemdService, systemdTimer, launchAgentPlist, windowsTaskXml, scheduleKind, scheduleFiles, removeSchedule } from "../lib/schedule.mjs";
+import { spawnSync } from "node:child_process";
+import { systemdService, systemdTimer, launchAgentPlist, windowsTaskXml, scheduleKind, scheduleFiles, removeSchedule, windowsTaskDeleteScriptFor } from "../lib/schedule.mjs";
 import { randomMinute } from "../lib/settings.mjs";
 
 const p = { node: "/usr/bin/node", script: "/usr/local/lib/godspeed-workouts/bin/godspeed-workouts.mjs", stateDir: "/var/lib/godspeed/workouts", version: "0.1.0", minute: 7, second: 42, path: "/usr/bin:/bin", home: "/root" };
@@ -112,4 +113,12 @@ test("removing an already absent Windows task succeeds", () => {
   assert.deepEqual(result, { ok: true, text: 'no scheduled task "Godspeed Workouts" to remove' });
   assert.equal(invocation[0], "powershell.exe");
   assert.match(invocation[1].at(-1), /GetHRForException/);
+});
+
+// The fake above only reads the script's text. This runs the generated script for real, against a task
+// name that cannot exist (never the real task's name, so a PC that has it is left alone).
+test("the real Windows delete script exits 42 for a task that does not exist", { skip: process.platform !== "win32" && "needs Windows PowerShell and the Task Scheduler" }, () => {
+  const script = windowsTaskDeleteScriptFor(`Godspeed Workouts test, no such task ${process.pid}`);
+  const r = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8", windowsHide: true });
+  assert.equal(r.status, 42, `${r.stdout}${r.stderr}`);
 });
