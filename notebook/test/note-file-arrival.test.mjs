@@ -12,7 +12,7 @@ import { createService } from '../server/main.mjs';
 // record's frontmatter is written around them.
 
 const temporary=()=>fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-note-arrival-'));
-const until=async(check,ms=10000)=>{const end=Date.now()+ms;for(;;){const value=check();if(value||Date.now()>end)return value;await new Promise(r=>setTimeout(r,50));}};
+const until=async(check,ms=10000)=>{const end=Date.now()+ms;for(;;){const value=await check();if(value||Date.now()>end)return value;await new Promise(r=>setTimeout(r,50));}};
 const notes=async base=>(await(await fetch(base+'/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'notes',operation:'select'})})).json()).data;
 const search=async(base,q)=>(await(await fetch(base+'/api/search?'+new URLSearchParams({q,types:'notes',mode:'words',format:'notes'}))).json()).data;
 
@@ -121,6 +121,26 @@ test('a page the notebook saw before it first looked stays the owner\'s own page
       assert.equal(await until(()=>again.list('notes').some(n=>n.title==='New page')),true,'a later page becomes a note');
     }finally{again.unwatch();}
   }finally{store.unwatch();}
+});
+
+test('a second outside edit within five seconds of the first is found by search as fast as the first',async()=>{
+  const root=temporary(),service=await createService({root,port:0}),base='http://127.0.0.1:'+service.address.port;
+  const BOUND=5000; // the issue's window: well above the milliseconds a working edit takes
+  try{
+    const file=path.join(root,'notebook','Twice edited.md');
+    fs.writeFileSync(file,'# Twice edited\n\nfirst words\n');
+    const listed=await until(async()=>{const rows=await notes(base);return rows.find(n=>n.title==='Twice edited')||null;});
+    assert.ok(listed,'the page is a note');
+    // The atomic replace every save and every adoption uses: the new text is
+    // written beside the file and renamed over it. An outside editor keeps
+    // the file's frontmatter and adds to the body.
+    const edit=(file,words)=>{fs.writeFileSync(file+'.tmp',fs.readFileSync(file,'utf8')+'\n'+words+'\n');fs.renameSync(file+'.tmp',file);};
+    edit(file,'quartzforge');
+    assert.ok(await until(async()=>(await search(base,'quartzforge')).length?true:null,BOUND),'the first edit is found within '+BOUND+' ms');
+    await new Promise(r=>setTimeout(r,2000));
+    edit(file,'emberglass');
+    assert.ok(await until(async()=>(await search(base,'emberglass')).length?true:null,BOUND),'the second edit, within five seconds of the first, is found within the same bound');
+  }finally{await service.close();fs.rmSync(root,{recursive:true,force:true});}
 });
 
 test('an adopted note is edited like any note, in the file it came from',async()=>{
