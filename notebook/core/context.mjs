@@ -16,9 +16,10 @@ export function privateFile(relative,text){
   if(frontmatter){const meta={};for(const line of frontmatter[1].split(/\r?\n/)){const m=line.match(/^([A-Za-z_][\w-]*):(.*)$/);if(m)meta[m[1]]=scalar(m[2]);}if(marked(meta))return true;try{return marked(JSON.parse(frontmatter[1]));}catch{return false;}}
   try{return marked(JSON.parse(text));}catch{return false;}
 }
-export function fileContext(store,limit=40000){
+export function fileContext(store,limit=40000,{exclude=[]}={}){
   const result=[];let remaining=limit;
   const walk=(relative)=>{
+    if(exclude.some(folder=>relative===folder||relative.startsWith(folder+'/')))return;
     const target=path.join(store.root,relative);if(!fs.existsSync(target))return;
     const info=fs.lstatSync(target);if(info.isSymbolicLink())return;
     if(info.isDirectory()){for(const name of fs.readdirSync(target))if(remaining>0)walk(path.posix.join(relative,name));}

@@ -15,7 +15,8 @@ done
 [ -n "$NODE" ] || { echo "FAIL: no node on this box"; exit 1; }
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
+ALIAS_PARENT="$(mktemp -d)"
+trap 'rm -rf "$TMP" "$ALIAS_PARENT" "$TEST_GUARD_HOME"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin"
 : > "$TMP/AGENTS.md"
 cp "$HERE/work.js" "$TMP/bin/"
@@ -30,7 +31,7 @@ export GODSPEED_NOW="2026-09-13T10:00:00.000Z"
 hw() { "$NODE" "$TMP/bin/work.js" "$@"; }
 idof() { hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s).find(x=>x.KEY===process.argv[1]);console.log(x?x.id:"none")})' "$1"; }
 
-PASS=0; FAIL=0
+PASS=0; FAIL=0; ABS_CASE=0
 ok()   { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf '  FAIL %s\n' "$1"; }
 check() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (wanted [$3], got [$2])"; fi; }
@@ -52,7 +53,7 @@ OUT="$(hw file --what "Put the guide on the shop shelf" --done-when "the listing
 contains "outward work files blocked, needing authorization" "$OUT" "W-20260913-02: blocked"
 contains "  and says it never runs on its own" "$OUT" "outward: never on its own"
 OUT="$(hw file --what "Post to the feed" --done-when "x" --owner robot --source test 2>&1)"; check "a made-up owner is refused" "$?" "1"
-OUT="$(hw file --what "Fix the cover picture" --done-when "the routing test passes" --check "test -f $TMP/cover-fixed" --key cover --source test 2>&1)"
+OUT="$(hw file --what "Fix the cover picture" --done-when "work/cover-result.md describes the corrected cover" --check "test -f $TMP/cover-fixed" --key cover --source test 2>&1)"
 contains "an item with a mechanical check files" "$OUT" "W-20260913-03: planned"
 OUT="$(hw file --what "Read the replies on the last post" --done-when "the replies are in the log" --needs "capability:browser bridge from this machine" --source test 2>&1)"
 contains "a missing capability files blocked and names it" "$OUT" "blocked (needs capability:browser bridge from this machine)"
@@ -78,9 +79,48 @@ hw attempt W-20260913-03 --runner claude-laptop --ok --result "patched the route
 OUT="$(hw verify W-20260913-03 2>&1)"; check "a failing check keeps the runner's claim unverified (exit 2)" "$?" "2"
 contains "  and says so" "$OUT" "the runner said done, the check says not; stays attempted"
 check "  UNVERIFIED line recorded" "$(grep -c 'UNVERIFIED check failed' "$TMP/work/W-20260913-03.md")" "1"
+printf '%s\n' 'corrected cover' > "$TMP/work/cover-result.md"
 touch "$TMP/cover-fixed"
-OUT="$(hw verify W-20260913-03 2>&1)"
-contains "  once the check passes it verifies" "$OUT" "verified by its check"
+OUT="$(hw verify W-20260913-03 2>&1)"; check "  missing content review exits 2" "$?" "2"
+contains "  a passing shell check is insufficient for a Godspeed-owned file result" "$OUT" "content review found missing work"
+printf '%s\n' '{"passed":false,"reason":"the cover is still wrong","missing":["the corrected cover"]}' > "$TMP/review-fail.json"
+OUT="$(hw verify W-20260913-03 --content-review "$TMP/review-fail.json" 2>&1)"; check "  a failed content review exits 2" "$?" "2"
+contains "  and names the missing content" "$OUT" "the corrected cover"
+printf '%s\n' '{"passed":true,"reason":"the corrected cover is present","missing":[]}' > "$TMP/review-pass.json"
+OUT="$(hw verify W-20260913-03 --content-review "$TMP/review-pass.json" 2>&1)"
+contains "  once both judgments pass it verifies" "$OUT" "verified by its check and content review"
+
+# An installed workspace may be reached through a stable symlink. The absolute spelling still names
+# the same Godspeed-owned result and therefore gets exactly the same content gate as the relative one.
+ln -s "$TMP" "$ALIAS_PARENT/workspace-link"
+OUT="$(hw file --what "Fix the absolute-path cover" --done-when "$ALIAS_PARENT/workspace-link/work/absolute-cover.md describes the corrected cover" --check "test -s work/absolute-cover.md" --key absolute-cover --source test 2>&1)"
+ABSOLUTE_COVER="$(idof absolute-cover)"
+printf '%s\n' 'shape only' > "$TMP/work/absolute-cover.md"
+hw take "$ABSOLUTE_COVER" --runner claude-laptop >/dev/null
+hw attempt "$ABSOLUTE_COVER" --runner claude-laptop --ok --result "wrote the cover result" >/dev/null
+OUT="$(hw verify "$ABSOLUTE_COVER" 2>&1)"; check "  an absolute workspace result also needs content review" "$?" "2"
+contains "  its path spelling cannot bypass the content gate" "$OUT" "content review found missing work"
+OUT="$(hw verify "$ABSOLUTE_COVER" --content-review "$TMP/review-pass.json" 2>&1)"
+contains "  an absolute workspace result verifies after both judgments" "$OUT" "verified by its check and content review"
+
+# An absolute DONE WHEN spelled with other capitals or a trailing dot is the same file (#571), so
+# `files` still finds it for the commit and the page, and it still needs the content review.
+printf '%s\n' 'shape only' > "$TMP/work/cover.md"
+for spelled in "$TMP/work/Cover.md" "$TMP/WORK./cover.md" "$(dirname "$TMP" | tr '[:lower:]' '[:upper:]')/$(basename "$TMP")/work/COVER.md"; do
+  KEY="abs-case-$((++ABS_CASE))"
+  hw file --what "Fix the cover as spelled" --done-when "$spelled describes the corrected cover" --check "test -s work/cover.md" --key "$KEY" --source test >/dev/null
+  ITEM="$(idof "$KEY")"
+  check "  files finds $spelled as work/cover.md" "$(hw files "$ITEM" 2>&1)" "work/cover.md"
+  hw take "$ITEM" --runner claude-laptop >/dev/null
+  hw attempt "$ITEM" --runner claude-laptop --ok --result "wrote the cover" >/dev/null
+  OUT="$(hw verify "$ITEM" 2>&1)"; check "  and without a content review it stays attempted" "$?" "2"
+  contains "  naming the missing review" "$OUT" "content review found missing work"
+done
+
+hw file --what "Restart the local counter" --done-when "the counter reads 4" --check "test -f $TMP/counter-four" --key counter --source test >/dev/null
+COUNTER="$(idof counter)"; hw take "$COUNTER" --runner claude-laptop >/dev/null; hw attempt "$COUNTER" --runner claude-laptop --ok --result "counter reads 4" >/dev/null; touch "$TMP/counter-four"
+OUT="$(hw verify "$COUNTER" 2>&1)"
+contains "a non-file result retains shell-check verification" "$OUT" "verified by its check"
 
 # --- failure, retries with a gap, attempts used up ------------------------------------------------------
 hw file --what "Refresh the contact list" --done-when "rows 1 to 15 carry today's date" --key dream --source test >/dev/null
@@ -160,7 +200,8 @@ hw take "$CH5" --runner claude-laptop >/dev/null
 hw attempt "$CH5" --runner claude-laptop --ok --result "we found out it is about forty percent" >/dev/null
 OUT="$(hw verify $CH5 2>&1)"; check "a learn item whose answer was only reported stays attempted" "$?" "2"
 mkdir -p "$TMP/research"; printf '## Answer\nAbout forty percent of readers reach chapter 5, from the reading log.\n' > "$TMP/research/chapter-5.md"
-OUT="$(hw verify $CH5 2>&1)"; contains "  once the answer is written where it was promised, it verifies" "$OUT" "verified by its check"
+printf '%s\n' '{"passed":true,"reason":"the answer and its evidence are in the promised file","missing":[]}' > "$TMP/ch5-review.json"
+OUT="$(hw verify $CH5 --content-review "$TMP/ch5-review.json" 2>&1)"; contains "  once the answer is written and independently reviewed, it verifies" "$OUT" "verified by its check and content review"
 
 # --- a repair mends this machine, and reaches nobody else (2026-10-27) -------------------------------------
 OUT="$(hw file --what "Install the fixed nightly upgrade over the broken copy" --done-when "the upgrade's own check passes again on this machine" --kind repair --key fix-upgrade --source test 2>&1)"
