@@ -528,4 +528,123 @@ describe("every page at a phone's and a desktop's width", () => {
     }
     expect(failures, failures.join("\n")).toEqual([]);
   }, 60_000);
+
+  // A name too long for one line at desktop widths (#878): sm:truncate on the h1 kept it to one
+  // line from 640 px up and ended it in "…", and nothing else on the page showed the whole name.
+  // The audit's own rules flag a truncated h1, but the page-wide check visits this route only as
+  // "group not found", so the real page is checked here at 375, 768 and 1280 px: the rules on the
+  // name, and its box against its own scroll width, which a nowrap clip keeps wider than the box.
+  // On main this fails at 768 and 1280 px.
+  it("shows a group name longer than one line in full at a phone's, a tablet's and a desktop's width", async () => {
+    const name = "Seed round investors for the 2027 expansion and everyone who joined at the demo day last spring";
+    const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name }, selection: "id,slug", single: true });
+    expect(group?.slug ?? null).toBeTruthy();
+    const failures: string[] = [];
+    for (const viewport of [{ width: 375, height: 812 }, { width: 768, height: 1024 }, { width: 1280, height: 900 }]) {
+      const context = await browser.newContext({ viewport });
+      try {
+        const page = await context.newPage();
+        const cdp = await context.newCDPSession(page);
+        await page.goto(`${seededNotebook.base}/dashboard/groups/${group.slug}`);
+        await settle(page);
+        // The element string holds only the first 60 characters of the text.
+        const found = (await auditShown(page, cdp)).filter((f) => f.element.startsWith(`h1 "${name.slice(0, 60)}`));
+        failures.push(...found.map((f) => `${viewport.width} px, ${f.rule}: ${f.element}`));
+        const cut = await page.evaluate((nm) => {
+          const h1 = [...document.querySelectorAll("h1")].find((e) => e.textContent === nm);
+          if (!h1) return "the name is missing";
+          const box = h1.getBoundingClientRect();
+          if (box.left < 0 || box.right > innerWidth) return `the name's box spans ${Math.round(box.left)} to ${Math.round(box.right)} on a ${innerWidth} px screen`;
+          return h1.scrollWidth > h1.clientWidth ? `the name is cut: its box holds ${h1.clientWidth} px, its text needs ${h1.scrollWidth}` : null;
+        }, name);
+        if (cut) failures.push(`${viewport.width} px: ${cut}`);
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 120_000);
+
+  // The List tab's table at a phone's width (#878): six columns cannot fit a card 272 px wide, and
+  // the table's sideways scroller (the shared Table's own wrapper) draws no scrollbar in this
+  // browser, so the last headers read as cut off rather than scrolled to. Every header the tab
+  // shows must lie inside its card. On main this fails at 320 and 375 px: "Joined", "Last
+  // Movement" and "Reason" sit outside the card's right edge.
+  it("fits the List tab's headers inside their card at a phone's width", async () => {
+    const name = "Members on the List tab";
+    const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name }, selection: "id,slug", single: true });
+    expect(group?.slug ?? null).toBeTruthy();
+    const person = await seededNotebook.query({ table: "contacts", operation: "insert", values: { name: "Grace Hopper" }, selection: "id", single: true });
+    await seededNotebook.query({ table: "contact_group_memberships", operation: "insert", values: { group_id: group.id, contact_id: person.id, priority: "high", status: "new", reason: "Met at the conference" }, selection: "id", single: true });
+    const failures: string[] = [];
+    for (const viewport of [{ width: 320, height: 568 }, { width: 375, height: 812 }]) {
+      const context = await browser.newContext({ viewport });
+      try {
+        const page = await context.newPage();
+        await page.goto(`${seededNotebook.base}/dashboard/groups/${group.slug}`);
+        await settle(page);
+        await page.getByRole("tab", { name: "List" }).click();
+        await page.getByText("Grace Hopper").first().waitFor({ timeout: 15_000 });
+        await settle(page);
+        const outside = await page.evaluate(() => {
+          const table = [...document.querySelectorAll("table")].find((t) => [...t.querySelectorAll("th")].some((th) => th.textContent === "Name"));
+          const card = table?.closest(".rounded-xl");
+          if (!table || !card) return "the List tab's table or card is missing";
+          const cardBox = card.getBoundingClientRect();
+          return [...table.querySelectorAll("th")].flatMap((th) => {
+            const box = th.getBoundingClientRect();
+            // A header hidden at this width has a zero box and is not shown at all.
+            if (box.width <= 0 || box.height <= 0) return [];
+            return box.right > cardBox.right + 0.5 || box.left < cardBox.left - 0.5 ? [`"${th.textContent}" lies outside its card`] : [];
+          });
+        });
+        failures.push(...(outside as string[]).map((line) => `${viewport.width} px: ${line}`));
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 60_000);
+
+  // The floating chat button against the groups page at its load state (#878): the button is pinned
+  // to the viewport's corner while the page scrolled the window, so a card in the bottom band of
+  // the screen lay under it however much room the end of the content reserved (#530). On main this
+  // fails at 375 px: a card's progress bar lies under the button before any scroll.
+  it("keeps the floating chat button off every group card at a phone's width", async () => {
+    // Enough ordinary groups that a card sits in the bottom band of the viewport at the load state,
+    // and one with a success criterion, whose progress bar the review saw under the button.
+    const named = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name: "Group with a progress bar", type: "other", success_criteria: [{ label: "Intro meetings held", target: 10, current: 4 }] }, selection: "id,slug", single: true });
+    expect(named?.slug ?? null).toBeTruthy();
+    for (let i = 0; i < 8; i++) {
+      await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name: `Filler group ${i + 1}` }, selection: "id", single: true });
+    }
+    const context = await browser.newContext({ viewport: { width: 375, height: 812 } });
+    try {
+      const page = await context.newPage();
+      await page.goto(`${seededNotebook.base}/dashboard/groups`);
+      await page.getByText("Group with a progress bar").first().waitFor({ timeout: 15_000 });
+      await settle(page);
+      const under = await page.evaluate(() => {
+        const fab = [...document.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === "Chat with Godspeed");
+        const main = document.querySelector("main");
+        if (!fab || !main) return "the floating chat button or main is missing";
+        const box = (e) => e.getBoundingClientRect();
+        const mainBox = box(main);
+        const fabBox = box(fab);
+        if (fabBox.top < mainBox.bottom) return `the button starts ${Math.round(mainBox.bottom - fabBox.top)} px above main's bottom edge`;
+        const intersect = (a, b) => !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+        for (const card of document.querySelectorAll("a[href^='/dashboard/groups/'] div.rounded-xl")) {
+          const b = box(card);
+          // The card's visible part: main's own box clips it, because main is the page's scroll area.
+          const visible = { top: Math.max(b.top, mainBox.top), bottom: Math.min(b.bottom, mainBox.bottom), left: Math.max(b.left, mainBox.left), right: Math.min(b.right, mainBox.right) };
+          if (visible.bottom <= visible.top) continue;
+          if (intersect(fabBox, visible)) return "the button covers a group card";
+        }
+        return null;
+      });
+      expect(under, String(under)).toEqual(null);
+    } finally {
+      await context.close();
+    }
+  }, 60_000);
 });
