@@ -1,5 +1,5 @@
 // WHAT THE AI'S NEWEST ANSWER SAYS ABOUT IT (#590). Every place that shows whether the AI can be
-// used (the chats, their model pickers and the Dashboard card) reads one state from here:
+// used (the chats, their model pickers and the Dashboard card) reads one state from here (#806):
 //   'ready'       the AI answered,
 //   'refused'     the provider refused the key or sign-in (HTTP 401 or 403, or Hermes saying so),
 //   'unreachable' an outage: a provider error, no route, or no answer at all yet,

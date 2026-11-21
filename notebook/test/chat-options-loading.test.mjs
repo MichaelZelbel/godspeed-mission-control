@@ -176,7 +176,8 @@ test('refused keys (401, 403), outages (500, closed port) and a stall are told a
  for(const [code,expected,said] of [[401,'refused',/Your AI key or sign-in was refused.*Settings, Your AI/],[200,'ready',/Stand-in answer/],[403,'refused',/Your AI key or sign-in was refused.*Settings, Your AI/],[500,'unreachable',/Your AI could not be reached.*Settings, Your AI/],[200,'ready',/Stand-in answer/]]){
   mode=code;now+=5000;
   const options=await readOptions();assert.equal(options.availability,expected,'HTTP '+code);assert.equal(options.usable,expected==='ready');
-  assert.equal((await readStatus()).runtimeConfigured,expected==='ready','the status agrees after HTTP '+code);
+  const status=await readStatus();
+  assert.equal(status.aiAvailability,expected,'the status agrees after HTTP '+code);assert.equal(status.runtimeConfigured,expected==='ready');
   const sent=await chat();assert.equal(sent.status,expected==='ready'?200:400,sent.text);assert.match(sent.text,said);
   assert.doesNotMatch(JSON.stringify(options)+sent.text,/fictional-key|private provider detail|HTTP [45]\d\d/);
   // A chat failure is the newest word on the AI: the next read says the same at once.
@@ -190,7 +191,23 @@ test('refused keys (401, 403), outages (500, closed port) and a stall are told a
  mode=200;now+=5000;assert.equal((await readOptions()).availability,'ready');
  // The address goes away entirely: an outage again.
  for(const res of held)res.destroy();endpoint.closeAllConnections?.();await new Promise(resolve=>endpoint.close(()=>resolve()));now+=5000;
- assert.equal((await readOptions()).availability,'unreachable');
+ assert.equal((await readOptions()).availability,'unreachable');assert.equal((await readStatus()).aiAvailability,'unreachable');
+});
+test('a chat that answers makes the next status read show the AI available, with no check in between (#803)',async t=>{
+ let fail=true,checks=0;
+ const provider=Object.assign(async()=>{if(fail)throw Error('Model provider failed with HTTP 500');return {reply:'ok'};},{options:async()=>({current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}),check:async()=>{checks++;if(fail)throw Error('Model provider failed with HTTP 500');}});
+ const {readOptions,readStatus,base}=await optionsFrom(t,provider,{defer:true});
+ assert.equal((await readOptions()).usable,false);
+ assert.equal((await readStatus()).runtimeConfigured,false);
+ fail=false;
+ const sent=await fetch(base+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})});
+ assert.equal(sent.status,200,await sent.text());
+ const asked=checks;
+ const status=await readStatus();
+ assert.equal(status.runtimeConfigured,true,'the chat that answered is the newest word on the AI, with no wait for the next connection check');
+ assert.equal(status.aiAvailability,'ready');
+ assert.equal(checks,asked,'no connection check ran in between');
+ assert.equal((await readOptions()).usable,true);
 });
 test('an AI connected only to the notebook while Hermes has none is not presented as ready for the chats',async t=>{
  const endpoint=http.createServer(async(req,res)=>{for await(const chunk of req);res.setHeader('Content-Type','application/json');res.end(JSON.stringify({choices:[{message:{content:'Connected.'}}]}));});
