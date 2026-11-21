@@ -1454,6 +1454,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       return { wordCount: trimmed ? trimmed.split(/\s+/).length : 0, charCount: text.length };
     },
   }) ?? { wordCount: 0, charCount: 0 };
+  // "1 word", not "1 words" (#818).
+  const wordsLabel = `${wordCount} ${wordCount === 1 ? "word" : "words"}`;
+  const charsLabel = `${charCount} ${charCount === 1 ? "character" : "characters"}`;
   const metadata = note.metadata as Record<string, unknown> | null;
   const mentionedPeople = Array.isArray(metadata?.people) ? (metadata.people as string[]) : [];
   const { data: mentionedGroupMatches = [] } = useQuery({
@@ -1578,7 +1581,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
         <div className="px-4 py-3 border-b border-border bg-muted/30 text-xs text-muted-foreground space-y-1 shrink-0">
           <p>Created: {format(new Date(note.created_at), "PPp")}</p>
           <p>Updated: {format(new Date(note.updated_at), "PPp")}</p>
-          <p>{wordCount} words · {charCount} characters</p>
+          <p>{wordsLabel} · {charsLabel}</p>
           {metadata?.type && <p>Type: {String(metadata.type)}</p>}
           {metadata?.summary && <p>Summary: {String(metadata.summary)}</p>}
           {Array.isArray(metadata?.topics) && (metadata.topics as string[]).length > 0 && (
@@ -2021,7 +2024,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </span>
           )}
         </div>
-        <span>{wordCount} words</span>
+        <span>{wordsLabel}</span>
       </div>
 
       {/* Delete confirmation */}
