@@ -7,7 +7,7 @@ import { useAICredits } from "@/hooks/useAICredits";
 import { showToast } from "@/lib/toast";
 import { functionErrorMessage } from "@/lib/function-error";
 import { triggerCreditsRefresh } from "@/lib/credits-events";
-import { AI_REFUSED, AI_STALLED_STATUS, AI_UNREACHABLE, NO_AI_ANALYSIS } from "../../../../core/no-ai.mjs";
+import { AI_REFUSED, AI_STALLED, AI_UNREACHABLE, NO_AI_ANALYSIS } from "../../../../core/no-ai.mjs";
 
 type SuggestMembersResult = {
   suggestions_added: number;
@@ -49,7 +49,7 @@ export function SuggestMembersButton({ groupId }: { groupId: string }) {
   const reason = providerConfigured || suggestMembers.isPending ? null :
     aiAvailability === "refused" ? AI_REFUSED :
     aiAvailability === "unreachable" ? AI_UNREACHABLE :
-    aiAvailability === "stalled" ? `${AI_STALLED_STATUS}. Try again in a moment, or check it in Settings, Your AI.` :
+    aiAvailability === "stalled" ? AI_STALLED :
     aiAvailability === "none" ? NO_AI_ANALYSIS : null;
 
   return (
