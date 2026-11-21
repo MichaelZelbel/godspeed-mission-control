@@ -62,3 +62,53 @@ test('the assistant refuses a moment hidden from it',async t=>{
   assert.equal(result.content[0].text,refusal);
   assert.ok(query.rows('moments').some(m=>m.id===hidden.id),'the hidden moment stays');
 });
+
+test('save_record cannot delete a moment by writing the removal correction itself',async t=>{
+  const {store,query,call,moment}=fixture(t);
+  const gone=moment('Old trip');
+  const result=await call('save_record',{type:'event_corrections',value:{moment_id:gone.id,patch:{removed_at:new Date().toISOString()}}});
+  assert.equal(result.isError,true,JSON.stringify(result));
+  assert.match(result.content[0].text,/structural_change/);
+  assert.ok(query.rows('moments').some(m=>m.id===gone.id),'the moment stays');
+  assert.equal(store.list('event_corrections').length,0,'no correction was written');
+});
+
+test('rolling back the suggestion that added a moment refuses once the moment is hidden from the assistant',async t=>{
+  const {store,query,call,moment}=fixture(t);
+  const added=moment('Suggested trip');
+  const item=store.save('review_queue',{suggestion_type:'add_moment',status:'kept',origin:'ai',title:'Suggested trip',target_entity_id:added.id,applied_at:new Date().toISOString(),payload:{title:'Suggested trip',happened_at:'2026-05-01'}});
+  query.execute({table:'moments',operation:'update',values:{id:added.id,ai_visibility:'hidden'},filters:[['eq','id',added.id]]});
+  const result=await call('review_suggestions',{action:'rollback',ids:[item.id]});
+  const answer=JSON.parse(result.content[0].text);
+  assert.equal(answer.succeeded,0,JSON.stringify(answer));
+  assert.match(answer.errors[0].error,/Choose a visible existing record/);
+  assert.ok(query.rows('moments').some(m=>m.id===added.id),'the hidden moment stays');
+  assert.equal(store.get('review_queue',item.id).status,'kept','the suggestion stays kept');
+});
+
+test('rolling back the suggestion that added a visible moment still removes it',async t=>{
+  const {store,query,call,moment}=fixture(t);
+  const added=moment('Suggested trip');
+  const item=store.save('review_queue',{suggestion_type:'add_moment',status:'kept',origin:'ai',title:'Suggested trip',target_entity_id:added.id,applied_at:new Date().toISOString(),payload:{title:'Suggested trip',happened_at:'2026-05-01'}});
+  const result=await call('review_suggestions',{action:'rollback',ids:[item.id]});
+  const answer=JSON.parse(result.content[0].text);
+  assert.equal(answer.succeeded,1,JSON.stringify(answer));
+  assert.equal(query.rows('moments').some(m=>m.id===added.id),false,'the moment is gone from the timeline');
+  assert.ok(store.list('event_corrections').some(c=>c.moment_id===added.id&&c.patch?.removed_at),'kept as a removal correction');
+});
+
+test('a version-stamped delete of a moment that is already gone refuses instead of succeeding',async t=>{
+  // The screen stamps the pinned version onto its delete (record-writes.mjs).
+  // When the moment was deleted elsewhere between fetch and click, the delete
+  // matched nothing: an empty success said "Moment deleted" for a moment still
+  // listed. Without a stamp (the journal's background cleanup) it stays
+  // idempotent.
+  const {store,query,moment}=fixture(t);
+  const gone=moment('Old trip');
+  const current=query.rows('moments').find(m=>m.id===gone.id);
+  query.execute({table:'moments',operation:'delete',filters:[['eq','id',gone.id]]});
+  assert.throws(()=>query.execute({table:'moments',operation:'delete',filters:[['eq','id',gone.id]],expected:{[gone.id]:current._hash}}),/already gone/);
+  const other=moment('Quiet week');
+  query.execute({table:'moments',operation:'delete',filters:[['eq','id','no-such-moment']]});
+  assert.ok(query.rows('moments').some(m=>m.id===other.id),'the unstamped no-match delete stays a silent no-op');
+});

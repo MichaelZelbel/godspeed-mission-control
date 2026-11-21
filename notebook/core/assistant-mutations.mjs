@@ -88,6 +88,11 @@ export function assistantMutationContext({store,query,domains,scopes},input,tool
   guardedQuery.withSnapshot(()=>{
    for(const next of records){
     assertAssistantTable(next.type,toolName);
+    // A removal correction written by save_record never read the moment's
+    // version (a fresh correction has no old record to hash), so it deleted
+    // a moment with no version check at all. The moment delete is
+    // structural_change's to make.
+    if(toolName==='save_record'&&next.type==='event_corrections'&&next.patch?.removed_at)throw Error('save_record cannot delete a moment. Use structural_change: type "moments", action "remove".');
     const old=ownerStore.records.get(next.type+'/'+next.id)||[...ownerStore.records.values()].find(r=>r.uid===next.uid);
     if(next.type==='collections'&&(next.agent_instructions??null)!==(old?.agent_instructions??null))throw Error(instructionsRefused);
     if(old){
@@ -106,12 +111,11 @@ export function assistantMutationContext({store,query,domains,scopes},input,tool
    for(const next of records)projected.records.set(next.type+'/'+next.id,next);
    const projectedQuery=new QueryService(projected);for(const next of records){
     if(reviewDecision(next))continue;
-    // A removal correction is the deletion of the moment it references. The
-    // moment itself was already checked visible and hash-guarded before the
-    // correction was written (query.mjs), and the correction adds no link of
-    // its own. Checked in this projection, where the patch has already removed
-    // the moment, the check refused every assistant moment delete, because the
-    // moment it points at is no longer visible there.
+    // A removal correction is the deletion of the moment it references, so in
+    // this projection, where the correction is already applied, the moment is
+    // no longer visible and its links cannot be checked. The moment itself is
+    // checked against the live store instead, where it still exists: a
+    // correction may remove only a moment the assistant may see.
     const historicalTargets=new Set(),prior=ownerStore.records.get('review_queue/'+next.id);
     // A rollback receipt describes what was written, including records this
     // same authorized Undo now tombstones. Its original targets were already
@@ -122,7 +126,8 @@ export function assistantMutationContext({store,query,domains,scopes},input,tool
       if(!target.before&&!target.shared&&current?._hash===target.after_hash&&after?.uid===current.uid&&after.removed_at&&records.some(record=>record.type===table&&record.id===target.id&&record.removed_at))historicalTargets.add(key);
      }
     }
-    if(!(next.type==='event_corrections'&&next.patch?.removed_at))assertAssistantLinks(projectedQuery,next.type,next,new Set(),historicalTargets);
+    if(next.type==='event_corrections'&&next.patch?.removed_at)assertAssistantRecord(guardedQuery,'moments',next.moment_id);
+    else assertAssistantLinks(projectedQuery,next.type,next,new Set(),historicalTargets);
    }
   });
   return ownerStore.commit(records,options);
