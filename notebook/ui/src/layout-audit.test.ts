@@ -445,4 +445,39 @@ describe("every page at a phone's and a desktop's width", () => {
     }
     expect(failures, failures.join("\n")).toEqual([]);
   }, 60_000);
+
+  // A name that is one long word with no spaces (#871): break-words alone does not let a flex item
+  // shrink below its longest word, so on main the name runs past the screen edge instead of
+  // wrapping. Checked at 320 px, the narrowest phone the header must hold, and at 375 px, the width
+  // the fault was seen at. On main this fails: the name runs past the screen edge.
+  it("wraps a group name that is one long word at a phone's width", async () => {
+    const name = "Supercalifragilisticexpialidociousgroups";
+    expect(name.length).toBe(40);
+    const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name }, selection: "id,slug", single: true });
+    expect(group?.slug ?? null).toBeTruthy();
+    const failures: string[] = [];
+    for (const viewport of [{ width: 375, height: 812 }, { width: 320, height: 568 }]) {
+      const context = await browser.newContext({ viewport });
+      try {
+        const page = await context.newPage();
+        const cdp = await context.newCDPSession(page);
+        await page.goto(`${seededNotebook.base}/dashboard/groups/${group.slug}`);
+        await settle(page);
+        const found = (await auditShown(page, cdp)).filter((f) => f.element.startsWith(`h1 "${name}"`));
+        failures.push(...found.map((f) => `${viewport.width} px, ${f.rule}: ${f.element}`));
+        // The name's whole box inside the screen: the audit's rules read the shown text, this reads
+        // the element's own box, which keeps its shrunken flex width even when the word overflows it.
+        const off = await page.evaluate((nm) => {
+          const h1 = [...document.querySelectorAll("h1")].find((e) => e.textContent === nm);
+          if (!h1) return "the name is missing";
+          const box = h1.getBoundingClientRect();
+          return box.left >= 0 && box.right <= innerWidth && box.width > 0 ? null : `the name's box spans ${Math.round(box.left)} to ${Math.round(box.right)} on a ${innerWidth} px screen`;
+        }, name);
+        if (off) failures.push(`${viewport.width} px: ${off}`);
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 60_000);
 });

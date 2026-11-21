@@ -25,7 +25,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import { READING_TOOLS, researchDomains, servedGoals } from "./prep-evidence.mjs";
+import { READING_TOOLS, needsReview, researchDomains, servedGoals } from "./prep-evidence.mjs";
 import { prepProblem, readPrep } from "./prep.mjs";
 
 const sha = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
@@ -244,11 +244,10 @@ const words = (v) => (typeof v === "string" ? v : v && typeof v === "object" ? O
 // A reviewer can reject one of the area's adopted goals even when the writer called the file
 // ready. Keep that rejected candidate useful as an explanation, but never leave it claiming ready.
 // Its old receipts deliberately stop matching after this edit, so neither the seal nor a copied
-// sidecar can admit it later. Only an area with research domains is reviewed at all, so only such
-// an area is demoted; and the file is read with its line endings evened out, so a preparation
-// saved with Windows line endings is demoted all the way, not halfway.
+// sidecar can admit it later. sealReview only reaches this where a review is needed at all (an
+// area with research domains); and the file is read with its line endings evened out, so a
+// preparation saved with Windows line endings is demoted all the way, not halfway.
 function leaveUncoveredGoalsDraft(prepFile, area, coverage) {
-  if (!researchDomains(area).length) return [];
   const rows = new Map(coverage.map((row) => [row.id, row]));
   const uncovered = servedGoals(area).filter((id) => rows.get(id)?.verdict !== "pass");
   if (!uncovered.length) return [];
@@ -263,8 +262,14 @@ function leaveUncoveredGoalsDraft(prepFile, area, coverage) {
 
 // The review, sealed by the host: written to `out` (a candidate in the run folder), and the gate's
 // answer about it. Returns { review, problem, issues }: problem is null when the talk may open from
-// the pair; issues are what the next try must resolve.
+// the pair; issues are what the next try must resolve. Where no review is needed at all (needsReview)
+// the seal seals nothing and asks the gate the same question prep-check asks, so the two say the
+// same thing about one preparation — review is null, and nothing is written, there.
 export function sealReview({ prepFile, area, evidenceFile, answer, reviewer, reviewedAt, out, now = new Date() }) {
+  if (!needsReview(area)) {
+    const problem = prepProblem(readPrep(prepFile), area, now);
+    return { review: null, problem, issues: problem ? [problem.replace(/^its /, "The preparation's ")] : [], uncovered: [] };
+  }
   const parsed = parseReview(answer);
   const coverage = Array.isArray(parsed?.coverage) ? parsed.coverage.map((row) => ({
     id: String(row?.id ?? "").trim(), verdict: row?.verdict === "pass" ? "pass" : "fail", reason: words(row?.reason),
