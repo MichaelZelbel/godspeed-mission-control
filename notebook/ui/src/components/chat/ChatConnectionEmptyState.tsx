@@ -4,6 +4,7 @@ import {Link} from 'react-router-dom';
 import {CHAT_AVAILABILITIES} from '../../../../core/chat-availability.mjs';
 import {AI_REFUSED_STATUS,AI_STALLED_STATUS,AI_UNREACHABLE_STATUS,NO_AI_STATUS,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../../../../core/no-ai.mjs';
 import {listenForChatOptions} from '@/local/chat-options.mjs';
+import {recordAIWorked} from '@/lib/chat-history';
 export type ChatAvailability=(typeof CHAT_AVAILABILITIES)[number];
 type ChatOptions={connected?:boolean;usable?:boolean;availability?:ChatAvailability};
 export type ChatAIState='checking'|ChatAvailability;
@@ -20,9 +21,12 @@ export function chatAIState(options?:ChatOptions):ChatAIState{
 export const CHAT_AVAILABILITY_CHANGED='godspeed:chat-availability-changed';
 let lastAvailability:string|undefined;
 async function chatOptions(){
+  const asked=Date.now();
   const response=await fetch('/api/chat/options');
   if(!response.ok)throw Error('Could not read AI connection status');
   const options=await response.json() as ChatOptions,known=chatAIState(options);
+  // A "No answer" note older than this read stays cleared (#821); stamped when it was asked.
+  if(known==='ready')recordAIWorked(asked);
   if(lastAvailability!==undefined&&lastAvailability!==known&&typeof window!=='undefined')window.dispatchEvent(new Event(CHAT_AVAILABILITY_CHANGED));
   lastAvailability=known;
   return options;
