@@ -25,7 +25,23 @@ export function useMediaQuery(query: string): boolean {
 }
 
 export function useIsMobile() {
-  return useMediaQuery(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
+  // The width, not just the media query: a test's matchMedia may be a stub whose answer never
+  // changes, while the window's innerWidth is what the resize effect reads.
+  const narrow = `(max-width: ${MOBILE_BREAKPOINT - 1}px)`;
+  const [isMobile, setIsMobile] = React.useState(() =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(narrow).matches
+  );
+
+  React.useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mql = window.matchMedia(narrow);
+    const onChange = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    mql.addEventListener("change", onChange);
+    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    return () => mql.removeEventListener("change", onChange);
+  }, [narrow]);
+
+  return isMobile;
 }
 
 export function usePanesTogether() {
