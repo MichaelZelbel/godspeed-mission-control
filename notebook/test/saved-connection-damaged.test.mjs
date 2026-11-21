@@ -8,7 +8,7 @@ import {AI_CONNECTION_UNREADABLE_STATUS} from '../core/no-ai.mjs';
 const KEY='sk-fictional-826-secret';
 const chatInput={message:'Say the fictional word.',request_id:'01234567-1234-4234-8234-012345678901'};
 
-async function notebook(t){
+async function notebook(t,{settingsOnly=false}={}){
   const requests={count:0};
   const ai=http.createServer((req,res)=>{req.resume();req.on('end',()=>{requests.count++;
     res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({choices:[{message:{content:'{"reply":"Connected."}'}}]}));});});
@@ -17,6 +17,12 @@ async function notebook(t){
   const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL','GODSPEED_MODEL_KEY','GODSPEED_MODEL'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-saved-connection-'));
   for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
+  if(settingsOnly){
+    // An AI connected for the notebook only while Hermes has none of its own: the settings-only state.
+    const home=path.join(root,'hermes-home');fs.mkdirSync(home,{recursive:true});
+    fs.writeFileSync(path.join(root,'assistant.json'),JSON.stringify({verified:true,executable:'hermes',home}));
+    process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'assistant.json');process.env.GODSPEED_ORIGINAL_RUNTIME='on';
+  }
   const {createService}=await import('../server/main.mjs');
   const service=await createService({root:path.join(root,'workspace'),port:0});
   let closed=false;
@@ -27,7 +33,7 @@ async function notebook(t){
   const post=async(route,body)=>{const r=await fetch(base+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});return {status:r.status,text:await r.text()};};
   const providerFile=path.join(root,'workspace','.godspeed','provider.json');
   const url='http://127.0.0.1:'+ai.address().port+'/v1/chat/completions',config={url,key:KEY,model:'fictional-model'};
-  return {requests,root,base,get,post,providerFile,url,config,connect:()=>post('/api/provider',config),close,createService};
+  return {requests,root,base,get,post,providerFile,url,config,connect:(overrides={})=>post('/api/provider',{...config,...overrides}),close,createService};
 }
 
 const damage=file=>fs.writeFileSync(file,'{ the notebook, the chat and the routines: not JSON');
@@ -96,6 +102,54 @@ test('a saved connection removed while the notebook runs: both surfaces show no 
     assert.equal((await post('/api/functions/conversation-chat',chatInput)).status,200);
     assert.equal(nb.requests.count,before+1);
   }finally{await second.close();}
+});
+
+test('a saved connection damaged while the notebook runs, with the AI connected for the notebook only: the chats still say it cannot be read, not the settings-only advice',async t=>{
+  const nb=await notebook(t,{settingsOnly:true});
+  assert.equal((await nb.connect({routines:false})).status,200,'connected for the notebook only');
+  damage(nb.providerFile);
+  assert.equal(JSON.parse((await nb.get('/api/status')).text).aiAvailability,'unreadable');
+  const options=JSON.parse((await nb.get('/api/chat/options')).text);
+  assert.equal(options.availability,'unreadable');assert.equal(options.usable,false);
+  const before=nb.requests.count;
+  const sent=await chatSend(nb);
+  assert.notEqual(sent.status,200);
+  assert.equal(JSON.parse(sent.text).error,AI_CONNECTION_UNREADABLE_STATUS,'the settings-only advice is not said for a damaged file');
+  assert.equal(nb.requests.count,before);
+});
+
+test('a chat summary is refused with the same sentence while the saved connection cannot be read',async t=>{
+  const nb=await notebook(t);
+  assert.equal((await nb.connect()).status,200);
+  damage(nb.providerFile);
+  const before=nb.requests.count;
+  const sent=await nb.post('/api/functions/conversation-chat',{mode:'summarize',messages:[{role:'user',content:'Summarize this conversation.'}]});
+  assert.notEqual(sent.status,200,'the summary must not reach the provider loaded before the damage');
+  assert.equal(JSON.parse(sent.text).error,AI_CONNECTION_UNREADABLE_STATUS);
+  assert.equal(nb.requests.count,before);
+});
+
+test('a saved connection replaced with a different one while the notebook runs: the chats follow the saved file, not the connection loaded before',async t=>{
+  const nb=await notebook(t);
+  assert.equal((await nb.connect()).status,200);
+  const reached={count:0};
+  const other=http.createServer((req,res)=>{req.resume();req.on('end',()=>{reached.count++;
+    res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({choices:[{message:{content:'{"reply":"Connected."}'}}]}));});});
+  await new Promise(resolve=>other.listen(0,'127.0.0.1',resolve));
+  t.after(()=>new Promise(resolve=>other.close(resolve)));
+  damage(nb.providerFile);
+  assert.equal(JSON.parse((await nb.get('/api/status')).text).aiAvailability,'unreadable');
+  fs.writeFileSync(nb.providerFile,JSON.stringify({url:'http://127.0.0.1:'+other.address().port+'/v1/chat/completions',key:KEY,model:'other-model'}));
+  const status=JSON.parse((await nb.get('/api/status')).text);
+  assert.equal(status.aiAvailability,'ready');assert.equal(status.runtimeConfigured,true);
+  const saved=JSON.parse((await nb.get('/api/provider')).text);
+  assert.equal(saved.model,'other-model');assert.equal(saved.configured,true);
+  const options=JSON.parse((await nb.get('/api/chat/options')).text);
+  assert.equal(options.usable,true);assert.equal(options.current,'other-model','the picker names the saved model');
+  const before=reached.count;
+  assert.equal((await chatSend(nb)).status,200);
+  assert.equal(reached.count,before+1,'the chat send reaches the saved connection');
+  assert.equal(nb.requests.count,1,'the connection loaded before the replacement is asked nothing more');
 });
 
 test('with an intact saved connection, reading the state costs no provider request',async t=>{

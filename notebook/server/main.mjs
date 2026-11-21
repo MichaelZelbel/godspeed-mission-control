@@ -101,11 +101,6 @@ const readSavedProvider=file=>{
   if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error('The saved AI connection is not valid. Connect it again after checking the server log.');
   return config;
 };
-// Whether a saved AI connection exists but cannot be read (Settings' own reading of the file). The
-// one availability the chats read asks this too (#826): while the notebook runs, the chats and
-// Settings then both say the saved connection cannot be read, a file repaired or replaced on disk
-// lets the surfaces agree again without a restart, and no provider call is spent on any of it.
-const savedProviderUnreadable=file=>{try{readSavedProvider(file);return false;}catch{return true;}};
 // A failed request to the AI, said as the chats say it (#590): a refused key, an outage, or an AI that
 // took the request and stopped answering (#808), each with what to do, never the provider's words,
 // which can quote the key. Godspeed's own no-AI sentences are not provider failures, though they
@@ -190,7 +185,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const backupFor=()=>{const saved=readBackupEndpoint(store.state);if(saved){try{return modelProvider(saved);}catch{return null;}}
     try{return routineAI&&fallbackChain(fs.readFileSync(path.join(routineAI.home,'config.yaml'),'utf8')).length?hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot}):null;}catch{return null;}};
   const guarded=main=>withBackup(main,backupFor,{state:store.state,model:()=>readBackupEndpoint(store.state)?.model});
-  if(!provider&&fs.existsSync(providerPath))provider=guarded(modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8'))));
+  // The saved config the running connection was built from, or null when it was built from anything
+  // else (an env address, a Hermes with its own AI, a provider handed in): what a changed file on
+  // disk is compared against (#826).
+  let savedConfig=null;
+  if(!provider&&fs.existsSync(providerPath)){const saved=JSON.parse(fs.readFileSync(providerPath,'utf8'));provider=guarded(modelProvider(saved));savedConfig=saved;}
   provider ||= guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}));
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
   // Where this notebook really runs from, for the tools (core/running-notebook.mjs): Windows only.
@@ -238,11 +237,22 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // An AI connected in Settings for the notebook only, while Hermes, which answers the chats, has no
   // AI of its own: the chats and the card say so, with the step that changes it (#590).
   const settingsOnlyAI=()=>{if(!routineAI||!fs.existsSync(providerPath))return false;try{return routineAIStatus(routineAI).source==='none';}catch{return false;}};
+  // The saved file is the connection Settings shows (#826): read it the way Settings does. A file
+  // that exists but cannot be read makes the one availability 'unreadable'; a file repaired or
+  // replaced on disk while the notebook runs is followed, so the chats serve the saved AI again,
+  // not the one loaded before the change. No provider call is spent on any of it.
+  const readSavedConnection=()=>{
+    let saved;try{saved=readSavedProvider(providerPath);}catch{return 'unreadable';}
+    if(saved&&savedConfig&&(saved.url!==savedConfig.url||saved.key!==savedConfig.key||saved.model!==savedConfig.model)){
+      provider=trackAIHealth(guarded(modelProvider(saved)));domains.provider=provider;scheduler.executor=jobExecutor(provider,query);lastChatCheckAt=0;savedConfig=saved;
+    }
+    return saved;
+  };
   // The one availability every surface reads (#806): the provider's newest result, 'none' with no
   // AI connected, or 'unreadable' when the saved connection exists but cannot be read (#826).
   // 'unknown' (connected, nothing asked yet) reads as ready, so a saved working
   // connection and one just connected in Settings are usable before the first check or chat (#764).
-  const chatAIAvailability=()=>{if(!domains.provider)return 'none';if(savedProviderUnreadable(providerPath))return 'unreadable';const health=provider?.health?.();return chatAvailability(!health||health==='unknown'?'ready':health);};
+  const chatAIAvailability=()=>{if(!domains.provider)return 'none';if(readSavedConnection()==='unreadable')return 'unreadable';const health=provider?.health?.();return chatAvailability(!health||health==='unknown'?'ready':health);};
   const ensureSpendGuard=()=>{
     if(store.get('jobs','spend-guard')||!spendGuardStatus(store,{hermesHome:routineAI?.home}).openrouter_connected)return;
     store.save('jobs',{id:'spend-guard',kind:'spend-guard',owner:store.get('settings','installation')?.owner||store.device,paused:false,state:'pending',next_run:new Date().toISOString(),interval_ms:3600000});
@@ -258,7 +268,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     connectPlanMain({...routineAI,model:found.model});
     try{fs.unlinkSync(providerPath);}catch{}
     const hermes=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});
-    provider=trackAIHealth(hermes);domains.provider=provider;scheduler.executor=jobExecutor(provider,query);lastChatCheckAt=Date.now();
+    provider=trackAIHealth(hermes);domains.provider=provider;scheduler.executor=jobExecutor(provider,query);lastChatCheckAt=Date.now();savedConfig=null;
     await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot});
     return found;
   }}):null;
@@ -528,7 +538,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const kept=guarded(chosen);
         atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);
         // The test just above answered, so the new AI starts ready, and the next reader checks it again in five seconds (#590, #764).
-        provider=trackAIHealth(kept,{initial:'ready'});domains.provider=provider;scheduler.executor=jobExecutor(provider,query);lastChatCheckAt=Date.now();
+        provider=trackAIHealth(kept,{initial:'ready'});domains.provider=provider;scheduler.executor=jobExecutor(provider,query);lastChatCheckAt=Date.now();savedConfig=config;
         ensureSpendGuard();
         if(!routines)return send(res,200,{connected:true,provider:providerView(config),routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
         connectRoutineAI({...routineAI,config});
@@ -545,7 +555,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         let removed=true;try{fs.unlinkSync(providerPath);}catch(error){if(error.code!=='ENOENT')throw error;removed=false;}
         const next=guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}))
           ||(routineAI&&routineAIStatus(routineAI).source!=='none'?hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot}):null);
-        provider=next?trackAIHealth(next):null;domains.provider=provider;scheduler.executor=jobExecutor(provider,query);lastChatCheckAt=0;
+        provider=next?trackAIHealth(next):null;domains.provider=provider;scheduler.executor=jobExecutor(provider,query);lastChatCheckAt=0;savedConfig=null;
         return send(res,200,{removed,connected:!!provider,provider:{configured:false,key:false},routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
       }
       if(route==='/api/spend-guard'&&req.method==='GET')return send(res,200,spendGuardStatus(store,{hermesHome:routineAI?.home}));
@@ -794,6 +804,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       // With no AI connected (the same test as runtimeConfigured in /api/status), the picker says so instead of naming a "Connected model" (#563).
       if(route==='/api/chat/options'&&req.method==='GET'){
+        // Reading the state follows a saved connection repaired or replaced on disk (#826), so the
+        // model named below is the saved one, not the one loaded before the change.
+        chatAIAvailability();
         if(domains.provider&&!assistantMissing&&settingsOnlyAI()&&chatAIAvailability()!=='unreadable'){const options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};return send(res,200,{connected:true,usable:false,availability:'settings-only',...options});}
         if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]});
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
@@ -812,10 +825,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));
         // A chat summary is read-only (Domains.summarizeChat): no message, receipt or retained conversation.
         const isChat=NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode!=='summarize',id=isChat?input.request_id:undefined;
+        // A saved connection the notebook can no longer read (#826): every chat function, a summary
+        // included, says what Settings says and asks the provider loaded before the damage nothing.
+        // Read before the settings-only check: with the file damaged, its advice cannot be followed.
+        if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&domains.provider&&!assistantMissing&&chatAIAvailability()==='unreadable')throw new Error(AI_CONNECTION_UNREADABLE_STATUS);
         if(isChat&&domains.provider&&!assistantMissing&&settingsOnlyAI())throw new Error(SETTINGS_ONLY_AI_STATUS+'. '+SETTINGS_ONLY_AI_HELP);
-        // A saved connection the notebook can no longer read (#826): the chat says what Settings
-        // says instead of asking the provider loaded before the file was damaged.
-        if(isChat&&domains.provider&&!assistantMissing&&chatAIAvailability()==='unreadable')throw new Error(AI_CONNECTION_UNREADABLE_STATUS);
         if(isChat&&id&&(!/^[a-f0-9-]{36}$/.test(id)||chatRequests.has(id)))throw new Error('Invalid chat request');
         const receiptId=isChat&&id?'chat-request-'+id:null,requestHash=hash({name,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
         if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,{data:previous.result,error:null});throw Error('This interrupted chat request needs review before replay');}
