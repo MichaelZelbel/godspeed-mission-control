@@ -448,6 +448,14 @@ describe("the audit's rules on pages built for them", { timeout: 20_000 }, () =>
       .toEqual([]);
   });
 
+  it("passes text a tall sticky header covers at the center, when a scroll can put it below it", async () => {
+    // The person page's sticky header is nearly half a phone's height (#887): the rule centers the
+    // text, which puts it under a header this tall, so the rule tries the scroll that puts the text
+    // just below the header before it reports.
+    expect(await audit(`<div style="height:200px;overflow:auto"><h2 style="position:sticky;top:0;margin:0;background:white;height:120px">Title</h2><p>Halfway down</p><div style="height:400px"></div></div>`))
+      .toEqual([]);
+  });
+
   it("passes a label tied with for, one referenced by aria-labelledby, and a field in a closed details", async () => {
     expect(await audit(`<label for="a">Name</label><input id="a"><label id="b">Strength</label><span role="slider" aria-labelledby="b" aria-valuenow="1" tabindex="0" style="display:inline-block;width:20px;height:20px;background:gray"></span><details><summary>More</summary><input></details>`))
       .toEqual([]);

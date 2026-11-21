@@ -136,17 +136,40 @@
     // In the middle of its scroll areas, as far as they go: text a scroll moves under a sticky header is
     // not drawn under it, text no scroll can bring out is.
     el.scrollIntoView({ block: "center", inline: "center" });
-    for (const text of textRects(el)) {
-      const x = text.left + text.width / 2;
-      const y = text.top + text.height / 2;
-      if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue;
-      let over = null;
-      for (const hit of document.elementsFromPoint(x, y)) {
-        if (hit === el || el.contains(hit) || hit.contains(el)) break;
-        if (paints(hit)) { over = hit; break; }
+    const covered = () => {
+      for (const text of textRects(el)) {
+        const x = text.left + text.width / 2;
+        const y = text.top + text.height / 2;
+        if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue;
+        for (const hit of document.elementsFromPoint(x, y)) {
+          if (hit === el || el.contains(hit) || hit.contains(el)) break;
+          if (paints(hit)) return hit;
+        }
       }
-      if (over) { found.push({ rule: "under another element", element: `${describe(el)} under ${describe(over)}` }); break; }
+      return null;
+    };
+    let over = covered();
+    if (over) {
+      // A sticky cover sits over the top band of its scroller at every scroll; what it hides is only
+      // really buried when no scroll can put the text below it. Try the scroll that puts the element
+      // just under the cover's bottom edge and keep the finding when a line is still covered (#887).
+      let sticky = null;
+      for (let e = over; e && e !== document.body; e = e.parentElement) {
+        const position = getComputedStyle(e).position;
+        if (position === "sticky") { sticky = e; break; }
+        if (position === "fixed") break;
+      }
+      if (sticky) {
+        const scroller = [...(function* () { for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) yield e; })()]
+          .find((e) => ["auto", "scroll"].includes(getComputedStyle(e).overflowY));
+        if (scroller) {
+          const shift = sticky.getBoundingClientRect().bottom + 1 - el.getBoundingClientRect().top;
+          if (shift > 0) scroller.scrollTop = Math.max(0, scroller.scrollTop - shift);
+          over = covered();
+        }
+      }
     }
+    if (over) { found.push({ rule: "under another element", element: `${describe(el)} under ${describe(over)}` }); }
   }
 
   hitAll.remove();
