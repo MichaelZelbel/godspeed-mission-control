@@ -127,6 +127,19 @@ test('a refused or unreachable AI is told apart from anything else the extractio
   for (const other of ['none', 'ready', null, undefined]) assert.equal(factsNotPulledOut(other), null);
 });
 
+// #861: a 402 (no credit) and a 429 (busy or limited) are causes of their own, said in the route's
+// shared words, never as an outage.
+test('a service with no credit or a busy one is named as its own cause in the moment save', async () => {
+  const {aiFailureKind, factsNotPulledOut} = await import('../ui/src/components/timeline/moment-form.mjs');
+  const {AI_NO_CREDIT, AI_BUSY, AI_NO_CREDIT_STATUS, AI_BUSY_STATUS} = await import('../core/no-ai.mjs');
+  assert.equal(aiFailureKind(AI_NO_CREDIT), 'no-credit');
+  assert.equal(aiFailureKind(AI_BUSY), 'busy');
+  assert.equal(factsNotPulledOut('no-credit'), 'No facts were pulled out of it. ' + AI_NO_CREDIT);
+  assert.equal(factsNotPulledOut('busy'), 'No facts were pulled out of it. ' + AI_BUSY);
+  assert.ok(AI_NO_CREDIT.startsWith(AI_NO_CREDIT_STATUS));
+  assert.ok(AI_BUSY.startsWith(AI_BUSY_STATUS));
+});
+
 // #812: a moment saved by hand while no AI is connected says so, with the shared wording.
 test('the extraction\'s no-AI answer becomes the shared no-AI sentence, anything else does not', async () => {
   const {noAiFacts, NO_AI_FACTS} = await import('../ui/src/components/timeline/moment-form.mjs');
