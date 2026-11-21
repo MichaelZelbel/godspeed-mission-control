@@ -106,6 +106,12 @@ export function assistantMutationContext({store,query,domains,scopes},input,tool
    for(const next of records)projected.records.set(next.type+'/'+next.id,next);
    const projectedQuery=new QueryService(projected);for(const next of records){
     if(reviewDecision(next))continue;
+    // A removal correction is the deletion of the moment it references. The
+    // moment itself was already checked visible and hash-guarded before the
+    // correction was written (query.mjs), and the correction adds no link of
+    // its own. Checked in this projection, where the patch has already removed
+    // the moment, the check refused every assistant moment delete, because the
+    // moment it points at is no longer visible there.
     const historicalTargets=new Set(),prior=ownerStore.records.get('review_queue/'+next.id);
     // A rollback receipt describes what was written, including records this
     // same authorized Undo now tombstones. Its original targets were already
@@ -116,7 +122,7 @@ export function assistantMutationContext({store,query,domains,scopes},input,tool
       if(!target.before&&!target.shared&&current?._hash===target.after_hash&&after?.uid===current.uid&&after.removed_at&&records.some(record=>record.type===table&&record.id===target.id&&record.removed_at))historicalTargets.add(key);
      }
     }
-    assertAssistantLinks(projectedQuery,next.type,next,new Set(),historicalTargets);
+    if(!(next.type==='event_corrections'&&next.patch?.removed_at))assertAssistantLinks(projectedQuery,next.type,next,new Set(),historicalTargets);
    }
   });
   return ownerStore.commit(records,options);
