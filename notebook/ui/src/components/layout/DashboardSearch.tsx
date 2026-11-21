@@ -195,13 +195,18 @@ export function DashboardSearch() {
   return (
     <div ref={containerRef} className="relative w-full max-w-md">
       <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        {/* Below sm the box is squeezed to about 85 px at 320 px, so the icon sits 8 px from the
+            edge and the input keeps no right padding: with the desktop paddings (36 px left, 32 px
+            right) the placeholder "Search" had 7 px of room and showed clipped (#868). While a
+            search runs the spinner may cross the end of what is typed; the dropdown under the box
+            shows "Searching your notes…" all the same. */}
+        <Search className="absolute left-2 sm:left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input aria-label="Search notes"
           value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => { if (query.trim()) setOpen(true); }}
           placeholder={isMobile ? "Search" : "Search notes…"}
-          className="pl-9 pr-8 h-9 text-sm bg-muted/50 border-transparent focus-visible:border-input"
+          className="pl-7 pr-0 sm:pl-9 sm:pr-8 h-9 text-sm bg-muted/50 border-transparent focus-visible:border-input"
         />
         {isSearching && (
           <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
