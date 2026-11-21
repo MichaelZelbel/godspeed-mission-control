@@ -23,7 +23,7 @@ const UI_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PAGE_AUDIT = readFileSync(fileURLToPath(new URL("./test/layout-audit-page.js", import.meta.url)), "utf8");
 
 type Finding = { rule: string; element: string };
-type Seeded = { note: string; person: string };
+type Seeded = { note: string; person: string; group: string };
 type RouteCheck = {
   pattern: string;
   /** The addresses to open: on the empty workspace `seeded` is null. */
@@ -116,6 +116,9 @@ async function seed(notebook: RealNotebook): Promise<Seeded> {
   const insert = (table: string, values: Record<string, unknown>) => notebook.query({ table, operation: "insert", values, selection: "id", single: true });
   const note = await insert("notes", { title: "Trip to Lisbon", content: "Book the train." });
   const person = await insert("contacts", { name: "Ada Lovelace" });
+  // A group whose name does not fit one line on any width: a card that clips it (#867) is what the
+  // audit's clipped-text rule must flag on the groups page.
+  const group = await insert("contact_groups", { name: "Seed round investors for the 2027 expansion" });
   await insert("moments", { title: "Lunch with Ada", happened_at: "2026-11-10", status: "happened", impact_level: 2, person_id: person.id, source: "manual" });
   const form = new FormData();
   form.append("file", new Blob([PIXEL, Buffer.alloc(51 * 1024 * 1024)], { type: "image/png" }), "photo.png");
@@ -124,7 +127,7 @@ async function seed(notebook: RealNotebook): Promise<Seeded> {
   const upload = await response.json();
   if (!response.ok) throw new Error(`The media upload failed: ${JSON.stringify(upload)}`);
   await insert("media_analysis", { note_id: note.id, storage_path: upload.data.path, media_type: "image", original_filename: "photo.png", analysis_status: "complete", description: "A photo", topics: [] });
-  return { note: note.id, person: person.id };
+  return { note: note.id, person: person.id, group: group.id };
 }
 
 // Loaded: no request in flight, fonts in, no sign-in or loading spinner, and no animation still on
@@ -384,7 +387,7 @@ describe("every page at a phone's and a desktop's width", () => {
       const context = await browser.newContext({ viewport });
       try {
         const page = await context.newPage();
-        for (const [url, text] of [["/dashboard/timeline", "Lunch with Ada"], ["/dashboard/people", "Ada Lovelace"], ["/dashboard/media", "Kept on this computer only"], ["/dashboard/notes", "Trip to Lisbon"]]) {
+        for (const [url, text] of [["/dashboard/timeline", "Lunch with Ada"], ["/dashboard/people", "Ada Lovelace"], ["/dashboard/media", "Kept on this computer only"], ["/dashboard/notes", "Trip to Lisbon"], ["/dashboard/groups", "Seed round investors for the 2027 expansion"]]) {
           await page.goto(seededNotebook.base + url);
           await page.getByText(text).first().waitFor({ timeout: 15_000 });
         }
