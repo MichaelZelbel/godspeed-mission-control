@@ -46,7 +46,8 @@ interface Props {
  * read like an AI action (#809). Its tooltip begins with the words its
  * name says and then keeps main's explanation of what a click does - for
  * a person that the hide spreads to the linked notes and moments - as one
- * `title`, like its neighbours have (#890).
+ * `title`, like its neighbours have (#890); the name itself stays the
+ * short one #809 decided.
  *
  * For `kind="person"` this flips `is_sensitive` (which also cascades to
  * linked notes/moments/actions). For all other kinds it flips
@@ -136,7 +137,8 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
   // that local search still finds it (#890, loop review of 6e2572e97). The
   // tooltip leads with the words the button announces, then explains; what
   // a click does is already in the name, so the trailing "Click to ..." of
-  // main's sentences is not repeated.
+  // main's sentences is not repeated. The name stays #809's decided
+  // "Shown to AI. Hide from AI"; only the tooltip carries the explanation.
   const tooltip = optimistic
     ? kind === "person"
       ? "Hidden from AI. Show to AI again. Linked notes & moments are hidden too."
