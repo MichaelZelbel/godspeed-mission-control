@@ -46,7 +46,7 @@
   },
   {
     "name": "godspeed-coach",
-    "commit": "7d25fb0db5d57f8db82f79f4392b093267c17015",
+    "commit": "5bc2d39e281183f4cc7fea31b36165f9921bc67e",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -110,7 +110,7 @@
   },
   {
     "name": "godspeed-headache",
-    "commit": "30dc063286c0f95e7fe68ab03b0c03321a1e2465",
+    "commit": "c39de0c7f098c00921923f60e721fb00b3e69133",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -124,6 +124,7 @@
       "lib/diary.mjs",
       "lib/episodes.mjs",
       "lib/migrate.mjs",
+      "lib/notebook-daily-rows.mjs",
       "lib/notebook.mjs",
       "lib/paths.mjs",
       "lib/report.mjs",
@@ -148,7 +149,7 @@
   },
   {
     "name": "godspeed-journal",
-    "commit": "6d810f457a78606e2a0bc778b0bb9f366311ae80",
+    "commit": "bf6f40e958e2e26b55c20c89376a187711c5a852",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -194,7 +195,7 @@
   },
   {
     "name": "godspeed-workouts",
-    "commit": "247d4022142817cc8c2dc3c0418aeb9e4bcbfc96",
+    "commit": "1e79e994701abb8073a8a6e65c277f310f33b5dd",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -236,7 +237,7 @@
   },
   {
     "name": "mc-phone",
-    "commit": "82c3edcec79505ce71fee7dd8ebaf60165ef0e54",
+    "commit": "db0b5f671fdd2c03d2203325766086e423c0dac8",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -269,7 +270,7 @@
   },
   {
     "name": "mc-video",
-    "commit": "e2827fd69350d6c101f9231e14cb0ffb9da328f8",
+    "commit": "e3ef31b1c5bcff3789afae93c01d8d9e25757517",
     "license": "MIT",
     "files": [
       "LICENSE",

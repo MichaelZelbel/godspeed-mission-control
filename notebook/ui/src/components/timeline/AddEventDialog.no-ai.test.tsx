@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 // #812: a moment saved by hand while no AI is connected says so and points to Settings, Your AI,
-// the way the refused and unreachable cases already do (#796). The decision is made when the
-// moment is saved, from the extraction's own answer, not from the state the tab cached when it
-// opened: the connection may have been removed while the tab was open, so the cached picture can
-// still say an AI is connected.
+// the way the refused and unreachable cases already do (#796). When the tab's picture still says an
+// AI is connected, the decision is made when the moment is saved, from the extraction's own answer:
+// the connection may have been removed while the tab was open, so the cached picture can still say
+// one is connected. When the tab's own status already says none is (#881), no extraction is asked
+// for at all and the same line comes from the status.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
@@ -72,13 +73,14 @@ describe("saving a moment by hand while no AI is connected", () => {
     await waitFor(() => expect(toast).toHaveBeenLastCalledWith({ title: "Moment created", description: NO_AI_FACTS }), WAIT);
   });
 
-  it("gives a tab that opened with no AI connected the same answer, decided when the moment is saved", async () => {
+  it("gives a tab that opened with no AI connected the same answer without asking for the extraction (#881)", async () => {
     state.providerConfigured = false;
     state.aiAvailability = "none";
     invoke.mockResolvedValue(serverSaid(NO_AI_STATUS + ". Connect your AI service in Settings, Your AI, before analysis."));
     await saveMoment();
-    // The answer came from the extraction asked at save time, not from the cached state.
-    expect(invoke).toHaveBeenCalledWith("extract-moment-profile", { body: { moment_id: "moment-1" } });
+    // The tab's own status already says no AI is connected, so nothing is asked of it: no
+    // extraction request is made at all, and the answer is the same #812 line.
+    expect(invoke).not.toHaveBeenCalled();
     await waitFor(() => expect(toast).toHaveBeenLastCalledWith({ title: "Moment created", description: NO_AI_FACTS }), WAIT);
   });
 

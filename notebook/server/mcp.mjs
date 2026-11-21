@@ -224,7 +224,12 @@ export async function mcp(input,{store,query,index,domains,scopes,delegated=fals
       else if(name==='personal_operation')value=await domains.invoke('personal-operation',a);
       else if(name==='write_fact')value=domains.writeFact(a);
       else if(name==='record_event')value=query.execute({table:'moments',operation:'insert',values:a}).data;
-      else if(name==='structural_change'){value=a.type==='moments'&&['remove','display-name'].includes(a.action)?query.execute({table:'moments',operation:a.action==='remove'?'delete':'update',values:{title:a.options?.name},filters:[['eq','id',a.id]],expected:{[a.id]:a.expected_hash},assistant:true}).data:store.structural(a.type,a.id,a.action,{...a.options,target:a.options?.target||a.options?.target_id});if(a.type==='notes'&&a.action==='remove')await retireShares(owner,[value?.id||a.id]);}
+      else if(name==='structural_change'){
+       // A moment id that matches no live moment (an unknown one, or one
+       // already deleted) would be a silent no-op: the filters match nothing
+       // and the answer is an empty success. The delete must refuse instead.
+       if(a.type==='moments'&&a.action==='remove'&&!query.rows('moments').some(r=>r.id===a.id))throw Error('Choose a visible existing record');
+       value=a.type==='moments'&&['remove','display-name'].includes(a.action)?query.execute({table:'moments',operation:a.action==='remove'?'delete':'update',values:{title:a.options?.name},filters:[['eq','id',a.id]],expected:{[a.id]:a.expected_hash},assistant:true}).data:store.structural(a.type,a.id,a.action,{...a.options,target:a.options?.target||a.options?.target_id});if(a.type==='notes'&&a.action==='remove')await retireShares(owner,[value?.id||a.id]);}
       else if(name==='review_suggestions'){
         // Keeping a suggestion files what a model inferred, so only on the owner's own request, in their
         // words (identity-shelf.mjs ownerAsked); removing, rolling back and snoozing take it away.

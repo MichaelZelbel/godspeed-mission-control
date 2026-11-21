@@ -363,6 +363,12 @@ export class QueryService {
     let rows = this.rows(table).filter(row => filters.every(f => embedded(f) || condition(row, f) === true));
     if (operation !== 'select') {
       if(filters.some(embedded))throw new Error('Filters on embedded records narrow reads only');
+      // A delete stamped with the version the screen saw, matched against no
+      // record, removed nothing: the record had already gone (another tab or
+      // device, a second click). An empty success said "deleted" for a record
+      // that was still listed. An unstamped delete (the journal's background
+      // cleanup) stays idempotent.
+      if(operation==='delete'&&!rows.length&&filters.some(f=>f[0]==='eq'&&f[1]==='id'&&typeof expected[f[2]]==='string'))throw new Error('The record to delete is already gone');
       const privateKeys=/^(access_token|refresh_token|api_key|secret|password|token|token_hash|encrypted_token|credentials)$/i;
       const inspect=value=>{if(value&&typeof value==='object')for(const [key,next] of Object.entries(value)){if(privateKeys.test(key))throw new Error('Connector credentials belong in local device configuration, never synced records');inspect(next);}};inspect(values);
       if (views.has(table)||rows.some(r=>r.native_file&&table==='deadlines')) throw new Error('Derived views are read-only; use the personal obligation operation');

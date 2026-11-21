@@ -76,8 +76,9 @@ import {recordRunningNotebook} from '../core/running-notebook.mjs';
 import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/hermes-update.mjs';
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
-import {trackAIHealth,aiFailure} from '../core/ai-health.mjs';
-import {SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS,AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS,AI_STALLED_STATUS,NO_AI_STATUS} from '../core/no-ai.mjs';
+import {trackAIHealth} from '../core/ai-health.mjs';
+import {SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS,NO_AI_STATUS} from '../core/no-ai.mjs';
+import {plainAIError,connectionTestError} from '../core/ai-outcome.mjs';
 import {MEDIA_CARRY_MAX_MB,MEDIA_PRESENCE_BATCH_SIZE,MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
 import {spendGuardStatus,saveSpendGuardSettings} from '../core/spend-guard.mjs';
 
@@ -95,26 +96,17 @@ export const startupReadiness=publication=>{
 };
 export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
 const providerView=config=>({configured:true,url:baseAddress(config.url),model:config.model,key:!!config.key});
+// What a damaged saved connection answers with, its own sentence instead of the generic
+// invalid-JSON one (#861 review D4), naming the step that recovers it.
+const DAMAGED_PROVIDER='The saved AI connection could not be read. Connect your AI again in Settings, Your AI.';
 const readSavedProvider=file=>{
   let text;try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code==='ENOENT')return null;throw error;}
-  const config=JSON.parse(text);
-  if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error('The saved AI connection is not valid. Connect it again after checking the server log.');
+  // A damaged file is one plain log line per request, never a stack trace, and never the file's own
+  // text, which holds the key (#833).
+  let config;try{config=JSON.parse(text);}catch{console.error('Godspeed Mission Control: the saved AI connection ('+file+') is not valid JSON. Connect your AI again in Settings, Your AI.');throw new Error(DAMAGED_PROVIDER);}
+  if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error(DAMAGED_PROVIDER);
   return config;
 };
-// A failed request to the AI, said as the chats say it (#590): a refused key, an outage, or an AI that
-// took the request and stopped answering (#808), each with what to do, never the provider's words,
-// which can quote the key. Godspeed's own no-AI sentences are not provider failures, though they
-// name an "AI service". null when the error is not the AI's.
-const PROVIDER_FAILURE=/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d|could not be reached|did not finish within|did not answer|needs sign-in|returned no text|connection could not start/i;
-const plainAIFailure=error=>{
-  const message=String(error?.message||'');
-  if(message.startsWith(NO_AI_STATUS)||message.startsWith(SETTINGS_ONLY_AI_STATUS)||!PROVIDER_FAILURE.test(message))return null;
-  const kind=aiFailure(error);
-  return kind==='refused'?AI_REFUSED_STATUS+'. Check it in Settings, Your AI, then try again.':kind==='stalled'?AI_STALLED_STATUS+'. Try again in a moment, or check it in Settings, Your AI.':kind?AI_UNREACHABLE_STATUS+'. Check its connection in Settings, Your AI, then try again.':null;
-};
-// The AI actions outside the chats that say a refused key or an outage the same way (#779); Process
-// note says it in Domains.invoke, so its background run does too (#808).
-const AI_ACTIONS=['draft-event','extract-moment-profile'];
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
@@ -311,9 +303,31 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // A file is opened before the reply starts, so a missing one is a 404, and a
   // read that fails halfway ends that one reply. Until 6 October 2026 either
   // stopped the whole server (an 'error' nobody listened for).
-  async function sendFile(res, file, headers, missing) {
+  async function sendFile(res, req, file, headers, missing) {
     let handle; try { handle = await fs.promises.open(file, 'r'); } catch { return missing ? missing() : send(res, 404, { error: 'This file is missing.' }); }
     let size; try { size = (await handle.stat()).size; } catch (error) { await handle.close().catch(() => {}); throw error; }
+    // A browser may ask for part of a file (`Range: bytes=a-b`, `bytes=a-` or
+    // `bytes=-n`): audio and video players scrub by fetching the piece they
+    // need, and Safari asks for a byte range before it plays anything, so a
+    // server that answers every request with the whole file cannot be played
+    // from at all there (#889). A well-formed range the file cannot satisfy,
+    // such as a start past its end, is refused with 416 and the file's size;
+    // anything else that is not a plain single range (a malformed header,
+    // several ranges at once, a start after the end inside the header) is
+    // ignored, and the whole file goes out as before, which the standard lets
+    // a server do. The access checks ran before sendFile, so a range changes
+    // nothing about who may read the file.
+    let start = 0, end = size - 1, ranged = false, unsatisfiable = false;
+    const asked = /^\s*bytes=(\d*)-(\d*)\s*$/.exec(String(req.headers.range || ''));
+    if (asked && size > 0) {
+      const a = asked[1], b = asked[2];
+      if (a === '' && b !== '') { if (Number(b) > 0) { start = Math.max(0, size - Number(b)); ranged = true; } else unsatisfiable = true; }
+      else if (a !== '' && (b === '' || Number(b) >= Number(a))) {
+        if (Number(a) < size) { start = Number(a); end = b === '' ? size - 1 : Math.min(Number(b), size - 1); ranged = true; }
+        else unsatisfiable = true;
+      }
+    } else if (asked && size === 0) unsatisfiable = true;
+    if (unsatisfiable) { await handle.close().catch(() => {}); return send(res, 416, { error: 'The requested part of this file does not exist.' }, { 'Content-Range': 'bytes */' + size, 'Accept-Ranges': 'bytes' }); }
     // The browser can give up on a page file at any moment: before the reply
     // starts, between opening the file and piping it, or part way through.
     // Piping into a reply that is already gone throws
@@ -324,8 +338,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     // were still loading. The reply is already beyond saving, so it only
     // ends here, and the server answers everyone else.
     if (res.destroyed) { await handle.close().catch(() => {}); return; }
-    res.writeHead(200, { ...headers, 'Content-Length': size });
-    const stream = handle.createReadStream();
+    res.writeHead(ranged ? 206 : 200, { ...headers, ...(ranged ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}), 'Content-Length': ranged ? end - start + 1 : size, 'Accept-Ranges': 'bytes' });
+    const stream = ranged ? handle.createReadStream({ start, end }) : handle.createReadStream();
     try { pipeline(stream, res, error => { if (error) res.destroy(); }); }
     catch { stream.destroy(); res.destroy(); await handle.close().catch(() => {}); }
   }
@@ -455,7 +469,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!auth.authorized(req)&&!accessKey)return send(res,401,{error:'Authentication required'});
         if(req.method!=='POST'){res.writeHead(405,{'Allow':'POST'});return res.end();}
         const input=JSON.parse(await body(req));if(accessKey&&input.method==='tools/call'&&!accessKey.scopes.includes(toolScope(input.params.name,input.params.arguments||{})))return send(res,403,{error:'This API key does not grant that capability'});
-        const explain=error=>{const shown=userFacing(error,[store.root,store.state,mediaRoot,uiRoot,os.homedir(),os.tmpdir()]);if(!shown||error instanceof SyntaxError)console.error('Godspeed Mission Control: MCP '+String(input.params?.name||input.method)+' failed:',error);return shown||'Something went wrong on the server. The details are in its log.';};
+        const explain=error=>{const shown=userFacing(plainAIError(error),[store.root,store.state,mediaRoot,uiRoot,os.homedir(),os.tmpdir()]);if(!shown||error instanceof SyntaxError)console.error('Godspeed Mission Control: MCP '+String(input.params?.name||input.method)+' failed:',error);return shown||'Something went wrong on the server. The details are in its log.';};
         const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes,delegated:!!accessKey&&!apiKeys.installationAssistant(accessKey),explain});if(response===null){res.writeHead(202);return res.end();}return send(res,200,response);
       }
       if(route==='/api/pair/keys'&&req.method==='GET')return send(res,200,{data:pairKeys.map(({id,created_at,revoked_at})=>({id,created_at,revoked_at:revoked_at||null}))});
@@ -466,7 +480,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/media/offline'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['all','selected'].includes(input.offline))throw new Error('Choose all or selected media');const config=mediaSync.config();if(!config)throw new Error('Pair this device first');atomic(mediaSync.configPath,JSON.stringify({...config,offline:input.offline,selected:input.selected||[]}));return send(res,200,{ok:true});}
       if(route==='/api/media/manifest')return send(res,200,{data:mediaSync.manifest()});
       if(route==='/api/media/tombstone'&&req.method==='POST'){const input=JSON.parse(await body(req)),old=mediaSync.manifest().find(m=>m.path===input.path);if(!old||old.sha256!==input.sha256||!input.removed_at||!Number.isFinite(Date.parse(input.removed_at)))throw new Error('This removal does not match the saved media version');atomic(path.join(mediaRoot,hash(old.path)+'.mapping.json'),JSON.stringify({...old,removed_at:input.removed_at}));return send(res,200,{ok:true});}
-      if(route.startsWith('/api/media/blob/')&&req.method==='GET'){const filename=mediaFileName(decodeURIComponent(route.slice('/api/media/blob/'.length)));if(!mediaSync.manifest().some(m=>m.file===filename&&!m.removed_at))return send(res,404,{error:'Unknown media object'});return sendFile(res,path.join(mediaRoot,filename),{'Content-Type':'application/octet-stream','X-Content-Type-Options':'nosniff'});}
+      if(route.startsWith('/api/media/blob/')&&req.method==='GET'){const filename=mediaFileName(decodeURIComponent(route.slice('/api/media/blob/'.length)));if(!mediaSync.manifest().some(m=>m.file===filename&&!m.removed_at))return send(res,404,{error:'Unknown media object'});return sendFile(res,req,path.join(mediaRoot,filename),{'Content-Type':'application/octet-stream','X-Content-Type-Options':'nosniff'});}
       if(route==='/api/media/transfer'&&req.method==='POST'){
         const input=JSON.parse(await body(req,140*1024*1024)),mapping=input.mapping,data=Buffer.from(input.data,'base64');
         if(hash(data)!==mapping.sha256||data.length!==mapping.size)throw new Error('Transfer integrity mismatch');
@@ -506,7 +520,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const saved=readSavedProvider(providerPath);return send(res,200,saved?providerView(saved):{configured:false,key:false});
       }
       if(route==='/api/provider'&&req.method==='POST'){
-        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),saved=readSavedProvider(providerPath),submittedKey=typeof input.key==='string'?input.key.trim():input.key;
+        // Reconnecting reads over a damaged saved file as if none were saved (#861 review D4): the
+        // new connection is tested and written whole, so the log line's instruction works. The
+        // damaged file's one plain log line per request is kept by readSavedProvider.
+        let saved=null;try{saved=readSavedProvider(providerPath);}catch{saved=null;}
+        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),submittedKey=typeof input.key==='string'?input.key.trim():input.key;
         const normalizedAddress=!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions';
         const retainedKey=!submittedKey&&saved&&baseAddress(normalizedAddress)===baseAddress(saved.url)?saved.key:submittedKey;
         const config={url:normalizedAddress,key:retainedKey,model:typeof input.model==='string'?input.model.trim():input.model};
@@ -518,7 +536,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           const backups=[saved&&backupEntryFor(saved),routineAI&&fallbackChain(fs.readFileSync(path.join(routineAI.home,'config.yaml'),'utf8'))[0]];
           if(backups.some(b=>sameService(want,b)))throw Object.assign(new Error(BACKUP_SERVICE),{backupService:true});}
         catch(error){if(error.backupService)throw error;}
-        await chosen({kind:'connection-test',contract:'Reply with Connected.'});
+        // Settings' own sentence for whatever the answer says, chosen here (ai-outcome.mjs), so the
+        // provider's raw words no longer travel to the browser for it to be worded (#861).
+        try{await chosen({kind:'connection-test',contract:'Reply with Connected.'});}catch(error){throw connectionTestError(error);}
         const kept=guarded(chosen);
         atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);
         // The test just above answered, so the new AI starts ready, and the next reader checks it again in five seconds (#590, #764).
@@ -567,7 +587,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         let main=null;try{main=backupEntryFor(JSON.parse(fs.readFileSync(providerPath,'utf8')));}catch{}
         const hermesMain=backupHome?routineAIStatus(routineAI):null;
         if(sameService(entry,main)||sameService(entry,hermesMain))throw new Error(SAME_SERVICE);
-        await candidate({kind:'connection-test',contract:'Reply with Connected.'});
+        try{await candidate({kind:'connection-test',contract:'Reply with Connected.'});}catch(error){throw connectionTestError(error);}
         return send(res,200,{connected:true,hermes:!!backupHome,...connectBackupAI({home:backupHome,state:store.state,config})});
       }
       // The ChatGPT plan sign-in (planSignIn above): its state, start it for the main AI or the
@@ -775,7 +795,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!found)return send(res,404,{error:'Media not found'});
         if(found.removed)return send(res,404,{error:'Media removed'});
         const keptElsewhere=()=>{res.writeHead(404,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>File kept on another computer</title><body style="font-family:system-ui,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1rem;line-height:1.5"><h1 style="font-size:1.3rem">This file is kept on the computer where it was added.</h1><p>Open it on that computer, or make the file smaller than '+MEDIA_CARRY_MAX_MB+' MB so it can travel to this one.</p></body></html>');};
-        return sendFile(res, found.file, { 'Content-Type': found.mapping.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }, found.mapping.size>CARRY_LIMIT ? keptElsewhere : null);
+        return sendFile(res, req, found.file, { 'Content-Type': found.mapping.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }, found.mapping.size>CARRY_LIMIT ? keptElsewhere : null);
       }
       if(route==='/api/media/kept-here'&&req.method==='GET')return send(res,200,{data:keptHere(media)});
       if(route==='/api/media/kept-elsewhere'&&req.method==='GET')return send(res,200,{data:keptElsewhere(media)});
@@ -793,8 +813,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
         if(provider?.check){
           // A read may ask for a fresh check (the Dashboard's arrival, #822): it still shares the
-          // in-flight check, but jumps the five-second pacing other reads keep (#794).
-          if(!chatAICheck&&(url.searchParams.has('check')||Date.now()-lastChatCheckAt>=5000)){
+          // in-flight check, but jumps the five-second pacing other reads keep (#794). A check that
+          // costs a billed chat (the assistant runtime's, #905) is run only by reads that ask for
+          // one, so idle pages never bill it (#762).
+          if(!chatAICheck&&(url.searchParams.has('check')||(!provider.checkBilled&&Date.now()-lastChatCheckAt>=5000))){
             lastChatCheckAt=Date.now();
             chatAICheck=(async()=>{try{await provider.check();}catch(error){console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}})().finally(()=>{chatAICheck=null;});
           }
@@ -834,12 +856,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});
         }catch(error){
           if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});
-          // A refused key and an outage are said apart, each with what to do (#590). Only the category is said, never the provider's words.
-          // The provider itself has already said what this failure means for the AI's availability
-          // (core/ai-health.mjs); here it is only said in plain words (#806).
-          if(isChat&&domains.provider&&!assistantMissing&&!controller.signal.aborted){const said=plainAIFailure(error);if(said)throw new Error(said);}
-          if(isChat&&domains.provider&&!assistantMissing&&!controller.signal.aborted&&/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d/i.test(error.message))throw new Error('Your AI could not be used. Check Settings, Your AI, then try again.');
-          if(AI_ACTIONS.includes(name)&&domains.provider&&!controller.signal.aborted){const said=plainAIFailure(error);if(said)throw new Error(said);}
+          // Every AI failure is already the one plain sentence a person reads: Domains.invoke
+          // translated it (core/ai-outcome.mjs), for this route and for every other one, so no
+          // route builds its own AI error text (#861). The chats' live state reads the cause where
+          // the provider is tracked (trackAIHealth): an answer the AI gave but that could not be
+          // used says nothing about whether the AI answers (ai-health.mjs aiFailure), so it is left
+          // alone here, like every other failure the route itself has already recorded.
           throw error;
         }finally{if(isChat&&id)chatRequests.delete(id);if(isSearch){req.off('aborted',abortSearch);res.off('close',abortSearch);}}
       }
@@ -854,13 +876,19 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       const cache = file.startsWith(path.join(uiRoot,'assets')+path.sep) ? 'public, max-age=31536000, immutable' : 'no-cache';
       // Only the notebook itself may frame its pages: another site could show
       // them in a frame made to look like something else (7 October 2026).
-      return sendFile(res, file, { 'Content-Type': mime, 'Cache-Control': cache, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"frame-ancestors 'self'",'X-Frame-Options':'SAMEORIGIN' });
+      return sendFile(res, req, file, { 'Content-Type': mime, 'Cache-Control': cache, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"frame-ancestors 'self'",'X-Frame-Options':'SAMEORIGIN' });
     } catch (e) {
       // A reply already under way cannot carry an error; it is cut off instead
       // (writing headers twice stopped the server until 6 October 2026).
       if (res.headersSent) { console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed after the reply started:', e); res.destroy(); return; }
-      const shown = userFacing(e, [store.root, store.state, mediaRoot, uiRoot, os.homedir(), os.tmpdir()]);
+      // Every AI failure left says its one plain sentence here, for the routes whose errors do not
+      // pass through Domains.invoke: the browser chat, and the connection tests above (#861).
+      const shown = userFacing(plainAIError(e), [store.root, store.state, mediaRoot, uiRoot, os.homedir(), os.tmpdir()]);
       if (!shown || e instanceof SyntaxError) console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed:', e);
+      // An answer the AI gave but that could not be used leaves the operator one plain line, so the
+      // shape the provider actually answered is not lost with it (#861 review R3): the sentence the
+      // person sees says nothing about what was wrong.
+      if (e?.aiCause==='unusable') console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' could not use the AI\'s answer: '+e.message);
       send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: shown || 'Something went wrong on the server. The details are in its log.', ...(shown && e.code ? { code: e.code } : {}) });
     }
   };

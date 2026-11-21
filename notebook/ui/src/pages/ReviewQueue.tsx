@@ -645,6 +645,8 @@ export default function ReviewQueue() {
               contact_id,
               status: item.payload?.default_status || null,
               reason: item.description || null,
+              // The day the member joined, as the group's List tab shows it (#913).
+              joined_at: new Date().toISOString(),
             })
             .select("id")
             .single();

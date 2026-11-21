@@ -134,7 +134,7 @@ test('the Settings form connects the routines\' AI through the server, and leave
  }finally{await service.close();}
  const reopened=await createService({root,port:0,device:'pc'}),reopenedBase='http://127.0.0.1:'+reopened.address.port;
  try{const response=await fetch(reopenedBase+'/api/provider'),data=await response.json();assert.deepEqual(data,{configured:true,url,model:'retained-key-model',key:true});assert.equal(JSON.stringify(data).includes('other-key'),false);
-  const providerFile=path.join(root,'.godspeed','provider.json');fs.writeFileSync(providerFile,'{broken');const broken=await fetch(reopenedBase+'/api/provider');assert.notEqual(broken.status,200);assert.match((await broken.json()).error,/not valid JSON/);
+  const providerFile=path.join(root,'.godspeed','provider.json');fs.writeFileSync(providerFile,'{broken');const broken=await fetch(reopenedBase+'/api/provider');assert.notEqual(broken.status,200);assert.match((await broken.json()).error,/The saved AI connection could not be read/);
   fs.rmSync(providerFile);fs.mkdirSync(providerFile);const unreadable=await fetch(reopenedBase+'/api/provider');assert.notEqual(unreadable.status,200);fs.rmdirSync(providerFile);
   // Removing an OpenRouter connection that was written into Hermes takes its key out of Hermes' .env
   // and its model out of config.yaml, and leaves Hermes' other lines alone (#779).

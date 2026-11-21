@@ -162,10 +162,47 @@ const NAMED_FILE_EXT = /\.(md|csv|json|txt|html)$/i;
 const fileOnDisk = (written, root) => {
   let c = written.replace(/^["'`(\[<]+/, '').replace(/[.,;:)"'`\]>]+$/, '');
   if (!/[\\/]/.test(c) || !NAMED_FILE_EXT.test(c)) return '';
+  let realRoot = '';
   if (/^([\\/]|[A-Za-z]:[\\/])/.test(c)) {
-    const rel = path.relative(root, c);
-    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return '';
-    c = rel;
+    // Compare the places on disk, not their spellings. Installed workspaces can be reached through
+    // a symlink (for example the stable Godspeed folder pointing at the current installation), and
+    // an absolute DONE WHEN written through that name must not evade the same review as a relative
+    // path. Of the written path only a folder at or above the mission control is resolved on disk,
+    // never a step at or below it: a result file may be a symlink, and a folder on the way may be
+    // one too, so resolving either here would read the place it points to, outside or inside,
+    // instead of the steps the relative spelling of the same file keeps — or drop the file
+    // altogether and let its shell CHECK alone verify it (#766). The steps inside the mission
+    // control, the last one included, keep the lookup below, so other capitals and trailing dots
+    // or spaces are found as for a relative path (#571), also in the steps that name the mission
+    // control itself.
+    try { realRoot = fs.realpathSync(root); } catch (e) { return ''; }
+    const drive = (c.match(/^[A-Za-z]:/) || [''])[0];
+    const steps = pathParts(c.slice(drive.length));
+    if (steps.includes('..')) return '';
+    let real = '', rest = [];
+    for (let i = steps.length - 1; i >= 0 && !real; i--) {
+      let at; try { at = fs.realpathSync(path.join(drive + path.sep, ...steps.slice(0, i))); } catch (e) { continue; /* a shorter start */ }
+      // A resolved folder is accepted only at or above the mission control: a step inside it is
+      // left to the walk below, however it is spelled, because it may be a symlink to a folder
+      // outside, which would drop the file and let its shell CHECK alone verify it, or a symlink
+      // to a folder inside, which would name the file after the place it points to instead of the
+      // steps DONE WHEN wrote (#766). Shortening keeps going until the folder found is the
+      // mission control itself or a folder holding it.
+      const down = path.relative(at, realRoot);
+      if (down.startsWith('..') || path.isAbsolute(down)) continue;
+      real = at; rest = steps.slice(i);
+    }
+    if (!real) return '';
+    let rel = path.relative(realRoot, real);
+    if (rel) {
+      // The mission control may lie below that folder, its own steps spelled with other capitals.
+      const down = path.relative(real, realRoot);
+      if (!down || down.startsWith('..') || path.isAbsolute(down)) return '';
+      const want = pathSteps(down);
+      if (rest.length <= want.length || !want.every((w, k) => pathSteps(rest[k])[0] === w)) return '';
+      rest = rest.slice(want.length); rel = '';
+    }
+    c = [...pathParts(rel), ...rest].join('/');
   }
   const parts = pathParts(c);
   if (!parts.length || parts.includes('..')) return '';
@@ -177,7 +214,13 @@ const fileOnDisk = (written, root) => {
     if (!name) return '';
     out.push(name); dir = path.join(dir, name);
   }
-  try { return fs.statSync(dir).isFile() ? out.join('/') : ''; } catch (e) { return ''; }
+  try {
+    // statSync follows a final symlink, so a result reached through one is a file here whatever it
+    // points at, and it is named the same however DONE WHEN spells it (#766). What the relative
+    // spelling commits and publishes for such a file, the absolute one commits and publishes too.
+    if (!fs.statSync(dir).isFile()) return '';
+    return out.join('/');
+  } catch (e) { return ''; }
 };
 const fileNamed = (text, root = GODSPEED) => {
   const words = String(text || '').replace(WEB_ADDRESS, ' ').split(/(\s+)/);
@@ -659,13 +702,42 @@ cmds.attempt = (a) => {
 };
 
 cmds.verify = (a) => {
-  const c = S.read(a._[0] || die('usage: mc-work verify <id> [--evidence "what was observed, where"]')) || die('no such work');
+  const c = S.read(a._[0] || die('usage: mc-work verify <id> [--content-review <json-file> | --evidence "what was observed, where"]')) || die('no such work');
   if (!['attempted', 'dispatched', 'planned'].includes(c.f.STATUS)) die(`${c.id} is ${c.f.STATUS}`);
   const d = a.date || today();
   const ev = oneLine(a.evidence);
+  const resultFile = fileNamed(c.f['DONE WHEN']);
+  const needsContentReview = c.f.OWNER === 'godspeed' && !!resultFile && !ev;
+  const reviewPath = a['content-review'] === true ? '' : oneLine(a['content-review']);
+  const contentReview = () => {
+    if (!reviewPath) return { passed: false, reason: 'the independent content review is missing', missing: ['a review of the result against DONE WHEN'] };
+    let value;
+    try { value = JSON.parse(fs.readFileSync(reviewPath, 'utf8')); } catch (e) { return { passed: false, reason: 'the independent content review is not valid JSON', missing: ['a valid review of the result against DONE WHEN'] }; }
+    if (!value || typeof value !== 'object' || typeof value.passed !== 'boolean' || typeof value.reason !== 'string' || !value.reason.trim()
+      || value.reason.length > 500 || !Array.isArray(value.missing) || value.missing.length > 20
+      || value.missing.some(x => typeof x !== 'string' || !x.trim() || x.length > 300)
+      || (value.passed && value.missing.length) || (!value.passed && !value.missing.length)) {
+      return { passed: false, reason: 'the independent content review has the wrong shape', missing: ['a bounded verdict with passed, reason, and matching missing requirements'] };
+    }
+    return { passed: value.passed, reason: oneLine(value.reason), missing: value.missing.map(oneLine) };
+  };
   if (c.f.CHECK) {
     const r = spawnSync(CHECK_SHELL, ['-c', c.f.CHECK], { cwd: GODSPEED, encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { GODSPEED_ROOT: GODSPEED }) });
     if (r.status === 0) {
+      if (needsContentReview) {
+        const review = contentReview();
+        if (!review.passed) {
+          L.logLine(c, d, 'UNVERIFIED', `content review: ${review.reason}; missing: ${review.missing.join('; ')}`);
+          S.write(c);
+          say(`${c.id}: the check passed, but the content review found missing work: ${review.missing.join('; ')}; stays attempted`);
+          process.exit(2);
+        }
+        c.f.STATUS = 'verified'; c.f.LEASE = '';
+        L.logLine(c, d, 'VERIFIED', `check passed (${c.f.CHECK}); content review passed: ${review.reason}`);
+        S.write(c);
+        say(`${c.id}: verified by its check and content review`);
+        return;
+      }
       c.f.STATUS = 'verified'; c.f.LEASE = '';
       L.logLine(c, d, 'VERIFIED', `check passed (${c.f.CHECK})` + (ev ? `; ${ev}` : ''));
       S.write(c);
@@ -1000,7 +1072,9 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
   went-out [--date D] [--json]          the steps that went out alone on a standing permission and were verified
                                         on day D (default yesterday): what the morning message reports after
   attempt <id> --runner <name> --ok --result "..." | --failed "why"   failed: retry in 1, 2, 4 days, never outward
-  verify <id> [--evidence "..."]     runs CHECK; verified only on exit 0, or on evidence a person observed
+  verify <id> [--content-review <json-file> | --evidence "..."]
+                                     runs CHECK; a Godspeed-owned file result also needs an independent
+                                     content review against DONE WHEN; person-observed evidence stays available
   block <id> --needs ... | unblock <id> --why ... [--approved-by "..."] | cancel <id> --why ...
   sweep --card <id> --reason "..."   your answer on a card cancels the work under it (or --stale)
   sweep --goal <id> [--cancel|--stale] --reason "..."   a goal changed; its work is re-planned
