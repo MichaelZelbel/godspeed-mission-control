@@ -209,6 +209,48 @@ test('a chat that answers makes the next status read show the AI available, with
  assert.equal(checks,asked,'no connection check ran in between');
  assert.equal((await readOptions()).usable,true);
 });
+// The original runtime's chats go to Hermes directly (native-agent.mjs), not through the health
+// tracked provider, so the state is fed by the chats themselves (#806). A Hermes install has no
+// connection check, so the walk here is refused, working, down and working again; the stalled step
+// is the provider walk above, whose check can stall.
+test('the original runtime Hermes chats feed the one state: a refused chat is not shown as ready',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-native-health-')),bin=path.join(dir,'bin'),modeFile=path.join(dir,'mode'),root=path.join(dir,'workspace');
+ fs.mkdirSync(bin,{recursive:true});fs.mkdirSync(path.join(dir,'venv','bin'),{recursive:true});fs.mkdirSync(root,{recursive:true});
+ let executable;
+ if(process.platform==='win32'){executable=path.join(bin,'hermes.exe');fs.copyFileSync(process.execPath,executable);}
+ else{executable=path.join(bin,'hermes');fs.writeFileSync(executable,'#!/bin/sh\nexec "'+process.execPath+'" "'+path.join(dir,'chat')+'"\n',{mode:0o755});}
+ // The model list the picker reads is served by the Python beside the executable; this one answers
+ // at once, without Hermes' own modules.
+ fs.writeFileSync(path.join(dir,'venv','bin','python3'),'#!/bin/sh\necho \'{"current":"fake-model","models":[{"id":"fake-model","efforts":[]}]}\';\n',{mode:0o755});
+ fs.writeFileSync(path.join(dir,'chat'),"const fs=require('node:fs');let mode='working';try{mode=fs.readFileSync('"+modeFile+"','utf8').trim();}catch{}\nif(mode==='refused'){process.stderr.write('authenticationerror: the API key was refused\\n');process.exit(1);}\nif(mode==='down'){process.stderr.write('the request could not be sent\\n');process.exit(1);}\nprocess.stdout.write('A reply from the fake assistant.');\n");
+ // On Windows the fake Hermes is this Node itself, which runs the script named by its first
+ // argument from the workspace, so the same chat script is written there too.
+ fs.writeFileSync(path.join(root,'chat'),fs.readFileSync(path.join(dir,'chat')));
+ const setMode=mode=>fs.writeFileSync(modeFile,mode);
+ const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL','GODSPEED_MODEL_KEY','GODSPEED_MODEL'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
+ const assistant=path.join(dir,'assistant.json');
+ for(const n of names)delete process.env[n];
+ fs.writeFileSync(assistant,JSON.stringify({verified:true,executable,home:dir,sourceRoot:dir}));process.env.GODSPEED_ORIGINAL_RUNTIME='on';process.env.GODSPEED_ASSISTANT_CONFIG=assistant;
+ const {createService}=await import('../server/main.mjs');const service=await createService({root,port:0});
+ t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(dir,{recursive:true,force:true});});
+ const base='http://127.0.0.1:'+service.address.port,readOptions=()=>loadChatOptions({fetcher:(url,init)=>fetch(base+url,init)}),readStatus=async()=>await (await fetch(base+'/api/status')).json();
+ const chat=async()=>{const reply=await fetch(base+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})});return {status:reply.status,text:await reply.text()};};
+ const both=(options,status,expected,step)=>{assert.equal(options.availability,expected,step);assert.equal(options.usable,expected==='ready',step);assert.equal(status.aiAvailability,expected,step);assert.equal(status.runtimeConfigured,expected==='ready',step);};
+ // Before any chat the state is 'unknown', which reads as ready (#764).
+ assert.equal((await readOptions()).availability,'ready');
+ setMode('refused');
+ const refused=await chat();assert.equal(refused.status,400,refused.text);assert.match(refused.text,/Your AI key or sign-in was refused/);
+ both(await readOptions(),await readStatus(),'refused','after the refused chat');
+ setMode('working');
+ const sent=await chat();assert.equal(sent.status,200,sent.text);assert.match(sent.text,/A reply from the fake assistant/);
+ both(await readOptions(),await readStatus(),'ready','after the chat that answered');
+ setMode('down');
+ const down=await chat();assert.equal(down.status,400,down.text);assert.match(down.text,/The AI request failed/);
+ both(await readOptions(),await readStatus(),'unreachable','after the chat that went down');
+ setMode('working');
+ assert.equal((await chat()).status,200);
+ both(await readOptions(),await readStatus(),'ready','after the recovery');
+});
 test('an AI connected only to the notebook while Hermes has none is not presented as ready for the chats',async t=>{
  const endpoint=http.createServer(async(req,res)=>{for await(const chunk of req);res.setHeader('Content-Type','application/json');res.end(JSON.stringify({choices:[{message:{content:'Connected.'}}]}));});
  await new Promise(resolve=>endpoint.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>endpoint.close(resolve)));

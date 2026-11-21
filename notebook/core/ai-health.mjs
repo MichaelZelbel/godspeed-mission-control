@@ -50,6 +50,12 @@ export function trackAIHealth(inner,{waitMs=AI_HEALTH_WAIT_MS,firstWaitMs=AI_HEA
   };
   Object.assign(run,inner);
   run.health=()=>state;
+  // A result that reached the AI outside this wrapper settles the same state: the original
+  // runtime's chats ask Hermes directly (native-agent.mjs), not through the tracked provider, so
+  // the caller records what the chat said (#806). An answer is the newest word ('ready'); a failure
+  // is its category, and a failure of the request itself says nothing. Whether the person stopped
+  // the request is the caller's to say, because only it sees the input.
+  run.record=error=>{const order=++started;settle(order,error?aiFailure(error):'ready');};
   if(typeof inner.check==='function'){
     run.check=async()=>{
       const order=++started;

@@ -48,6 +48,7 @@ import {PlanSignIn,PLAN_PROVIDER} from '../core/plan-signin.mjs';
 import {voiceStatus,saveVoice} from '../core/voice-replies.mjs';
 import {goalOverview} from '../core/goal-overview.mjs';
 import {nativeAgent} from '../core/native-agent.mjs';
+import {chatAvailability} from '../core/chat-availability.mjs';
 import {NativeScheduler,hermesJobs} from '../core/native-scheduler.mjs';
 import {WorkoutsAddon} from '../core/workouts.mjs';
 import {enableKinds,readNotebookRoutines} from '../core/notebook-routines.mjs';
@@ -223,6 +224,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const automaticUpdate=new AutomaticUpdate({store,lifecycle,start:()=>startUpdate({root:store.root})});
   domains.assistantProblem=assistantMissing?assistantProblem:null;
   if(originalRuntime&&!assistantMissing){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root,providerFile:providerPath,keptFile:path.join(store.state,KEPT_FILE),lifecycle});const scenarioReleaseUrl=process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL;const updater=new HermesUpdate({store,descriptor,ask:askDirectly,lifecycle,releaseUrl:isScenarioHermesReleaseUrl(scenarioReleaseUrl)?scenarioReleaseUrl:undefined});scheduler.updater=updater;scheduler.chatHealth=new ChatHealth({store,descriptor,lifecycle});domains.hermesUpdate=updater;domains.nativeScheduler=scheduler;query.nativeHermesHome=descriptor.home;}
+  // The original runtime's chats ask Hermes directly (native-agent.mjs), not through the health
+  // tracked provider, so their outcome settles the same one state here: an answering chat is the
+  // AI's newest word, and a failed one too, unless the person stopped it (#806).
+  if(domains.nativeAgent){const agent=domains.nativeAgent;domains.nativeAgent=async input=>{try{const reply=await agent(input);provider?.record?.();return reply;}catch(error){if(!input?.signal?.aborted)provider?.record?.(error);throw error;}};}
   // Where the routines' AI is set: the Hermes home the routines run in (core/routine-ai.mjs).
   const routineAI=originalRuntime&&descriptor?.verified&&descriptor.home?{home:descriptor.home,state:store.state}:null;
   // An AI connected in Settings for the notebook only, while Hermes, which answers the chats, has no
@@ -231,7 +236,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // The one availability every surface reads (#806): the provider's newest result, or 'none' with
   // no AI connected. 'unknown' (connected, nothing asked yet) reads as ready, so a saved working
   // connection and one just connected in Settings are usable before the first check or chat (#764).
-  const chatAIAvailability=()=>{if(!domains.provider)return 'none';const health=provider?.health?.();return !health||health==='unknown'?'ready':health;};
+  const chatAIAvailability=()=>{if(!domains.provider)return 'none';const health=provider?.health?.();return chatAvailability(!health||health==='unknown'?'ready':health);};
   const ensureSpendGuard=()=>{
     if(store.get('jobs','spend-guard')||!spendGuardStatus(store,{hermesHome:routineAI?.home}).openrouter_connected)return;
     store.save('jobs',{id:'spend-guard',kind:'spend-guard',owner:store.get('settings','installation')?.owner||store.device,paused:false,state:'pending',next_run:new Date().toISOString(),interval_ms:3600000});
