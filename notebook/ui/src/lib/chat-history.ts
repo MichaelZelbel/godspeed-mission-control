@@ -42,8 +42,11 @@ export interface PersistedChatMessage {
 // the AI has worked after it, the note stays cleared, even when the AI fails again later. Every open
 // chat surface reads the AI's state each second (ChatConnectionEmptyState) and records here when a
 // read that says it works was asked, so a read that left before a failure cannot clear the note of
-// that failure. Kept in this browser's storage, so every window and every reload agree.
-const AI_WORKED_KEY = "godspeed:ai-worked-at";
+// that failure. Kept in this browser's storage, so every window and every reload agree. The key name
+// starts with none of the prefixes file-preferences.ts syncs to the server (menerio, godspeed, ...):
+// this is per-browser runtime state, and a once-a-second server write from every open tab made them
+// conflict (the review's D1 on PR #795).
+const AI_WORKED_KEY = "ai-worked-at";
 
 export function aiWorkedAt(): number {
   try {

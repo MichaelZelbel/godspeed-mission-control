@@ -187,7 +187,7 @@ it('a note in a chat that was closed while the AI worked again stays cleared in 
  // The AI works again while only the chat page is open.
  ai=AI.ready;
  surfaces['the chat page'].show();
- await waitFor(()=>expect(localStorage.getItem('godspeed:ai-worked-at')).not.toBeNull(),{timeout:3000});
+ await waitFor(()=>expect(localStorage.getItem('ai-worked-at')).not.toBeNull(),{timeout:3000});
  cleanup();
 
  ai=AI.unreachable;

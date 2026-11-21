@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { NOTE_MODIFYING_TOOLS, aiWorkedAt, recordAIWorked, unansweredReason, withSummary } from "./chat-history";
+import { hydrateFilePreferences } from "@/local/file-preferences";
 
 // The note chat reports what it did by tool name (domains.mjs): update_note
 // for a text change, update_note_metadata, trash_note. A name missing here
@@ -42,4 +43,36 @@ it("records when the AI last worked, and never moves it back", () => {
   recordAIWorked(1000);
   expect(aiWorkedAt()).toBe(3000);
   localStorage.clear();
+});
+
+// The durable-preferences patch (file-preferences.ts) syncs every changed key
+// matching its pattern to the server's ui-preferences record. The worked-at
+// time is written about once a second by every open chat surface, so a key
+// name the patch catches made concurrent tabs conflict and kept raising the
+// "preference change could not be saved" toast (PR #795's review, D1).
+it("recording when the AI last worked never saves a preference", async () => {
+  localStorage.clear();
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.startsWith("/api/query")) {
+      return Promise.resolve(new Response(JSON.stringify({ data: [{ _hash: "test-hash" }] }), { status: 200 }));
+    }
+    return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+  });
+  await hydrateFilePreferences();
+  calls.length = 0;
+  recordAIWorked(Date.now());
+  recordAIWorked(Date.now() + 1000);
+  // The patch saves through a 150 ms debounce; give it the chance to fire.
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  expect(calls).toEqual([]);
+  vi.unstubAllGlobals();
+  localStorage.clear();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
