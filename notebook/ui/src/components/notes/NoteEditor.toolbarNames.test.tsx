@@ -115,8 +115,11 @@ describe("Every icon button in the note toolbar has an accessible name (#879)", 
     expectEveryTooltipNamed(container, "synced note toolbar", 3);
   }, 60_000);
 
-  it("a note switched to Markdown source, with its source-mode button", async () => {
-    const id = await seedNote({ title: "Raw plan", content: "## Raw notes" });
+  it("a favorited, pinned note switched to Markdown source, with its source-mode button", async () => {
+    // Favorited and pinned too: the source-mode action bar renders its own copy
+    // of the favorite/pin buttons, and this is the only case that reaches their
+    // "Remove from favorites" / "Unpin" branches.
+    const id = await seedNote({ title: "Raw plan", content: "## Raw notes", is_favorite: true, is_pinned: true });
     const { container } = await openNote(id);
     const more = await waitFor(() => {
       const el = container.querySelector('button[title="More actions"]');
