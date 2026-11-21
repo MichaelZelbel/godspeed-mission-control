@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';import {fileURLToPath} from 'node:url';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';import {fileURLToPath} from 'node:url';import {spawnSync} from 'node:child_process';
 
 // A CARRIED ADD-ON THAT DRIFTED FROM ITS PIN, FOUND WITHOUT THE ADD-ON'S REPOSITORY (#862). The
 // copies under third-party/addons/ are vendored at the commit sources.json pins, and the vendoring
@@ -14,12 +14,14 @@ const sha=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest
 export const WAY='Make the change in the add-on\'s own repository and bring it here by re-pinning: run python notebook/scripts/vendor-addons.py <checkout folder> <add-on>. The copies in third-party/addons are never edited by hand.';
 
 // Every pinned add-on: one problem per carried file that no longer has the content its hash stands
-// for, one per carried file with no hash, one per hash with no carried file behind it. An add-on
-// carried in this repository has no pin and records no hashes, so it is not asked.
+// for, one per carried file with no hash, one per hash with no carried file behind it, and one per
+// file sitting in the copy that the add-on does not carry. An add-on carried in this repository has
+// no pin and records no hashes, so it is not asked.
 export function hashProblems(list,root){
  const problems=[];
  for(const pin of list){
   if(pin.carriedHere)continue;
+  const carried=new Set(pin.files);
   const hashes=pin.hashes||{};
   for(const file of pin.files){
    const name=`${pin.name}/${file}`;
@@ -28,8 +30,19 @@ export function hashProblems(list,root){
    else if(hashes[file]!==sha(path.join(root,name)))problems.push(`${name} has been changed since its hash was recorded.`);
   }
   for(const file of Object.keys(hashes))if(!pin.files.includes(file))problems.push(`${pin.name}/${file} has a hash recorded but is not among the files the add-on carries.`);
+  for(const file of copyFiles(root,pin.name))if(!carried.has(file))problems.push(`${pin.name}/${file} is present in the copy but is not among the files the add-on carries.`);
  }
  return problems;
+}
+
+// The files a copy holds on disk. In this repository git answers, as vendor-addons.py --check asks
+// it, so files the repository ignores (node_modules, __pycache__) do not count as part of a copy;
+// a throwaway folder has no repository, so the walk answers there.
+function copyFiles(root,name){
+ if(root!==addonsRoot)return fs.readdirSync(path.join(root,name),{recursive:true}).filter(file=>fs.statSync(path.join(root,name,file)).isFile());
+ const listed=spawnSync('git',['ls-files','--cached','--others','--exclude-standard','--',`third-party/addons/${name}`],{cwd:product});
+ if(listed.status!==0)throw new Error(listed.stderr.toString());
+ return listed.stdout.toString().split('\n').filter(Boolean).map(file=>file.slice(`third-party/addons/${name}/`.length));
 }
 
 export const hashReport=(list,root)=>{const problems=hashProblems(list,root);return problems.length?problems.join('\n')+'\n\n'+WAY:'';};
@@ -72,6 +85,14 @@ test('a hash with no carried file behind it is named with the add-on and the way
  const report=hashReport(f.pins,f.root);
  assert.match(report,/pinned-add-on\/lib\/gone\.mjs is carried but is not in the copy\./);
  assert.match(report,/pinned-add-on\/lib\/tick\.mjs has a hash recorded but is not among the files the add-on carries\./);
+ assert.match(report,/own repository/);assert.match(report,/re-pin/);
+});
+
+test('a file added to the copy that the add-on does not carry is named with the add-on and the way out',()=>{
+ const f=fixture();
+ fs.writeFileSync(path.join(f.root,'pinned-add-on/lib/extra.mjs'),'added here by hand');
+ const report=hashReport(f.pins,f.root);
+ assert.match(report,/pinned-add-on\/lib\/extra\.mjs is present in the copy but is not among the files the add-on carries\./);
  assert.match(report,/own repository/);assert.match(report,/re-pin/);
 });
 
