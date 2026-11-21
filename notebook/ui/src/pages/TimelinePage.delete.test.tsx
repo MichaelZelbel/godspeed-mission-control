@@ -54,13 +54,13 @@ vi.mock("@/lib/toast", () => ({
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div data-testid="drawer-menu">{children}</div>,
   DropdownMenuItem: ({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) => <button onClick={onClick}>{children}</button>,
 }));
 vi.mock("@/components/ui/context-menu", () => ({
   ContextMenu: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   ContextMenuTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  ContextMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  ContextMenuContent: ({ children }: { children: React.ReactNode }) => <div data-testid="card-menu">{children}</div>,
   ContextMenuItem: ({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) => <button onClick={onClick}>{children}</button>,
 }));
 
@@ -79,11 +79,20 @@ describe("deleting a timeline moment", () => {
   beforeEach(() => { db.splice(0, db.length, ...seedRows); });
   afterEach(() => { cleanup(); db.splice(0, db.length); deleted.length = 0; toasts.length = 0; failDelete.on = false; });
 
-  it("offers Delete in the drawer's Moment actions menu, and cancelling keeps the moment", async () => {
+  it("offers Delete in the card's menu and the drawer's Moment actions menu, and cancelling keeps the moment", async () => {
     page();
-    fireEvent.click((await screen.findAllByText("Old trip", undefined, WAIT))[0]);
-    const deletes = await screen.findAllByRole("button", { name: "Delete" }, WAIT);
-    fireEvent.click(deletes[0]);
+    await screen.findAllByText("Old trip", undefined, WAIT);
+    // Both menus offer Delete (criterion 1). With the drawer closed only the
+    // card's is in the accessibility tree; the drawer's joins when it opens.
+    expect(within(document.querySelector("[data-testid='card-menu']") as HTMLElement).getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Old trip"));
+    const drawerMenu = await waitFor(() => {
+      const menu = document.querySelector("[data-testid='drawer-menu']");
+      if (!menu) throw new Error("the drawer has not mounted yet");
+      return menu as HTMLElement;
+    }, WAIT);
+    expect(within(drawerMenu).getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    fireEvent.click(within(drawerMenu).getByRole("button", { name: "Delete" }));
     expect(await screen.findByText('Delete "Old trip"?', undefined, WAIT)).toBeInTheDocument();
     fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("alertdialog")).toBeNull();

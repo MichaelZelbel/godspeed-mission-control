@@ -229,9 +229,6 @@ export default function TimelinePage() {
     setEditDialogOpen(true);
   };
 
-  // Unified "Make a copy": same date and details, suffixed title, participants
-  // carried over. Provenance is deliberately NOT copied - it belongs to the
-  // original extraction, so a copy reads as user-authored.
   const [confirm, confirmDialog] = useConfirmDialog();
 
   // Deleting a moment removes only the moment itself: its people, their facts
@@ -253,6 +250,9 @@ export default function TimelinePage() {
     await fetchData();
   };
 
+  // Unified "Make a copy": same date and details, suffixed title, participants
+  // carried over. Provenance is deliberately NOT copied - it belongs to the
+  // original extraction, so a copy reads as user-authored.
   const duplicateMoment = async (moment: TimelineMoment) => {
     if (!user) return;
     const existing = new Set(moments.map((m) => (m.title || "").trim()).filter(Boolean));
