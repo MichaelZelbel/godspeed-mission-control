@@ -2,8 +2,9 @@
 
   python notebook/scripts/vendor-addons.py <folder> [add-on ...]
       copies each named add-on (every carried one when none is named) from the commit its checkout
-      <folder>/dev/<add-on> has out, never from its working files, and pins that commit in
-      third-party/addons/sources.json; the other add-ons' copies and pins stay as they are.
+      <folder>/dev/<add-on> has out, never from its working files, and pins that commit and the hash
+      of every file it carries in third-party/addons/sources.json; the other add-ons' copies and
+      pins stay as they are.
   python notebook/scripts/vendor-addons.py --check <folder>
       says which copied file differs from the commit its add-on is pinned to; exit 1 if any does.
 A copy is never edited here by hand: a change goes into the add-on's own repository, and this
@@ -18,7 +19,7 @@ same question as the others - do the pinned list and the files on disk agree? - 
 product's own tracked files, the only source it has, and says so rather than claiming a commit
 matched.
 """
-import pathlib,subprocess,json,sys,shutil
+import pathlib,subprocess,json,sys,shutil,hashlib
 ADDONS=['godspeed-coach','godspeed-headache','godspeed-journal','godspeed-workouts','mc-phone','mc-video']
 ACTIVATION='Explicit setup only. No connector or outward action is enabled by packaging.'
 product=pathlib.Path(__file__).resolve().parents[2];target=product/'third-party/addons';pins_file=target/'sources.json'
@@ -76,9 +77,15 @@ for name in args[1:] or ADDONS:
     commit=git(root,'rev-parse','HEAD').decode().strip()
     files=selected(name,git(root,'ls-tree','-r','--name-only',commit).decode().splitlines())
     shutil.rmtree(target/name,ignore_errors=True)
+    hashes={}
     for p in files:
-        dest=target/name/p;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(git(root,'show',f'{commit}:{p}'))
-    entry={'name':name,'commit':commit,'license':'MIT','files':files,'activation':ACTIVATION}
+        content=git(root,'show',f'{commit}:{p}')
+        dest=target/name/p;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(content)
+        hashes[p]=hashlib.sha256(content).hexdigest()
+    # The hash of every carried file, so a copy edited here can be found without the add-on's
+    # repository: the gate's own test (notebook/test/addon-carried-hashes.test.mjs) recomputes
+    # them from the copies alone. Rewritten on every re-pin with the rest of the entry.
+    entry={'name':name,'commit':commit,'license':'MIT','files':files,'hashes':hashes,'activation':ACTIVATION}
     pins=[entry if e['name']==name else e for e in pins] if any(e['name']==name for e in pins) else sorted(pins+[entry],key=lambda e:e['name'])
     print(f'{name}: {len(files)} files from {commit}')
 # LF on every platform, like the carried files themselves (written with write_bytes above). A run on
