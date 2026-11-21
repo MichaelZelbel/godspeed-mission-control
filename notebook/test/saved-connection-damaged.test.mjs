@@ -8,9 +8,10 @@ import {AI_CONNECTION_UNREADABLE_STATUS} from '../core/no-ai.mjs';
 const KEY='sk-fictional-826-secret';
 const chatInput={message:'Say the fictional word.',request_id:'01234567-1234-4234-8234-012345678901'};
 
-async function notebook(t,{settingsOnly=false}={}){
-  const requests={count:0};
-  const ai=http.createServer((req,res)=>{req.resume();req.on('end',()=>{requests.count++;
+async function notebook(t,{settingsOnly=false,startConnected=false}={}){
+  const requests={count:0,bodies:[]};
+  const ai=http.createServer((req,res)=>{let text='';req.on('data',chunk=>{text+=chunk;});req.on('end',()=>{requests.count++;
+    if(req.method==='POST'&&text)try{requests.bodies.push(JSON.parse(text));}catch{}
     res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({choices:[{message:{content:'{"reply":"Connected."}'}}]}));});});
   await new Promise(resolve=>ai.listen(0,'127.0.0.1',resolve));
   t.after(()=>new Promise(resolve=>ai.close(resolve)));
@@ -24,6 +25,9 @@ async function notebook(t,{settingsOnly=false}={}){
     process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'assistant.json');process.env.GODSPEED_ORIGINAL_RUNTIME='on';
   }
   const {createService}=await import('../server/main.mjs');
+  const providerFile=path.join(root,'workspace','.godspeed','provider.json');
+  const url='http://127.0.0.1:'+ai.address().port+'/v1/chat/completions',config={url,key:KEY,model:'fictional-model'};
+  if(startConnected){fs.mkdirSync(path.dirname(providerFile),{recursive:true});fs.writeFileSync(providerFile,JSON.stringify({...config,...startConnected}));}
   const service=await createService({root:path.join(root,'workspace'),port:0});
   let closed=false;
   const close=async()=>{if(closed)return;closed=true;await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];};
@@ -31,8 +35,6 @@ async function notebook(t,{settingsOnly=false}={}){
   const base='http://127.0.0.1:'+service.address.port;
   const get=async route=>{const r=await fetch(base+route);return {status:r.status,text:await r.text()};};
   const post=async(route,body)=>{const r=await fetch(base+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});return {status:r.status,text:await r.text()};};
-  const providerFile=path.join(root,'workspace','.godspeed','provider.json');
-  const url='http://127.0.0.1:'+ai.address().port+'/v1/chat/completions',config={url,key:KEY,model:'fictional-model'};
   return {requests,root,base,get,post,providerFile,url,config,connect:(overrides={})=>post('/api/provider',{...config,...overrides}),close,createService};
 }
 
@@ -140,16 +142,44 @@ test('a saved connection replaced with a different one while the notebook runs: 
   damage(nb.providerFile);
   assert.equal(JSON.parse((await nb.get('/api/status')).text).aiAvailability,'unreadable');
   fs.writeFileSync(nb.providerFile,JSON.stringify({url:'http://127.0.0.1:'+other.address().port+'/v1/chat/completions',key:KEY,model:'other-model'}));
+  // Options first: the picker's own first read after a file change must already name the saved model.
+  const options=JSON.parse((await nb.get('/api/chat/options')).text);
+  assert.equal(options.usable,true);assert.equal(options.current,'other-model','the picker names the saved model');
   const status=JSON.parse((await nb.get('/api/status')).text);
   assert.equal(status.aiAvailability,'ready');assert.equal(status.runtimeConfigured,true);
   const saved=JSON.parse((await nb.get('/api/provider')).text);
   assert.equal(saved.model,'other-model');assert.equal(saved.configured,true);
-  const options=JSON.parse((await nb.get('/api/chat/options')).text);
-  assert.equal(options.usable,true);assert.equal(options.current,'other-model','the picker names the saved model');
   const before=reached.count;
   assert.equal((await chatSend(nb)).status,200);
   assert.equal(reached.count,before+1,'the chat send reaches the saved connection');
   assert.equal(nb.requests.count,1,'the connection loaded before the replacement is asked nothing more');
+});
+
+test('a saved connection the notebook loaded at startup is followed too when the file is replaced while it runs',async t=>{
+  const nb=await notebook(t,{startConnected:true});
+  assert.equal(JSON.parse((await nb.get('/api/status')).text).aiAvailability,'ready');
+  const reached={count:0};
+  const other=http.createServer((req,res)=>{req.resume();req.on('end',()=>{reached.count++;
+    res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({choices:[{message:{content:'{"reply":"Connected."}'}}]}));});});
+  await new Promise(resolve=>other.listen(0,'127.0.0.1',resolve));
+  t.after(()=>new Promise(resolve=>other.close(resolve)));
+  fs.writeFileSync(nb.providerFile,JSON.stringify({url:'http://127.0.0.1:'+other.address().port+'/v1/chat/completions',key:KEY,model:'other-model'}));
+  const options=JSON.parse((await nb.get('/api/chat/options')).text);
+  assert.equal(options.usable,true);assert.equal(options.current,'other-model');
+  const status=JSON.parse((await nb.get('/api/status')).text);
+  assert.equal(status.aiAvailability,'ready');assert.equal(status.runtimeConfigured,true);
+  const before=reached.count;
+  assert.equal((await chatSend(nb)).status,200);
+  assert.equal(reached.count,before+1,'the chat send reaches the saved connection');
+  assert.equal(nb.requests.count,0,'the connection loaded at startup is asked nothing');
+});
+
+test('a saved connection whose settings beyond its address change while the notebook runs: the chats follow the whole saved connection',async t=>{
+  const nb=await notebook(t,{startConnected:{maxTokens:9999}});
+  fs.writeFileSync(nb.providerFile,JSON.stringify({...nb.config,maxTokens:1111}));
+  assert.equal(JSON.parse((await nb.get('/api/status')).text).aiAvailability,'ready');
+  assert.equal((await chatSend(nb)).status,200);
+  assert.equal(nb.requests.bodies.at(-1)?.max_tokens,1111,'the chat follows the saved maxTokens, not the one loaded at startup');
 });
 
 test('with an intact saved connection, reading the state costs no provider request',async t=>{

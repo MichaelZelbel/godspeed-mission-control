@@ -243,7 +243,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // not the one loaded before the change. No provider call is spent on any of it.
   const readSavedConnection=()=>{
     let saved;try{saved=readSavedProvider(providerPath);}catch{return 'unreadable';}
-    if(saved&&savedConfig&&(saved.url!==savedConfig.url||saved.key!==savedConfig.key||saved.model!==savedConfig.model)){
+    // The whole saved object is compared, not a hand-listed subset: every field modelProvider reads
+    // (beyond url, key and model: maxTokens, retryWaits, stallWatch) must decide the rebuild (#826).
+    // A hand edit that only reorders keys rebuilds needlessly but harmlessly: no provider call.
+    if(saved&&savedConfig&&JSON.stringify(saved)!==JSON.stringify(savedConfig)){
       provider=trackAIHealth(guarded(modelProvider(saved)));domains.provider=provider;scheduler.executor=jobExecutor(provider,query);lastChatCheckAt=0;savedConfig=saved;
     }
     return saved;
