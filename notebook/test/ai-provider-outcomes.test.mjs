@@ -9,6 +9,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';
 import {aiRoutes,answerCause,diagnosticCause,plainAIError,connectionTestError} from '../core/ai-outcome.mjs';
+import {AI_DISPATCH} from '../core/domains.mjs';
 import {AI_REFUSED,AI_UNREACHABLE,AI_STALLED,AI_NO_CREDIT,AI_BUSY,AI_UNREADABLE,
   KEY_REFUSED,CONNECT_UNREACHABLE,AI_SERVICE_FAILED,AI_REQUEST_LIMITED,AI_REQUEST_REJECTED,CONNECT_NO_CREDIT} from '../core/no-ai.mjs';
 import {RETRY_WAITS,STALL_WATCH} from '../core/runtime.mjs';
@@ -120,6 +121,7 @@ function fixturesFor(seeded){
     '/api/functions/backfill-profile-extraction':()=>[{}],
     '/api/functions/backfill-moment-profile-extraction':()=>[{}],
     '/api/functions/backfill-media-analysis':()=>[{}],
+    '/api/functions/search-notes-semantic':()=>[{query:'Ada'}],
     '/api/browser-chat':()=>[{message:'Hello'}],
     '/api/provider':()=>[{url:seeded.ai.localUrl,key:KEY,model:'fictional-model',routines:false}],
     '/api/backup-ai':()=>[{url:seeded.ai.localUrl,key:KEY,model:'fictional-model'}],
@@ -153,6 +155,7 @@ test('every AI route is driven through every outcome, and says its one plain sen
   const seededN=await seeded(t),fixtures=fixturesFor(seededN),run=seededN.run,AI_ROUTES=aiRoutes();
   assert.deepEqual(Object.keys(fixtures).sort(),[...AI_ROUTES].sort(),'the routes the test drives are exactly the ones the module lists');
   const connectionRoutes=['/api/backup-ai','/api/provider'];
+  const index=seededN.service.domains.index;
   for(const mode of Object.keys(MODE_CAUSE)){
     seededN.ai.set(mode);
     // The backup's leg goes first: a connected main AI must not be the backup's own service, so the
@@ -160,7 +163,13 @@ test('every AI route is driven through every outcome, and says its one plain sen
     // 127.0.0.1; the provider's own leg may then reconnect it.
     for(const route of [...AI_ROUTES.filter(r=>!connectionRoutes.includes(r)),...connectionRoutes]){
       for(const body of fixtures[route]()){
-        const answer=await run(route,body),expected=saidFor(route,mode);
+        // The word search's AI-calling branch is the one that ranks with the provider, and the
+        // seeded notebook has a search index, so this route's legs drive the branch without it.
+        const withoutIndex=route==='/api/functions/search-notes-semantic';
+        if(withoutIndex)seededN.service.domains.index=null;
+        let answer;
+        try{answer=await run(route,body);}finally{if(withoutIndex)seededN.service.domains.index=index;}
+        const expected=saidFor(route,mode);
         if(expected===null){ // the connection test only wants an answer: it passed
           assert.equal(answer.status,200,route+' '+mode+': '+answer.text);
           assert.equal(JSON.parse(answer.text).connected,true,route+' '+mode);
@@ -192,6 +201,21 @@ test('every AI route is driven through every outcome, and says its one plain sen
     seededN.ai.server.closeAllConnections?.();
   }
   await seededN.ai.close();
+});
+
+// Every name the dispatch serves that is not published as AI-calling must never reach the AI: the
+// dispatch table declares them, and this leg drives each one so a branch that asks the AI under a
+// false declaration fails here too (#861).
+test('a function the dispatch does not serve AI for never reaches the AI',async t=>{
+  const nb=await notebook(t),{ai,service}=nb;
+  const nonAI=Object.keys(AI_DISPATCH).filter(name=>!AI_DISPATCH[name]);
+  assert.ok(nonAI.length>0);
+  ai.set('refused401');
+  for(const name of nonAI){
+    const before=ai.state.calls;
+    try{await service.domains.invoke(name,{});}catch{}
+    assert.equal(ai.state.calls,before,name+' reached the AI though the dispatch declares it false');
+  }
 });
 
 test('an AI failure through the MCP door is told in plain words too, never the provider\'s',async t=>{
@@ -272,6 +296,12 @@ test('a route that wrapped the provider\'s raw words in its own text is still wo
   const wrapped=plainAIError(new Error('raw provider said: Model provider failed with HTTP 401: Incorrect API key provided: '+KEY));
   assert.equal(wrapped.message,AI_REFUSED);assert.equal(wrapped.message.includes(KEY),false);
   const outage=plainAIError(new Error('provider wording: HTTP 502 Bad Gateway'));assert.equal(outage.message,AI_UNREACHABLE);
+  // A reset leg: the boundary's own network-error wording carries the AI's address, so a route
+  // that wraps it says the sentence alone, and the address never reaches the person (#861).
+  const reset=plainAIError(new Error('raw provider said: The AI at 127.0.0.1:57000 could not be reached. Check that this computer is online and that the AI\'s address in Settings is right.'));
+  assert.equal(reset.message,AI_UNREACHABLE);assert.doesNotMatch(reset.message,RAW);
+  const stall=plainAIError(new Error('raw provider said: The model provider at 127.0.0.1:57000 stopped answering. Check that this computer is online and that the AI\'s address in Settings is right.'));
+  assert.equal(stall.message,AI_STALLED);assert.doesNotMatch(stall.message,RAW);
   // The notebook's own kinds of problem are left as they are: a context limit is not an AI failure,
   // and a refusal that is already plain stays plain.
   const context=plainAIError(new Error('Context length exceeded: 413,274 tokens. Cannot compress further.'));

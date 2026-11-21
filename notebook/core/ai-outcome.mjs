@@ -93,11 +93,20 @@ export function aiFailed(cause,message,{status,detail}={}){
 // key) to the person (#861 review). The raw words themselves say the cause, so they are read here.
 const RAW_PROVIDER=new RegExp('Model provider failed|Incorrect API key|invalid_api_key|insufficient_quota|rate limit exceeded|rate_limit|'+STATUS_LINE.source);
 
+// The boundary's own network-error and stall wording (runtime.mjs): a route that wraps the AI's
+// error in its own words leaks the AI's address, so the shared handling reads these words too and
+// says the sentence alone (#861 review).
+const WRAPPED_NETWORK=/could not be reached\. Check that this computer is online|stopped answering\. Check that this computer is online/;
+
 // The cause an error carries, read from aiCause first, or from raw provider words a route wrapped
 // in its own text (a context limit reads as no cause, its own kind of problem). Null is no cause.
 const causeOf=error=>{
   if(AI_CAUSES.includes(error?.aiCause))return error.aiCause;
-  if(error instanceof Error&&RAW_PROVIDER.test(String(error.message||''))){const read=diagnosticCause(error.message);if(read)return read;}
+  if(error instanceof Error){
+    const message=String(error.message||'');
+    if(WRAPPED_NETWORK.test(message))return /stopped answering/.test(message)?'stalled':'unavailable';
+    if(RAW_PROVIDER.test(message)){const read=diagnosticCause(message);if(read)return read;}
+  }
   return null;
 };
 

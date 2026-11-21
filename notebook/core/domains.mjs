@@ -145,21 +145,37 @@ export function weekNotes(notes){
   }
   return out;
 }
-// THE AI-CALLING FUNCTIONS THIS DISPATCH SERVES (#861). answer() below routes these to branches
-// that ask the AI provider (core/runtime.mjs); the list is published here, beside those branches,
-// so a new AI-calling function is added to it in the same file. The route test
-// (test/ai-provider-outcomes.test.mjs) drives every one of them against a stub AI and needs a
-// fixture for each, so a new AI function is included or the test fails; one published without a
-// branch in answer() fails the test too, because the stub answers nothing. Functions whose work
-// never asks the AI, and search-notes-semantic (its provider branch is on its own open branch),
-// are deliberately not listed.
-export const AI_FUNCTIONS=Object.freeze([
-  'conversation-chat','note-chat','collection-chat','draft-event','process-note',
-  'generate-profile-suggestions','enrich-people','extract-moment-profile','analyze-media','analyze-pdf',
-  'classify-profile-fact','generate_collection_schema','weekly-review','generate-group-briefing',
-  'suggest-group-members','suggest-group-next-step','backfill-metadata','backfill-profile-extraction',
-  'backfill-moment-profile-extraction','backfill-media-analysis',
-]);
+// THE DISPATCH TABLE (#861). Every function name answer() below serves, with whether that branch
+// can reach the AI provider (core/runtime.mjs). AI_FUNCTIONS is built from the table, so the route
+// list the test walks comes from the dispatch itself: a branch cannot call the AI without being
+// declared true here, because the dispatch refuses a name the table does not know, and the route
+// test (test/ai-provider-outcomes.test.mjs) drives every declared name — the true ones through
+// every outcome, the false ones against the counting stub, which they must never reach.
+export const AI_DISPATCH=Object.freeze({
+  'conversation-chat':true,'note-chat':true,'collection-chat':true,'draft-event':true,
+  'process-note':true,'generate-profile-suggestions':true,'enrich-people':true,
+  'extract-moment-profile':true,'analyze-media':true,'analyze-pdf':true,
+  'classify-profile-fact':true,'generate_collection_schema':true,'weekly-review':true,
+  'generate-group-briefing':true,'suggest-group-members':true,'suggest-group-next-step':true,
+  'backfill-metadata':true,'backfill-profile-extraction':true,
+  'backfill-moment-profile-extraction':true,'backfill-media-analysis':true,
+  // Its word search is the index's own work; the branch that ranks with the provider when no
+  // search index is connected is what the true declares, and the route test drives that branch.
+  'search-notes-semantic':true,
+  // Functions whose work never asks the AI:
+  'retrieve-memory':false,'import-goal-files':false,'personal-operation':false,
+  'addon-deadlines':false,'get-graph-data':false,'find-connections':false,
+  'suggest-connections':false,'compute-connections':false,'normalize-profile':false,
+  'quick-capture':false,'link-note':false,'merge-contacts':false,'profile-lint':false,
+  'review-queue-bulk':false,'sweep-note-processing':false,
+  'ensure-token-allowance':false,'moderate-content':false,
+  // The optional connectors (Connectors.invoke), none of them AI:
+  'configure-connector':false,'run-connector':false,'gdrive-proxy':false,'gdrive-sync':false,
+  'github-import-vault':false,'github-people-sync':false,'github-proxy':false,
+  'github-sync-export':false,'github-sync-pull':false,'send-patch':false,
+  'embed-document':false,'delete-my-account':false,
+});
+export const AI_FUNCTIONS=Object.freeze(Object.keys(AI_DISPATCH).filter(name=>AI_DISPATCH[name]));
 publishAIFunctions(AI_FUNCTIONS);
 
 export class Domains {
@@ -308,6 +324,10 @@ export class Domains {
     try{return await this.answer(name,input);}catch(error){throw plainAIError(error);}
   }
   async answer(name, input = {}) {
+    // The dispatch table is the register of names this dispatch serves: a branch added without a
+    // table entry is unreachable, so a builder must declare it there, and its entry says whether
+    // the AI is asked (#861).
+    if(!(name in AI_DISPATCH))throw new Error('Processing function has not been ported: ' + name);
     if(name==='draft-event')return draftEvent(this.provider,input);
     if(name==='retrieve-memory')return retrieveNoteWindows(this.query,input.query||input.message||'');
     // A message from the page that shows who the assistant is carries that page's numbered parts,
@@ -585,7 +605,7 @@ export class Domains {
         const visible=new Set(visibleRows(this.query,'notes').map(n=>n.id)),own=input.caller==='app'?byWords(searchable().filter(n=>!visible.has(n.id)),question):[];
         if(!candidates.length)return {notes:own,mode:'meaning-expanded and provider-ranked',semantic:true};
         const result=readReply(await this.provider({kind:name,query:question,notes:candidates,contract:'Rank these retrieved note excerpts by semantic relevance to the query. Return JSON {matches:[{id,score}]} where scores are between 0 and 1. Use only supplied IDs. This is a bounded candidate selection, not a search of an entire database.'}));
-        if(!Array.isArray(result.matches)||result.matches.some(m=>!Number.isFinite(m.score)||m.score<0||m.score>1))throw Error('Search returned invalid relevance scores');
+        if(!Array.isArray(result.matches)||result.matches.some(m=>!Number.isFinite(m.score)||m.score<0||m.score>1))throw unreadableReply(new Error('Search returned invalid relevance scores'));
         const ids=new Set(candidates.map(n=>n.id)),notes=visibleRows(this.query,'notes').filter(n=>!n.is_trashed&&ids.has(n.id)),seen=new Set();
         return {notes:[...result.matches.filter(m=>ids.has(m.id)&&!seen.has(m.id)&&seen.add(m.id)).sort((a,b)=>b.score-a.score).map(m=>({...notes.find(n=>n.id===m.id),similarity:m.score})).filter(n=>n.id),...own],mode:'meaning-expanded and provider-ranked',semantic:true};
       }
