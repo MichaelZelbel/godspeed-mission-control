@@ -42,12 +42,13 @@ export interface EditMomentData {
   id: string;
   title: string;
   description: string | null;
-  happened_at: string;
+  // A moment another writer saved may have no happened_at and no scores.
+  happened_at: string | null;
   happened_end: string | null;
   status: string;
-  impact_level: number;
-  confidence_date: number;
-  confidence_truth: number;
+  impact_level: number | null;
+  confidence_date: number | null;
+  confidence_truth: number | null;
   participantIds?: string[];
 }
 
@@ -111,12 +112,15 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
     if (editEvent) {
       setTitle(editEvent.title);
       setDescription(editEvent.description || "");
-      setDateStart(editEvent.happened_at.split("T")[0]);
+      // A dateless or scoreless moment opens with the new-moment starting
+      // values instead of crashing (filledOnOpen keeps an empty start date
+      // open to a suggestion, but marks the score sliders as the moment's own).
+      setDateStart(editEvent.happened_at ? editEvent.happened_at.split("T")[0] : today);
       setDateEnd(editEvent.happened_end ? editEvent.happened_end.split("T")[0] : "");
       setStatus(editEvent.status);
-      setImpactLevel(editEvent.impact_level);
-      setConfDate(editEvent.confidence_date);
-      setConfTruth(editEvent.confidence_truth);
+      setImpactLevel(editEvent.impact_level ?? 1);
+      setConfDate(editEvent.confidence_date ?? 5);
+      setConfTruth(editEvent.confidence_truth ?? 5);
       setMatchedPeople(editEvent.participantIds || []);
     } else {
       setTitle("");
