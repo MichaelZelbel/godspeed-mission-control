@@ -96,12 +96,15 @@ export const startupReadiness=publication=>{
 };
 export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
 const providerView=config=>({configured:true,url:baseAddress(config.url),model:config.model,key:!!config.key});
+// What a damaged saved connection answers with, its own sentence instead of the generic
+// invalid-JSON one (#861 review D4), naming the step that recovers it.
+const DAMAGED_PROVIDER='The saved AI connection could not be read. Connect your AI again in Settings, Your AI.';
 const readSavedProvider=file=>{
   let text;try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code==='ENOENT')return null;throw error;}
   // A damaged file is one plain log line per request, never a stack trace, and never the file's own
   // text, which holds the key (#833).
-  let config;try{config=JSON.parse(text);}catch{console.error('Godspeed Mission Control: the saved AI connection ('+file+') is not valid JSON. Connect your AI again in Settings, Your AI.');throw new Error('The request or a saved file was not valid JSON.');}
-  if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error('The saved AI connection is not valid. Connect it again after checking the server log.');
+  let config;try{config=JSON.parse(text);}catch{console.error('Godspeed Mission Control: the saved AI connection ('+file+') is not valid JSON. Connect your AI again in Settings, Your AI.');throw new Error(DAMAGED_PROVIDER);}
+  if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error(DAMAGED_PROVIDER);
   return config;
 };
 
@@ -483,7 +486,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const saved=readSavedProvider(providerPath);return send(res,200,saved?providerView(saved):{configured:false,key:false});
       }
       if(route==='/api/provider'&&req.method==='POST'){
-        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),saved=readSavedProvider(providerPath),submittedKey=typeof input.key==='string'?input.key.trim():input.key;
+        // Reconnecting reads over a damaged saved file as if none were saved (#861 review D4): the
+        // new connection is tested and written whole, so the log line's instruction works. The
+        // damaged file's one plain log line per request is kept by readSavedProvider.
+        let saved=null;try{saved=readSavedProvider(providerPath);}catch{saved=null;}
+        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),submittedKey=typeof input.key==='string'?input.key.trim():input.key;
         const normalizedAddress=!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions';
         const retainedKey=!submittedKey&&saved&&baseAddress(normalizedAddress)===baseAddress(saved.url)?saved.key:submittedKey;
         const config={url:normalizedAddress,key:retainedKey,model:typeof input.model==='string'?input.model.trim():input.model};
@@ -813,9 +820,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});
           // Every AI failure is already the one plain sentence a person reads: Domains.invoke
           // translated it (core/ai-outcome.mjs), for this route and for every other one, so no
-          // route builds its own AI error text (#861). Only the chats' live state is read from the
-          // cause here: an answer the AI gave but that could not be used says the AI answered.
-          if(isChat&&domains.provider&&!assistantMissing&&!controller.signal.aborted&&error.aiCause&&error.aiCause!=='unusable'){chatAIUsable=false;chatAICheckedAt=Date.now();}
+          // route builds its own AI error text (#861). The chats' live state reads the cause where
+          // the provider is tracked (trackAIHealth): an answer the AI gave but that could not be
+          // used says nothing about whether the AI answers (ai-health.mjs aiFailure), so it is left
+          // alone here, like every other failure the route itself has already recorded.
           throw error;
         }finally{if(isChat&&id)chatRequests.delete(id);if(isSearch){req.off('aborted',abortSearch);res.off('close',abortSearch);}}
       }
@@ -839,6 +847,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // pass through Domains.invoke: the browser chat, and the connection tests above (#861).
       const shown = userFacing(plainAIError(e), [store.root, store.state, mediaRoot, uiRoot, os.homedir(), os.tmpdir()]);
       if (!shown || e instanceof SyntaxError) console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed:', e);
+      // An answer the AI gave but that could not be used leaves the operator one plain line, so the
+      // shape the provider actually answered is not lost with it (#861 review R3): the sentence the
+      // person sees says nothing about what was wrong.
+      if (e?.aiCause==='unusable') console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' could not use the AI\'s answer: '+e.message);
       send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: shown || 'Something went wrong on the server. The details are in its log.', ...(shown && e.code ? { code: e.code } : {}) });
     }
   };

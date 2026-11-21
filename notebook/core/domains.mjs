@@ -1,5 +1,5 @@
 import {NO_AI_CHAT,NO_AI_ANALYSIS,readReply,unreadableReply} from './no-ai.mjs';
-import {plainAIError} from './ai-outcome.mjs';
+import {plainAIError,publishAIFunctions} from './ai-outcome.mjs';
 import {momentDraft} from './moment-draft.mjs';
 import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
 import {startCharmJudgement} from './charm-judgement.mjs';
@@ -145,6 +145,23 @@ export function weekNotes(notes){
   }
   return out;
 }
+// THE AI-CALLING FUNCTIONS THIS DISPATCH SERVES (#861). answer() below routes these to branches
+// that ask the AI provider (core/runtime.mjs); the list is published here, beside those branches,
+// so a new AI-calling function is added to it in the same file. The route test
+// (test/ai-provider-outcomes.test.mjs) drives every one of them against a stub AI and needs a
+// fixture for each, so a new AI function is included or the test fails; one published without a
+// branch in answer() fails the test too, because the stub answers nothing. Functions whose work
+// never asks the AI, and search-notes-semantic (its provider branch is on its own open branch),
+// are deliberately not listed.
+export const AI_FUNCTIONS=Object.freeze([
+  'conversation-chat','note-chat','collection-chat','draft-event','process-note',
+  'generate-profile-suggestions','enrich-people','extract-moment-profile','analyze-media','analyze-pdf',
+  'classify-profile-fact','generate_collection_schema','weekly-review','generate-group-briefing',
+  'suggest-group-members','suggest-group-next-step','backfill-metadata','backfill-profile-extraction',
+  'backfill-moment-profile-extraction','backfill-media-analysis',
+]);
+publishAIFunctions(AI_FUNCTIONS);
+
 export class Domains {
   constructor(query, { provider = null } = {}) { this.query = query; this.store = query.store; this.provider = provider; }
   // A saved picture or PDF, read where it is kept (media-store.mjs). A call that names none, such as

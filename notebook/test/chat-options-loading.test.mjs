@@ -270,7 +270,9 @@ test('the original runtime Hermes chats feed the one state: a refused chat is no
  const sent=await chat();assert.equal(sent.status,200,sent.text);assert.match(sent.text,/A reply from the fake assistant/);
  both(await readOptions(),await readStatus(),'ready','after the chat that answered');
  setMode('down');
- const down=await chat();assert.equal(down.status,400,down.text);assert.match(down.text,/The AI request failed/);
+ // The chat's failure is worded by the module like every route's: the shared outage sentence
+ // (core/ai-outcome.mjs), never the runtime's own wording (#861).
+ const down=await chat();assert.equal(down.status,400,down.text);assert.match(down.text,/Your AI could not be reached/);
  both(await readOptions(),await readStatus(),'unreachable','after the chat that went down');
  setMode('working');
  assert.equal((await chat()).status,200);

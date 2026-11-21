@@ -15,13 +15,16 @@ import {briefing} from './briefing.mjs';
 import {currentHealth,healthSafeReply,latestPerDayMetric} from './health-inputs.mjs';
 // A chat may take ten minutes; Stop ends it sooner. Until 6 October 2026 it was
 // cut off after two, which long answers over many notes regularly needed.
+// The draft suggestion's own short budget (core/draft-event.mjs sets the same one), named once so
+// the form's timer and the provider's own timeout cannot drift apart (#861 review R9).
+export const DRAFT_BUDGET_MS=20000;
 export function providerTimeBudget(input){
   if(input.kind==='connection-check'&&input.timeout_ms===15000)return 15000;
-  if(input.kind==='draft-event'&&input.timeout_ms===20000)return 20000;
+  if(input.kind==='draft-event'&&input.timeout_ms===DRAFT_BUDGET_MS)return DRAFT_BUDGET_MS;
   if(input.timeout_ms!==undefined&&![600000,300000].includes(input.timeout_ms))throw Error('Choose the supported chat or scheduled AI time budget');
   return input.timeout_ms||600000;
 }
-export function providerTimeoutMessage(milliseconds){return milliseconds===20000?'The suggestion did not finish within 20 seconds. Please try again.':milliseconds===300000?'The scheduled AI call exceeded five minutes. This attempt failed.':'The AI did not finish within ten minutes. Try a shorter message or a lower effort.';}
+export function providerTimeoutMessage(milliseconds){return milliseconds===DRAFT_BUDGET_MS?'The suggestion did not finish within 20 seconds. Please try again.':milliseconds===300000?'The scheduled AI call exceeded five minutes. This attempt failed.':'The AI did not finish within ten minutes. Try a shorter message or a lower effort.';}
 export function isHermesExecutable(executable){return ['hermes','hermes.exe'].includes(path.basename(executable).toLowerCase());}
 // AN AI THAT CANNOT BE REACHED IS SAID IN PLAIN WORDS (#506, 13 November 2026). Node's fetch reports
 // a refused, unresolvable or dropped connection only as "fetch failed", which routines recorded as
@@ -126,7 +129,9 @@ export function childFailure(error,timeoutMs,unstarted){
   // A stopped reply says nothing about the AI; a time budget that ran out is an outage, an answer
   // beyond its size limit an unusable answer, a program that could not start an outage (#861).
   // The suggestion's own 20-second budget keeps its own sentence, like the direct provider's does.
-  const cause=error.code==='ABORTED'?null:error.code==='TIMEOUT'&&timeoutMs===20000?null:error.code==='TIMEOUT'?'unavailable':error.code==='OUTPUT_LIMIT'?'unusable':'unavailable';
+  // The draft budget is the form's, not the AI's answer, so its timeout says the module's stalled
+  // sentence and the availability is left to say whether the AI answers at all (#861 review D3).
+  const cause=error.code==='ABORTED'?null:error.code==='TIMEOUT'&&timeoutMs===DRAFT_BUDGET_MS?'stalled':error.code==='TIMEOUT'?'unavailable':error.code==='OUTPUT_LIMIT'?'unusable':'unavailable';
   return aiFailed(cause,message);
 }
 // Hermes' waiting line: "  [tool] ( ˘⌣˘)♡ brainstorming...", a face and one word ending in dots.
@@ -238,7 +243,7 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
         try{response=await fetch(url,{method:'POST',headers,body:request,signal:AbortSignal.any([...stopping,AbortSignal.timeout(timeoutMs)])});}
         // A timeout keeps its own sentence when the kind has one of its own (the suggestion's 20
         // seconds); otherwise it is an outage, said by the route's shared wording (#861).
-        catch(error){if(error.name==='TimeoutError')throw timeoutMs===20000?Error(providerTimeoutMessage(timeoutMs)):aiFailed('unavailable',providerTimeoutMessage(timeoutMs));if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
+        catch(error){if(error.name==='TimeoutError')throw aiFailed(timeoutMs===DRAFT_BUDGET_MS?'stalled':'unavailable',providerTimeoutMessage(timeoutMs));if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
         if(response.ok||!RETRY_STATUS.has(response.status)||attempt>=retryWaits.length||signal?.aborted)break;
         await response.arrayBuffer().catch(()=>{});
         const waitStop=AbortSignal.any(stopping);
