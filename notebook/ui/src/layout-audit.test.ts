@@ -23,7 +23,7 @@ const UI_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PAGE_AUDIT = readFileSync(fileURLToPath(new URL("./test/layout-audit-page.js", import.meta.url)), "utf8");
 
 type Finding = { rule: string; element: string };
-type Seeded = { note: string; person: string };
+type Seeded = { note: string; person: string; group: string };
 type RouteCheck = {
   pattern: string;
   /** The addresses to open: on the empty workspace `seeded` is null. */
@@ -116,6 +116,13 @@ async function seed(notebook: RealNotebook): Promise<Seeded> {
   const insert = (table: string, values: Record<string, unknown>) => notebook.query({ table, operation: "insert", values, selection: "id", single: true });
   const note = await insert("notes", { title: "Trip to Lisbon", content: "Book the train." });
   const person = await insert("contacts", { name: "Ada Lovelace" });
+  // A group whose name does not fit one line on any width: a card that clips it (#867) is what the
+  // audit's clipped-text rule must flag on the groups page.
+  const group = await insert("contact_groups", { name: "Seed round investors for the 2027 expansion" });
+  // And one whose name holds a word no box fits, so word breaking, not wrapping between words, is
+  // what keeps it inside the card and the people tree's row (#867).
+  const unbroken = await insert("contact_groups", { name: "Donaudampfschifffahrtsgesellschaft Investoren" });
+  if (!unbroken.id) throw new Error("the unbroken-name group did not insert");
   await insert("moments", { title: "Lunch with Ada", happened_at: "2026-11-10", status: "happened", impact_level: 2, person_id: person.id, source: "manual" });
   const form = new FormData();
   form.append("file", new Blob([PIXEL, Buffer.alloc(51 * 1024 * 1024)], { type: "image/png" }), "photo.png");
@@ -124,7 +131,7 @@ async function seed(notebook: RealNotebook): Promise<Seeded> {
   const upload = await response.json();
   if (!response.ok) throw new Error(`The media upload failed: ${JSON.stringify(upload)}`);
   await insert("media_analysis", { note_id: note.id, storage_path: upload.data.path, media_type: "image", original_filename: "photo.png", analysis_status: "complete", description: "A photo", topics: [] });
-  return { note: note.id, person: person.id };
+  return { note: note.id, person: person.id, group: group.id };
 }
 
 // Loaded: no request in flight, fonts in, no sign-in or loading spinner, and no animation still on
@@ -237,9 +244,15 @@ describe("the routes the check visits", () => {
   });
 });
 
-describe("the audit's rules on pages built for them", () => {
+describe("the audit's rules on pages built for them", { timeout: 20_000 }, () => {
   let browser: Browser;
-  beforeAll(async () => { browser = await launch(); }, 60_000);
+  // Each case opens a page in a real browser: about 50 ms alone, but the first one, which also pays for
+  // the browser's first page, timed out at vitest's 5 s default in a busy CI job (#775). So a first page
+  // is opened and closed here, under this hook's own limit, and each case gets 20 s.
+  beforeAll(async () => {
+    browser = await launch();
+    await (await browser.newPage()).close();
+  }, 60_000);
   afterAll(async () => { await browser?.close(); });
 
   async function audit(body: string, width = 375): Promise<string[]> {
@@ -276,6 +289,37 @@ describe("the audit's rules on pages built for them", () => {
   it("reports a label running past the side of the page's main area", async () => {
     expect(await audit(`<main style="width:200px"><span style="white-space:nowrap;font-size:24px">Kept on this computer only</span></main>`))
       .toEqual(['clipped: span "Kept on this computer only"']);
+  });
+
+  // A paragraph whose box is sized by a script from its own text, so the case holds on any font: the
+  // first line is "Kept on this " and the box ends `past` px before the end of `upTo` characters.
+  const sizedParagraph = (upTo: number, past: number) => `<p id="sized" style="margin:0;white-space:pre-wrap">Kept on this computer only</p><script>
+    const p = document.getElementById("sized"), range = document.createRange();
+    range.setStart(p.firstChild, 0);
+    range.setEnd(p.firstChild, ${upTo});
+    p.style.width = (range.getBoundingClientRect().width - ${past}) + "px";
+  </script>`;
+
+  it("passes a wrapped line whose trailing space ends 1/64 px past its box", async () => {
+    // The premise, as the rule saw it before #746: the line's hanging space ends past the box.
+    const page = await browser.newPage({ viewport: { width: 375, height: 600 } });
+    try {
+      await page.setContent(`<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}</style></head><body>${sizedParagraph(13, 1 / 64)}</body></html>`);
+      const { box, lineEnds } = await page.evaluate(() => {
+        const p = document.getElementById("sized")!;
+        const range = document.createRange();
+        range.selectNodeContents(p.firstChild!);
+        return { box: p.getBoundingClientRect().right, lineEnds: [...range.getClientRects()].map((r) => r.right) };
+      });
+      expect(Math.max(...lineEnds) - box).toBeCloseTo(1 / 64, 6);
+    } finally {
+      await page.close();
+    }
+    expect(await audit(sizedParagraph(13, 1 / 64))).toEqual([]);
+  });
+
+  it("reports a wrapped line whose last glyph runs 1/64 px past its box", async () => {
+    expect(await audit(sizedParagraph(4, 1 / 64))).toEqual(['clipped: p "Kept on this computer only"']);
   });
 
   it("reports an input whose placeholder does not fit", async () => {
@@ -347,9 +391,9 @@ describe("every page at a phone's and a desktop's width", () => {
       const context = await browser.newContext({ viewport });
       try {
         const page = await context.newPage();
-        for (const [url, text] of [["/dashboard/timeline", "Lunch with Ada"], ["/dashboard/people", "Ada Lovelace"], ["/dashboard/media", "Kept on this computer only"], ["/dashboard/notes", "Trip to Lisbon"]]) {
+        for (const [url, ...texts] of [["/dashboard/timeline", "Lunch with Ada"], ["/dashboard/people", "Ada Lovelace"], ["/dashboard/media", "Kept on this computer only"], ["/dashboard/notes", "Trip to Lisbon"], ["/dashboard/groups", "Seed round investors for the 2027 expansion", "Donaudampfschifffahrtsgesellschaft Investoren"]]) {
           await page.goto(seededNotebook.base + url);
-          await page.getByText(text).first().waitFor({ timeout: 15_000 });
+          for (const text of texts) await page.getByText(text).first().waitFor({ timeout: 15_000 });
         }
       } finally {
         await context.close();
@@ -358,4 +402,130 @@ describe("every page at a phone's and a desktop's width", () => {
       expect(failures, failures.join("\n")).toEqual([]);
     }, 240_000);
   }
+
+  // The group page with a real, long name (#863): the audit above meets it only as "group not
+  // found", because the seed has no group. The seed is not given one here either: the list page's
+  // cards clip a long name at both widths, which is a fault of its own, apart from this fix, and
+  // would turn the page-wide check red for something this change does not touch. So the header is
+  // checked on its own: the audit's rules on the name and the two buttons, and the name's whole
+  // box against each button's box, at a phone's width and at 320 px, the narrowest phone the
+  // header must hold. On main this fails: the buttons squeezed the name to one letter.
+  it("shows a group's whole name with its Add Member and Edit buttons at a phone's width", async () => {
+    const name = "Seed round investors for the 2027 expansion";
+    const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name }, selection: "id,slug", single: true });
+    expect(group?.slug ?? null).toBeTruthy();
+    const failures: string[] = [];
+    for (const viewport of [{ width: 375, height: 812 }, { width: 320, height: 568 }]) {
+      const context = await browser.newContext({ viewport });
+      try {
+        const page = await context.newPage();
+        const cdp = await context.newCDPSession(page);
+        await page.goto(`${seededNotebook.base}/dashboard/groups/${group.slug}`);
+        await settle(page);
+        // The audit's rules, read only on the name and the two buttons.
+        const headerNames = [`h1 "${name}"`, 'button "Add Member"', 'button "Edit"'];
+        const found = (await auditShown(page, cdp)).filter((f) => headerNames.some((n) => f.element.startsWith(n)));
+        failures.push(...found.map((f) => `${viewport.width} px, ${f.rule}: ${f.element}`));
+        // And the boxes themselves: the name's whole box against each button's whole box.
+        const overlap = await page.evaluate((nm) => {
+          const h1 = [...document.querySelectorAll("h1")].find((e) => e.textContent === nm);
+          const button = (t) => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === t);
+          if (!h1 || !button("Add Member") || !button("Edit")) return "the name or a button is missing";
+          const intersect = (a, b) => !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+          const box = (e) => e.getBoundingClientRect();
+          for (const t of ["Add Member", "Edit"]) {
+            if (intersect(box(h1), box(button(t)))) return `"${t}" overlaps the name`;
+          }
+          return box(h1).left >= 0 && box(h1).right <= innerWidth ? null : "the name runs past the screen";
+        }, name);
+        if (overlap) failures.push(`${viewport.width} px: ${overlap}`);
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 60_000);
+
+  // The dashboard's top bar at 320 px, the narrowest phone the header must hold (#868): on main the
+  // bar's other controls squeezed the search box to 77 px wide, and the box's own paddings left
+  // 5 px of that for text, so the placeholder "Search" clipped. The page-wide check above meets the bar only at 375 and
+  // 1280 px, where the box still fits, so the box is checked on its own here, on a page every
+  // dashboard page shares: the audit's rules on the search box, and the audit's own room measure
+  // (the box less its borders and paddings) against the width its text needs.
+  it("shows the top bar's search box with room for its text at 320 px", async () => {
+    const failures: string[] = [];
+    for (const viewport of [{ width: 375, height: 812 }, { width: 320, height: 568 }]) {
+      const context = await browser.newContext({ viewport });
+      try {
+        const page = await context.newPage();
+        const cdp = await context.newCDPSession(page);
+        await page.goto(`${empty.base}/dashboard`);
+        await settle(page);
+        // Only the top bar's search box: a fault anywhere else on the page at 320 px is apart from
+        // this fix, as a group card's clipped name was (#867).
+        const found = (await auditShown(page, cdp)).filter((f) => f.element.startsWith('input "Search'));
+        failures.push(...found.map((f) => `${viewport.width} px, ${f.rule}: ${f.element}`));
+        const room = await page.evaluate(() => {
+          const input = document.querySelector<HTMLInputElement>('input[aria-label="Search notes"]');
+          if (!input) return null;
+          const style = getComputedStyle(input);
+          const ruler = document.createElement("span");
+          for (const key of ["fontFamily", "fontSize", "fontWeight", "fontStyle", "letterSpacing", "textTransform", "fontStretch", "wordSpacing"]) {
+            (ruler.style as any)[key] = style[key];
+          }
+          Object.assign(ruler.style, { position: "absolute", whiteSpace: "pre", visibility: "hidden" });
+          ruler.textContent = input.value || input.placeholder || "";
+          document.body.appendChild(ruler);
+          const need = ruler.getBoundingClientRect().width;
+          ruler.remove();
+          // Not input.clientWidth: on an input Chrome leaves the padding out of it.
+          const spare = input.getBoundingClientRect().width
+            - ["borderLeftWidth", "borderRightWidth", "paddingLeft", "paddingRight"].reduce((sum, key) => sum + parseFloat((style as any)[key]), 0);
+          return { need, spare };
+        });
+        if (!room) failures.push(`${viewport.width} px: the search box is missing`);
+        else if (room.need > room.spare) {
+          failures.push(`${viewport.width} px: clipped: the search box's text needs ${room.need.toFixed(1)} px, the box has ${room.spare.toFixed(1)}`);
+        }
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 60_000);
+
+  // A name that is one long word with no spaces (#871): break-words alone does not let a flex item
+  // shrink below its longest word, so on main the name runs past the screen edge instead of
+  // wrapping. Checked at 320 px, the narrowest phone the header must hold, and at 375 px, the width
+  // the fault was seen at. On main this fails: the name runs past the screen edge.
+  it("wraps a group name that is one long word at a phone's width", async () => {
+    const name = "Supercalifragilisticexpialidociousgroups";
+    expect(name.length).toBe(40);
+    const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name }, selection: "id,slug", single: true });
+    expect(group?.slug ?? null).toBeTruthy();
+    const failures: string[] = [];
+    for (const viewport of [{ width: 375, height: 812 }, { width: 320, height: 568 }]) {
+      const context = await browser.newContext({ viewport });
+      try {
+        const page = await context.newPage();
+        const cdp = await context.newCDPSession(page);
+        await page.goto(`${seededNotebook.base}/dashboard/groups/${group.slug}`);
+        await settle(page);
+        const found = (await auditShown(page, cdp)).filter((f) => f.element.startsWith(`h1 "${name}"`));
+        failures.push(...found.map((f) => `${viewport.width} px, ${f.rule}: ${f.element}`));
+        // The name's whole box inside the screen: the audit's rules read the shown text, this reads
+        // the element's own box, which keeps its shrunken flex width even when the word overflows it.
+        const off = await page.evaluate((nm) => {
+          const h1 = [...document.querySelectorAll("h1")].find((e) => e.textContent === nm);
+          if (!h1) return "the name is missing";
+          const box = h1.getBoundingClientRect();
+          return box.left >= 0 && box.right <= innerWidth && box.width > 0 ? null : `the name's box spans ${Math.round(box.left)} to ${Math.round(box.right)} on a ${innerWidth} px screen`;
+        }, name);
+        if (off) failures.push(`${viewport.width} px: ${off}`);
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 60_000);
 });

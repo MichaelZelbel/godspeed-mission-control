@@ -2,6 +2,8 @@
 // apart from the dialog so it can be tested with node --test
 // (notebook/test/moment-form.test.mjs).
 
+import { AI_REFUSED_STATUS, AI_STALLED_STATUS, AI_UNREACHABLE_STATUS, NO_AI_STATUS } from '../../../../core/no-ai.mjs';
+
 const DAY = /^(\d{4}-\d{2}-\d{2})/;
 
 export const MOMENT_STATUSES = ['past_fact', 'future_plan', 'ongoing', 'unknown'];
@@ -126,4 +128,32 @@ export function newPeopleToCreate(suggested = [], typed = []) {
     if (name && !out.some((n) => sameName(n, name))) out.push(name);
   }
   return out;
+}
+
+// What the server says when the AI refused the key, could not be reached or stopped answering
+// (server/main.mjs plainAIFailure): 'refused', 'unreachable', 'stalled', or null.
+export function aiFailureKind(message) {
+  const text = String(message ?? '');
+  if (text.startsWith(AI_REFUSED_STATUS)) return 'refused';
+  if (text.startsWith(AI_UNREACHABLE_STATUS)) return 'unreachable';
+  if (text.startsWith(AI_STALLED_STATUS)) return 'stalled';
+  return null;
+}
+
+// What a saved moment's confirmation adds when no facts were pulled out of it
+// because of the AI (#779), or null when there is nothing to add.
+export function factsNotPulledOut(kind) {
+  if (kind === 'refused') return 'No facts were pulled out of it. ' + AI_REFUSED_STATUS + '. Check it in Settings, Your AI.';
+  if (kind === 'unreachable') return 'No facts were pulled out of it. ' + AI_UNREACHABLE_STATUS + '. Check its connection in Settings, Your AI.';
+  if (kind === 'stalled') return 'No facts were pulled out of it. ' + AI_STALLED_STATUS + '. Try again in a moment, or check it in Settings, Your AI.';
+  return null;
+}
+
+// What a saved moment's confirmation says when the extraction answers that no AI is connected
+// (#812): built from the shared no-AI wording (core/no-ai.mjs), it names Settings, Your AI the
+// way the refused and unreachable answers above do. The extraction is asked when the moment is
+// saved, so a tab whose cached picture still says an AI is connected gets the same answer.
+export const NO_AI_FACTS = 'No facts were pulled out of it. ' + NO_AI_STATUS + '. Connect your AI service in Settings, Your AI.';
+export function noAiFacts(message) {
+  return String(message ?? '').startsWith(NO_AI_STATUS) ? NO_AI_FACTS : null;
 }

@@ -47,6 +47,11 @@ export function setEnvValue(text,name,value){
  if(!found){while(out.length&&out.at(-1)==='')out.pop();out.push(name+'='+value);}
  return out.join('\n').replace(/\n*$/,'\n');
 }
+// That line taken out again; every other line stays.
+export function deleteEnvValue(text,name){
+ const kept=String(text||'').replace(/\r\n/g,'\n').split('\n').filter(line=>!new RegExp('^\\s*(?:export\\s+)?'+name+'\\s*=').test(line));
+ return kept.join('\n');
+}
 const envValue=(text,name)=>{const m=new RegExp('^\\s*(?:export\\s+)?'+name+'\\s*=\\s*(.*)$','m').exec(String(text||''));return m?unquote(m[1]):'';};
 const read=file=>{try{return fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');}catch{return '';}};
 const writePrivate=(file,text)=>{atomic(file,text);if(process.platform!=='win32')try{fs.chmodSync(file,0o600);}catch{}};
@@ -70,6 +75,22 @@ export function connectRoutineAI({home,state,config,now=new Date()}){
  if(want.env){let env=read(envFile);for(const [name,value] of Object.entries(want.env))env=setEnvValue(env,name,value);writePrivate(envFile,env);}
  const record={...readRecord(state),connected:{provider:want.provider,model:want.model,base_url:want.base_url,at:now.toISOString()}};
  delete record.check;writeRecord(state,record);
+ return routineAIStatus({home,state});
+}
+
+// REMOVING THE AI CONNECTED IN SETTINGS (#779): what connectRoutineAI wrote for this same connection
+// comes out of Hermes' home again, so its key is not left behind. A sign-in of Hermes' own, or a
+// connection made some other way since, is not this form's to remove and stays.
+export function disconnectRoutineAI({home,state,config}){
+ let want;try{want=hermesSettingsFor(config);}catch{return routineAIStatus({home,state});}
+ const now=routineAIStatus({home,state});
+ if(now.source!=='settings'||now.provider!==want.provider||now.model!==want.model)return now;
+ const configFile=path.join(home,'config.yaml'),envFile=path.join(home,'.env');
+ let text=read(configFile);
+ for(const key of ['provider','default','base_url','api_key'])text=deleteConfigValue(text,['model',key]);
+ writePrivate(configFile,text);
+ if(want.env&&fs.existsSync(envFile)){let env=read(envFile);for(const name of Object.keys(want.env))env=deleteEnvValue(env,name);writePrivate(envFile,env);}
+ const record=readRecord(state);delete record.connected;delete record.check;writeRecord(state,record);
  return routineAIStatus({home,state});
 }
 

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import AddEventDialog from "./AddEventDialog";
+import { WAIT } from "@/test/wait-limits";
 
 const state = vi.hoisted(() => ({ providerConfigured: false }));
 const invoke = vi.hoisted(() => vi.fn(async () => ({ data: {}, error: null })));
@@ -37,9 +38,9 @@ globalThis.ResizeObserver ??= NoResize as any;
 
 async function saveMoment() {
   render(<AddEventDialog people={[]} onCreated={() => {}} open onOpenChange={() => {}} />);
-  fireEvent.change(await screen.findByPlaceholderText("Short title for this moment"), { target: { value: "A saved moment" } });
+  fireEvent.change(await screen.findByPlaceholderText("Short title for this moment", undefined, WAIT), { target: { value: "A saved moment" } });
   fireEvent.click(screen.getByRole("button", { name: "Create Moment" }));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Create Moment" })).not.toBeDisabled());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Create Moment" })).not.toBeDisabled(), WAIT);
 }
 
 describe("moment profile extraction", () => {
@@ -49,9 +50,13 @@ describe("moment profile extraction", () => {
     state.providerConfigured = false;
   });
 
-  it("does not request extraction when no AI is available", async () => {
+  it("still asks the extraction when the tab's status has not loaded, and lets it decide", async () => {
+    // The mocked gate says no AI is connected but has not said which availability (aiAvailability
+    // is undefined), so the tab cannot tell and the extraction decides when the moment is saved;
+    // with none connected it answers at once, without asking any AI (core/domains.mjs).
     await saveMoment();
-    expect(invoke).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledOnce();
+    expect(invoke).toHaveBeenCalledWith("extract-moment-profile", { body: { moment_id: "moment-1" } });
   });
 
   it("keeps requesting extraction when AI is available", async () => {

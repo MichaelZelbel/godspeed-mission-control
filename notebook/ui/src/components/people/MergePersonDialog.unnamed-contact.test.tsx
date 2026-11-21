@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import { MergePersonDialog } from "./MergePersonDialog";
+import { WAIT } from "@/test/wait-limits";
 
 // Issue #154, review of #155: merging a contact that has no name named it nowhere.
 const nameless: any = { id: "review-0001", aliases: [] };
@@ -25,7 +26,7 @@ describe("the merge dialog for a contact that has no name", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={client}><MergePersonDialog open onOpenChange={() => {}} sourcePerson={nameless}
       allPeople={[nameless, candidate]} onMergeComplete={() => {}} /></QueryClientProvider>);
-    expect(await screen.findByText("Merge Unnamed person")).toBeInTheDocument();
+    expect(await screen.findByText("Merge Unnamed person", undefined, WAIT)).toBeInTheDocument();
     expect(screen.getAllByText("Unnamed person").length).toBeGreaterThan(0);
   });
 });

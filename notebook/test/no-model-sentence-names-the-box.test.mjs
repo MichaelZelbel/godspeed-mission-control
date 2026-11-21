@@ -10,9 +10,12 @@ const root=path.join(path.dirname(fileURLToPath(import.meta.url)),'..');
 
 function boxLabel(){
  const tsx=fs.readFileSync(path.join(root,'ui/src/local/ConnectAI.tsx'),'utf8');
- const line=tsx.split('\n').find(l=>l.includes('useForRoutines')&&l.includes('<span>'));
- assert.ok(line,'the checkbox label was not found in ConnectAI.tsx');
- return line.split('<span>')[1].split('{')[0].trim();
+ // The box is the checkbox bound to useForRoutines; its label is the <label> tied to that box's id.
+ const box=tsx.match(/<input id=\{([^}]+)\} type="checkbox"[^>]*checked=\{useForRoutines\}/);
+ assert.ok(box,'the routines checkbox was not found in ConnectAI.tsx');
+ const at=tsx.indexOf('<label htmlFor={'+box[1]+'}>');
+ assert.ok(at>=0,'the checkbox label was not found in ConnectAI.tsx');
+ return tsx.slice(at).split('>')[1].split(/[{<]/)[0].trim();
 }
 
 test('NO_MODEL_IN_HOME quotes the Settings box by the label ConnectAI.tsx shows',()=>{

@@ -1,9 +1,12 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useId,useRef,useState} from 'react';
 import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
+import {AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger} from '@/components/ui/alert-dialog';
 import {AlertTriangle,CheckCircle2,Loader2} from 'lucide-react';
 import {providerService} from '../../../core/provider-service.mjs';
+import {aiFailure} from '../../../core/ai-health.mjs';
+import {AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS} from '../../../core/no-ai.mjs';
 
 // Settings > Your AI (18 October 2026). What the person connects here powers the notebook and, unless
 // they untick it, the daily routines and the chat too (notebook/core/routine-ai.mjs): every installer
@@ -43,11 +46,57 @@ export function serviceName(provider?:string|null,base?:string|null){
   if((provider==='custom'||provider==='api')&&base){try{return new URL(base).hostname;}catch{}}
   return provider||'an AI service';
 }
+// WHAT "TEST AND CONNECT" SAYS WHEN THE AI DID NOT ANSWER (#763). The server passes on the provider's
+// own failure ("Model provider failed with HTTP 403: Forbidden"); a person reads instead what happened
+// and what to do, in the chats' words for the same states (core/no-ai.mjs). The provider's text is
+// dropped: it can quote part of the key. Anything that is not a provider failure (a refusal of the
+// form itself, a timeout already said plainly) is shown as the server wrote it.
+export const KEY_REFUSED=AI_REFUSED_STATUS+'. The service did not accept this key. Check it, or replace it with a new key from your AI service, then try again.';
+export const AI_UNREACHABLE=AI_UNREACHABLE_STATUS+'. Nothing answered at its address. Check that this computer is online and that the address is right, then try again.';
+export const AI_SERVICE_FAILED='Your AI service had a problem on its side and did not answer. Your key was not refused. Try again in a few minutes.';
+export const AI_REQUEST_LIMITED='Your AI service turned the request away for now, often because of a usage limit or no credit left. Check your account with the service, then try again.';
+export const AI_REQUEST_REJECTED='Your AI service did not accept the request. Check the model name and the address, then try again.';
+export function connectionError(message:string){
+  const failed=/Model provider failed with HTTP (\d{3})/.exec(message),status=failed?Number(failed[1]):0;
+  if(failed&&aiFailure(message)==='refused'||/needs sign-in/i.test(message))return KEY_REFUSED;
+  if(/could not be reached|fetch failed/i.test(message))return AI_UNREACHABLE;
+  if(status>=500)return AI_SERVICE_FAILED;
+  if(status===429)return AI_REQUEST_LIMITED;
+  if(status)return AI_REQUEST_REJECTED;
+  return message;
+}
 const when=(at:string)=>{const d=new Date(at);return isNaN(d.getTime())?at:d.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});};
 const DAY=24*3600*1000;
 
-export function RoutineAIState({status,checking,onCheck}:{status?:RoutineAI;checking:boolean;onCheck:()=>void}){
-  if(status&&!status.available)return <p role="status">This installation runs no daily routines and no assistant chat because no assistant program is installed.</p>;
+type SpendGuard={enabled:boolean;daily_limit:number;low_balance:number;openrouter_connected:boolean;provider_message:string};
+export function spendGuardResponse(value:unknown):SpendGuard{
+  if(!value||typeof value!=='object')throw new Error('Spending protection settings could not be read.');
+  const data=value as Record<string,unknown>;
+  if(typeof data.enabled!=='boolean'||typeof data.daily_limit!=='number'||typeof data.low_balance!=='number'||typeof data.openrouter_connected!=='boolean'||typeof data.provider_message!=='string')throw new Error('Spending protection settings could not be read.');
+  return data as SpendGuard;
+}
+export function SpendGuardSettings(){
+  const query=useQuery({queryKey:['spend-guard'],queryFn:async()=>spendGuardResponse(await call('spend-guard'))});
+  const [enabled,setEnabled]=useState(true),[daily,setDaily]=useState('2'),[low,setLow]=useState('5'),[saving,setSaving]=useState(false),[message,setMessage]=useState('');
+  useEffect(()=>{if(!query.data)return;setEnabled(query.data.enabled);setDaily(String(query.data.daily_limit));setLow(String(query.data.low_balance));},[query.data]);
+  const save=async(e:React.FormEvent)=>{e.preventDefault();setSaving(true);setMessage('');try{const data=await call('spend-guard',{enabled,daily_limit:Number(daily),low_balance:Number(low)});query.refetch();setMessage(data.enabled?'Saved. OpenRouter spending protection is on.':'Saved. OpenRouter spending protection is off.');}catch(error:any){setMessage(error.message);}finally{setSaving(false);}};
+  return <form id="spend-guard" className="border-t pt-4 space-y-3" onSubmit={save} aria-label="OpenRouter spending protection">
+    <h3 className="text-lg">OpenRouter spending protection</h3>
+    <p>Godspeed checks daily spending and remaining credit once an hour. It never changes your OpenRouter limits.</p>
+    {query.data&&<p role="status">{query.data.provider_message}</p>}
+    <label className="flex gap-2"><input type="checkbox" checked={enabled} disabled={!query.data} onChange={e=>setEnabled(e.target.checked)}/>Check OpenRouter spending</label>
+    <label className="block">Tell me when today's spending is above (USD)<Input type="number" min="0" step="0.01" disabled={!query.data} value={daily} onChange={e=>setDaily(e.target.value)}/></label>
+    <label className="block">Tell me when remaining credit is below (USD)<Input type="number" min="0" step="0.01" disabled={!query.data} value={low} onChange={e=>setLow(e.target.value)}/></label>
+    <Button className="min-h-11" disabled={saving||!query.data}>{saving?'Saving…':'Save spending protection'}</Button>{message&&<p role="status">{message}</p>}
+  </form>;
+}
+
+export function RoutineAIState({status,checking,onCheck,connected=false}:{status?:RoutineAI;checking:boolean;onCheck:()=>void;connected?:boolean}){
+  // No assistant program (#763): the notebook still runs its own routines, and the AI connected here
+  // answers the chat and the routines that need an AI (#590), so the notice says what runs, not that nothing does.
+  if(status&&!status.available)return <p role="status">{connected
+    ?'No assistant program is installed here. The notebook runs its own routines, such as reminders and domain watch, and the AI you connected below answers the chat and the routines that need an AI.'
+    :'No assistant program is installed here. The notebook still runs its own routines, such as reminders and domain watch. Connect your AI below to add the chat and the routines that need an AI.'}</p>;
   if(!status)return null;
   if(status.source==='none')return <p className="flex gap-2 items-start" role="status"><AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" aria-hidden="true"/><span>Your daily routines have no AI to think with yet, so they cannot run. Connect your AI below.</span></p>;
   const check=status.check;
@@ -66,7 +115,7 @@ export function RoutineAIState({status,checking,onCheck}:{status?:RoutineAI;chec
 }
 
 export function ConnectAI(){
-  const qc=useQueryClient();
+  const qc=useQueryClient(),id=useId();
   const status=useQuery({queryKey:['routine-ai'],queryFn:routineAIStatus});
   const saved=useQuery({queryKey:['provider'],queryFn:savedProvider});
   const [service,setService]=useState('openrouter'),[address,setAddress]=useState(''),[model,setModel]=useState(''),[key,setKey]=useState('');
@@ -90,26 +139,54 @@ export function ConnectAI(){
       if(result.routines?.available)qc.setQueryData(['routine-ai'],result.routines);
       setDone(!useForRoutines||!result.routines?.available?'Connected. The notebook uses it.':result.routines.check?.ok?'Connected. The routines, the chat and the notebook use it, and the routines reached it just now.':'Connected for the notebook, but the routines could not reach it: '+(result.routines.check?.error||'no answer')+'.');
       qc.invalidateQueries({queryKey:['candidate-status']});
-    }catch(err:any){setError(err.message);}finally{setBusy(false);}};
+    }catch(err:any){setError(connectionError(err.message));}finally{setBusy(false);}};
+  // Removing the saved connection (#779): the server forgets its key, here and in Hermes when it was
+  // written there, and the form asks for a new one.
+  const [removing,setRemoving]=useState(false);
+  const remove=async()=>{setRemoving(true);setError('');setDone('');
+    try{const result=await call('provider/remove',{});qc.setQueryData(['provider'],{configured:false,key:false});
+      if(result.routines?.available)qc.setQueryData(['routine-ai'],result.routines);
+      setKey('');setModel('');setAddress('');setService('openrouter');
+      setDone(result.connected?'Removed. The notebook uses the AI it had before this connection.':'Removed. No AI is connected now. Connect one here whenever you like.');
+      for(const queryKey of [['candidate-status'],['provider-availability'],['chat-options'],['backup-ai']])qc.invalidateQueries({queryKey});
+    }catch(err:any){setError(err.message);}finally{setRemoving(false);}};
+  const removeControl=<AlertDialog>
+    <AlertDialogTrigger asChild><Button type="button" variant="outline" className="min-h-11" disabled={removing}>{removing?'Removing…':'Remove this AI connection'}</Button></AlertDialogTrigger>
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>Remove your AI connection?</AlertDialogTitle>
+        <AlertDialogDescription>{saved.error
+          // #825: the damaged file is deleted too, and no copy is kept; say so before the person confirms.
+          ?'The saved connection file can\'t be read, so Godspeed deletes it. No copy of it is kept. The notebook, the chat and the routines that used it have no AI until you connect one again.'
+          :'Godspeed forgets its key and stops using this AI. The notebook, the chat and the routines that used it have no AI until you connect one again.'}</AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel>Keep it</AlertDialogCancel>
+        <AlertDialogAction onClick={remove}>Remove</AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>;
   return <section id="connect-ai" className="border rounded p-4 space-y-4" aria-labelledby="connect-ai-title">
     <h2 id="connect-ai-title" className="text-xl">Your AI</h2>
-    {status.isLoading?<p role="status">Reading which AI your routines use…</p>:<RoutineAIState status={data} checking={checking} onCheck={check}/>}
-    {saved.error?<p role="alert" className="text-red-500">The saved AI connection could not be read. The form is unavailable so it cannot be overwritten.</p>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
+    {status.isLoading?<p role="status">Reading which AI your routines use…</p>:<RoutineAIState status={data} checking={checking} onCheck={check} connected={!!saved.data?.configured}/>}
+    {saved.error?<div className="space-y-3"><p role="alert" className="text-red-500">The saved AI connection could not be read. The form is unavailable so it cannot be overwritten. Remove it to connect one again.</p>{removeControl}{done&&<p role="status">{done}</p>}{error&&<p role="alert" className="text-red-500">{error}</p>}</div>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
       <p>Connect the AI account you pay for. The key stays on this device and never goes into your notes.</p>
-      <label className="block">Your AI service
-        <select className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!data?.available).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      <div><label className="block" htmlFor={id+'service'}>Your AI service</label>
+        <select id={id+'service'} className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!data?.available).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
       {service==='chatgpt'?<PlanSignIn as="main" onConnected={signedIn=>{setError('');setDone('Connected. Your ChatGPT plan ('+signedIn.model+') now powers the routines, the chat and the notebook.');qc.invalidateQueries({queryKey:['routine-ai']});qc.invalidateQueries({queryKey:['backup-ai']});qc.invalidateQueries({queryKey:['candidate-status']});}}/>:<>
-      {service==='other'&&<label className="block">Its address, as the service gives it (OpenAI-compatible)
-        <Input required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></label>}
-      <label className="block">Model, written the way your service writes it
-        <Input required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></label>
-      <label className="block">{canRetainKey?'Key (leave it empty to keep the saved one)':'Key'}
-        <Input required={!canRetainKey} type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></label>
-      {data?.available&&<label className="flex gap-2 items-start"><input type="checkbox" className="mt-1" checked={useForRoutines} onChange={e=>setRoutines(e.target.checked)}/><span>Use it for the daily routines and the chat too{data.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':'.'}</span></label>}
+      {service==='other'&&<div><label className="block" htmlFor={id+'address'}>Its address, as the service gives it (OpenAI-compatible)</label>
+        <Input id={id+'address'} required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></div>}
+      <div><label className="block" htmlFor={id+'model'}>Model, written the way your service writes it</label>
+        <Input id={id+'model'} required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></div>
+      <div><label className="block" htmlFor={id+'key'}>{canRetainKey?'Key (leave it empty to keep the saved one)':'Key'}</label>
+        <Input id={id+'key'} required={!canRetainKey} type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></div>
+      {data?.available&&<div className="flex gap-2 items-start"><input id={id+'routines'} type="checkbox" className="mt-1" checked={useForRoutines} onChange={e=>setRoutines(e.target.checked)}/><label htmlFor={id+'routines'}>Use it for the daily routines and the chat too{data.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':'.'}</label></div>}
       <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect'}</Button></>}
+      {saved.data?.configured&&removeControl}
       {done&&<p role="status">{done}</p>}
       {error&&<p role="alert" className="text-red-500">{error}</p>}
     </form>}
+    <SpendGuardSettings/>
     <BackupAI/>
   </section>;
 }
@@ -133,7 +210,7 @@ export function BackupState({status,removing,onRemove}:{status?:BackupStatus;rem
   </div>;
 }
 export function BackupAI(){
-  const qc=useQueryClient();
+  const qc=useQueryClient(),id=useId();
   const status=useQuery({queryKey:['backup-ai'],queryFn:()=>call('backup-ai') as Promise<BackupStatus>});
   const [service,setService]=useState('openrouter'),[address,setAddress]=useState(''),[model,setModel]=useState(''),[key,setKey]=useState('');
   const [busy,setBusy]=useState(false),[removing,setRemoving]=useState(false),[error,setError]=useState(''),[done,setDone]=useState('');
@@ -142,7 +219,7 @@ export function BackupAI(){
     try{qc.setQueryData(['backup-ai'],await call('backup-ai',{url,key,model}));setKey('');setModel('');
       setDone('Connected as your backup. It answered a test just now, and it steps in only when your main AI fails.');
       qc.invalidateQueries({queryKey:['routine-ai']});
-    }catch(err:any){setError(err.message);}finally{setBusy(false);}};
+    }catch(err:any){setError(connectionError(err.message));}finally{setBusy(false);}};
   const remove=async()=>{setRemoving(true);setError('');setDone('');
     try{qc.setQueryData(['backup-ai'],await call('backup-ai/remove',{}));setDone('The backup is removed. When your main AI fails, the work waits for it again.');qc.invalidateQueries({queryKey:['routine-ai']});}
     catch(err:any){setError(err.message);}finally{setRemoving(false);}};
@@ -152,15 +229,15 @@ export function BackupAI(){
     {status.isLoading?<p role="status">Reading your backup AI…</p>:<BackupState status={status.data} removing={removing} onRemove={remove}/>}
     <form className="space-y-3" onSubmit={submit} aria-label="Connect a backup AI">
       <p>{status.data?.configured?'Connect another one in its place, the same ways as your main AI:':'Connect one the same ways as your main AI:'}</p>
-      <label className="block">Backup AI service
-        <select className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!status.data?.hermes).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      <div><label className="block" htmlFor={id+'service'}>Backup AI service</label>
+        <select id={id+'service'} className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!status.data?.hermes).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
       {service==='chatgpt'?<PlanSignIn as="backup" onConnected={signedIn=>{setError('');setDone('Connected as your backup: your ChatGPT plan ('+signedIn.model+'). It answered a test just now, and it steps in only when your main AI fails.');qc.invalidateQueries({queryKey:['backup-ai']});qc.invalidateQueries({queryKey:['routine-ai']});}}/>:<>
-      {service==='other'&&<label className="block">Its address, as the service gives it (OpenAI-compatible)
-        <Input required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></label>}
-      <label className="block">Backup model, written the way your service writes it
-        <Input required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></label>
-      <label className="block">Backup key
-        <Input required type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></label>
+      {service==='other'&&<div><label className="block" htmlFor={id+'address'}>Backup AI address, as the service gives it (OpenAI-compatible)</label>
+        <Input id={id+'address'} required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></div>}
+      <div><label className="block" htmlFor={id+'model'}>Backup model, written the way your service writes it</label>
+        <Input id={id+'model'} required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></div>
+      <div><label className="block" htmlFor={id+'key'}>Backup key</label>
+        <Input id={id+'key'} required type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></div>
       <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect as backup'}</Button></>}
       {done&&<p role="status">{done}</p>}
       {error&&<p role="alert" className="text-red-500">{error}</p>}

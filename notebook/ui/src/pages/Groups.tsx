@@ -49,7 +49,9 @@ function GroupCard({ group, memberCount }: { group: ContactGroup; memberCount: n
               <TemplateIcon icon={group.icon} />
             </div>
             <div className="min-w-0 flex-1">
-              <CardTitle className="truncate text-base">{group.name}</CardTitle>
+              {/* break-words, not truncate: a long name wraps (#867), and a name whose single word
+                  is wider than the card still breaks inside it instead of spilling out. */}
+              <CardTitle className="text-base break-words">{group.name}</CardTitle>
               <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{group.description || "No description"}</p>
             </div>
           </div>

@@ -18,7 +18,7 @@ import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import ImportanceSlider from "./ImportanceSlider";
 import { UNNAMED_PERSON } from "./people";
-import { filledOnOpen, mergeSuggestion, newPeopleToCreate } from "./moment-form.mjs";
+import { NO_AI_FACTS, aiFailureKind, factsNotPulledOut, filledOnOpen, mergeSuggestion, newPeopleToCreate, noAiFacts } from "./moment-form.mjs";
 
 export interface TimelineContact {
   id: string;
@@ -63,7 +63,7 @@ const AI_FALLBACK = "The suggestion could not be made. Try again.";
 export default function AddEventDialog({ people, onCreated, editEvent, open: controlledOpen, onOpenChange }: AddEventDialogProps) {
   const { user, session } = useAuth();
   const { toast } = useToast();
-  const { checkCredits, providerConfigured } = useAICreditsGate();
+  const { checkCredits, providerConfigured, aiAvailability } = useAICreditsGate();
   const isControlled = controlledOpen !== undefined;
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isControlled ? controlledOpen : internalOpen;
@@ -295,12 +295,30 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
         }
       }
 
-      // Fire-and-forget: extract profile facts about participants from this moment.
-      if (momentId && providerConfigured) {
-        supabase.functions.invoke("extract-moment-profile", { body: { moment_id: momentId } }).catch(() => {});
+      // Profile facts about the participants are pulled out after the save and never hold it up. When
+      // the AI refused the key or could not be reached, the confirmation says no facts were (#779).
+      const saved = isEditMode ? "Moment updated" : "Moment created";
+      // A refused, unreachable or stalled AI the tab already knows about keeps its at-once answer
+      // (#796). With no AI connected at all (the tab's own status, refreshed every few seconds) no
+      // extraction is asked for (#881): the person still sees the #812 line, without a request that
+      // can only fail. When the tab's picture still says an AI is connected, the extraction decides
+      // when the moment is saved (#812): the connection may have been removed or connected while the
+      // tab was open, so a tab whose picture is out of date gets the answer from the extraction's
+      // own reply, which names Settings, Your AI.
+      const known = providerConfigured ? null : factsNotPulledOut(aiAvailability);
+      const noneConnected = !providerConfigured && aiAvailability === "none";
+      if (momentId && !known && !noneConnected) {
+        supabase.functions
+          .invoke("extract-moment-profile", { body: { moment_id: momentId } })
+          .then(({ error }) => {
+            const message = String(error?.message || "");
+            const skipped = noAiFacts(message) || factsNotPulledOut(aiFailureKind(message));
+            if (skipped) toast({ title: saved, description: skipped });
+          })
+          .catch(() => {});
       }
-
-      toast({ title: isEditMode ? "Moment updated" : "Moment created" });
+      const savedDescription = known || (noneConnected ? NO_AI_FACTS : null);
+      toast(savedDescription ? { title: saved, description: savedDescription } : { title: saved });
       setOpen(false);
       onCreated();
 

@@ -68,8 +68,8 @@ function blockValue(lines){
  }
  return items;
 }
-export function fallbackChain(text){
- const lines=String(text||'').replace(/^\uFEFF/,'').replace(/\r\n/g,'\n').split('\n'),out=[],seen=new Set();
+export function fallbackEntries(text){
+ const lines=String(text||'').replace(/^\uFEFF/,'').replace(/\r\n/g,'\n').split('\n'),out=[];
  for(const key of ['fallback_providers','fallback_model']){
   const at=lines.findIndex(line=>new RegExp('^'+key+':(?:[ \\t]+.*)?$').test(line));
   if(at===-1)continue;
@@ -81,11 +81,13 @@ export function fallbackChain(text){
    if(!entry||typeof entry!=='object')continue;
    const provider=unquote(entry.provider),model=unquote(entry.model),base_url=unquote(entry.base_url).replace(/\/+$/,'');
    if(!provider||!model)continue;
-   const id=[provider.toLowerCase(),model.toLowerCase(),base_url.toLowerCase()].join('\n');if(seen.has(id))continue;seen.add(id);
-   out.push({provider,model,...(base_url?{base_url}:{}),key:!!(unquote(entry.api_key)||unquote(entry.key_env)||unquote(entry.api_key_env))});
+   out.push({provider,model,...(base_url?{base_url}:{}),api_key:unquote(entry.api_key),key_env:unquote(entry.key_env||entry.api_key_env)});
   }
  }
  return out;
+}
+export function fallbackChain(text){
+ const seen=new Set();return fallbackEntries(text).flatMap(({provider,model,base_url,api_key,key_env})=>{const id=[provider.toLowerCase(),model.toLowerCase(),String(base_url||'').toLowerCase()].join('\n');if(seen.has(id))return [];seen.add(id);return [{provider,model,...(base_url?{base_url}:{}),key:!!(api_key||key_env)}];});
 }
 
 // The one backup goes into Hermes as the whole fallback chain: a chain set by hand before is
@@ -192,11 +194,13 @@ export function carryingWords(model){
 // THE NOTEBOOK'S OWN CALLS (provider.json, an address the Settings form connected): the main one
 // first; only when it failed, and only for that request, the backup. A request the person stopped,
 // or one that ran out of its time, is not tried again: the time it had is used up, and running it a
-// second time could outlast the supervisor's patience (supervisor-health.mjs).
+// second time could outlast the supervisor's patience (supervisor-health.mjs). Nor is one whose main
+// AI stopped answering (runtime.mjs, #770): a backup that stalled too would be watched for as long
+// again, past the minute in which a stalled send is said.
 // backup: a function that returns the backup provider at the moment it is needed, or null, so a
 // backup connected or removed in Settings counts from the next request on.
 export function fallsBack(error,input){
- if(input?.signal?.aborted)return false;
+ if(input?.signal?.aborted||error?.code==='AI_STALLED')return false;
  return !/Reply stopped|did not finish within|exceeded five minutes|exceeded its limit/i.test(String(error?.message||''));
 }
 // The backup gets only the time the request has left (input.timeout_ms, ten minutes when unnamed,

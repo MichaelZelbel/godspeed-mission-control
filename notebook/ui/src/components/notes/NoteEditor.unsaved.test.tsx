@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import { startNotebook, type RealNotebook } from "@/test/real-notebook";
+import { WAIT } from "@/test/wait-limits";
 
 // Issue #29 (23 October 2026): text typed in a note was lost for good. The
 // notebook restarted for about 80 seconds, the person switched to another note,
@@ -84,7 +85,7 @@ async function closePage() {
 }
 
 async function openEditor() {
-  await waitFor(() => expect(document.querySelector(".ProseMirror")).not.toBeNull());
+  await waitFor(() => expect(document.querySelector(".ProseMirror")).not.toBeNull(), WAIT);
   return (document.querySelector(".ProseMirror") as any).editor;
 }
 function type(editor: any, words: string) {
@@ -121,7 +122,7 @@ describe("text typed in a note while the notebook does not answer (#29)", () => 
     // Another note is opened straight away, inside the autosave's pause: the
     // save sent on leaving the note is the one that fails.
     rerender(page.view(other));
-    await waitFor(() => expect(document.querySelector(".ProseMirror")?.textContent).toContain("A book about ferns."));
+    await waitFor(() => expect(document.querySelector(".ProseMirror")?.textContent).toContain("A book about ferns."), WAIT);
     await new Promise((r) => setTimeout(r, 300));
     expect((await stored(gardenId)).content).not.toContain("Also tulips");
 
@@ -145,7 +146,7 @@ describe("text typed in a note while the notebook does not answer (#29)", () => 
 
     comeBack();
     await waitFor(async () => expect((await stored(id)).content).toContain("Water the beans."), { timeout: 15_000 });
-    await waitFor(() => expect(screen.queryByText(/Not saved yet/)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/Not saved yet/)).toBeNull(), WAIT);
     expect(screen.getByText(/^Saved /)).toBeInTheDocument();
     const after = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(after);
@@ -166,7 +167,7 @@ describe("text typed in a note while the notebook does not answer (#29)", () => 
 
     comeBack();
     await waitFor(async () => expect((await stored(id)).content).toContain("Water the beans."), { timeout: 15_000 });
-    await waitFor(() => expect(screen.queryByText("Save failed")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("Save failed")).toBeNull(), WAIT);
   }, 50_000);
 
   it("is restored and saved when the note is opened after a reload", async () => {
@@ -184,7 +185,7 @@ describe("text typed in a note while the notebook does not answer (#29)", () => 
     page = await openPage();
     render(page.view(await page.read(id)));
     editor = await openEditor();
-    await waitFor(() => expect(document.querySelector(".ProseMirror")?.textContent).toContain("Compost in spring."));
+    await waitFor(() => expect(document.querySelector(".ProseMirror")?.textContent).toContain("Compost in spring."), WAIT);
     await waitFor(async () => expect((await stored(id)).content).toContain("Compost in spring."), { timeout: 15_000 });
     expect(notebook.conflicts().filter((c) => c.record_id === id)).toEqual([]);
   }, 40_000);
@@ -215,6 +216,6 @@ describe("text typed in a note while the notebook does not answer (#29)", () => 
     const kept = notebook.conflicts().filter((c) => c.record_id === id);
     expect(kept).toHaveLength(1);
     expect(kept[0].remote.content).toContain("Water on Sunday.");
-    await waitFor(() => expect(toasts.some((t) => t.includes('Review conflicting edits'))).toBe(true));
+    await waitFor(() => expect(toasts.some((t) => t.includes('Review conflicting edits'))).toBe(true), WAIT);
   }, 40_000);
 });

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import { VoiceReplies } from "./VoiceReplies";
+import { WAIT } from "@/test/wait-limits";
 
 // Voice replies (25 October 2026, discussion #41): which voice answers voice notes, what the chat is
 // set to, and an ElevenLabs voice kept only after its sample worked. Every id and key is made up.
@@ -28,7 +29,7 @@ describe("Voice replies in Settings", () => {
   it("says what happens to a voice note, which voice speaks, and how the chat changes it", async () => {
     serve({ voice: () => [200, free] });
     show();
-    expect(await screen.findByText(/Your assistant speaks with the free voice from Microsoft Edge/)).toHaveTextContent("(en-US-AvaMultilingualNeural)");
+    expect(await screen.findByText(/Your assistant speaks with the free voice from Microsoft Edge/, undefined, WAIT)).toHaveTextContent("(en-US-AvaMultilingualNeural)");
     expect(screen.getByText(/it answers with a voice note and the same text/)).toBeInTheDocument();
     expect(screen.getByText(/stops voice replies there/)).toHaveTextContent("/voice off stops voice replies there, /voice tts makes every answer spoken, and /voice on goes back");
     expect(screen.queryByRole("button", { name: "Use the free voice instead" })).toBeNull();
@@ -37,15 +38,15 @@ describe("Voice replies in Settings", () => {
   it("makes a sample with the ElevenLabs voice and its settings, plays it, and never keeps the key in the form", async () => {
     const calls = serve({ voice: body => body ? [200, { ...eleven, sample: "data:audio/ogg;base64,T2dnUw==" }] : [200, free] });
     show();
-    await screen.findByText(/free voice from Microsoft Edge/);
+    await screen.findByText(/free voice from Microsoft Edge/, undefined, WAIT);
     fireEvent.change(screen.getByLabelText(/^ElevenLabs key/), { target: { value: "sk_fictional000000000000000000000000" } });
     fireEvent.change(screen.getByLabelText(/^Voice ID/), { target: { value: "FictionalVoice00001" } });
-    fireEvent.change(screen.getByLabelText(/^Model/), { target: { value: "eleven_v3" } });
+    fireEvent.change(screen.getByLabelText(/^ElevenLabs model/), { target: { value: "eleven_v3" } });
     fireEvent.change(screen.getByLabelText(/^Stability/), { target: { value: "0.3" } });
     fireEvent.change(screen.getByLabelText(/^Similarity/), { target: { value: "1" } });
     fireEvent.change(screen.getByLabelText(/^Style/), { target: { value: "0.3" } });
     fireEvent.click(screen.getByRole("button", { name: "Make a sample and save" }));
-    expect(await screen.findByText(/Saved\. This is how your assistant sounds now/)).toBeInTheDocument();
+    expect(await screen.findByText(/Saved\. This is how your assistant sounds now/, undefined, WAIT)).toBeInTheDocument();
     expect(calls.find(c => c.body)?.body).toMatchObject({ service: "elevenlabs", key: "sk_fictional000000000000000000000000", voice_id: "FictionalVoice00001", model: "eleven_v3", stability: "0.3", similarity_boost: "1", style: "0.3" });
     expect(screen.getByLabelText("The sample of your assistant's voice")).toHaveAttribute("src", "data:audio/ogg;base64,T2dnUw==");
     expect(screen.getByText(/Your assistant speaks with your ElevenLabs voice/)).toHaveTextContent("FictionalVoice00001 (model eleven_v3; stability 0.3, similarity 1, style 0.3)");
@@ -56,22 +57,22 @@ describe("Voice replies in Settings", () => {
     const failing = { ...eleven, chats: { voice_only: 0, all: 0, off: 1 }, failing: { since: "2026-10-25T08:00:00Z", at: "2026-10-25T09:00:00Z", error: "Your ElevenLabs account has no credits left for this." } };
     const calls = serve({ voice: body => !body ? [200, failing] : body.service === "edge" ? [200, free] : [400, { error: "ElevenLabs did not accept the key. Copy it again from your ElevenLabs account." }] });
     show();
-    expect(await screen.findByRole("alert")).toHaveTextContent(/The last voice note could not be made on .*Your ElevenLabs account has no credits left for this\. Your answers still arrive as text\./);
+    expect(await screen.findByRole("alert", undefined, WAIT)).toHaveTextContent(/The last voice note could not be made on .*Your ElevenLabs account has no credits left for this\. Your answers still arrive as text\./);
     expect(screen.getByText(/voice replies are switched off/)).toHaveTextContent("Send /voice on there to switch them on again.");
     expect((screen.getByLabelText(/^Voice ID/) as HTMLInputElement).value).toBe("FictionalVoice00001");
     expect(screen.getByLabelText(/^ElevenLabs key \(leave it empty to keep the saved one\)/)).not.toBeRequired();
     fireEvent.click(screen.getByRole("button", { name: "Make a sample and save" }));
-    expect(await screen.findByText(/ElevenLabs did not accept the key/)).toBeInTheDocument();
+    expect(await screen.findByText(/ElevenLabs did not accept the key/, undefined, WAIT)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Use the free voice instead" }));
-    expect(await screen.findByText(/speaks with the free voice again/)).toBeInTheDocument();
+    expect(await screen.findByText(/speaks with the free voice again/, undefined, WAIT)).toBeInTheDocument();
     expect(calls.at(-1)?.body).toEqual({ service: "edge" });
   });
 
   it("offers the fast model first and starts with it, so a voice note comes back in about a second", async () => {
     serve({ voice: () => [200, { ...free, elevenlabs: { ...free.elevenlabs, model: "eleven_v4_turbo" } }] });
     show();
-    await screen.findByText(/free voice from Microsoft Edge/);
-    expect((screen.getByLabelText(/^Model/) as HTMLInputElement).value).toBe("eleven_v4_turbo");
+    await screen.findByText(/free voice from Microsoft Edge/, undefined, WAIT);
+    expect((screen.getByLabelText(/^ElevenLabs model/) as HTMLInputElement).value).toBe("eleven_v4_turbo");
     const offered = Array.from(document.querySelectorAll("#voice-models option")).map(o => o.getAttribute("value"));
     expect(offered[0]).toBe("eleven_v4_turbo");
     expect(offered).toContain("eleven_multilingual_v2");
@@ -81,12 +82,12 @@ describe("Voice replies in Settings", () => {
     const words = "Your ElevenLabs key may not transcribe, so your voice notes are understood on this computer: allow the key Speech to Text on the ElevenLabs page for API keys and save it again to have ElevenLabs understand them, which is quicker.";
     serve({ voice: () => [200, { ...eleven, transcribe: { service: "local", model: null, words } }] });
     show();
-    expect(await screen.findAllByText(words)).toHaveLength(1);
+    expect(await screen.findAllByText(words, undefined, WAIT)).toHaveLength(1);
     expect(screen.getByText(words)).toHaveTextContent("Speech to Text");
     cleanup();
     serve({ voice: () => [200, { ...eleven, transcribe: { service: "elevenlabs", model: "scribe_v2", words: null } }] });
     show();
-    expect(await screen.findByText(/Your voice notes are understood by ElevenLabs/)).toHaveTextContent("(scribe_v2)");
+    expect(await screen.findByText(/Your voice notes are understood by ElevenLabs/, undefined, WAIT)).toHaveTextContent("(scribe_v2)");
     expect(screen.queryByText(/may not transcribe/)).toBeNull();
   });
 
@@ -94,7 +95,7 @@ describe("Voice replies in Settings", () => {
     const words = "ElevenLabs could not be reached from here, so it is not known yet whether your key may transcribe. Your voice notes are sent to ElevenLabs until you save your key again.";
     serve({ voice: () => [200, { ...eleven, transcribe: { service: "elevenlabs", model: "scribe_v2", words } }] });
     show();
-    expect(await screen.findByText(/Your voice notes are understood by ElevenLabs/)).toHaveTextContent("(scribe_v2)");
+    expect(await screen.findByText(/Your voice notes are understood by ElevenLabs/, undefined, WAIT)).toHaveTextContent("(scribe_v2)");
     expect(screen.getAllByText(words)).toHaveLength(1);
   });
 

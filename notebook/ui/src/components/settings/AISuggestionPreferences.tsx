@@ -168,19 +168,20 @@ export function AISuggestionPreferences() {
       <CardContent className="space-y-6">
         <div className="space-y-3">
           <div>
-            <Label className="text-sm font-semibold">AI suggestion mode</Label>
+            <Label id="suggestion-mode-title" className="text-sm font-semibold">AI suggestion mode</Label>
           </div>
           <RadioGroup
+            aria-labelledby="suggestion-mode-title"
             value={prefs.suggestion_mode}
             onValueChange={(value) => setPrefs((p) => ({ ...p, suggestion_mode: value as SuggestionMode }))}
             className="gap-3"
           >
             {modeOptions.map((option) => (
               <label key={option.value} className="flex cursor-pointer items-start gap-3 rounded-md border border-border p-3 transition-colors hover:bg-muted/50">
-                <RadioGroupItem value={option.value} className="mt-1" />
+                <RadioGroupItem value={option.value} className="mt-1" aria-labelledby={`suggestion-mode-${option.value}`} aria-describedby={`suggestion-mode-${option.value}-about`} />
                 <span className="space-y-1">
-                  <span className="block text-sm font-medium text-foreground">{option.label}</span>
-                  <span className="block text-xs text-muted-foreground">{option.description}</span>
+                  <span id={`suggestion-mode-${option.value}`} className="block text-sm font-medium text-foreground">{option.label}</span>
+                  <span id={`suggestion-mode-${option.value}-about`} className="block text-xs text-muted-foreground">{option.description}</span>
                 </span>
               </label>
             ))}
@@ -191,19 +192,20 @@ export function AISuggestionPreferences() {
 
         <div className="space-y-3">
           <div>
-            <Label className="text-sm font-semibold">Suggestion sensitivity</Label>
+            <Label id="suggestion-sensitivity-title" className="text-sm font-semibold">Suggestion sensitivity</Label>
           </div>
           <RadioGroup
+            aria-labelledby="suggestion-sensitivity-title"
             value={prefs.suggestion_sensitivity}
             onValueChange={(value) => setPrefs((p) => ({ ...p, suggestion_sensitivity: value as SuggestionSensitivity }))}
             className="gap-3"
           >
             {sensitivityOptions.map((option) => (
               <label key={option.value} className="flex cursor-pointer items-start gap-3 rounded-md border border-border p-3 transition-colors hover:bg-muted/50">
-                <RadioGroupItem value={option.value} className="mt-1" />
+                <RadioGroupItem value={option.value} className="mt-1" aria-labelledby={`suggestion-sensitivity-${option.value}`} aria-describedby={`suggestion-sensitivity-${option.value}-about`} />
                 <span className="space-y-1">
-                  <span className="block text-sm font-medium text-foreground">{option.label}</span>
-                  <span className="block text-xs text-muted-foreground">{option.description}</span>
+                  <span id={`suggestion-sensitivity-${option.value}`} className="block text-sm font-medium text-foreground">{option.label}</span>
+                  <span id={`suggestion-sensitivity-${option.value}-about`} className="block text-xs text-muted-foreground">{option.description}</span>
                 </span>
               </label>
             ))}

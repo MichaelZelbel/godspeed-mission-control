@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, createRef } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, useEditorState, EditorContent } from "@tiptap/react";
 import { Markdown } from "tiptap-markdown";
 import StarterKit from "@tiptap/starter-kit";
 import UnderlineExt from "@tiptap/extension-underline";
@@ -118,7 +118,7 @@ import { markdownToHtml, tiptapJsonToMarkdown } from "@/utils/markdown-converter
 import { resolveAttachmentImagesInHtml } from "@/lib/upload-attachment";
 import { buildTitleMap, resolveWikilinksInHtml } from "@/lib/wikilink-resolver";
 import { escapeLike, fetchAllPages, pgOrValue } from "@/lib/postgrest";
-import { dbErrorMessage } from "@/lib/function-error";
+import { dbErrorMessage, functionErrorMessage } from "@/lib/function-error";
 import {
   FLUSH_REQUEST_EVENT,
   FLUSH_DONE_EVENT,
@@ -147,6 +147,8 @@ interface NoteEditorProps {
   onToggleLocalGraph?: () => void;
   onNoteSelect?: (noteId: string) => void;
 }
+
+const CLASSIFY_FAILED = "Classify with AI did not finish. Try again.";
 
 /** Extract all wikilink noteIds from editor JSON content (resolved nodes only) */
 function extractWikilinkIds(doc: any): string[] {
@@ -1289,7 +1291,10 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
         if (saved?.updated_at) lastSavedUpdatedAtRef.current = Math.max(lastSavedUpdatedAtRef.current, new Date(saved.updated_at).getTime());
         setSaveStatus("saved");
       }
-      processNote.mutate(note.id);
+      // Says why it failed: no AI, a refused key or an outage (#779). It said nothing before.
+      processNote.mutate(note.id, {
+        onError: async (error) => showToast.error(await functionErrorMessage(error, CLASSIFY_FAILED)),
+      });
     } catch {
       setSaveStatus("error");
       showToast.error("Save the latest changes before requesting AI processing");
@@ -1438,9 +1443,20 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     showToast.success("Logged as interaction");
   };
 
-  const plainText = editor?.getText() || "";
-  const wordCount = plainText.trim() ? plainText.trim().split(/\s+/).length : 0;
-  const charCount = plainText.length;
+  // Read on every change of the text: the editor does not re-render this
+  // component as the person types, so a count taken at render time stayed
+  // behind ("0 words" in a new note with several words) until a save (#809).
+  const { wordCount, charCount } = useEditorState({
+    editor,
+    selector: ({ editor: e }) => {
+      const text = e?.getText() || "";
+      const trimmed = text.trim();
+      return { wordCount: trimmed ? trimmed.split(/\s+/).length : 0, charCount: text.length };
+    },
+  }) ?? { wordCount: 0, charCount: 0 };
+  // "1 word", not "1 words" (#818).
+  const wordsLabel = `${wordCount} ${wordCount === 1 ? "word" : "words"}`;
+  const charsLabel = `${charCount} ${charCount === 1 ? "character" : "characters"}`;
   const metadata = note.metadata as Record<string, unknown> | null;
   const mentionedPeople = Array.isArray(metadata?.people) ? (metadata.people as string[]) : [];
   const { data: mentionedGroupMatches = [] } = useQuery({
@@ -1543,14 +1559,14 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </>
           ) : (
             <>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"} aria-label={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
                 <Star className={cn("h-4 w-4", note.is_favorite && "fill-warning text-warning")} />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"} aria-label={note.is_pinned ? "Unpin" : "Pin to top"}>
                 <Pin className={cn("h-4 w-4", note.is_pinned && "text-primary")} />
               </Button>
               {!note.is_external && (
-                <Button variant="ghost" size="icon" className={cn("h-8 w-8", sourceMode && "bg-accent text-accent-foreground")} onClick={toggleSourceMode} title={sourceMode ? "Rich text mode" : "Markdown source"}>
+                <Button variant="ghost" size="icon" className={cn("h-8 w-8", sourceMode && "bg-accent text-accent-foreground")} onClick={toggleSourceMode} title={sourceMode ? "Rich text mode" : "Markdown source"} aria-label={sourceMode ? "Rich text mode" : "Markdown source"}>
                   <Code2 className="h-4 w-4" />
                 </Button>
               )}
@@ -1565,7 +1581,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
         <div className="px-4 py-3 border-b border-border bg-muted/30 text-xs text-muted-foreground space-y-1 shrink-0">
           <p>Created: {format(new Date(note.created_at), "PPp")}</p>
           <p>Updated: {format(new Date(note.updated_at), "PPp")}</p>
-          <p>{wordCount} words · {charCount} characters</p>
+          <p>{wordsLabel} · {charsLabel}</p>
           {metadata?.type && <p>Type: {String(metadata.type)}</p>}
           {metadata?.summary && <p>Summary: {String(metadata.summary)}</p>}
           {Array.isArray(metadata?.topics) && (metadata.topics as string[]).length > 0 && (
@@ -1609,10 +1625,10 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           }}
           quickActions={
             <>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"} aria-label={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
                 <Star className={cn("h-3.5 w-3.5", note.is_favorite && "fill-warning text-warning")} />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"} aria-label={note.is_pinned ? "Unpin" : "Pin to top"}>
                 <Pin className={cn("h-3.5 w-3.5", note.is_pinned && "text-primary")} />
               </Button>
               {sharedNote?.is_active && (
@@ -1633,6 +1649,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                 className="h-7 w-7"
                 onClick={() => window.open(`/dashboard/notes/${note.id}`, "_blank")}
                 title="Open in new tab"
+                aria-label="Open in new tab"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
               </Button>
@@ -1642,6 +1659,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                 className="h-7 w-7 hover:text-destructive"
                 onClick={moveToTrash}
                 title="Move to trash"
+                aria-label="Move to trash"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
@@ -1650,7 +1668,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           noteActions={
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7" title="More actions">
+                <Button variant="ghost" size="icon" className="h-7 w-7" title="More actions" aria-label="More actions">
                   <MoreHorizontal className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
@@ -1697,7 +1715,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                 <DropdownMenuItem onClick={makeACopy} disabled={duplicateNote.isPending}>
                   <Copy className="mr-2 h-4 w-4" /> Make a copy
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => { navigator.clipboard.writeText(`${title}\n\n${plainText}`).then(() => showToast.success("Copied to clipboard"), () => showToast.error("Could not copy to the clipboard")); }}>
+                <DropdownMenuItem onClick={() => { navigator.clipboard.writeText(`${title}\n\n${editor?.getText() || ""}`).then(() => showToast.success("Copied to clipboard"), () => showToast.error("Could not copy to the clipboard")); }}>
                   <Copy className="mr-2 h-4 w-4" /> Copy to clipboard
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={downloadMarkdown}>
@@ -1815,6 +1833,20 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             ref={titleInputRef}
             value={title}
             onChange={(e) => handleTitleChange(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter ends the title and goes on in the note's text, as a
+              // person expects; without this the next words joined the title
+              // (#791). Not while an input method is still composing a word.
+              if (e.key !== "Enter" || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || e.nativeEvent.isComposing) return;
+              e.preventDefault();
+              const ed = editorRef.current;
+              if (!ed) return;
+              // focus("start") puts the cursor at the start but only moves the
+              // focus on the next frame; a fast typist's next letter would still
+              // land in the title, so the focus moves here, at once.
+              ed.commands.focus("start");
+              ed.view.focus();
+            }}
             placeholder="Untitled"
             className="w-full min-w-0 text-2xl font-bold font-display bg-transparent border-none outline-none placeholder:text-muted-foreground/40"
             disabled={note.is_trashed || note.is_external}
@@ -1994,7 +2026,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </span>
           )}
         </div>
-        <span>{wordCount} words</span>
+        <span>{wordsLabel}</span>
       </div>
 
       {/* Delete confirmation */}

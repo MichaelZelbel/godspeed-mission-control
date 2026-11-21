@@ -23,7 +23,7 @@ async function optionsFrom(t,provider,{defer=false}={}){
  t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
  const base='http://127.0.0.1:'+service.address.port,readStatus=async()=>await (await fetch(base+'/api/status')).json(),status=await readStatus();
  const readOptions=()=>loadChatOptions({fetcher:(url,init)=>fetch(base+url,init)});
- return {status,options:defer?null:await readOptions(),readOptions,readStatus};
+ return {status,options:defer?null:await readOptions(),readOptions,readStatus,base};
 }
 test('with no AI connected the model choices say so rather than naming a connected model',async t=>{
  const {status,options}=await optionsFrom(t);
@@ -37,7 +37,7 @@ test('a connected AI keeps its own model choices',async t=>{
 test('a configured AI that refuses its check keeps its model identity but is unusable',async t=>{
  const provider=Object.assign(async()=>{throw Error('Model provider failed with HTTP 401: secret provider detail');},{options:async()=>({current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}),check:async()=>{throw Error('Model provider failed with HTTP 401: secret provider detail');}});
  const {options}=await optionsFrom(t,provider);
- assert.equal(options.connected,true);assert.equal(options.usable,false);assert.equal(options.current,'fictional-model');assert.doesNotMatch(JSON.stringify(options),/401|secret provider detail/);
+ assert.equal(options.connected,true);assert.equal(options.usable,false);assert.equal(options.availability,'refused');assert.equal(options.current,'fictional-model');assert.doesNotMatch(JSON.stringify(options),/401|secret provider detail/);
 });
 test('AI usability is rechecked every five seconds in both directions',async t=>{
  let now=100000,usable=true;
@@ -85,7 +85,7 @@ test('a refused chat returns plain guidance instead of provider diagnostics',asy
  const {createService}=await import('../server/main.mjs');const service=await createService({root:path.join(root,'workspace'),port:0,provider});
  t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
  const result=await fetch('http://127.0.0.1:'+service.address.port+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})});
- const body=await result.json();assert.equal(result.status,400);assert.match(body.error,/Your AI could not be used.*Settings, Your AI/);assert.doesNotMatch(body.error,/401|secret provider detail/);
+ const body=await result.json();assert.equal(result.status,400);assert.match(body.error,/Your AI key or sign-in was refused.*Settings, Your AI/);assert.doesNotMatch(body.error,/401|secret provider detail|could not be reached/);
 });
 test('a chat send with no AI keeps the no-AI setup guidance',async t=>{
  const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
@@ -98,4 +98,196 @@ test('a chat send with no AI keeps the no-AI setup guidance',async t=>{
 test('a connected AI without a model list is still shown as the connected model',async t=>{
  const {options}=await optionsFrom(t,async()=>({reply:'ok'}));
  assert.equal(options.connected,true);assert.equal(options.current,'');assert.equal(options.label,'Connected model');
+});
+
+// #764: an AI connected in Settings is usable at once, without a chat having been opened first.
+import http from 'node:http';
+async function fakeEndpoint(t){
+ const state={status:200,kinds:[]};
+ const server=http.createServer((req,res)=>{let raw='';req.on('data',c=>raw+=c);req.on('end',()=>{try{state.kinds.push(JSON.parse(JSON.parse(raw).messages[1].content).kind);}catch{}res.statusCode=state.status;res.setHeader('content-type','application/json');res.end(JSON.stringify(state.status===200?{choices:[{message:{content:'Connected'}}]}:{error:{message:'Fictional refused key'}}));});});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ return {state,address:'http://127.0.0.1:'+server.address().port+'/v1'};
+}
+async function notebookAt(t,root,provider){
+ const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL','GODSPEED_MODEL_KEY','GODSPEED_MODEL'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
+ for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
+ const {createService}=await import('../server/main.mjs');const service=await createService({root:path.join(root,'workspace'),port:0,provider});
+ let closed=false;const close=async()=>{if(closed)return;closed=true;await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];};t.after(close);
+ const base='http://127.0.0.1:'+service.address.port;
+ return {close,status:async()=>await (await fetch(base+'/api/status')).json(),options:()=>loadChatOptions({fetcher:(url,init)=>fetch(base+url,init)}),connect:address=>fetch(base+'/api/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:address,key:'fictional-key',model:'fictional-model',routines:false})})};
+}
+const tempRoot=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-ai-connect-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;};
+test('an AI connected in Settings is available at once on a fresh notebook, with no chat opened',async t=>{
+ const ai=await fakeEndpoint(t),notebook=await notebookAt(t,tempRoot(t));
+ assert.equal((await notebook.status()).runtimeConfigured,false);
+ const connected=await notebook.connect(ai.address);assert.equal(connected.status,200);
+ const status=await notebook.status();
+ assert.equal(status.aiConfigured,true);assert.equal(status.runtimeConfigured,true,'the Dashboard, Add Moment and every runtimeConfigured reader see the AI at once');
+ assert.deepEqual(ai.state.kinds,['connection-test'],'no chat or chat options were read to get there');
+});
+test('a fresh start with a saved, working connection is available before any chat is opened',async t=>{
+ const ai=await fakeEndpoint(t),root=tempRoot(t),first=await notebookAt(t,root);
+ assert.equal((await first.connect(ai.address)).status,200);await first.close();
+ const reopened=await notebookAt(t,root);
+ assert.equal((await reopened.status()).runtimeConfigured,true);
+ assert.equal((await reopened.options()).usable,true);
+});
+test('connecting a working AI after a failed check makes it available again at once',async t=>{
+ let now=100000;t.mock.method(Date,'now',()=>now);
+ const ai=await fakeEndpoint(t),root=tempRoot(t),first=await notebookAt(t,root);
+ assert.equal((await first.connect(ai.address)).status,200);await first.close();
+ const notebook=await notebookAt(t,root);
+ ai.state.status=401;
+ assert.equal((await notebook.options()).usable,false);assert.equal((await notebook.status()).runtimeConfigured,false);
+ ai.state.status=200;now+=1000;
+ assert.equal((await notebook.connect(ai.address)).status,200);
+ assert.equal((await notebook.status()).runtimeConfigured,true);
+});
+test('a refused key at connect time leaves the AI off',async t=>{
+ const ai=await fakeEndpoint(t),notebook=await notebookAt(t,tempRoot(t));
+ ai.state.status=401;
+ assert.notEqual((await notebook.connect(ai.address)).status,200);
+ const status=await notebook.status();assert.equal(status.aiConfigured,false);assert.equal(status.runtimeConfigured,false);
+});
+test('a check still running for the AI that was replaced does not turn the new one off',async t=>{
+ let rejectCheck,checkStarted;const started=new Promise(resolve=>{checkStarted=resolve;});
+ const old=Object.assign(async()=>({reply:'ok'}),{check:()=>{checkStarted();return new Promise((resolve,reject)=>{rejectCheck=reject;});}});
+ const ai=await fakeEndpoint(t),notebook=await notebookAt(t,tempRoot(t),old);
+ const reading=notebook.options();await started;
+ assert.equal((await notebook.connect(ai.address)).status,200);
+ rejectCheck(new Error('Fictional old provider failure'));await reading;
+ assert.equal((await notebook.status()).runtimeConfigured,true);
+});
+// The connect path's own connection test just answered, so the next reader asks the free key
+// endpoint at most five seconds later, not the AI again at once (#590, #764).
+test('the AI just connected is not asked again before five seconds',async t=>{
+ let now=1_000_000;const asks=[];
+ const endpoint=http.createServer(async(req,res)=>{for await(const chunk of req);asks.push(req.method);res.statusCode=200;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(req.method==='POST'?{choices:[{message:{content:'Connected.'}}]}:{}));});
+ await new Promise(resolve=>endpoint.listen(0,'127.0.0.1',resolve));
+ t.after(()=>new Promise(resolve=>endpoint.close(()=>resolve())));
+ t.mock.method(Date,'now',()=>now);
+ const {readOptions,base}=await optionsFrom(t,undefined,{defer:true});
+ const connected=await fetch(base+'/api/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'http://127.0.0.1:'+endpoint.address().port,key:'fictional-key',model:'fictional-model'})});
+ assert.equal(connected.status,200,await connected.clone().text());
+ assert.deepEqual(asks,['POST'],'only the connection test has asked');
+ const ready=await readOptions();assert.equal(ready.usable,true);assert.equal(ready.availability,'ready');
+ assert.deepEqual(asks,['POST'],'the reader right after connecting does not ask the AI again');
+ now+=5000;
+ await readOptions();
+ assert.deepEqual(asks,['POST','GET','GET'],'five seconds later the check asks the free key endpoint');
+});
+// #590: a real provider stand-in, connected through Settings, steps through every state. Each step
+// is read the way the chats, their pickers and the Dashboard card read it (/api/chat/options), and
+// a chat send says the same thing. A provider that stops answering is stalled within about five
+// seconds, not a refusal or an outage (#808), and not after the request's own 15 seconds.
+test('refused keys (401, 403), outages (500, closed port) and a stall are told apart, and recovery shows',async t=>{
+ let mode=200;const held=[];
+ const endpoint=http.createServer(async(req,res)=>{for await(const chunk of req);if(mode==='stall'){held.push(res);return;}res.statusCode=mode;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(mode===200?{choices:[{message:{content:JSON.stringify({reply:'Stand-in answer.'})}}]}:{error:{message:'private provider detail'}}));});
+ await new Promise(resolve=>endpoint.listen(0,'127.0.0.1',resolve));
+ t.after(()=>{for(const res of held)res.destroy();endpoint.closeAllConnections?.();return new Promise(resolve=>endpoint.close(()=>resolve()));});
+ let now=1_000_000;t.mock.method(Date,'now',()=>now);
+ const {readOptions,readStatus,base}=await optionsFrom(t,undefined,{defer:true});
+ const connected=await fetch(base+'/api/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'http://127.0.0.1:'+endpoint.address().port,key:'fictional-key',model:'fictional-model'})});
+ assert.equal(connected.status,200,await connected.clone().text());
+ const chat=async()=>{const reply=await fetch(base+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})});return {status:reply.status,text:await reply.text()};};
+ const ready=await readOptions();assert.equal(ready.usable,true);assert.equal(ready.availability,'ready');assert.equal(ready.current,'fictional-model');
+ for(const [code,expected,said] of [[401,'refused',/Your AI key or sign-in was refused.*Settings, Your AI/],[200,'ready',/Stand-in answer/],[403,'refused',/Your AI key or sign-in was refused.*Settings, Your AI/],[500,'unreachable',/Your AI could not be reached.*Settings, Your AI/],[200,'ready',/Stand-in answer/]]){
+  mode=code;now+=5000;
+  const options=await readOptions();assert.equal(options.availability,expected,'HTTP '+code);assert.equal(options.usable,expected==='ready');
+  const status=await readStatus();
+  assert.equal(status.aiAvailability,expected,'the status agrees after HTTP '+code);assert.equal(status.runtimeConfigured,expected==='ready');
+  const sent=await chat();assert.equal(sent.status,expected==='ready'?200:400,sent.text);assert.match(sent.text,said);
+  assert.doesNotMatch(JSON.stringify(options)+sent.text,/fictional-key|private provider detail|HTTP [45]\d\d/);
+  // A chat failure is the newest word on the AI: the next read says the same at once.
+  if(expected!=='ready')assert.equal((await readOptions()).availability,expected);
+ }
+ // The provider stops answering: within about five seconds every reader is told it is stalled.
+ mode='stall';now+=5000;const started=performance.now();
+ const stalled=await readOptions();const waited=performance.now()-started;
+ assert.equal(stalled.availability,'stalled');assert.equal((await readStatus()).aiAvailability,'stalled');assert.equal(stalled.usable,false);assert.ok(waited<6000,'answered after '+Math.round(waited)+' ms');
+ // It answers again: the next check sees it, without waiting for the stalled request to give up.
+ mode=200;now+=5000;assert.equal((await readOptions()).availability,'ready');
+ // The address goes away entirely: an outage again.
+ for(const res of held)res.destroy();endpoint.closeAllConnections?.();await new Promise(resolve=>endpoint.close(()=>resolve()));now+=5000;
+ assert.equal((await readOptions()).availability,'unreachable');assert.equal((await readStatus()).aiAvailability,'unreachable');
+});
+test('a chat that answers makes the next status read show the AI available, with no check in between (#803)',async t=>{
+ let fail=true,checks=0;
+ const provider=Object.assign(async()=>{if(fail)throw Error('Model provider failed with HTTP 500');return {reply:'ok'};},{options:async()=>({current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}),check:async()=>{checks++;if(fail)throw Error('Model provider failed with HTTP 500');}});
+ const {readOptions,readStatus,base}=await optionsFrom(t,provider,{defer:true});
+ assert.equal((await readOptions()).usable,false);
+ assert.equal((await readStatus()).runtimeConfigured,false);
+ fail=false;
+ const sent=await fetch(base+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})});
+ assert.equal(sent.status,200,await sent.text());
+ const asked=checks;
+ const status=await readStatus();
+ assert.equal(status.runtimeConfigured,true,'the chat that answered is the newest word on the AI, with no wait for the next connection check');
+ assert.equal(status.aiAvailability,'ready');
+ assert.equal(checks,asked,'no connection check ran in between');
+ assert.equal((await readOptions()).usable,true);
+});
+// The original runtime's chats go to Hermes directly (native-agent.mjs), not through the health
+// tracked provider, so the state is fed by the chats themselves (#806). A Hermes install has no
+// connection check, so the walk here is refused, working, down and working again; the stalled step
+// is the provider walk above, whose check can stall.
+test('the original runtime Hermes chats feed the one state: a refused chat is not shown as ready',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-native-health-')),bin=path.join(dir,'bin'),modeFile=path.join(dir,'mode'),root=path.join(dir,'workspace');
+ fs.mkdirSync(bin,{recursive:true});fs.mkdirSync(path.join(dir,'venv','bin'),{recursive:true});fs.mkdirSync(root,{recursive:true});
+ let executable;
+ if(process.platform==='win32'){executable=path.join(bin,'hermes.exe');fs.copyFileSync(process.execPath,executable);}
+ else{executable=path.join(bin,'hermes');fs.writeFileSync(executable,'#!/bin/sh\nexec "'+process.execPath+'" "'+path.join(dir,'chat')+'"\n',{mode:0o755});}
+ // The model list the picker reads is served by the Python beside the executable; this one answers
+ // at once, without Hermes' own modules.
+ fs.writeFileSync(path.join(dir,'venv','bin','python3'),'#!/bin/sh\necho \'{"current":"fake-model","models":[{"id":"fake-model","efforts":[]}]}\';\n',{mode:0o755});
+ fs.writeFileSync(path.join(dir,'chat'),"const fs=require('node:fs');let mode='working';try{mode=fs.readFileSync('"+modeFile+"','utf8').trim();}catch{}\nif(mode==='refused'){process.stderr.write('authenticationerror: the API key was refused\\n');process.exit(1);}\nif(mode==='down'){process.stderr.write('the request could not be sent\\n');process.exit(1);}\nprocess.stdout.write('A reply from the fake assistant.');\n");
+ // On Windows the fake Hermes is this Node itself, which runs the script named by its first
+ // argument from the workspace, so the same chat script is written there too.
+ fs.writeFileSync(path.join(root,'chat'),fs.readFileSync(path.join(dir,'chat')));
+ const setMode=mode=>fs.writeFileSync(modeFile,mode);
+ const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL','GODSPEED_MODEL_KEY','GODSPEED_MODEL'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
+ const assistant=path.join(dir,'assistant.json');
+ for(const n of names)delete process.env[n];
+ fs.writeFileSync(assistant,JSON.stringify({verified:true,executable,home:dir,sourceRoot:dir}));process.env.GODSPEED_ORIGINAL_RUNTIME='on';process.env.GODSPEED_ASSISTANT_CONFIG=assistant;
+ const {createService}=await import('../server/main.mjs');const service=await createService({root,port:0});
+ t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(dir,{recursive:true,force:true});});
+ const base='http://127.0.0.1:'+service.address.port,readOptions=()=>loadChatOptions({fetcher:(url,init)=>fetch(base+url,init)}),readStatus=async()=>await (await fetch(base+'/api/status')).json();
+ const chat=async()=>{const reply=await fetch(base+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})});return {status:reply.status,text:await reply.text()};};
+ const both=(options,status,expected,step)=>{assert.equal(options.availability,expected,step);assert.equal(options.usable,expected==='ready',step);assert.equal(status.aiAvailability,expected,step);assert.equal(status.runtimeConfigured,expected==='ready',step);};
+ // Before any chat the state is 'unknown', which reads as ready (#764).
+ assert.equal((await readOptions()).availability,'ready');
+ setMode('refused');
+ const refused=await chat();assert.equal(refused.status,400,refused.text);assert.match(refused.text,/Your AI key or sign-in was refused/);
+ both(await readOptions(),await readStatus(),'refused','after the refused chat');
+ // A chat refused because an update holds the lifecycle says nothing about the AI: the surfaces
+ // keep the newest real result, here still 'refused', instead of reading an outage (#806).
+ const release=service.scheduler.lifecycle.acquire('assistant update');
+ const updating=await chat();assert.equal(updating.status,400,updating.text);assert.match(updating.text,/The assistant is updating/);
+ both(await readOptions(),await readStatus(),'refused','after the chat the updating assistant refused');
+ release();
+ setMode('working');
+ const sent=await chat();assert.equal(sent.status,200,sent.text);assert.match(sent.text,/A reply from the fake assistant/);
+ both(await readOptions(),await readStatus(),'ready','after the chat that answered');
+ setMode('down');
+ const down=await chat();assert.equal(down.status,400,down.text);assert.match(down.text,/The AI request failed/);
+ both(await readOptions(),await readStatus(),'unreachable','after the chat that went down');
+ setMode('working');
+ assert.equal((await chat()).status,200);
+ both(await readOptions(),await readStatus(),'ready','after the recovery');
+});
+test('an AI connected only to the notebook while Hermes has none is not presented as ready for the chats',async t=>{
+ const endpoint=http.createServer(async(req,res)=>{for await(const chunk of req);res.setHeader('Content-Type','application/json');res.end(JSON.stringify({choices:[{message:{content:'Connected.'}}]}));});
+ await new Promise(resolve=>endpoint.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>endpoint.close(resolve)));
+ const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL','GODSPEED_MODEL_KEY','GODSPEED_MODEL'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-settings-only-')),root=path.join(dir,'workspace'),home=path.join(dir,'hermes-home'),assistant=path.join(dir,'assistant.json');
+ for(const n of names)delete process.env[n];
+ fs.mkdirSync(home,{recursive:true});fs.writeFileSync(assistant,JSON.stringify({verified:true,executable:'hermes',home}));process.env.GODSPEED_ORIGINAL_RUNTIME='on';process.env.GODSPEED_ASSISTANT_CONFIG=assistant;
+ const {createService}=await import('../server/main.mjs');const service=await createService({root,port:0});
+ t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(dir,{recursive:true,force:true});});
+ const origin='http://127.0.0.1:'+service.address.port,connected=await fetch(origin+'/api/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'http://127.0.0.1:'+endpoint.address().port,key:'fictional-key',model:'fictional-model',routines:false})});
+ assert.equal(connected.status,200);
+ const options=await loadChatOptions({fetcher:(url,init)=>fetch(origin+url,init)});
+ assert.equal(options.connected,true);assert.equal(options.usable,false);assert.equal(options.availability,'settings-only');assert.equal(options.current,'fictional-model');
+ const reply=await fetch(origin+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),message:'Hello'})}),answer=await reply.json();
+ assert.equal(reply.status,400);assert.match(answer.error,/connected only to the notebook.*Use it for the daily routines and the chat too.*Settings, Your AI/);assert.doesNotMatch(answer.error,/fictional-key/);
 });
