@@ -840,8 +840,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
         if(provider?.check){
           // A read may ask for a fresh check (the Dashboard's arrival, #822): it still shares the
-          // in-flight check, but jumps the five-second pacing other reads keep (#794).
-          if(!chatAICheck&&(url.searchParams.has('check')||Date.now()-lastChatCheckAt>=5000)){
+          // in-flight check, but jumps the five-second pacing other reads keep (#794). A check that
+          // costs a billed chat (the assistant runtime's, #905) is run only by reads that ask for
+          // one, so idle pages never bill it (#762).
+          if(!chatAICheck&&(url.searchParams.has('check')||(!provider.checkBilled&&Date.now()-lastChatCheckAt>=5000))){
             lastChatCheckAt=Date.now();
             chatAICheck=(async()=>{try{await provider.check();}catch(error){console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}})().finally(()=>{chatAICheck=null;});
           }
