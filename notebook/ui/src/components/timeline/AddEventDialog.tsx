@@ -18,7 +18,7 @@ import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import ImportanceSlider from "./ImportanceSlider";
 import { UNNAMED_PERSON } from "./people";
-import { aiFailureKind, factsNotPulledOut, filledOnOpen, mergeSuggestion, newPeopleToCreate } from "./moment-form.mjs";
+import { aiFailureKind, factsNotPulledOut, filledOnOpen, mergeSuggestion, newPeopleToCreate, noAiFacts } from "./moment-form.mjs";
 
 export interface TimelineContact {
   id: string;
@@ -298,17 +298,23 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
       // Profile facts about the participants are pulled out after the save and never hold it up. When
       // the AI refused the key or could not be reached, the confirmation says no facts were (#779).
       const saved = isEditMode ? "Moment updated" : "Moment created";
-      if (momentId && providerConfigured) {
+      // A refused, unreachable or stalled AI the tab already knows about keeps its at-once answer
+      // (#796). Whether an AI is connected at all is decided when the moment is saved (#812), from
+      // the extraction's own answer: the connection may have been removed or connected while the
+      // tab was open, so the tab's cached picture is not what decides. With none connected the
+      // extraction answers at once with the shared no-AI sentence, which names Settings, Your AI.
+      const known = providerConfigured ? null : factsNotPulledOut(aiAvailability);
+      if (momentId && !known) {
         supabase.functions
           .invoke("extract-moment-profile", { body: { moment_id: momentId } })
           .then(({ error }) => {
-            const skipped = factsNotPulledOut(aiFailureKind(error?.message));
+            const message = String(error?.message || "");
+            const skipped = noAiFacts(message) || factsNotPulledOut(aiFailureKind(message));
             if (skipped) toast({ title: saved, description: skipped });
           })
           .catch(() => {});
       }
-      const why = providerConfigured ? null : factsNotPulledOut(aiAvailability);
-      toast(why ? { title: saved, description: why } : { title: saved });
+      toast(known ? { title: saved, description: known } : { title: saved });
       setOpen(false);
       onCreated();
 
