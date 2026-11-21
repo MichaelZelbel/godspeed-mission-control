@@ -741,8 +741,10 @@ export default function MediaLibrary() {
     : null;
 
 
+  // The pane fills main's content height where the floating chat button shows, defined in
+  // DashboardLayout.
   return (
-    <div className="flex flex-col h-[calc(100dvh-104px)]">
+    <div className="flex flex-col h-[var(--page-h)]">
       <SEOHead title="Media Library - Godspeed Mission Control" noIndex />
 
       {/* Header */}

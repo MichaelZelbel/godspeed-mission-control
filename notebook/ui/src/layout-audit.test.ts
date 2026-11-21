@@ -351,6 +351,29 @@ describe("the audit's rules on pages built for them", { timeout: 20_000 }, () =>
       .toEqual([]);
   });
 
+  // Centering a line lands it under a tall sticky header (the person page's header card is taller
+  // than half its pane), but a smaller scroll shows the whole line clear. The rule must try that
+  // scroll before it reports: on the centered position alone it flagged reachable text.
+  it("passes text centered under a tall sticky header that a smaller scroll brings out", async () => {
+    expect(await audit(`<div style="height:400px;overflow:auto"><div style="position:sticky;top:0;height:278px;background:white">Name, alias badges and buttons</div><div style="height:520px"></div><p style="margin:0">No relationships yet. Add one.</p><div style="height:400px"></div></div>`))
+      .toEqual([]);
+  });
+
+  it("reports text under a sticky header no scroll can bring it out from", async () => {
+    expect(await audit(`<div style="height:400px;overflow:auto"><h2 style="position:sticky;top:0;margin:0;height:100px;background:white">Title</h2><p style="margin:0;margin-top:-90px">Hidden behind the title</p></div>`))
+      .toEqual(['under another element: p "Hidden behind the title" under h2 "Title"']);
+  });
+
+  // Room to scroll above the scroller lets its walk carry the line past its own top edge, where the
+  // scroller clips it and hit-testing reaches only the ancestors above the scroller: the line paints
+  // nowhere at any scroll, under the header when scrolled less, clipped entirely when scrolled more.
+  // The escape must require the line itself to be hit where it stands, not a layout rect that sits
+  // inside the viewport while nothing draws it.
+  it("reports text a scroll clips out of its own scroller while it stays under a sticky header", async () => {
+    expect(await audit(`<div style="height:200px"></div><div style="height:300px;overflow:auto"><h2 style="position:sticky;top:0;margin:0;height:100px;background:white">Title</h2><p style="margin:0;margin-top:-90px">Hidden behind the title</p><div style="height:600px"></div></div>`))
+      .toEqual(['under another element: p "Hidden behind the title" under h2 "Title"']);
+  });
+
   it("passes a label tied with for, one referenced by aria-labelledby, and a field in a closed details", async () => {
     expect(await audit(`<label for="a">Name</label><input id="a"><label id="b">Strength</label><span role="slider" aria-labelledby="b" aria-valuenow="1" tabindex="0" style="display:inline-block;width:20px;height:20px;background:gray"></span><details><summary>More</summary><input></details>`))
       .toEqual([]);
@@ -522,6 +545,159 @@ describe("every page at a phone's and a desktop's width", () => {
           return box.left >= 0 && box.right <= innerWidth && box.width > 0 ? null : `the name's box spans ${Math.round(box.left)} to ${Math.round(box.right)} on a ${innerWidth} px screen`;
         }, name);
         if (off) failures.push(`${viewport.width} px: ${off}`);
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 60_000);
+
+  // A name too long for one line at desktop widths (#878): sm:truncate on the h1 kept it to one
+  // line from 640 px up and ended it in "…", and nothing else on the page showed the whole name.
+  // The audit's own rules flag a truncated h1, but the page-wide check visits this route only as
+  // "group not found", so the real page is checked here at 375, 768 and 1280 px: the rules on the
+  // name, and its box against its own scroll width, which a nowrap clip keeps wider than the box.
+  // On main this fails at 768 and 1280 px.
+  it("shows a group name longer than one line in full at a phone's, a tablet's and a desktop's width", async () => {
+    const name = "Seed round investors for the 2027 expansion and everyone who joined at the demo day last spring";
+    const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name }, selection: "id,slug", single: true });
+    expect(group?.slug ?? null).toBeTruthy();
+    const failures: string[] = [];
+    for (const viewport of [{ width: 375, height: 812 }, { width: 768, height: 1024 }, { width: 1280, height: 900 }]) {
+      const context = await browser.newContext({ viewport });
+      try {
+        const page = await context.newPage();
+        const cdp = await context.newCDPSession(page);
+        await page.goto(`${seededNotebook.base}/dashboard/groups/${group.slug}`);
+        await settle(page);
+        // The page's only h1 is the group's name, so any h1 finding is about it. Copying the
+        // audit's own element-string format here would let its drift void this half of the case.
+        const found = (await auditShown(page, cdp)).filter((f) => f.element.startsWith('h1 "'));
+        failures.push(...found.map((f) => `${viewport.width} px, ${f.rule}: ${f.element}`));
+        const cut = await page.evaluate((nm) => {
+          const h1 = [...document.querySelectorAll("h1")].find((e) => e.textContent === nm);
+          if (!h1) return "the name is missing";
+          const box = h1.getBoundingClientRect();
+          if (box.left < 0 || box.right > innerWidth) return `the name's box spans ${Math.round(box.left)} to ${Math.round(box.right)} on a ${innerWidth} px screen`;
+          return h1.scrollWidth > h1.clientWidth ? `the name is cut: its box holds ${h1.clientWidth} px, its text needs ${h1.scrollWidth}` : null;
+        }, name);
+        if (cut) failures.push(`${viewport.width} px: ${cut}`);
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 120_000);
+
+  // The List tab's table at a phone's width (#878): six columns cannot fit a card 272 px wide, and
+  // the table's sideways scroller (the shared Table's own wrapper) draws no scrollbar in this
+  // browser, so the last headers read as cut off rather than scrolled to. Every header the tab
+  // shows must lie inside its card. On main this fails at 320 and 375 px: "Joined", "Last
+  // Movement" and "Reason" sit outside the card's right edge.
+  it("fits the List tab's headers inside their card at a phone's width", async () => {
+    const name = "Members on the List tab";
+    const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name }, selection: "id,slug", single: true });
+    expect(group?.slug ?? null).toBeTruthy();
+    const person = await seededNotebook.query({ table: "contacts", operation: "insert", values: { name: "Grace Hopper" }, selection: "id", single: true });
+    await seededNotebook.query({ table: "contact_group_memberships", operation: "insert", values: { group_id: group.id, contact_id: person.id, priority: "high", status: "new", reason: "Met at the conference" }, selection: "id", single: true });
+    const failures: string[] = [];
+    for (const viewport of [{ width: 320, height: 568 }, { width: 375, height: 812 }]) {
+      const context = await browser.newContext({ viewport });
+      try {
+        const page = await context.newPage();
+        await page.goto(`${seededNotebook.base}/dashboard/groups/${group.slug}`);
+        await settle(page);
+        await page.getByRole("tab", { name: "List" }).click();
+        await page.getByText("Grace Hopper").first().waitFor({ timeout: 15_000 });
+        await settle(page);
+        const outside = await page.evaluate(() => {
+          const table = [...document.querySelectorAll("table")].find((t) => [...t.querySelectorAll("th")].some((th) => th.textContent === "Name"));
+          const card = table?.closest(".rounded-xl");
+          if (!table || !card) return "the List tab's table or card is missing";
+          const cardBox = card.getBoundingClientRect();
+          return [...table.querySelectorAll("th")].flatMap((th) => {
+            const box = th.getBoundingClientRect();
+            // A header hidden at this width has a zero box and is not shown at all.
+            if (box.width <= 0 || box.height <= 0) return [];
+            return box.right > cardBox.right + 0.5 || box.left < cardBox.left - 0.5 ? [`"${th.textContent}" lies outside its card`] : [];
+          });
+        });
+        failures.push(...(outside as string[]).map((line) => `${viewport.width} px: ${line}`));
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 60_000);
+
+  // The floating chat button against the groups page at its load state (#878): the button is pinned
+  // to the viewport's corner while the page scrolled the window, so a card in the bottom band of
+  // the screen lay under it however much room the end of the content reserved (#530). On main this
+  // fails at 375 px: a card's progress bar lies under the button before any scroll.
+  it("keeps the floating chat button off every group card at a phone's width", async () => {
+    // Enough ordinary groups that a card sits in the bottom band of the viewport at the load state,
+    // and one with a success criterion, whose progress bar the review saw under the button.
+    const named = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name: "Group with a progress bar", type: "other", success_criteria: [{ label: "Intro meetings held", target: 10, current: 4 }] }, selection: "id,slug", single: true });
+    expect(named?.slug ?? null).toBeTruthy();
+    for (let i = 0; i < 8; i++) {
+      await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name: `Filler group ${i + 1}` }, selection: "id", single: true });
+    }
+    const context = await browser.newContext({ viewport: { width: 375, height: 812 } });
+    try {
+      const page = await context.newPage();
+      await page.goto(`${seededNotebook.base}/dashboard/groups`);
+      await page.getByText("Group with a progress bar").first().waitFor({ timeout: 15_000 });
+      await settle(page);
+      const under = await page.evaluate(() => {
+        const fab = [...document.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === "Chat with Godspeed");
+        const main = document.querySelector("main");
+        if (!fab || !main) return "the floating chat button or main is missing";
+        const box = (e) => e.getBoundingClientRect();
+        const mainBox = box(main);
+        const fabBox = box(fab);
+        if (fabBox.top < mainBox.bottom) return `the button starts ${Math.round(mainBox.bottom - fabBox.top)} px above main's bottom edge`;
+        const intersect = (a, b) => !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+        const cards = [...document.querySelectorAll("a[href^='/dashboard/groups/'] div.rounded-xl")];
+        // A selector that matched nothing would check no card at all; its sibling case guards the
+        // same way.
+        if (!cards.length) return "no group card matched the audit's selector";
+        for (const card of cards) {
+          const b = box(card);
+          // The card's visible part: main's own box clips it, because main is the page's scroll area.
+          const visible = { top: Math.max(b.top, mainBox.top), bottom: Math.min(b.bottom, mainBox.bottom), left: Math.max(b.left, mainBox.left), right: Math.min(b.right, mainBox.right) };
+          if (visible.bottom <= visible.top) continue;
+          if (intersect(fabBox, visible)) return "the button covers a group card";
+        }
+        return null;
+      });
+      expect(under, String(under)).toEqual(null);
+    } finally {
+      await context.close();
+    }
+  }, 60_000);
+
+  // The pages that fill main's height where the floating chat button shows (#878): People, the
+  // Media Library and a collection page size their pane for main's content box, so a pane built
+  // for an older budget leaves its bottom band below main's scrollport at load, reachable only by
+  // a second scroll inside main the pages were not designed for. At the load state main must not
+  // scroll inside itself on these pages. On main this fails on all three routes: the pane sits
+  // 96 px below main's bottom edge.
+  it("keeps every full-height page inside main at a desktop's width", async () => {
+    const collection = await seededNotebook.query({ table: "collections", operation: "insert", values: { name: "Full-height collection", slug: "full-height-collection" }, selection: "id,slug", single: true });
+    expect(collection?.slug ?? null).toBeTruthy();
+    const failures: string[] = [];
+    for (const url of ["/dashboard/people", "/dashboard/media", `/collections/${collection.slug}`]) {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+      try {
+        const page = await context.newPage();
+        await page.goto(`${seededNotebook.base}${url}`);
+        await settle(page);
+        const over = await page.evaluate(() => {
+          const main = document.querySelector("main");
+          if (!main) return "main is missing";
+          return main.scrollHeight > main.clientHeight + 1 ? `main holds ${main.scrollHeight} px of page in a ${main.clientHeight} px scrollport at load` : null;
+        });
+        if (over) failures.push(`${url}: ${over}`);
       } finally {
         await context.close();
       }
