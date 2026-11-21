@@ -101,12 +101,26 @@ test('a range changes nothing about who may read a file, and a browser that give
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-range-'));
   const service = await createService({ root, port: 0 });
   const base = 'http://127.0.0.1:' + service.address.port;
+  const port = service.address.port;
+  // A few MB, so the ranged reply is still travelling when the test cuts the
+  // connection: a reply small enough to arrive in one piece (the 1000-byte
+  // file above) is over before any cut could land in it.
+  const big = Buffer.alloc(3 * 1024 * 1024);
+  for (let i = 0; i < big.length; i++) big[i] = i % 251;
   const form = new FormData();
-  form.set('file', new Blob([content]), 'sample.mp3');
+  form.set('file', new Blob([big], { type: 'audio/mpeg' }), 'sample.mp3');
   form.set('path', 'owner/sample.mp3');
-  await fetch(base + '/api/media/upload', { method: 'POST', body: form });
+  const uploaded = await fetch(base + '/api/media/upload', { method: 'POST', body: form });
+  assert.equal(uploaded.status, 200, await uploaded.clone().text());
   t.after(async () => { await service.close(); fs.rmSync(root, { recursive: true, force: true }); });
   const route = '/api/media/file/' + encodeURIComponent('owner/sample.mp3');
+  // A request the door allows without a range is allowed with one: here a
+  // same-origin request (its Origin is the door's own address), answered 206
+  // with exactly the asked bytes.
+  const sameSite = await fetch(base + route, { headers: { Origin: base, Range: 'bytes=0-9' } });
+  assert.equal(sameSite.status, 206);
+  assert.equal(sameSite.headers.get('content-range'), `bytes 0-9/${big.length}`);
+  assert.ok(Buffer.from(await sameSite.arrayBuffer()).equals(big.subarray(0, 10)));
   // A file a request is refused without a range is refused with one: here a
   // cross-site origin, which the door refuses either way.
   for (const headers of [{ Origin: 'https://unrelated.example' }, { Origin: 'https://unrelated.example', Range: 'bytes=0-9' }]) {
@@ -115,17 +129,41 @@ test('a range changes nothing about who may read a file, and a browser that give
     await r.text();
   }
   // A browser that gives up part way through a range ends only that reply:
-  // the connection is cut while bytes are still travelling, and the next
-  // request is answered in full by the same server.
-  await new Promise(resolve => {
-    const socket = net.connect(service.address.port, '127.0.0.1', () => {
-      socket.write(`GET ${route} HTTP/1.1\r\nHost: localhost\r\nRange: bytes=0-999\r\nConnection: close\r\n\r\n`);
+  // the status line and Content-Range arrive first, the connection is cut
+  // while bytes are still travelling, and the same server answers the next
+  // request, as a range and in full.
+  const asked = big.length - 1000;
+  const cut = await new Promise((resolve, reject) => {
+    const socket = net.connect(port, '127.0.0.1', () => {
+      socket.write(`GET ${route} HTTP/1.1\r\nHost: 127.0.0.1\r\nRange: bytes=1000-\r\nConnection: close\r\n\r\n`);
     });
-    socket.once('data', () => socket.destroy());
+    let received = Buffer.alloc(0), destroyed = false;
+    socket.on('data', chunk => {
+      received = Buffer.concat([received, chunk]);
+      const headerEnd = received.indexOf('\r\n\r\n');
+      if (destroyed || headerEnd === -1) return;
+      try {
+        const head = received.subarray(0, headerEnd).toString();
+        const bodyBytes = received.length - headerEnd - 4;
+        // The reply being cut is a ranged one, not the whole file.
+        assert.equal(head.split('\r\n')[0], 'HTTP/1.1 206 Partial Content', head);
+        assert.ok(/^Content-Range: bytes 1000-\d+\/\d+$/m.test(head), head);
+        if (bodyBytes >= 256 * 1024 && bodyBytes < asked) {
+          destroyed = true;
+          socket.destroy();
+          resolve({ bodyBytes });
+        }
+      } catch (error) { destroyed = true; socket.destroy(); reject(error); }
+    });
     socket.on('error', () => {});
-    socket.on('close', resolve);
+    socket.on('close', () => { if (!destroyed) { destroyed = true; reject(new Error('the reply finished before the test could cut it mid-range')); } });
   });
-  const after = await fetch(base + route);
-  assert.equal(after.status, 200);
-  assert.ok(Buffer.from(await after.arrayBuffer()).equals(content));
+  assert.ok(cut.bodyBytes > 0 && cut.bodyBytes < asked, `only ${cut.bodyBytes} of the ${asked} asked bytes had arrived when the connection was cut`);
+  const afterRange = await fetch(base + route, { headers: { Range: 'bytes=0-9' } });
+  assert.equal(afterRange.status, 206);
+  assert.equal(afterRange.headers.get('content-range'), `bytes 0-9/${big.length}`);
+  assert.ok(Buffer.from(await afterRange.arrayBuffer()).equals(big.subarray(0, 10)));
+  const afterWhole = await fetch(base + route);
+  assert.equal(afterWhole.status, 200);
+  assert.ok(Buffer.from(await afterWhole.arrayBuffer()).equals(big));
 });
