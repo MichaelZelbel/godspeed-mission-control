@@ -155,7 +155,10 @@ export function ConnectAI(){
     <AlertDialogContent>
       <AlertDialogHeader>
         <AlertDialogTitle>Remove your AI connection?</AlertDialogTitle>
-        <AlertDialogDescription>Godspeed forgets its key and stops using this AI. The notebook, the chat and the routines that used it have no AI until you connect one again.</AlertDialogDescription>
+        <AlertDialogDescription>{saved.error
+          // #825: the damaged file is deleted too, and no copy is kept; say so before the person confirms.
+          ?'The saved connection file can\'t be read, so Godspeed deletes it. No copy of it is kept. The notebook, the chat and the routines that used it have no AI until you connect one again.'
+          :'Godspeed forgets its key and stops using this AI. The notebook, the chat and the routines that used it have no AI until you connect one again.'}</AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
         <AlertDialogCancel>Keep it</AlertDialogCancel>
