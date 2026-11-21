@@ -22,8 +22,10 @@ const kindToTable: Record<Exclude<AiEntityKind, "person">, AiKind> = {
   action_item: "action_items",
 };
 
-// How long the switch's confirmation stays, as long as the page toast it
-// replaces did (sonner's default).
+// While the save runs the switch does not stop being focusable: an HTML-disabled button drops
+// keyboard focus to the page body when the change starts, and the next Tab began again from the
+// top (#864). It keeps focus, is marked `aria-disabled` for assistive technology, does nothing
+// until the save settles, and looks disabled through that state.
 const CONFIRMATION_MS = 4000;
 
 type Confirmation = { text: string; failed: boolean };
@@ -79,6 +81,7 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
   const pending = kind === "person" ? togglePerson.isPending : toggleItem.isPending;
 
   const onClick = () => {
+    if (pending) return;
     const next = !optimistic;
     setOptimistic(next);
     if (kind === "person") {
@@ -151,10 +154,11 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
                 variant="outline"
                 size="sm"
                 onClick={onClick}
-                disabled={pending}
+                aria-disabled={pending}
+                aria-busy={pending}
                 aria-label={`${label}. ${action}`}
                 className={cn(
-                  "h-7 gap-1.5 px-2 text-xs font-normal",
+                  "h-7 gap-1.5 px-2 text-xs font-normal aria-disabled:opacity-50 aria-disabled:pointer-events-none",
                   optimistic
                     ? "text-muted-foreground border-dashed"
                     : "text-foreground",
