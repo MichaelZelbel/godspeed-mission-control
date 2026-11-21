@@ -16,7 +16,7 @@ const { seedRows, db, deleted, failDelete, toasts } = vi.hoisted(() => {
   ] as any[],
   db: [] as any[],
   deleted: [] as string[],
-  failDelete: { on: false },
+  failDelete: { on: false, network: false },
   toasts: [] as string[],
   };});
 
@@ -26,7 +26,7 @@ vi.mock("@/integrations/supabase/client", () => {
     const chain: any = new Proxy({}, {
       get: (_t, prop) => {
         if (prop === "then") return (resolve: any, reject: any) => Promise.resolve(result).then(resolve, reject);
-        if (table === "moments" && prop === "delete") return () => { result = { data: null, error: failDelete.on ? { message: "boom" } : null }; return chain; };
+        if (table === "moments" && prop === "delete") return () => { result = { data: null, error: failDelete.on ? { message: failDelete.network ? "Failed to fetch" : "boom" } : null }; return chain; };
         if (table === "moments" && prop === "eq") return (_col: string, id: string) => {
           if (!failDelete.on) { const i = db.findIndex((m) => m.id === id); if (i >= 0) { db.splice(i, 1); deleted.push(id); } }
           return chain;
@@ -77,7 +77,7 @@ const confirmButton = async () => {
 
 describe("deleting a timeline moment", () => {
   beforeEach(() => { db.splice(0, db.length, ...seedRows); });
-  afterEach(() => { cleanup(); db.splice(0, db.length); deleted.length = 0; toasts.length = 0; failDelete.on = false; });
+  afterEach(() => { cleanup(); db.splice(0, db.length); deleted.length = 0; toasts.length = 0; failDelete.on = false; failDelete.network = false; });
 
   it("offers Delete in the card's menu and the drawer's Moment actions menu, and cancelling keeps the moment", async () => {
     page();
@@ -122,6 +122,23 @@ describe("deleting a timeline moment", () => {
     await vi.waitFor(() => { expect(toasts.some((t) => t.startsWith("error:"))).toBe(true); }, WAIT);
     expect((await screen.findAllByText("Old trip", undefined, WAIT)).length).toBeGreaterThan(0);
     expect(toasts).not.toContain("success:Moment deleted");
+    expect(deleted).toEqual([]);
+  });
+
+  // The server's answer names the moment only when it is not a network
+  // failure, so the offline path needs its own assertion (criterion 4).
+  it("a delete that cannot reach the server keeps the moment and says it could not be deleted", async () => {
+    failDelete.on = true;
+    failDelete.network = true;
+    page();
+    fireEvent.click((await screen.findAllByText("Old trip", undefined, WAIT))[0]);
+    const deletes = await screen.findAllByRole("button", { name: "Delete" }, WAIT);
+    fireEvent.click(deletes[0]);
+    fireEvent.click(await confirmButton());
+    await vi.waitFor(() => { expect(toasts).toContain("error:Could not delete the moment. Check your connection and try again."); }, WAIT);
+    expect((await screen.findAllByText("Old trip", undefined, WAIT)).length).toBeGreaterThan(0);
+    expect(toasts).not.toContain("success:Moment deleted");
+    expect(toasts).not.toContain("error:Could not reach the server. Check your connection and try again.");
     expect(deleted).toEqual([]);
   });
 });

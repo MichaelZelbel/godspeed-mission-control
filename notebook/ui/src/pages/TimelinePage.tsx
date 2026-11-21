@@ -21,7 +21,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Slider } from "@/components/ui/slider";
 import { parseDateOnly } from "@/lib/local-date";
 import { fetchAllPages } from "@/lib/postgrest";
-import { dbErrorMessage } from "@/lib/function-error";
+import { dbErrorMessage, isNetworkError } from "@/lib/function-error";
 import { displayPeople } from "@/components/timeline/people";
 import { useConfirmDialog } from "@/components/common/ConfirmDialog";
 import AddEventDialog, { type EditMomentData, type TimelineContact } from "@/components/timeline/AddEventDialog";
@@ -242,7 +242,13 @@ export default function TimelinePage() {
     }))) return;
     const { error } = await supabase.from("moments" as any).delete().eq("id", moment.id);
     if (error) {
-      showToast.error(dbErrorMessage(error, "Could not delete the moment. Please try again."));
+      // Offline and server-unreachable failures still say what failed: the
+      // moment could not be deleted, not just that the connection is down.
+      showToast.error(
+        isNetworkError(error)
+          ? "Could not delete the moment. Check your connection and try again."
+          : dbErrorMessage(error, "Could not delete the moment. Please try again.")
+      );
       return;
     }
     showToast.success("Moment deleted");
