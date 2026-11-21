@@ -28,15 +28,18 @@ import AddEventDialog, { type EditMomentData, type TimelineContact } from "@/com
 
 interface TimelineMoment {
   id: string;
-  happened_at: string;
+  happened_at: string | null;
   happened_end: string | null;
   title: string;
   description: string | null;
   status: string;
-  confidence_date: number;
-  confidence_truth: number;
-  impact_level: number;
-  source: string;
+  confidence_date: number | null;
+  confidence_truth: number | null;
+  impact_level: number | null;
+  source: string | null;
+  // A moment another writer (an assistant, an import) can save without happened_at,
+  // which may then carry a moment_date instead.
+  moment_date?: string | null;
   verified: boolean;
   is_potential_major: boolean;
   participants?: TimelineContact[];
@@ -52,6 +55,23 @@ const statusClasses: Record<string, string> = {
 
 import {impactLabels} from "../../../core/impact-scale.mjs";
 const statuses = ["past_fact", "future_plan", "ongoing", "unknown"];
+
+// A moment saved without happened_at may carry moment_date; without either it is undated.
+const momentDay = (m: Pick<TimelineMoment, "happened_at" | "moment_date">) => m.happened_at ?? m.moment_date ?? null;
+const UNDATED = "Undated";
+
+// The formatted day of a moment, or null when it has no readable day. Used to
+// render, never to group: an unparseable day must not crash the page either.
+const formatMomentDay = (m: Pick<TimelineMoment, "happened_at" | "moment_date">, pattern: string) => {
+  const day = momentDay(m);
+  if (!day) return null;
+  const parsed = parseDateOnly(day);
+  return parsed ? format(parsed, pattern) : null;
+};
+
+// A score the writer left out reads as "Not set", never as a blank tile; 0 is
+// a real value and stays "0".
+const scoreText = (value: number | null | undefined, outOf: string) => (value == null ? "Not set" : `${value}/${outOf}`);
 // A record from elsewhere may carry a status the timeline does not know (the notebook's default is "confirmed"): show it as unknown.
 const knownStatus = (status: string | null | undefined) => (statuses.includes(status as string) ? (status as string) : "unknown");
 
@@ -138,9 +158,11 @@ export default function TimelinePage() {
   const filteredMoments = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return moments.filter((m) => {
-      if (m.impact_level < minImpact) return false;
-      if (m.confidence_truth < minConfTruth) return false;
-      if (m.confidence_date < minConfDate) return false;
+      // A moment with no score counts as the filter's lowest, so it is not
+      // filtered away by the default (or any) setting.
+      if ((m.impact_level ?? 1) < minImpact) return false;
+      if ((m.confidence_truth ?? 0) < minConfTruth) return false;
+      if ((m.confidence_date ?? 0) < minConfDate) return false;
       if (statusFilter.length > 0 && !statusFilter.includes(m.status)) return false;
       if (personFilter.length > 0) {
         const ids = participantMap[m.id] || [];
@@ -159,11 +181,13 @@ export default function TimelinePage() {
   const groupedByYear = useMemo(() => {
     const groups: Record<string, TimelineMoment[]> = {};
     for (const m of filteredMoments) {
-      const year = m.happened_at.split("-")[0];
+      const day = momentDay(m);
+      const year = day ? day.split("-")[0] : UNDATED;
       if (!groups[year]) groups[year] = [];
       groups[year].push(m);
     }
-    return Object.entries(groups).sort(([a], [b]) => Number(b) - Number(a));
+    // Years newest first; the undated moments stay reachable at the end.
+    return Object.entries(groups).sort(([a], [b]) => (a === UNDATED ? 1 : b === UNDATED ? -1 : Number(b) - Number(a)));
   }, [filteredMoments]);
 
   const toggle = (value: string, setter: React.Dispatch<React.SetStateAction<string[]>>) => setter((prev) => prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]);
@@ -217,7 +241,9 @@ export default function TimelinePage() {
       id: moment.id,
       title: moment.title,
       description: moment.description,
-      happened_at: moment.happened_at,
+      // A moment without happened_at edits from its moment_date; without either
+      // the dialog starts at today and a suggestion may still fill the day.
+      happened_at: moment.happened_at ?? moment.moment_date ?? null,
       happened_end: moment.happened_end,
       status: moment.status,
       impact_level: moment.impact_level,
@@ -352,8 +378,9 @@ export default function TimelinePage() {
         </CollapsibleContent>
       </Collapsible>
 
-      {loading ? <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div> : loadFailed ? <div role="alert" className="text-center py-20 text-muted-foreground space-y-4"><p className="text-lg font-medium text-foreground">Your timeline could not be loaded</p><p className="text-sm">Check your connection and try again.</p><Button variant="outline" size="sm" onClick={fetchData}>Try again</Button></div> : groupedByYear.length === 0 ? (searchQuery.trim() || statusFilter.length > 0 || personFilter.length > 0 || minImpact > 1 || minConfTruth > 0 || minConfDate > 0) ? <div className="text-center py-20 text-muted-foreground space-y-4"><Search className="mx-auto h-12 w-12 opacity-40" /><p className="text-lg font-medium">No moments match your filters</p><Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button></div> : <div className="text-center py-20 text-muted-foreground space-y-4"><Calendar className="mx-auto h-12 w-12 opacity-40" /><p className="text-lg font-medium">No moments yet</p><p className="text-sm">Add moments manually to build your timeline.</p><AddEventDialog people={people} onCreated={fetchData} /></div> : <div className="space-y-8">{groupedByYear.map(([year, yearMoments]) => <div key={year}><div className="flex items-center gap-3 mb-4"><span className="text-2xl font-bold text-foreground">{year}</span><Separator className="flex-1" /><span className="text-xs text-muted-foreground">{yearMoments.length} moment{yearMoments.length !== 1 ? "s" : ""}</span></div><div className="relative ml-4 border-l-2 border-border pl-6 space-y-4">{yearMoments.map((moment) => <ContextMenu key={moment.id}><ContextMenuTrigger asChild><button onClick={() => openMomentDrawer(moment)} className="block w-full text-left group"><div className="absolute -left-[9px] h-4 w-4 rounded-full border-2 border-background bg-primary mt-1" /><Card className="transition-shadow hover:shadow-md cursor-pointer"><CardContent className="py-3 px-4"><div className="flex items-start justify-between gap-2"><div className="min-w-0 flex-1"><p className="font-medium text-sm break-words">{moment.title}</p><p className="text-xs text-muted-foreground mt-0.5">{format(parseDateOnly(moment.happened_at) ?? new Date(moment.happened_at), "MMM d, yyyy")}{moment.happened_end && ` – ${format(parseDateOnly(moment.happened_end) ?? new Date(moment.happened_end), "MMM d, yyyy")}`}</p></div><div className="flex items-center gap-1.5 shrink-0"><Badge variant="outline" className={`text-[10px] px-1.5 ${statusClasses[moment.status] || ""}`}>{moment.status.replace("_", " ")}</Badge>{(provenanceMap[moment.id] || []).length > 0 && <FileText className="h-3 w-3 text-muted-foreground" />}{moment.verified && <CheckCircle2 className="h-3 w-3 text-success" />}</div></div></CardContent></Card></button></ContextMenuTrigger><ContextMenuContent className="w-48"><ContextMenuItem onClick={() => void openEditDialog(moment)}><Pencil className="mr-2 h-3.5 w-3.5" /> Edit</ContextMenuItem><ContextMenuItem onClick={() => duplicateMoment(moment)}><Copy className="mr-2 h-3.5 w-3.5" /> Make a copy</ContextMenuItem><ContextMenuItem onClick={() => void deleteMoment(moment)}><Trash2 className="mr-2 h-3.5 w-3.5" /> Delete</ContextMenuItem></ContextMenuContent></ContextMenu>)}</div></div>)}</div>}
-      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}><SheetContent className="sm:max-w-lg overflow-y-auto">{selectedMoment && <><SheetHeader><SheetTitle>{selectedMoment.title}</SheetTitle><SheetDescription>{format(parseDateOnly(selectedMoment.happened_at) ?? new Date(selectedMoment.happened_at), "MMMM d, yyyy")}{selectedMoment.happened_end && ` – ${format(parseDateOnly(selectedMoment.happened_end) ?? new Date(selectedMoment.happened_end), "MMMM d, yyyy")}`}</SheetDescription></SheetHeader><div className="mt-6 space-y-6"><div className="flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => void openEditDialog(selectedMoment)}><Pencil className="mr-2 h-4 w-4" /> Edit Moment</Button><DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="icon" className="h-8 w-8" aria-label="Moment actions"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => duplicateMoment(selectedMoment)}><Copy className="mr-2 h-4 w-4" /> Make a copy</DropdownMenuItem><DropdownMenuItem onClick={() => void deleteMoment(selectedMoment)}><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div>{selectedMoment.description && <p className="text-sm text-muted-foreground">{selectedMoment.description}</p>}<div className="grid grid-cols-3 gap-3 text-center"><div className="rounded-lg bg-muted p-3"><p className="text-xs text-muted-foreground">Impact</p><p className="text-lg font-bold">{selectedMoment.impact_level}/4</p><p className="text-xs text-muted-foreground">{impactLabels[selectedMoment.impact_level]}</p></div><div className="rounded-lg bg-muted p-3"><p className="text-xs text-muted-foreground">Conf. Truth</p><p className="text-lg font-bold">{selectedMoment.confidence_truth}/10</p></div><div className="rounded-lg bg-muted p-3"><p className="text-xs text-muted-foreground">Conf. Date</p><p className="text-lg font-bold">{selectedMoment.confidence_date}/10</p></div></div><div className="flex gap-2 flex-wrap"><Badge variant="outline" className={statusClasses[selectedMoment.status] || ""}>{selectedMoment.status.replace("_", " ")}</Badge><Badge variant="outline">Source: {selectedMoment.source}</Badge></div>{selectedMoment.participants && selectedMoment.participants.length > 0 && <div><h2 className="mb-2 flex items-center gap-2 text-sm font-medium"><Users className="h-4 w-4" /> Participants</h2><div className="flex gap-2 flex-wrap">{selectedMoment.participants.map((p) => <Badge key={p.id} variant="secondary">{p.name}</Badge>)}</div></div>}</div></>}</SheetContent></Sheet>
+      {loading ? <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div> : loadFailed ? <div role="alert" className="text-center py-20 text-muted-foreground space-y-4"><p className="text-lg font-medium text-foreground">Your timeline could not be loaded</p><p className="text-sm">Check your connection and try again.</p><Button variant="outline" size="sm" onClick={fetchData}>Try again</Button></div> : groupedByYear.length === 0 ? (searchQuery.trim() || statusFilter.length > 0 || personFilter.length > 0 || minImpact > 1 || minConfTruth > 0 || minConfDate > 0) ? <div className="text-center py-20 text-muted-foreground space-y-4"><Search className="mx-auto h-12 w-12 opacity-40" /><p className="text-lg font-medium">No moments match your filters</p><Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button></div> : <div className="text-center py-20 text-muted-foreground space-y-4"><Calendar className="mx-auto h-12 w-12 opacity-40" /><p className="text-lg font-medium">No moments yet</p><p className="text-sm">Add moments manually to build your timeline.</p><AddEventDialog people={people} onCreated={fetchData} /></div> : <div className="space-y-8">{groupedByYear.map(([year, yearMoments]) => <div key={year}><div className="flex items-center gap-3 mb-4"><span className="text-2xl font-bold text-foreground">{year}</span><Separator className="flex-1" /><span className="text-xs text-muted-foreground">{yearMoments.length} moment{yearMoments.length !== 1 ? "s" : ""}</span></div><div className="relative ml-4 border-l-2 border-border pl-6 space-y-4">{yearMoments.map((moment) => <ContextMenu key={moment.id}><ContextMenuTrigger asChild><button onClick={() => openMomentDrawer(moment)} className="block w-full text-left group"><div className="absolute -left-[9px] h-4 w-4 rounded-full border-2 border-background bg-primary mt-1" /><Card className="transition-shadow hover:shadow-md cursor-pointer"><CardContent className="py-3 px-4"><div className="flex items-start justify-between gap-2"><div className="min-w-0 flex-1"><p className="font-medium text-sm break-words">{moment.title}</p><p className="text-xs text-muted-foreground mt-0.5">{formatMomentDay(moment, "MMM d, yyyy")}{moment.happened_end && ` – ${format(parseDateOnly(moment.happened_end) ?? new Date(moment.happened_end), "MMM d, yyyy")}`}</p></div><div className="flex items-center gap-1.5 shrink-0"><Badge variant="outline" className={`text-[10px] px-1.5 ${statusClasses[moment.status] || ""}`}>{moment.status.replace("_", " ")}</Badge>{(provenanceMap[moment.id] || []).length > 0 && <FileText className="h-3 w-3 text-muted-foreground" />}{moment.verified && <CheckCircle2 className="h-3 w-3 text-success" />}</div></div></CardContent></Card></button></ContextMenuTrigger><ContextMenuContent className="w-48"><ContextMenuItem onClick={() => void openEditDialog(moment)}><Pencil className="mr-2 h-3.5 w-3.5" /> Edit</ContextMenuItem><ContextMenuItem onClick={() => duplicateMoment(moment)}><Copy className="mr-2 h-3.5 w-3.5" /> Make a copy</ContextMenuItem><ContextMenuItem onClick={() => void deleteMoment(moment)}><Trash2 className="mr-2 h-3.5 w-3.5" /> Delete</ContextMenuItem></ContextMenuContent></ContextMenu>)}</div></div>)}</div>}
+
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}><SheetContent className="sm:max-w-lg overflow-y-auto">{selectedMoment && <><SheetHeader><SheetTitle>{selectedMoment.title}</SheetTitle><SheetDescription>{formatMomentDay(selectedMoment, "MMMM d, yyyy") || "Undated"}{selectedMoment.happened_end && ` – ${format(parseDateOnly(selectedMoment.happened_end) ?? new Date(selectedMoment.happened_end), "MMMM d, yyyy")}`}</SheetDescription></SheetHeader><div className="mt-6 space-y-6"><div className="flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => void openEditDialog(selectedMoment)}><Pencil className="mr-2 h-4 w-4" /> Edit Moment</Button><DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="icon" className="h-8 w-8" aria-label="Moment actions"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => duplicateMoment(selectedMoment)}><Copy className="mr-2 h-4 w-4" /> Make a copy</DropdownMenuItem><DropdownMenuItem onClick={() => void deleteMoment(selectedMoment)}><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div>{selectedMoment.description && <p className="text-sm text-muted-foreground">{selectedMoment.description}</p>}<div className="grid grid-cols-3 gap-3 text-center"><div className="rounded-lg bg-muted p-3"><p className="text-xs text-muted-foreground">Impact</p><p className="text-lg font-bold">{scoreText(selectedMoment.impact_level, "4")}</p><p className="text-xs text-muted-foreground">{selectedMoment.impact_level != null ? impactLabels[selectedMoment.impact_level] : ""}</p></div><div className="rounded-lg bg-muted p-3"><p className="text-xs text-muted-foreground">Conf. Truth</p><p className="text-lg font-bold">{scoreText(selectedMoment.confidence_truth, "10")}</p></div><div className="rounded-lg bg-muted p-3"><p className="text-xs text-muted-foreground">Conf. Date</p><p className="text-lg font-bold">{scoreText(selectedMoment.confidence_date, "10")}</p></div></div><div className="flex gap-2 flex-wrap"><Badge variant="outline" className={statusClasses[selectedMoment.status] || ""}>{selectedMoment.status.replace("_", " ")}</Badge><Badge variant="outline">Source: {selectedMoment.source || "Not set"}</Badge></div>{selectedMoment.participants && selectedMoment.participants.length > 0 && <div><h2 className="mb-2 flex items-center gap-2 text-sm font-medium"><Users className="h-4 w-4" /> Participants</h2><div className="flex gap-2 flex-wrap">{selectedMoment.participants.map((p) => <Badge key={p.id} variant="secondary">{p.name}</Badge>)}</div></div>}</div></>}</SheetContent></Sheet>
       <AddEventDialog people={people} onCreated={fetchData} editEvent={editMomentData} open={editDialogOpen} onOpenChange={setEditDialogOpen} />
       <AddEventDialog people={people} onCreated={fetchData} open={createDialogOpen} onOpenChange={setCreateDialogOpen} />
       {confirmDialog}
