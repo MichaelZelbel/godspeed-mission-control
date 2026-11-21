@@ -31,12 +31,13 @@ export function watchTree(root, listener) {
   };
   // Watch one directory. A directory that vanished between being seen and
   // being watched is skipped, and so is one this process cannot watch
-  // (EACCES/EPERM): a locked subfolder must not silence the tree that watches
-  // fine, and main's recursive watcher skips it the same way. Unless it is
-  // the root itself: failing to watch the root is a failure to watch anything,
-  // like fs.watch's own. Every other failure (an exhausted watch budget, out
-  // of handles) reaches the error channel, whose consumer gives up the watch,
-  // reads everything and starts again.
+  // (EACCES/EPERM): the skip is deliberate — a locked subfolder must not
+  // silence the tree that watches fine, and on Linux the recursive watcher
+  // this module replaces does the opposite, going dark for the whole tree
+  // around one. Unless it is the root itself: failing to watch the root is a
+  // failure to watch anything, like fs.watch's own. Every other failure (an
+  // exhausted watch budget, out of handles) reaches the error channel, whose
+  // consumer gives up the watch, reads everything and starts again.
   const watch = (relative, announce) => {
     if (closed || watchers.has(relative)) return;
     let watcher;
@@ -63,6 +64,7 @@ export function watchTree(root, listener) {
     catch (error) {
       if (relative === '') throw error;
       if (error.code === 'ENOENT' || error.code === 'EACCES' || error.code === 'EPERM') return;
+      fail(error);
       return;
     }
     watcher.on('error', fail);

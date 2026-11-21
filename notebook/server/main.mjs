@@ -984,15 +984,18 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   };
   // Private backups and Git merge workspaces are outside the watched knowledge.
   // A watcher that fails (the resource failures the error channel carries) is
-  // dropped here and the whole root is rebuilt: left in the map it would block
-  // the rootWatcher's re-watch route for the life of the process and the root
-  // would go dark.
+  // dropped here, the whole root is rebuilt, and the root is watched again
+  // after a second, like the store's own recovery: left in the map it would
+  // block the rootWatcher's re-watch route for the life of the process and
+  // the root would go dark. The watcher is stored before the error handler is
+  // attached, because watchTree replays a construction failure on attach and
+  // the identity guard needs the entry in the map to evict the dead watcher.
   const watchRoot=name=>{
     const folder=path.join(store.root,name);
     if(watchers.has(name)||!fs.existsSync(folder))return;
     const watcher=watchTree(folder,changed(name));
-    watcher.on('error',()=>{try{watcher.close();}catch{}if(watchers.get(name)===watcher){watchers.delete(name);changed(name)('rename',null);}});
     watchers.set(name,watcher);
+    watcher.on('error',()=>{try{watcher.close();}catch{}if(watchers.get(name)===watcher){watchers.delete(name);changed(name)('rename',null);setTimeout(()=>watchRoot(name),1000).unref?.();}});
   };
   for(const name of durableRoots)watchRoot(name);
   // A manual or extra instructions changed by anything (a sync from another machine, a session, an
