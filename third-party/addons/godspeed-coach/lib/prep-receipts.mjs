@@ -25,8 +25,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import { READING_TOOLS, researchDomains, researchEvidenceProblem, servedGoals } from "./prep-evidence.mjs";
-import { readPrep } from "./prep.mjs";
+import { READING_TOOLS, researchDomains, servedGoals } from "./prep-evidence.mjs";
+import { prepProblem, readPrep } from "./prep.mjs";
 
 const sha = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 const iso = (ms) => new Date(ms).toISOString();
@@ -244,12 +244,15 @@ const words = (v) => (typeof v === "string" ? v : v && typeof v === "object" ? O
 // A reviewer can reject one of the area's adopted goals even when the writer called the file
 // ready. Keep that rejected candidate useful as an explanation, but never leave it claiming ready.
 // Its old receipts deliberately stop matching after this edit, so neither the seal nor a copied
-// sidecar can admit it later.
+// sidecar can admit it later. Only an area with research domains is reviewed at all, so only such
+// an area is demoted; and the file is read with its line endings evened out, so a preparation
+// saved with Windows line endings is demoted all the way, not halfway.
 function leaveUncoveredGoalsDraft(prepFile, area, coverage) {
+  if (!researchDomains(area).length) return [];
   const rows = new Map(coverage.map((row) => [row.id, row]));
   const uncovered = servedGoals(area).filter((id) => rows.get(id)?.verdict !== "pass");
   if (!uncovered.length) return [];
-  let text = fs.readFileSync(prepFile, "utf8");
+  let text = fs.readFileSync(prepFile, "utf8").replace(/\r\n/g, "\n");
   text = text.replace(/^STATE:[ \t]*ready[ \t]*$/m, "STATE: draft");
   const explanation = `Independent review left these adopted goals uncovered: ${uncovered.join(", ")}.`;
   if (/^## Gaps[ \t]*$/m.test(text)) text = text.replace(/^## Gaps[ \t]*$/m, `## Gaps\n\n${explanation}`);
@@ -277,9 +280,13 @@ export function sealReview({ prepFile, area, evidenceFile, answer, reviewer, rev
   };
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, JSON.stringify(review, null, 2) + "\n");
-  const evidenceProblem = parsed ? researchEvidenceProblem(readPrep(prepFile), area, now, { evidence: evidenceFile, review: out })
+  // The seal asks the same gate a talk opening asks, over these candidate files: a file the gate
+  // would refuse (STATE not ready, another area's, an empty section) is not sealed, whatever the
+  // review says. And only an answer that was parsed demotes: an unreadable or empty answer is a
+  // failed seal, never a verdict that left goals uncovered.
+  const evidenceProblem = parsed ? prepProblem(readPrep(prepFile), area, now, { files: { evidence: evidenceFile, review: out } })
     : "its independent reviewer did not answer with the JSON the review recipe asks for";
-  const uncovered = leaveUncoveredGoalsDraft(prepFile, area, coverage);
+  const uncovered = parsed ? leaveUncoveredGoalsDraft(prepFile, area, coverage) : [];
   const problem = evidenceProblem || (uncovered.length ? "its independent review did not pass because it left an adopted goal uncovered" : null);
   const next = [...issues, ...coverage.filter((r) => r.verdict !== "pass").map((r) => `${r.id}: ${r.reason || "not substantiated"}`)];
   for (const id of uncovered) if (!next.some((issue) => issue.startsWith(`${id}:`))) next.push(`${id}: the independent review left this adopted goal uncovered`);
