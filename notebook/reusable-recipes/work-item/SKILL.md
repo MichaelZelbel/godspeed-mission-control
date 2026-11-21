@@ -16,8 +16,8 @@ the register: the program that called you does that from your final line.
 ## What done means
 
 **DONE WHEN is the contract.** It says what a reader will see when this is done. CHECK, if the
-item has one, is the line that will be run after you finish, from the mission control's top folder, and it
-alone decides whether the item is verified. Read both before you start, and before you answer run
+item has one, is the line that will be run after you finish, from the mission control's top folder. It
+must pass, and a separate reader compares a finished file with DONE WHEN before verification. Read both before you start, and before you answer run
 the CHECK yourself, exactly as written: if it does not exit 0, finish or correct the work (never the
 check) until it does, or end with the FAILED line below.
 

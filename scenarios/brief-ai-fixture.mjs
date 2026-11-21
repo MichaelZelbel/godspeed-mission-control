@@ -12,7 +12,9 @@ const server=http.createServer((request,response)=>{
   try{input=JSON.parse(body);}catch{}
   const prompt=String(input.messages?.at(-1)?.content||'');
   let content='Connected.';
-  if(prompt.includes('"kind":"morning-brief"'))content='Good morning. Choose one useful step and finish it today.\n\nNext: Ask Godspeed to show one concrete result.';
+  if(prompt.includes('"kind":"morning-brief"'))content=prompt.includes('Atlas proposal')&&prompt.includes('River proposal')
+   ?'Good morning. Atlas proposal and River proposal are waiting for your decision.\n\nNext: choose Atlas proposal or River proposal.'
+   :'Good morning. Choose one useful step and finish it today.\n\nNext: Ask Godspeed to show one concrete result.';
   else if(prompt.includes('"kind":"brief-verification"'))content=JSON.stringify({passed:true,reason:'The fixture accepts the deterministic scenario briefing.',rejection_scope:'non-source',rejected_source_ids:[]});
   response.writeHead(200,{'content-type':'application/json'});
   response.end(JSON.stringify({choices:[{message:{role:'assistant',content}}]}));
