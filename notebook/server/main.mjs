@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { pipeline } from 'node:stream';
 import os from 'node:os';
 import { Store, atomic, hash } from '../core/records/store.mjs';
+import { seed } from '../core/seeds.mjs';
 import { SearchIndex } from '../core/index/search.mjs';
 import { MeaningIndex, embeddingConfig, saveEmbeddingConfig, embedder } from '../core/index/meaning.mjs';
 import { QueryService } from '../core/query.mjs';
@@ -164,6 +165,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     error=>console.error(startupTrace('index-publication-failed'),error?.message||error)
   );
   const stopIndexing=store.onChange(({changed,gone})=>{try{index.update(changed);index.forget(gone);}catch{}});
+  // A notebook opened without `godspeed.mjs init`, or by a version that ships new starter
+  // templates, still gets them; one the owner removed is not put back.
+  try{seed(store);}catch(error){console.error('Godspeed Mission Control: the starter templates could not be added:',error.message);}
   // Meaning search, when a service is connected (Settings, or GODSPEED_EMBEDDINGS_*).
   const connectMeaning=config=>{index.meaning?.close();index.meaning=new MeaningIndex(index,{config});};
   connectMeaning(embeddingConfig(store.state));
