@@ -153,7 +153,7 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
           aria-disabled={pending}
           aria-busy={pending}
           title={tooltip}
-          aria-label={tooltip}
+          aria-label={`${label}. ${optimistic ? "Show to AI again" : "Hide from AI"}`}
           className={cn(
             "h-7 gap-1.5 px-2 text-xs font-normal aria-disabled:opacity-50 aria-disabled:pointer-events-none",
             optimistic

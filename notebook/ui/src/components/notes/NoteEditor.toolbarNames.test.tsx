@@ -86,7 +86,7 @@ function accessibleName(button: HTMLButtonElement): string {
   return (button.textContent ?? "").trim();
 }
 
-/** Every button in scope is named; every button with a tooltip is named the same as its tooltip. */
+/** Every button in scope is named; an icon-only button uses its tooltip as its name. */
 function expectEveryTooltipNamed(scope: Element, where: string, atLeast: number) {
   const buttons = Array.from(scope.querySelectorAll<HTMLButtonElement>("button"));
   expect(buttons.length, `${where}: only ${buttons.length} buttons found`).toBeGreaterThanOrEqual(atLeast);
@@ -95,7 +95,12 @@ function expectEveryTooltipNamed(scope: Element, where: string, atLeast: number)
     expect(name, `${where}: a button has no accessible name: ${button.outerHTML.slice(0, 200)}`).not.toBe("");
     const title = button.getAttribute("title")?.trim();
     if (title !== undefined) {
-      expect(name, `${where}: the button with tooltip "${title}" says "${name}" instead: ${button.outerHTML.slice(0, 200)}`).toBe(title);
+      const visibleText = (button.textContent ?? "").trim();
+      if (visibleText) {
+        expect(name, `${where}: the button's name "${name}" does not contain its visible text "${visibleText}": ${button.outerHTML.slice(0, 200)}`).toContain(visibleText);
+      } else {
+        expect(name, `${where}: the button with tooltip "${title}" says "${name}" instead: ${button.outerHTML.slice(0, 200)}`).toBe(title);
+      }
     }
   }
 }
