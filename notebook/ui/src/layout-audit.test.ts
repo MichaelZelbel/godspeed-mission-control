@@ -993,4 +993,52 @@ describe("every page at a phone's and a desktop's width", () => {
     }
     expect(failures, failures.join("\n")).toEqual([]);
   }, 60_000);
+
+  // A group member's sheet at a phone's width (#941): the List tab's row button opens it, so the
+  // page-wide check meets it only behind the "group not found" page, and nothing audited it. On
+  // main this fails at 320 px: the Next Steps row's two buttons do not wrap, so the sheet's
+  // content is 367 px wide inside a 319 px sheet and "Add Next Step" runs past its right edge,
+  // and the long member name in the header is truncated to "Bartholomew Feathers…". The case
+  // opens the sheet for the long-named member at 320 and 375 px, the narrowest phone the sheet
+  // must hold and the width the fault was seen at, and applies the audit's rules to the whole
+  // shown page (behind the open sheet only the sheet itself is visible), the sheet's sideways
+  // scroll measure, and the header name's own box against its scroll width.
+  it("fits a member's sheet inside the screen at a phone's width", async () => {
+    const member = "Bartholomew Featherstonehaugh";
+    const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name: "Members in the sheet" }, selection: "id,slug", single: true });
+    expect(group?.slug ?? null).toBeTruthy();
+    const person = await seededNotebook.query({ table: "contacts", operation: "insert", values: { name: member }, selection: "id", single: true });
+    await seededNotebook.query({ table: "contact_group_memberships", operation: "insert", values: { group_id: group.id, contact_id: person.id, priority: "urgent", status: "new", reason: "Met at the conference" }, selection: "id", single: true });
+    const failures: string[] = [];
+    for (const viewport of [{ width: 320, height: 568 }, { width: 375, height: 812 }]) {
+      const context = await browser.newContext({ viewport });
+      try {
+        const page = await context.newPage();
+        const cdp = await context.newCDPSession(page);
+        await page.goto(`${seededNotebook.base}/dashboard/groups/${group.slug}`);
+        await settle(page);
+        await page.getByRole("tab", { name: "List" }).click();
+        await page.getByRole("button", { name: member }).first().click();
+        await page.getByRole("dialog").waitFor({ timeout: 15_000 });
+        await settle(page);
+        failures.push(...(await auditShown(page, cdp)).map((f) => `${viewport.width} px, ${f.rule}: ${f.element}`));
+        const sheet = await page.evaluate(() => {
+          // The sheet is the page's last dialog: the row button opens no other one.
+          const el = [...document.querySelectorAll('[role="dialog"]')].at(-1) as HTMLElement | undefined;
+          if (!el) return null;
+          const title = el.querySelector("h2") as HTMLElement | null;
+          return { sw: el.scrollWidth, cw: el.clientWidth, title: title?.textContent ?? "", titleCut: title && title.scrollWidth > title.clientWidth, holds: title?.clientWidth, needs: title?.scrollWidth };
+        });
+        if (!sheet) failures.push(`${viewport.width} px: the member sheet is missing`);
+        else {
+          if (sheet.sw > sheet.cw) failures.push(`${viewport.width} px: the sheet scrolls sideways out of sight: its content is ${sheet.sw} px wide in a ${sheet.cw} px sheet`);
+          if (!sheet.title.includes(member)) failures.push(`${viewport.width} px: the sheet's header does not show the whole name "${member}"`);
+          else if (sheet.titleCut) failures.push(`${viewport.width} px: the sheet's header cuts the name: its box holds ${sheet.holds} px, its text needs ${sheet.needs}`);
+        }
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 60_000);
 });
