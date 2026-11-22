@@ -2,10 +2,10 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 
 // The notebook's "Documentation" link went to /docs, which has no route in this app ("This page
 // is unavailable"). The documentation is the user guide at godspeedmissioncontrol.com/guide, so
-// the sidebar, and the footer, 404 and wizard pages kept from the upstream notebook, open it in a
-// new tab instead.
+// the sidebar and footer kept from the upstream notebook open it in a new tab instead. (The 404
+// and wizard pages that also did are gone: no route reached them.)
 const read=p=>fs.readFileSync(new URL(p,import.meta.url),'utf8').replaceAll('\r','');
-const FILES=['components/layout/DashboardSidebar.tsx','components/layout/Footer.tsx','pages/NotFound.tsx','pages/Wizard.tsx'];
+const FILES=['components/layout/DashboardSidebar.tsx','components/layout/Footer.tsx'];
 
 test('no link goes to the /docs page this app does not have',()=>{
  assert.doesNotMatch(read('../ui/src/App.tsx'),/path=["']\/docs/,'there is still no /docs route');
@@ -19,6 +19,4 @@ test('Documentation opens the user guide in a new tab',()=>{
  assert.match(sidebar,/<NavLink to=\{item\.url\} \{\.\.\.newTab\(item\.url\)\}>/,'the System links pass the new-tab attributes');
  assert.match(sidebar,/const newTab = \(url: string\) => \(\/\^https\?:\/\.test\(url\) \? \{ target: "_blank", rel: "noopener" \} : \{\}\);/);
  assert.match(read('../ui/src/components/layout/Footer.tsx'),/\{ label: "Docs", to: GUIDE_URL, external: true \}/);
- assert.match(read('../ui/src/pages/Wizard.tsx'),/<a href=\{GUIDE_URL\} target="_blank" rel="noopener"/);
- assert.match(read('../ui/src/pages/NotFound.tsx'),/window\.open\(`\$\{GUIDE_URL\}\/search\?q=\$\{encodeURIComponent\(query\.trim\(\)\)\}`, "_blank", "noopener"\)/);
 });
