@@ -782,6 +782,8 @@ test('every scenario job is in exactly one group, and the groups are the approve
   const release = rows.filter((r) => r.gate === 'release').map((r) => r.id);
   assert.equal(release.length, 17, 'the release gate is the 17 jobs approved on 2026-11-22; changing it is the owner\'s decision');
   assert.equal(rows.length - release.length, 15);
+  // The approved list itself, pinned so that swapping one job between the groups cannot pass unseen.
+  assert.deepEqual([...release].sort(), ['brief-asked-in-chat', 'briefing-breaks-a-rule', 'docker-server', 'first-day', 'linux-install', 'linux-update', 'mac-install', 'plain-yes', 'reminder-closed-elsewhere', 'reminder-from-settings', 'server-update-keeps-everything', 'settings-on-install', 'talk-prep-honest', 'telegram-language', 'update-keeps-everything', 'what-was-that', 'windows-old-names-move']);
   for (const id of ['linux-install', 'docker-server', 'first-day', 'plain-yes', 'reminder-closed-elsewhere', 'windows-old-names-move']) assert.ok(release.includes(id), `${id} holds up a release`);
   for (const id of ['voice', 'connection-check', 'late-reminder-file', 'hermes-update-rollback', 'media-travels']) assert.ok(!release.includes(id), `${id} is weekly only`);
 });
