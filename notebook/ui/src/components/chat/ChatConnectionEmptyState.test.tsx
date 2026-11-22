@@ -5,6 +5,7 @@ import '@testing-library/jest-dom/vitest';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {MemoryRouter} from 'react-router-dom';
 import {ChatConnectionEmptyState,chatAIState,useChatOptions,stateSaid} from './ChatConnectionEmptyState';
+import {AI_CONNECTION_UNREADABLE_STATUS} from '../../../../core/no-ai.mjs';
 import { WAIT } from "@/test/wait-limits";
 
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
@@ -47,6 +48,14 @@ describe.each(surfaces)('%s pre-composer state',surface=>{
     expect(screen.getByText(/Use it for the daily routines and the chat too/)).toBeInTheDocument();
     expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
   });
+  // #826: the saved connection exists but cannot be read, so the chat says what Settings says.
+  it('says the saved connection cannot be read, as Settings does',async()=>{
+    show({connected:true,usable:false,availability:'unreadable'});
+    expect(await screen.findByText('The saved AI connection could not be read.', undefined, WAIT)).toBeInTheDocument();
+    expect(screen.getByText('Remove it in Settings, Your AI, to connect one again.')).toBeInTheDocument();
+    expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
+    expect(screen.queryByText('Ordinary ready state')).not.toBeInTheDocument();
+  });
 });
 
 it('preserves a ready state when connection checking is unavailable',()=>{
@@ -55,6 +64,10 @@ it('preserves a ready state when connection checking is unavailable',()=>{
 
 it('knows a stalled reply already says the stall, so the notice under it does not repeat it',()=>{
   expect(stateSaid('Your AI is not answering. Try again in a moment, or check it in Settings, Your AI.')).toBe('stalled');
+});
+
+it('knows a reply that says the saved connection cannot be read, so the notice does not repeat it',()=>{
+  expect(stateSaid(AI_CONNECTION_UNREADABLE_STATUS)).toBe('unreadable');
 });
 
 // #822: the Dashboard's arrival read asks for a check only once a chat has read the shared state

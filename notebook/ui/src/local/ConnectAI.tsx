@@ -5,6 +5,7 @@ import {Input} from '@/components/ui/input';
 import {AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger} from '@/components/ui/alert-dialog';
 import {AlertTriangle,CheckCircle2,Loader2} from 'lucide-react';
 import {providerService} from '../../../core/provider-service.mjs';
+import {AI_CONNECTION_UNREADABLE_STATUS} from '../../../core/no-ai.mjs';
 
 // Settings > Your AI (18 October 2026). What the person connects here powers the notebook and, unless
 // they untick it, the daily routines and the chat too (notebook/core/routine-ai.mjs): every installer
@@ -18,11 +19,11 @@ type SavedProvider=|{configured:false;key:false}|{configured:true;url:string;mod
 async function call(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 export const routineAIStatus=()=>call('routine-ai') as Promise<RoutineAI>;
 function providerResponse(value:unknown):SavedProvider{
-  if(!value||typeof value!=='object')throw new Error('The saved AI connection could not be read.');
+  if(!value||typeof value!=='object')throw new Error(AI_CONNECTION_UNREADABLE_STATUS);
   const data=value as Record<string,unknown>;
   if(data.configured===false&&data.key===false)return {configured:false,key:false};
   if(data.configured===true&&typeof data.url==='string'&&typeof data.model==='string'&&typeof data.key==='boolean')return data as SavedProvider;
-  throw new Error('The saved AI connection could not be read.');
+  throw new Error(AI_CONNECTION_UNREADABLE_STATUS);
 }
 const savedProvider=async()=>providerResponse(await call('provider'));
 // THE CHOICES, the same for the main AI and the backup (22 October 2026, discussion #20): a key of
@@ -100,12 +101,27 @@ export function RoutineAIState({status,checking,onCheck,connected=false}:{status
 export function ConnectAI(){
   const qc=useQueryClient(),id=useId();
   const status=useQuery({queryKey:['routine-ai'],queryFn:routineAIStatus});
-  const saved=useQuery({queryKey:['provider'],queryFn:savedProvider});
+  // The saved file is read again while this page is open (#826): a connection damaged or repaired
+  // on disk reaches it within one status refresh, the same five seconds the chat reads keep.
+  const saved=useQuery({queryKey:['provider'],queryFn:savedProvider,refetchInterval:5000,refetchIntervalInBackground:true});
   const [service,setService]=useState('openrouter'),[address,setAddress]=useState(''),[model,setModel]=useState(''),[key,setKey]=useState('');
   const [routines,setRoutines]=useState<boolean|null>(null),[busy,setBusy]=useState(false),[checking,setChecking]=useState(false),[error,setError]=useState(''),[done,setDone]=useState('');
   const data=status.data,useForRoutines=routines??(data?.source!=='hermes');
-  const filled=useRef(false);
-  useEffect(()=>{if(filled.current||!saved.data)return;filled.current=true;if(!saved.data.configured)return;
+  useEffect(()=>{
+    if(!saved.isError)return;
+    setDone('');
+    setError('');
+  },[saved.isError]);
+  // The form is filled from the saved connection, and filled again only when that connection itself
+  // changes on disk (a repair or a replacement while the page is open, #826). While it stays the
+  // same, text the person is editing is never dropped.
+  const loaded=useRef<string>();
+  useEffect(()=>{
+    if(!saved.data)return;
+    const signature=JSON.stringify(saved.data);
+    if(signature===loaded.current)return;
+    loaded.current=signature;
+    if(!saved.data.configured)return;
     const url=saved.data.url,selected=providerService(url);
     setService(selected);setAddress(selected==='other'?url:'');setModel(saved.data.model||'');
   },[saved.data]);
@@ -152,7 +168,7 @@ export function ConnectAI(){
   return <section id="connect-ai" className="border rounded p-4 space-y-4" aria-labelledby="connect-ai-title">
     <h2 id="connect-ai-title" className="text-xl">Your AI</h2>
     {status.isLoading?<p role="status">Reading which AI your routines use…</p>:<RoutineAIState status={data} checking={checking} onCheck={check} connected={!!saved.data?.configured}/>}
-    {saved.error?<div className="space-y-3"><p role="alert" className="text-red-500">The saved AI connection could not be read. The form is unavailable so it cannot be overwritten. Remove it to connect one again.</p>{removeControl}{done&&<p role="status">{done}</p>}{error&&<p role="alert" className="text-red-500">{error}</p>}</div>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
+    {saved.error?<div className="space-y-3"><p role="alert" className="text-red-500">{AI_CONNECTION_UNREADABLE_STATUS} The form is unavailable so it cannot be overwritten. Remove it to connect one again.</p>{removeControl}{error&&<p role="alert" className="text-red-500">{error}</p>}</div>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
       <p>Connect the AI account you pay for. The key stays on this device and never goes into your notes.</p>
       <div><label className="block" htmlFor={id+'service'}>Your AI service</label>
         <select id={id+'service'} className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!data?.available).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
