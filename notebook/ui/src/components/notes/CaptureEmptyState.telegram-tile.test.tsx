@@ -7,6 +7,7 @@ import "@testing-library/jest-dom/vitest";
 import { CaptureEmptyState } from "./CaptureEmptyState";
 import Control from "@/local/Control";
 import ConnectTelegram from "@/local/ConnectTelegram";
+import { telegramSwitchedOff } from "@/local/ConnectTelegram";
 import { WAIT } from "@/test/wait-limits";
 
 // The one sentence the Telegram page and the Settings' Telegram section show where Telegram cannot
@@ -68,5 +69,28 @@ describe("The Dashboard empty state's Telegram tile", () => {
     expect(await screen.findByText(/In Telegram, open/, undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByText("BotFather")).toBeInTheDocument();
     expect(screen.getByLabelText("Your bot's key")).toBeInTheDocument();
+  });
+});
+
+// Issue #975: where Telegram cannot be connected, the tile promised it worked.
+describe("The tile's own words", () => {
+  const PROMISE = "Send messages to your bot to capture ideas on the go.";
+
+  it("say what the Telegram page says where Telegram cannot be connected", async () => {
+    page({ available: false, managed: null, connected: false, phase: "none" }, "/dashboard/notes");
+    expect(await screen.findByText(TELEGRAM_UNAVAILABLE, undefined, WAIT)).toBeInTheDocument();
+    expect(screen.queryByText(PROMISE)).toBeNull();
+  });
+
+  it("say the server's operator switched Telegram off when they did", async () => {
+    page({ available: false, managed: null, reason: "switched-off", connected: false, phase: "none" }, "/dashboard/notes");
+    expect(await screen.findByText(telegramSwitchedOff, undefined, WAIT)).toBeInTheDocument();
+    expect(screen.queryByText(PROMISE)).toBeNull();
+  });
+
+  it("stay as they were where Telegram can be connected", async () => {
+    page({ available: true, managed: "web", connected: false, phase: "none" }, "/dashboard/notes");
+    expect(await screen.findByText(PROMISE, undefined, WAIT)).toBeInTheDocument();
+    expect(screen.queryByText(TELEGRAM_UNAVAILABLE)).toBeNull();
   });
 });
