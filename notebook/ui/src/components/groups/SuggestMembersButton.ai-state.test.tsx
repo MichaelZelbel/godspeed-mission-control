@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
-import { AI_REFUSED, AI_STALLED_STATUS, AI_UNREACHABLE, NO_AI_ANALYSIS } from "../../../../core/no-ai.mjs";
+import { AI_CONNECTION_UNREADABLE_STATUS, AI_REFUSED, AI_STALLED_STATUS, AI_UNREACHABLE, NO_AI_ANALYSIS } from "../../../../core/no-ai.mjs";
 import { SuggestMembersButton } from "./SuggestMembersButton";
 import { WAIT } from "@/test/wait-limits";
 
@@ -67,6 +67,14 @@ describe("the AI Match Members button while the AI fails", () => {
     renderButton();
     expect(screen.getByRole("button", { name: "AI Match Members" })).toBeDisabled();
     expect(screen.getByRole("status")).toHaveTextContent(noticeText(NO_AI_ANALYSIS));
+  });
+
+  // #826: the saved connection exists but cannot be read, so the button says what Settings says.
+  it("says the saved connection cannot be read when its file is damaged", () => {
+    state.aiAvailability = "unreadable";
+    renderButton();
+    expect(screen.getByRole("button", { name: "AI Match Members" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(noticeText(AI_CONNECTION_UNREADABLE_STATUS));
   });
 
   it("shows no provider's own words in any of these states", () => {

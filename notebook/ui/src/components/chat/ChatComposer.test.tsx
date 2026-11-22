@@ -75,6 +75,15 @@ it('with no AI connected the model picker says so and both pickers are off',asyn
  expect(screen.queryByText('Connected model')).not.toBeInTheDocument();
 });
 
+it('labels the disabled picker when the saved AI connection is unreadable',async()=>{
+ answer({connected:true,usable:false,availability:'unreadable',current:'',models:[{id:'',efforts:[]}]});show();
+ const model=screen.getByRole('combobox',{name:'Model'});
+ await waitFor(()=>expect(model).toHaveDisplayValue('Connection unreadable'), WAIT);
+ expect(model).toHaveAttribute('title','Connection unreadable');
+ expect(model).toBeDisabled();
+ expect(screen.queryByText('Connected model')).not.toBeInTheDocument();
+});
+
 it('a connected AI without a model list still shows the connected model',async()=>{
  answer({current:'Connected model',models:[{id:'',efforts:[]}]});show();
  const model=screen.getByRole('combobox',{name:'Model'});

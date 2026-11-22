@@ -3355,8 +3355,10 @@ function CollectionDetailPage() {
       </div>
     );
 
+  // The pane fills main's content height where the floating chat button shows, defined in
+  // DashboardLayout.
   return (
-    <div className="flex h-[calc(100dvh-104px)] w-full flex-col overflow-hidden rounded-md border bg-background lg:flex-row">
+    <div className="flex h-[var(--page-h)] w-full flex-col overflow-hidden rounded-md border bg-background lg:flex-row">
       <SEOHead
         title={`${collection?.name ?? "Collection"} - Godspeed Mission Control`}
         noIndex

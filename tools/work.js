@@ -77,10 +77,17 @@ const asOwner = (v) => (PERSON.test(v) ? 'person' : /^mission[ -]?control$/i.tes
 const NEEDS = /^(none|person|authorization|capability:.+)$/;
 const asNeeds = (v) => (PERSON.test(v) ? 'person' : v);
 const KINDS = ['do', 'learn', 'repair'];
+// THE RESULT EXTENSIONS (#914). One list for filing and for finding: the filing gate (a learn
+// item's DONE WHEN, --publish) and the file-finding side (mc-work-run's commit, publish and
+// content review) accept the same files. .html has been a result since before #571, so it is in
+// the list, not out of it.
+const RESULT_EXTS = ['md', 'csv', 'json', 'txt', 'html'];
+const RESULT_EXTS_SAID = RESULT_EXTS.map((e, i) => '.' + e + (i === RESULT_EXTS.length - 1 ? '' : i === RESULT_EXTS.length - 2 ? ' or ' : ', ')).join('');
+const NAMED_FILE_EXT = new RegExp('\\.(' + RESULT_EXTS.join('|') + ')$', 'i');
 // A learn item is done when its answer is in a file. "Names a file" means: a token with a
-// slash or backslash in it, ending in .md, .csv, .json or .txt, trailing punctuation ignored.
+// slash or backslash in it, ending in one of the result extensions, trailing punctuation ignored.
 const namesFile = (s) => String(s || '').split(/\s+/).map(t => t.replace(/[.,;:)"'\]]+$/, ''))
-  .some(t => /[\\/]/.test(t) && /\.(md|csv|json|txt)$/i.test(t));
+  .some(t => /[\\/]/.test(t) && NAMED_FILE_EXT.test(t));
 // WHERE A RESULT IS KEPT (#543). On 14 November 2026 a daily round kept a person's finished
 // checklist in routines/next-action/<day>/, a run-log folder the nightly cleanup empties after 30
 // days, and verified the item on it there. So `file` refuses a DONE WHEN, --path or CHECK that names
@@ -158,7 +165,6 @@ const runLogPath = (text) => {
 // ignored, trailing dots and spaces dropped). A path may hold spaces, so runs of words are tried
 // too, earliest first and shortest first. Only a file of the mission control that is there counts;
 // the answer is its path from the mission control with / between steps, written as on disk.
-const NAMED_FILE_EXT = /\.(md|csv|json|txt|html)$/i;
 const fileOnDisk = (written, root) => {
   let c = written.replace(/^["'`(\[<]+/, '').replace(/[.,;:)"'`\]>]+$/, '');
   if (!/[\\/]/.test(c) || !NAMED_FILE_EXT.test(c)) return '';
@@ -547,7 +553,7 @@ cmds.file = (a) => {
     const inLog = runLogPath(text);
     if (inLog) die(`${label} names ${inLog.path}, ${inLog.itself ? 'which is' : 'inside'} ${inLog.folder}/, a run-log folder whose files the nightly cleanup deletes after 30 days. A result is kept with the person's work: put it under work/, goals/ or ideas/ (for example work/<a short name>.md) and name that path instead`);
   }
-  if (kind === 'learn' && !namesFile(done)) die('a learn item is done when the answer is written somewhere a reader can open: its DONE WHEN must name a file (a path ending in .md, .csv, .json or .txt), or give --path <file>');
+  if (kind === 'learn' && !namesFile(done)) die(`a learn item is done when the answer is written somewhere a reader can open: its DONE WHEN must name a file (a path ending in ${RESULT_EXTS_SAID}), or give --path <file>`);
   if (!done) die('--done-when is required: what a reader will see when this is done, so it can be verified by someone who is not the runner');
   const touches = a.touches === undefined || a.touches === 'true' ? [] : (holdsLib() || die('--touches needs holds.js beside this program')).touchTokens(a.touches);
   const badSlug = touches.find(t => !holdsLib().SLUG.test(t));
@@ -563,7 +569,7 @@ cmds.file = (a) => {
   const publish = a.publish === 'yes';
   if (publish) {
     if (a.may !== undefined) die('a page goes out on a yes for this item, not on a standing permission: file it without --may');
-    if (!namesFile(done)) die('--publish needs a DONE WHEN that names the file to publish (a path ending in .md, .csv, .json or .txt)');
+    if (!namesFile(done)) die(`--publish needs a DONE WHEN that names the file to publish (a path ending in ${RESULT_EXTS_SAID})`);
   }
   const outward = a.outward === 'yes' || publish ? 'yes' : 'no';
   if (kind === 'repair' && (outward === 'yes' || a.may !== undefined)) die('a repair mends this machine and reaches nobody else, so it is never outward: file the outward part as an item of its own');
