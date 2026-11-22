@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
@@ -86,6 +86,15 @@ describe("The tile's own words", () => {
     page({ available: false, managed: null, reason: "switched-off", connected: false, phase: "none" }, "/dashboard/notes");
     expect(await screen.findByText(telegramSwitchedOff, undefined, WAIT)).toBeInTheDocument();
     expect(screen.queryByText(PROMISE)).toBeNull();
+  });
+
+  it("stay as they were where the server settings manage Telegram", async () => {
+    page({ available: false, managed: "environment", connected: false, phase: "none" }, "/dashboard/notes");
+    // The promise shows before the status arrives, so let the answer land before judging the tile.
+    await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalledWith(expect.stringContaining("telegram"), expect.anything()), WAIT);
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(screen.getByText(PROMISE)).toBeInTheDocument();
+    expect(screen.queryByText(TELEGRAM_UNAVAILABLE)).toBeNull();
   });
 
   it("stay as they were where Telegram can be connected", async () => {
