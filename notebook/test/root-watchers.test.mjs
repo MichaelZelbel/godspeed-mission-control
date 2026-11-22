@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {createService} from '../server/main.mjs';
+import {recordsFolder} from '../core/file-policy.mjs';
 
 const BOUND=5000;
 const until=async(check,ms=BOUND)=>{const end=Date.now()+ms;for(;;){const value=check();if(value||Date.now()>end)return value;await new Promise(r=>setTimeout(r,50));}};
@@ -22,6 +23,10 @@ test('after the workspace folder is replaced, a note written into the new folder
     assert.equal(await until(()=>found(service,'zebraalpha')),true,'the first note is found');
     write(root,'work/b.md','zebrabeta');
     assert.equal(await until(()=>found(service,'zebrabeta')),true,'the second note is found');
+    write(root,recordsFolder+'/c.md','zebragamma');
+    assert.equal(await until(()=>found(service,'zebragamma')),true,'a first note in the notes folder is found');
+    write(root,recordsFolder+'/d.md','zebradelta');
+    assert.equal(await until(()=>found(service,'zebradelta')),true,'a second note in the notes folder is found');
   }finally{await done();}
 });
 
@@ -59,6 +64,18 @@ test('a root unreadable at start does not stop the notebook: it starts, names th
   const {service,done}=await workspace(prepare);
   try{
     assert.equal(found(service,'startone'),true);
+    assert.equal(log.lines.filter(line=>line.includes('cannot read goals')).length,1);
+  }finally{log.restore();await done();}
+});
+
+test('a synchronous rebuild skips an unreadable root, keeps the readable files and reports the folder once',{skip:process.getuid?.()===0||process.platform==='win32'},async()=>{
+  const log=captured();
+  const {root,service,done}=await workspace(r=>{fs.mkdirSync(path.join(r,'goals'));fs.writeFileSync(path.join(r,'goals','x.md'),'x');});
+  try{
+    fs.chmodSync(path.join(root,'goals'),0);
+    write(root,'work/sync.md','syncone');
+    service.index.rebuild();service.index.rebuild();
+    assert.equal(found(service,'syncone'),true);
     assert.equal(log.lines.filter(line=>line.includes('cannot read goals')).length,1);
   }finally{log.restore();await done();}
 });

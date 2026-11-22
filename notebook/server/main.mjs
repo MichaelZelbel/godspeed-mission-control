@@ -7,7 +7,7 @@ import { pipeline } from 'node:stream';
 import os from 'node:os';
 import { Store, atomic, hash } from '../core/records/store.mjs';
 import { seed } from '../core/seeds.mjs';
-import { SearchIndex } from '../core/index/search.mjs';
+import { SearchIndex, isUnreadable } from '../core/index/search.mjs';
 import { MeaningIndex, embeddingConfig, saveEmbeddingConfig, embedder } from '../core/index/meaning.mjs';
 import { QueryService } from '../core/query.mjs';
 import { Domains } from '../core/domains.mjs';
@@ -1046,7 +1046,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   };
   // A root that cannot be watched yet is tried again by `reconcile`; only a
   // permission failure is let through, anything else still fails the start.
-  const watchRootOrWait=name=>{try{watchRoot(name);}catch(error){if(error?.code!=='EACCES'&&error?.code!=='EPERM')throw error;}};
+  const watchRootOrWait=name=>{try{watchRoot(name);}catch(error){if(!isUnreadable(error))throw error;}};
   for(const name of durableRoots)watchRootOrWait(name);
   // A manual or extra instructions changed by anything (a sync from another machine, a session, an
   // editor) bring the assistant's own identity file in step with them (assistant-soul.mjs).
@@ -1058,8 +1058,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   };
   const inodeOf=()=>{try{return fs.statSync(store.root).ino;}catch{return null;}};
   let rootWatcher=null,rootInode=inodeOf();
-  const armRootWatcher=()=>{try{rootWatcher=fs.watch(store.root,onRootEvent);rootWatcher.on('error',()=>{});}catch(error){rootWatcher=null;if(rootInode!==null&&error?.code!=='ENOENT')throw error;}};
-  armRootWatcher();
+  const openRootWatcher=()=>{const watcher=fs.watch(store.root,onRootEvent);watcher.on('error',()=>{});return watcher;};
+  try{rootWatcher=openRootWatcher();}catch(error){if(rootInode!==null&&error?.code!=='ENOENT')throw error;}
   // Once a second: a folder that appeared (a durable root created after start,
   // including one under a parent such as routines/) or could not be watched yet
   // is watched now; and the workspace folder itself, replaced under the running
@@ -1070,13 +1070,19 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     const inode=inodeOf();
     if(inode===null)return;
     if(inode!==rootInode){
+      // The new folder's watcher is opened before anything is torn down and
+      // before the inode is remembered: a failure here (a folder not yet
+      // readable, no handles left) is retried on the next tick, never thrown
+      // out of the timer.
+      let next;try{next=openRootWatcher();}catch{return;}
       rootInode=inode;
       try{rootWatcher?.close();}catch{}
+      rootWatcher=next;
       for(const watcher of watchers.values()){try{watcher.close();}catch{}}
       watchers.clear();
       for(const timer of rewatches.values())clearTimeout(timer);
       rewatches.clear();
-      armRootWatcher();
+      store.unwatch();store.watch();
       changed('')('rename',null);
     }
     for(const name of durableRoots){

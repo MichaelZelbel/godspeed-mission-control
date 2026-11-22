@@ -8,7 +8,7 @@ import {mergeRanked} from './meaning.mjs';
 import {MeaningWorker} from './meaning-worker-client.mjs';
 import {STOPWORDS} from './stopwords.mjs';
 
-const denied = error => error?.code === 'EACCES' || error?.code === 'EPERM';
+export const isUnreadable = error => error?.code === 'EACCES' || error?.code === 'EPERM';
 
 // The search index: one SQLite file beside the notebook, rebuilt from the
 // notebook whenever it is missing or of an older form, so it never holds
@@ -164,10 +164,10 @@ export class SearchIndex {
     const documents = this.recordDocuments(), seen = new Set();
     const unreadable = new Set();
     let top = '';
-    const visit = (relative, allowed = shared, limit = 512 * 1024) => { try { const absolute = path.join(this.store.root, relative); if (!fs.existsSync(absolute)) return; const stat = fs.lstatSync(absolute); if (stat.isSymbolicLink()) return; if (stat.isDirectory()) { for (const name of fs.readdirSync(absolute)) if (allowed(relative + '/' + name)) visit(relative + '/' + name, allowed, limit); } else if (stat.size <= limit && /\.(md|json|jsonl|txt)$/.test(relative) && !seen.has(relative)) { seen.add(relative); documents.push(this.fileDocument(relative, fs.readFileSync(absolute, 'utf8'))); } } catch (error) { if (!denied(error)) throw error; unreadable.add(top); } };
+    const visit = (relative, allowed = shared, limit = 512 * 1024) => { try { const absolute = path.join(this.store.root, relative); if (!fs.existsSync(absolute)) return; const stat = fs.lstatSync(absolute); if (stat.isSymbolicLink()) return; if (stat.isDirectory()) { for (const name of fs.readdirSync(absolute)) if (allowed(relative + '/' + name)) visit(relative + '/' + name, allowed, limit); } else if (stat.size <= limit && /\.(md|json|jsonl|txt)$/.test(relative) && !seen.has(relative)) { seen.add(relative); documents.push(this.fileDocument(relative, fs.readFileSync(absolute, 'utf8'))); } } catch (error) { if (!isUnreadable(error)) throw error; unreadable.add(top); } };
     for (const name of [...durableRoots.filter(r => r !== recordsFolder), ...durableFiles]) { top = name; visit(name); }
     // An owner's own pages in the notebook folder are searched like any file.
-    for (const file of this.store.documents || []) visit(path.relative(this.store.root, file).split(path.sep).join('/'));
+    for (const file of this.store.documents || []) { const relative = path.relative(this.store.root, file).split(path.sep).join('/'); top = relative.split('/')[0]; visit(relative); }
     // Mission Control's other folders are searched too, as Menerio searched its
     // copies of them (6 October 2026), up to Menerio's 300 KB a file. Never
     // the routines' run logs or the memory benchmark's own questions.
@@ -262,7 +262,7 @@ export class SearchIndex {
     this.readsSinceBreath = 0;
     const unreadable = new Set();
     let top = recordsFolder;
-    const entries = async folder => { try { return await io.readdir(folder, { withFileTypes: true }); } catch (error) { if (error.code === 'ENOENT') return []; if (denied(error)) { unreadable.add(top); return []; } throw error; } };
+    const entries = async folder => { try { return await io.readdir(folder, { withFileTypes: true }); } catch (error) { if (error.code === 'ENOENT') return []; if (isUnreadable(error)) { unreadable.add(top); return []; } throw error; } };
     let pages = [];
     if (this.store.watching) {
       // The store already holds every record and is told about every change.
@@ -291,13 +291,13 @@ export class SearchIndex {
     const visit = async (relative, allowed = shared, limit = 512 * 1024) => {
       if (this.closed) return;
       const absolute = path.join(this.store.root, relative); let stat;
-      try { stat = await io.lstat(absolute); } catch (error) { if (error.code === 'ENOENT') return; if (denied(error)) { unreadable.add(top); return; } throw error; }
+      try { stat = await io.lstat(absolute); } catch (error) { if (error.code === 'ENOENT') return; if (isUnreadable(error)) { unreadable.add(top); return; } throw error; }
       if (stat.isSymbolicLink()) return;
       if (stat.isDirectory()) { for (const entry of await entries(absolute)) if (allowed(relative + '/' + entry.name)) await visit(relative + '/' + entry.name, allowed, limit); }
       else if (stat.size <= limit && /\.(md|json|jsonl|txt)$/.test(relative) && !seen.has(relative)) {
         seen.add(relative);
         await this.breathe();
-        let text; try { text = this.readText(absolute); } catch (error) { if (!denied(error)) throw error; unreadable.add(top); return; }
+        let text; try { text = this.readText(absolute); } catch (error) { if (!isUnreadable(error)) throw error; unreadable.add(top); return; }
         if (text !== null) documents.push(this.fileDocument(relative, text));
       }
     };
