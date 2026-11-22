@@ -830,6 +830,141 @@ describe("every page at a phone's and a desktop's width", () => {
     }
   }, 60_000);
 
+  // The List tab's table at a tablet's width with the sidebar open (#937): the sidebar eats a
+  // fixed 256 px, so the card is 464 px wide at 768 px, phone-narrow, and the six columns pushed
+  // "Last Movement" and "Reason" past the card's edge while the table's sideways scroller drew
+  // no scrollbar, and the "Joined" header was cut with it. Below lg the same four columns drop
+  // out as they do below sm, so only "Name" and "Joined" show: every header shown must lie
+  // inside its card, and the table must fit the card with no sideways scroll at all. With an
+  // 80-character member name. On main this fails at 768 px: the two last headers lie outside.
+  it("fits the List tab's shown headers inside their card at a tablet's width with the sidebar open", async () => {
+    const name = "Members on the List tab at a tablet's width";
+    const member = "Bartholomew Wilhelmina Featherstonehaugh Fitzwilliam Darcy Wellington Pershing X";
+    expect(member.length).toBe(80);
+    const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name }, selection: "id,slug", single: true });
+    expect(group?.slug ?? null).toBeTruthy();
+    const person = await seededNotebook.query({ table: "contacts", operation: "insert", values: { name: member }, selection: "id", single: true });
+    await seededNotebook.query({ table: "contact_group_memberships", operation: "insert", values: { group_id: group.id, contact_id: person.id, priority: "high", status: "new", reason: "Met at the conference" }, selection: "id", single: true });
+    const context = await browser.newContext({ viewport: { width: 768, height: 1024 } });
+    try {
+      const page = await context.newPage();
+      await page.goto(`${seededNotebook.base}/dashboard/groups/${group.slug}`);
+      await settle(page);
+      await page.getByRole("tab", { name: "List" }).click();
+      await page.getByText(member).first().waitFor({ timeout: 15_000 });
+      await settle(page);
+      const faults = await page.evaluate(() => {
+        const table = [...document.querySelectorAll("table")].find((t) => [...t.querySelectorAll("th")].some((th) => th.textContent === "Name"));
+        const card = table?.closest(".rounded-xl");
+        if (!table || !card) return ["the List tab's table or card is missing"];
+        const cardBox = card.getBoundingClientRect();
+        const faults: string[] = [];
+        for (const th of table.querySelectorAll("th")) {
+          const box = th.getBoundingClientRect();
+          // A header hidden at this width has a zero box and is not shown at all.
+          if (box.width <= 0 || box.height <= 0) continue;
+          if (box.right > cardBox.right + 0.5 || box.left < cardBox.left - 0.5) faults.push(`"${th.textContent}" lies outside its card`);
+        }
+        if (table.scrollWidth > table.clientWidth + 0.5) faults.push(`the table needs ${table.scrollWidth} px, its card scrolls ${table.clientWidth}`);
+        for (const td of table.querySelectorAll("tbody td")) {
+          const box = td.getBoundingClientRect();
+          if (box.width <= 0 || box.height <= 0) continue;
+          if (box.right > cardBox.right + 0.5 || box.left < cardBox.left - 0.5) faults.push(`a member's cell lies outside its card`);
+        }
+        return faults;
+      });
+      expect(faults, faults.join("\n")).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  }, 60_000);
+
+  // The floating chat button at a phone's width against the last Timeline and World card (#937):
+  // the button is pinned to the viewport's corner, and before the button-zone cap (#910) the page
+  // scrolled the window, so the bottom card's badge sat under the button at every scroll before
+  // the end. Where the button shows, main now holds the space above the button's zone and scrolls
+  // within it, so no scroll position can put a card under the button: the check asserts the room
+  // itself, and the last card's badge and the last World entity row's badge, scrolled to the end
+  // of main, clear of the button.
+  it("keeps the floating chat button off the last Timeline and World card at a phone's width", async () => {
+    // Enough rows on both pages that the last one sits below the fold at the load state.
+    for (let i = 0; i < 12; i++) {
+      await seededNotebook.query({ table: "contacts", operation: "insert", values: { name: `World entity contact ${i + 1}` }, selection: "id", single: true });
+      await seededNotebook.query({ table: "moments", operation: "insert", values: { title: `Chat button moment ${i + 1}`, happened_at: `2026-0${(i % 9) + 1}-15`, status: "past_fact", impact_level: 2, source: "manual" }, selection: "id", single: true });
+    }
+    const failures: string[] = [];
+    for (const url of ["/dashboard/timeline", "/dashboard/world"]) {
+      const context = await browser.newContext({ viewport: { width: 320, height: 568 } });
+      try {
+        const page = await context.newPage();
+        await page.goto(`${seededNotebook.base}${url}`);
+        await settle(page);
+        const under = await page.evaluate(() => {
+          const fab = [...document.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === "Chat with Godspeed");
+          const main = document.querySelector("main");
+          if (!fab || !main) return ["the floating chat button or main is missing"];
+          const box = (e: Element) => e.getBoundingClientRect();
+          const fabBox = box(fab);
+          const mainBox = box(main);
+          const faults: string[] = [];
+          if (fabBox.top < mainBox.bottom - 0.5) faults.push(`the button starts ${Math.round(mainBox.bottom - fabBox.top)} px above main's bottom edge`);
+          // The end of the list: the last scroll position there is.
+          main.scrollTop = main.scrollHeight;
+          const cards = [...main.querySelectorAll(".rounded-xl, ul > li")];
+          if (!cards.length) return ["no card matched the audit's selector"];
+          const last = cards[cards.length - 1];
+          const lastBox = box(last);
+          // The card's visible part: main's own box clips it, because main is the page's scroll area.
+          const visible = { top: Math.max(lastBox.top, mainBox.top), bottom: Math.min(lastBox.bottom, mainBox.bottom), left: Math.max(lastBox.left, mainBox.left), right: Math.min(lastBox.right, mainBox.right) };
+          if (visible.bottom <= visible.top) return faults;
+          const intersect = (a: typeof visible, b: DOMRect) => !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+          if (intersect(visible, fabBox)) faults.push("the button covers the last card");
+          const badge = last.querySelector(".rounded-full, [class*='badge']") ?? last;
+          const badgeBox = box(badge);
+          const badgeVisible = { top: Math.max(badgeBox.top, mainBox.top), bottom: Math.min(badgeBox.bottom, mainBox.bottom), left: Math.max(badgeBox.left, mainBox.left), right: Math.min(badgeBox.right, mainBox.right) };
+          if (badgeVisible.bottom > badgeVisible.top && intersect(badgeVisible, fabBox)) faults.push("the button covers the last card's badge");
+          return faults;
+        });
+        failures.push(...(under as string[]).map((line) => `${url} at 320 px: ${line}`));
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 60_000);
+
+  // A Timeline title that is one 40-character word on a phone's card (#937): the card leaves the
+  // title about 200 px and the badge about 65 px beside it, where truncate kept the word clipped
+  // to a single short line. The title now wraps wherever it must, with the badge dropping under
+  // it on a line too narrow for both, so the whole word shows on at most two lines. On main this
+  // fails: the title is cut.
+  it("wraps a Timeline title that is one 40-character word onto at most two lines at a phone's width", async () => {
+    const title = "Supercalifragilisticexpialidocioustitles";
+    expect(title.length).toBe(40);
+    await seededNotebook.query({ table: "moments", operation: "insert", values: { title, happened_at: "2026-06-15", status: "past_fact", impact_level: 2, source: "manual" }, selection: "id", single: true });
+    const context = await browser.newContext({ viewport: { width: 320, height: 568 } });
+    try {
+      const page = await context.newPage();
+      await page.goto(`${seededNotebook.base}/dashboard/timeline`);
+      await page.getByText(title).first().waitFor({ timeout: 15_000 });
+      await settle(page);
+      const wrapped = await page.evaluate((t) => {
+        const p = [...document.querySelectorAll("p")].find((e) => e.textContent?.includes(t) && e.textContent!.trim() === t);
+        if (!p) return ["the moment's title is missing"];
+        const faults: string[] = [];
+        if (p.scrollWidth > p.clientWidth + 0.5) faults.push(`the title is cut: its box holds ${p.clientWidth} px, its text needs ${p.scrollWidth}`);
+        const range = document.createRange();
+        range.selectNodeContents(p);
+        const tops = [...new Set([...range.getClientRects()].filter((r) => r.height > 0).map((r) => Math.round(r.top)))];
+        if (tops.length > 2) faults.push(`the title wraps onto ${tops.length} lines`);
+        return faults;
+      }, title);
+      expect(wrapped, (wrapped as string[]).join("\n")).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  }, 60_000);
+
   // The pages that fill main's height where the floating chat button shows (#878): People, the
   // Media Library and a collection page size their pane for main's content box, so a pane built
   // for an older budget leaves its bottom band below main's scrollport at load, reachable only by
