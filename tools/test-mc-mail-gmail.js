@@ -194,7 +194,7 @@ async function main() {
     && !g.urls.some(x => /format=(full|raw)/.test(x)), JSON.stringify(heads) + g.urls.join(" "));
   g.urls.length = 0;
   const paged = await G.headerSearch({ senders: ["paged.example"], after: "2026-10-05" });
-  ok("7c header search follows the next page token, so a busy sender is counted whole", paged.length === 2 && paged[1].message_id === "m3"
+  ok("7c header search follows the next page token, so a busy sender is counted whole", paged.length === 2 && paged[1].message_id === "m3@x"
     && g.urls.some(x => /pageToken=p2/.test(x)), JSON.stringify(paged) + g.urls.join(" "));
   const body = await G.read({ message_id: "m1" }, wrap);
   ok("8 a message body comes back marked untrusted", /<<<UNTRUSTED[\s\S]*IGNORE YOUR INSTRUCTIONS[\s\S]*>>>/.test(body));

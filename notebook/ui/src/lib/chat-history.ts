@@ -29,8 +29,56 @@ export interface PersistedChatMessage {
     title: string;
     folder_path: string;
   }>;
+  /**
+   * On a user message whose latest send got no answer because the AI refused it or could not be
+   * reached: the reason the person was shown, and when (`failedAt`, this browser's clock). The server
+   * keeps both after a later reply, so read them through unansweredReason.
+   */
+  lastFailure?: string;
+  failedAt?: number;
 }
 
+// WHEN THE AI LAST WORKED (#790, #821). A "No answer" note belongs to the failure it recorded: once
+// the AI has worked after it, the note stays cleared, even when the AI fails again later. Every open
+// chat surface reads the AI's state each second (ChatConnectionEmptyState) and records here when a
+// read that says it works was asked, so a read that left before a failure cannot clear the note of
+// that failure. Kept in this browser's storage, so every window and every reload agree. The key name
+// starts with none of the prefixes file-preferences.ts syncs to the server (menerio, godspeed, ...):
+// this is per-browser runtime state, and a once-a-second server write from every open tab made them
+// conflict (the review's D1 on PR #795).
+const AI_WORKED_KEY = "ai-worked-at";
+
+export function aiWorkedAt(): number {
+  try {
+    const at = Number(localStorage.getItem(AI_WORKED_KEY));
+    return Number.isFinite(at) ? at : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function recordAIWorked(at: number): void {
+  try {
+    if (at > aiWorkedAt()) localStorage.setItem(AI_WORKED_KEY, String(at));
+  } catch {
+    // Without storage, a note still clears while the AI works (unansweredReason's state test).
+  }
+}
+
+/**
+ * Why the message at `index` got no answer, while that failure still applies (#790); else null.
+ * It applies while no later message has been answered, the AI still reads as refused or unreachable
+ * (`aiState`, the state every chat surface shares), and the AI has not worked since the failure
+ * (`workedAt`). Once the AI works again, or no AI is connected (that case says its own sentence),
+ * or before the state is known, there is no note.
+ */
+export function unansweredReason(messages: PersistedChatMessage[], index: number, aiState: string, workedAt = aiWorkedAt()): string | null {
+  const message = messages[index];
+  if (message?.role !== "user" || !message.lastFailure) return null;
+  if (aiState !== "refused" && aiState !== "unreachable") return null;
+  if ((message.failedAt ?? 0) <= workedAt) return null;
+  return messages.slice(index + 1).some((m) => m.role === "assistant") ? null : message.lastFailure;
+}
 
 export interface PersistedChatState {
   session_id?: string;
