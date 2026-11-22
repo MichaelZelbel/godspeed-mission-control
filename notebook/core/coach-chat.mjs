@@ -1,7 +1,8 @@
+import fs from 'node:fs';
 import {canStartTalk,findArea,listAreas} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {brief,continuingTalkDay} from '../../third-party/addons/godspeed-coach/lib/brief.mjs';
 import {prepForBrief,prepMissing,prepPath} from '../../third-party/addons/godspeed-coach/lib/prep.mjs';
-import {openTalk,readTalk,setOpening,setShown} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';
+import {openTalk,readTalk,setOpening,setShown,talkDates} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';
 import {localParts,now} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {loadSettings} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 
@@ -72,6 +73,25 @@ export function coachTalkCorrectedOpening(store,start){
   if(talk)setOpening(area,start.day,opening);
   else openTalk(area,start.day,{opening,prepared:start.card,prep:start.prep,read:start.prep?`the prepared talk ${start.prep}`:''},now());
   return coachTalkRecordProblem(store,start,opening,{requireShown:false})?null:opening;
+}
+
+// The days the start's area already holds a talk for, taken before the assistant is asked.
+export function coachTalkDays(store,start){
+  const area=findArea(store.root,start.area);
+  return new Set(area?talkDates(area):[]);
+}
+
+// The assistant's `talk open` follows its own clock and may write the talk under another day than
+// the one the start named (issue #984). That record is today's talk under the wrong date, not a talk
+// the person had, so it is removed; a record that was there before the start is never touched.
+export function removeStrayCoachTalks(store,start,before){
+  const area=findArea(store.root,start.area);
+  if(!area)return;
+  for(const day of talkDates(area)){
+    if(day===start.day||before.has(day))continue;
+    const talk=readTalk(area,day);
+    if(talk.state==='opened')fs.rmSync(talk.file);
+  }
 }
 
 // What the assistant is told when its reply to a talk start failed the guard (issue #489).
