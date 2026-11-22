@@ -22,15 +22,21 @@ const tmp = (name) => { const r = fs.mkdtempSync(path.join(os.tmpdir(), name)); 
 const SECTIONS = ["The opening", "Talk card", "Where they stand", "What changed since the last talk", "The world this week", "Opportunities", "Routes", "Rejected routes", "What I think", "Gaps", "Cut, and why", "Research coverage"];
 
 // A mission control with one researched area (two domains, one goal) and its ready preparation.
-function mission() {
+// { domains: false } leaves the RESEARCH DOMAIN lines out (an area no review is needed for);
+// { state: "draft" } and { crlf: true } shape the preparation file the way the seal's faults meet it.
+function mission({ domains = true, state = "ready", crlf = false } = {}) {
   const root = tmp("coach-receipts-");
   const dir = path.join(root, "coach", "work");
   fs.mkdirSync(path.join(dir, "prep"), { recursive: true });
   fs.writeFileSync(path.join(root, "coach", "settings.json"), JSON.stringify({ timezone: "Europe/Berlin", git_sync: "off" }));
   fs.mkdirSync(path.join(root, "rules")); fs.writeFileSync(path.join(root, "AGENTS.md"), "");
-  fs.writeFileSync(path.join(dir, "area.md"), "AREA: work\nTITLE: Work and money\nRHYTHM: weekly wednesday\nTIME: 19:00\nSTARTS: 2026-10-14\nSTATUS: on\nSERVES: buffer\nRESEARCH DOMAIN: income | new earning paths\nRESEARCH DOMAIN: market | market changes\n");
+  fs.writeFileSync(path.join(dir, "area.md"), "AREA: work\nTITLE: Work and money\nRHYTHM: weekly wednesday\nTIME: 19:00\nSTARTS: 2026-10-14\nSTATUS: on\nSERVES: buffer\n"
+    + (domains ? "RESEARCH DOMAIN: income | new earning paths\nRESEARCH DOMAIN: market | market changes\n" : ""));
   const file = path.join(dir, "prep", "2026-10-21.md");
-  fs.writeFileSync(file, "AREA: work\nTALK: 2026-10-21 19:00\nPREPARED: 2026-10-21T10:30:00Z\nSTATE: ready\n\n" + SECTIONS.map((t) => `## ${t}\nA substantive line for ${t}.\n`).join("\n"));
+  let text = `AREA: work\nTALK: 2026-10-21 19:00\nPREPARED: 2026-10-21T10:30:00Z\nSTATE: ${state}\n\n`
+    + SECTIONS.map((t) => `## ${t}\nA substantive line for ${t}.\n`).join("\n");
+  if (crlf) text = text.replace(/\n/g, "\r\n");
+  fs.writeFileSync(file, text);
   return { root, dir, file, area: () => readArea(dir) };
 }
 
@@ -133,8 +139,8 @@ test("a run whose marker no record holds has no receipts", async () => {
 });
 
 // The writer's evidence and the reviewer's run, as mc-coach-prep makes them, then sealed.
-async function sealed({ answer, reviewerSession = "review-session", reviewedAt = at(END + 600_000), modelSidecar = false } = {}) {
-  const m = mission(), area = m.area();
+async function sealed({ answer, reviewerSession = "review-session", reviewedAt = at(END + 600_000), modelSidecar = false, mission: missionOpts = {} } = {}) {
+  const m = mission(missionOpts), area = m.area();
   const home = tmp("claude-home-"), marker = newMarker();
   claudeTranscript(home, marker, "writer-session");
   const run = await captureRun({ marker, startedMs: START, finishedMs: END, claude: [home], hermes: [] });
@@ -148,7 +154,7 @@ async function sealed({ answer, reviewerSession = "review-session", reviewedAt =
   const r = sealReview({ prepFile: m.file, area, evidenceFile, answer: text, out: reviewFile, now: NOW, reviewedAt,
     reviewer: { marker: newMarker("review"), session_id: reviewerSession, record_sha256: "b".repeat(64), assistant: "claude" } });
   const place = () => { for (const [from, to] of [[evidenceFile, m.file.replace(/\.md$/, ".evidence.json")], [reviewFile, m.file.replace(/\.md$/, ".review.json")]]) fs.copyFileSync(from, to); };
-  return { ...m, r, run, place, gate: () => prepProblem(readPrep(m.file), readArea(m.dir), NOW) };
+  return { ...m, r, run, reviewFile, place, gate: () => prepProblem(readPrep(m.file), readArea(m.dir), NOW) };
 }
 
 test("a passing review, sealed and placed beside the preparation, opens the talk", async () => {
@@ -217,6 +223,73 @@ test("one byte changed in the preparation after the seal is refused", async () =
   assert.equal(s.gate(), "its research evidence or review belongs to another preparation");
 });
 
+test("an unreadable or empty answer does not touch the preparation", async () => {
+  const before = fs.readFileSync((await sealed()).file, "utf8");
+  for (const answer of ["", "I think it is fine.", "{"]) {
+    const s = await sealed({ answer });
+    assert.match(s.r.problem, /did not answer with the JSON/);
+    assert.deepEqual(s.r.uncovered, [], "no goals are said uncovered when the answer was never parsed");
+    const text = fs.readFileSync(s.file, "utf8");
+    assert.equal(text, before, "the file is left exactly as the run wrote it");
+    assert.doesNotMatch(text, /^STATE: draft$/m);
+    assert.doesNotMatch(text, /Independent review left these adopted goals uncovered/);
+  }
+});
+
+// The failing-cover answer the demotion tests use: the goal is judged and fails.
+const failsGoal = (c) => JSON.stringify({
+  verdict: "pass",
+  coverage: [...c(["income", "market"]), { id: "buffer", verdict: "fail", reason: "No route covers this adopted goal.", sources: [] }],
+  issues: [],
+});
+
+test("the seal refuses a file the gate would refuse, not only the review pair", async () => {
+  // A passing answer: on its own the pair would seal, but the file itself is not ready.
+  const s = await sealed({ mission: { state: "draft" } });
+  assert.equal(s.r.problem, "its STATE is draft, not ready");
+  assert.equal(s.gate(), "its STATE is draft, not ready", "the gate refuses the same file");
+});
+
+test("a preparation saved with CRLF line endings is demoted all the way, not halfway", async () => {
+  const s = await sealed({ answer: failsGoal, mission: { crlf: true } });
+  const text = fs.readFileSync(s.file, "utf8");
+  // The demotion rewrites the file the way every coach rewrite does (header.mjs evens out line
+  // endings), so a Windows-saved file comes out one whole file, not half kept and half rewritten.
+  assert.doesNotMatch(text, /\r/, "the demoted file is rewritten whole, not half CRLF and half LF");
+  assert.match(text, /^STATE: draft$/m, "STATE is demoted even when the file was saved with Windows line endings");
+  assert.match(text, /Independent review left these adopted goals uncovered: buffer\./);
+  s.place();
+  assert.equal(s.gate(), "its independent research review did not pass");
+});
+
+test("an area with no research domains is not demoted by a review it never needed", async () => {
+  const s = await sealed({ answer: failsGoal, mission: { domains: false } });
+  assert.equal(s.r.problem, null);
+  assert.deepEqual(s.r.uncovered, []);
+  const text = fs.readFileSync(s.file, "utf8");
+  assert.doesNotMatch(text, /^STATE: draft$/m);
+  assert.doesNotMatch(text, /Independent review left these adopted goals uncovered/);
+  assert.equal(s.gate(), null, "the gate opens the talk from the preparation alone");
+});
+
+// The two commands must agree where no review is needed: prep-check calls a ready preparation
+// usable, so prep-seal seals it too, without demanding a review answer — and both refuse it with
+// the same reason when the gate refuses it.
+test("an area with no research domains is sealed without a review answer, as prep-check reads it", async () => {
+  const s = await sealed({ answer: "", mission: { domains: false } });
+  assert.equal(s.r.problem, null, "the seal seals what prep-check calls ready");
+  assert.equal(s.r.review, null, "nothing is sealed where no review is needed");
+  assert.equal(fs.existsSync(s.reviewFile), false, "no review file is written");
+  assert.equal(s.gate(), null);
+});
+
+test("where no review is needed the seal still refuses a file the gate refuses", async () => {
+  const s = await sealed({ answer: "", mission: { domains: false, state: "draft" } });
+  assert.equal(s.r.problem, "its STATE is draft, not ready");
+  assert.deepEqual(s.r.issues, ["The preparation's STATE is draft, not ready"], "prep-check's reason, in the seal's words");
+  assert.equal(s.gate(), "its STATE is draft, not ready", "the gate refuses the same file");
+});
+
 test("parseReview takes the JSON out of a fence or a sentence", () => {
   assert.deepEqual(parseReview('{"verdict":"pass"}'), { verdict: "pass" });
   assert.deepEqual(parseReview('Sure.\n```json\n{"verdict":"fail"}\n```'), { verdict: "fail" });
@@ -247,4 +320,37 @@ test("the coach's prep-receipts and prep-seal commands write the candidates and 
   assert.equal(r3.status, 1);
   assert.match(r3.stdout, /^not sealed: its review was not recorded as an independent execution/);
   assert.match(fs.readFileSync(issues, "utf8"), /^- /);
+});
+
+// The two commands, as the person runs them: prep-check calls a ready preparation usable, so
+// prep-seal seals it too, without demanding a review answer, where the area names no research
+// domains. The seal asks for none of the review artifacts there — the review run's record, its
+// answer, the evidence and the review file are not part of the question it asks the gate.
+test("the coach's prep-seal agrees with prep-check where no review is needed", async () => {
+  const m = mission({ domains: false });
+  const env = { ...process.env, HOME: tmp("home-"), GODSPEED_NOW: NOW.toISOString(), GODSPEED_COACH_GIT_SYNC: "off" };
+  const coach = (...args) => spawnSync(process.execPath, [BIN, ...args, "--godspeed", m.root], { env, encoding: "utf8" });
+  const rundir = path.join(m.root, "routines", "coach-prep", "2026-10-21"), rv = path.join(rundir, "r.json");
+  const check = coach("prep-check", "work", "--date", "2026-10-21");
+  assert.equal(check.status, 0, check.stdout + check.stderr);
+  assert.match(check.stdout, /^ready: /);
+  const r = coach("prep-seal", "work", "--date", "2026-10-21");
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /^sealed: no independent review is needed/);
+  assert.equal(fs.existsSync(rv), false, "no review file is written");
+});
+
+// And the refuse direction, as the person runs it: a no-domain preparation the gate refuses is
+// sealed by nothing, with the same reason prep-check gives — a seal that reported success here
+// would tell the runner the preparation opens the talk while the talk-time gate refuses it.
+test("the coach's prep-seal refuses, as prep-check does, a no-domain preparation the gate refuses", async () => {
+  const m = mission({ domains: false, state: "draft" });
+  const env = { ...process.env, HOME: tmp("home-"), GODSPEED_NOW: NOW.toISOString(), GODSPEED_COACH_GIT_SYNC: "off" };
+  const coach = (...args) => spawnSync(process.execPath, [BIN, ...args, "--godspeed", m.root], { env, encoding: "utf8" });
+  const check = coach("prep-check", "work", "--date", "2026-10-21");
+  assert.equal(check.status, 1, check.stdout + check.stderr);
+  assert.match(check.stdout, /^not ready: .*its STATE is draft, not ready/);
+  const seal = coach("prep-seal", "work", "--date", "2026-10-21");
+  assert.equal(seal.status, 1, seal.stdout + seal.stderr);
+  assert.match(seal.stdout, /^not sealed: its STATE is draft, not ready/);
 });

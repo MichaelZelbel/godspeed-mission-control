@@ -43,6 +43,17 @@
 #   setup.json                        the notebook's configured answer to the owner's first goal
 #   routines-after.txt                the names of the assistant's routines after the update
 #   health.txt                        what the notebook answered on its own address
+# And, for the night chat tidy-up, whose every gate on the way to being made says nothing (#721):
+#   tidy-<step>/                      after the command, the line, Update now, and the first and the
+#                                     second tick: the scheduler's own files (starting-routines.json,
+#                                     notebook-routines.json, assistant.json), the assistant's
+#                                     cron/jobs.json and `cron list`, whether its .env names a Telegram
+#                                     bot (never what it says), the routing table as the scheduler's
+#                                     home keys it, and gates.json (night-tidy-gates.mjs), which says
+#                                     what followChatTidy does if the tick reaches it, which gate
+#                                     stops the tidy-up; gates.json is in the step log too
+#   tidy-watch.txt                    every five seconds of the two ticks, how many tidy-ups there are
+#   journal.txt                       the notebook service's journal from the first update to the end
 SCENARIO=update-keeps-everything
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
@@ -149,6 +160,68 @@ press_update_now() {
     fail "the machine kept no stage file after Update now"
 }
 
+# THE NIGHT CHAT TIDY-UP'S EVIDENCE (#721). On 18 November 2026 this scenario found no tidy-up after
+# the update and had kept nothing that could say why. What the scheduler reads on the way to making
+# it, kept after each step; the gates also go to the step log, which a night keeps when the
+# evidence folder is gone with the machine.
+keep_tidy_evidence() { # <step>
+  local folder=$EVIDENCE/tidy-$1 file executable
+  mkdir -p "$folder" || return 0
+  for file in starting-routines.json notebook-routines.json assistant.json; do
+    cp "$STATE/$file" "$folder/$file" 2>/dev/null || printf 'not there\n' >"$folder/$file.missing"
+  done
+  cp "$HERMES/cron/jobs.json" "$folder/jobs.json" 2>/dev/null || printf 'not there\n' >"$folder/jobs.json.missing"
+  executable=$(json_value "$STATE/assistant.json" executable 2>/dev/null)
+  if [ -n "$executable" ]; then
+    HERMES_HOME=$HERMES timeout 60 "$executable" cron list >"$folder/cron-list.txt" 2>&1 ||
+      printf '(cron list ended with %s)\n' "$?" >>"$folder/cron-list.txt"
+  fi
+  if grep -qE '^[[:space:]]*TELEGRAM_BOT_TOKEN[[:space:]]*=[[:space:]]*[^[:space:]]' "$HERMES/.env" 2>/dev/null; then
+    printf 'yes\n' >"$folder/telegram-bot-in-env.txt"
+  else
+    printf 'no\n' >"$folder/telegram-bot-in-env.txt"
+  fi
+  chat_store routing >"$folder/routing.json" 2>&1 || true
+  "$NODE" "$HERE/night-tidy-gates.mjs" --workspace "$ROOT" --home "$HERMES" >"$folder/gates.json" 2>&1 || true
+  say "  the night chat tidy-up, $1: $(cut -c1-1500 "$folder/gates.json")"
+}
+
+# The notebook's own service journal since a time, from the user's service or the system's.
+notebook_journal() { # <since, as journalctl takes it>
+  if systemctl --user cat "$UNIT" >/dev/null 2>&1; then
+    journalctl --user -u "$UNIT" --since "$1" --no-pager -o short-iso 2>&1
+  else
+    sudo journalctl -u "$UNIT" --since "$1" --no-pager -o short-iso 2>&1
+  fi
+}
+
+tidy_count() { # <names file>
+  grep -c -x -F "$ROUTINE" "$1" || true
+}
+
+# Two of the notebook's ticks, watched: the notebook makes its routines on its own tick, at most
+# once a minute (native-scheduler.mjs), so 150 seconds are two ticks, which prove the connected chat
+# app gets one routine without doubling it. Every five seconds it notes how many there are, so when
+# it came, or that it never did, is in the evidence; the wait is as long as it always was.
+watch_two_ticks() {
+  local waited=0 count last=none names=$EVIDENCE/.routines-now.txt
+  : >"$EVIDENCE/tidy-watch.txt"
+  while [ "$waited" -lt 150 ]; do
+    routine_names "$names"
+    count=$(tidy_count "$names")
+    printf '%s s\t%s\n' "$waited" "$count" >>"$EVIDENCE/tidy-watch.txt"
+    if [ "$count" != "$last" ]; then
+      say "  after $waited s: \"$ROUTINE\" $count times"
+      last=$count
+    fi
+    if [ "$waited" = 75 ]; then keep_tidy_evidence first-tick; fi
+    sleep 5
+    waited=$((waited + 5))
+  done
+  rm -f "$names"
+  keep_tidy_evidence second-tick
+}
+
 routine_names() { # <file>
   "$NODE" -e '
 const fs=require("fs");
@@ -204,10 +277,13 @@ act() {
   rm -rf "$EVIDENCE.releases" "$EVIDENCE.stage"
   stand_in_release "$EVIDENCE.releases" "$STAGE_REF"
   serve_stand_in_releases "$EVIDENCE.releases"
+  local journal_since
+  journal_since=$(date '+%Y-%m-%d %H:%M:%S')
   update_with_the_command "$EVIDENCE/update-said.txt"
   assistant_home
   wait_for 120 "the notebook to answer after godspeed-update" notebook_answers ||
     fail "the notebook does not answer after godspeed-update brought it to the stage"
+  keep_tidy_evidence command
   # A person who is not sure the update finished runs the line as well, and nothing of theirs may
   # be doubled or lost by it.
   say "The line after the command, so nothing is doubled by a second update"
@@ -215,6 +291,7 @@ act() {
   assistant_home
   wait_for 120 "the notebook to answer after the second run" notebook_answers ||
     fail "the notebook does not answer after the line ran a second time"
+  keep_tidy_evidence line
   cp "$STATE/stage.json" "$EVIDENCE/kept-stage.json" ||
     fail "the update kept no stage file on the machine, so what it installed cannot be said"
 
@@ -226,10 +303,10 @@ act() {
     fail "the notebook does not answer after its service was told where the stand-in releases are"
   press_update_now
   assistant_home
-  # The notebook makes its routines on its own tick, at most once a minute (native-scheduler.mjs),
-  # so two ticks prove the connected chat app gets one routine without doubling it.
+  keep_tidy_evidence button
   say "Two of the notebook's own ticks, in which one night routine is made"
-  sleep 150
+  watch_two_ticks
+  notebook_journal "$journal_since" >"$EVIDENCE/journal.txt"
 
   cp "$RUNTIME/version" "$EVIDENCE/version-after" || fail "the update left no version file behind"
   curl -fsSL "$RAW/$STAGE_REF/stage.json" -o "$EVIDENCE/stage.json" ||
@@ -242,6 +319,10 @@ act() {
     printf 'gone\n' >"$EVIDENCE/owner-setting-after.txt"
   chat_store dump --session "$CHAT" >"$EVIDENCE/chat-after.txt"
   routine_names "$EVIDENCE/routines-after.txt"
+  if [ "$(tidy_count "$EVIDENCE/routines-after.txt")" != 1 ]; then
+    say "What the notebook itself said from the first update on (its journal, its own lines):"
+    grep -F 'Godspeed Mission Control' "$EVIDENCE/journal.txt" | tail -n 60 >&2 || true
+  fi
   curl -sS -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$NOTEBOOK_PORT/health" \
     >"$EVIDENCE/health.txt" 2>/dev/null || printf '000\n' >"$EVIDENCE/health.txt"
 }

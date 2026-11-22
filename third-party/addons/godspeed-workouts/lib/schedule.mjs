@@ -208,13 +208,15 @@ const commandFailure = (what, r) => ({ ok: false, text: `${what}: ${(r.stderr ||
 // Task Scheduler reports an absent task as HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND).
 // Preserve that machine-readable result through a private exit status instead of its localized text.
 const WINDOWS_TASK_ABSENT = 42;
-const windowsTaskDeleteScript = [
+// The HRESULT is a signed 32-bit value here, so it is compared as one: a [uint32] cast of it throws.
+export const windowsTaskDeleteScriptFor = (task) => [
   "$ErrorActionPreference='Stop'",
   "$service=New-Object -ComObject 'Schedule.Service'",
   "$service.Connect()",
   "$folder=$service.GetFolder('\\')",
-  `try{$folder.DeleteTask('${TASK}',0)}catch{$hresult=[uint32][System.Runtime.InteropServices.Marshal]::GetHRForException($_.Exception);if($hresult -eq 0x80070002){exit ${WINDOWS_TASK_ABSENT}};throw}`,
+  `try{$folder.DeleteTask('${task}',0)}catch{$hresult=[System.Runtime.InteropServices.Marshal]::GetHRForException($_.Exception);if($hresult -eq 0x80070002){exit ${WINDOWS_TASK_ABSENT}};throw}`,
 ].join(";");
+const windowsTaskDeleteScript = windowsTaskDeleteScriptFor(TASK);
 
 export function removeSchedule(p, { runCommand = run, retrySystemdReload = false } = {}) {
   if (p.kind === "windows-task") {

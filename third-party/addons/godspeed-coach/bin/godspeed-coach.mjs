@@ -16,7 +16,7 @@ import { gate, NO_WAKE } from "../lib/gate.mjs";
 import { dueTick } from "../lib/tick.mjs";
 import { contextBlock, waitingTalks } from "../lib/context.mjs";
 import { readPrep, prepProblem, prepForBrief, prepDue, prepPath, prepCheck, prepFile, prepDir, prepMissing, prepExpected, rhythmDrop, countsAsTalkDay } from "../lib/prep.mjs";
-import { researchDomains } from "../lib/prep-evidence.mjs";
+import { needsReview } from "../lib/prep-evidence.mjs";
 import { writeQuestions, readQuestions, questionsFile, openQuestionsDate, addQuestion, dropQuestion, hasQuestions } from "../lib/questions.mjs";
 import { recordRhythmSet } from "../lib/rhythm-change.mjs";
 import { commitCoach, syncInBackground, syncQueued, pullQuietly } from "../lib/sync.mjs";
@@ -108,7 +108,7 @@ function openTalkDate(a) {
 // preparation open a talk, not the research its review passed.
 const NO_NEW_STUDY = "A search that found no new study means no new study, not that nothing is useful: answer from the routes, rejected routes and coverage above.";
 function reviewedBefore(a, ymd) {
-  if (!researchDomains(a).length) return null;
+  if (!needsReview(a)) return null;
   let names = [];
   try { names = fs.readdirSync(prepDir(a)).filter((n) => /^\d{4}-\d{2}-\d{2}\.md$/.test(n) && n.slice(0, 10) <= ymd).sort().reverse(); } catch { /* no prep folder */ }
   for (const n of names) {
@@ -287,20 +287,28 @@ const commands = {
   async "prep-seal"() {
     const a = needArea(pos[0]);
     const d = dateArg(f.date);
-    if (!f.marker || !f.started || !f.finished || !f.out || !f.evidence || !f.answer) die("godspeed-coach prep-seal <area> --date <talk day> --evidence <file> --answer <reviewer's answer> --marker <review marker> --started <time> --finished <time> --out <file> [--issues-out <file>] [--json]");
-    const { captureRun, sealReview } = await import("../lib/prep-receipts.mjs");
     const fail = (problem, issues) => {
       if (f["issues-out"]) fs.writeFileSync(path.resolve(f["issues-out"]), issues.map((x) => `- ${x}\n`).join(""));
       out(`not sealed: ${problem}`, { ok: false, problem, issues }); process.exitCode = 1;
     };
-    const run = await captureRun({ marker: f.marker, startedMs: Date.parse(f.started), finishedMs: Date.parse(f.finished) });
-    if (run.problem) return fail(`the review run: ${run.problem}`, ["The review could not be checked: " + run.problem]);
+    // Where no review is needed the reviewer's record, its answer and the evidence are not part
+    // of the question, so the seal asks none of them — prep-check and prep-seal say the same
+    // thing about one preparation (needsReview is the rule's owner in lib/prep-evidence.mjs).
+    const reviewed = needsReview(a);
+    if (reviewed && (!f.marker || !f.started || !f.finished || !f.out || !f.evidence || !f.answer)) die("godspeed-coach prep-seal <area> --date <talk day> --evidence <file> --answer <reviewer's answer> --marker <review marker> --started <time> --finished <time> --out <file> [--issues-out <file>] [--json]");
+    const { captureRun, sealReview } = await import("../lib/prep-receipts.mjs");
+    const run = reviewed ? await captureRun({ marker: f.marker, startedMs: Date.parse(f.started), finishedMs: Date.parse(f.finished) }) : null;
+    if (run?.problem) return fail(`the review run: ${run.problem}`, ["The review could not be checked: " + run.problem]);
     let answer = "";
-    try { answer = fs.readFileSync(path.resolve(f.answer), "utf8"); } catch { /* none */ }
-    const r = sealReview({ prepFile: prepFile(a, d), area: a, evidenceFile: path.resolve(f.evidence), answer, out: path.resolve(f.out),
-      reviewer: { ...run, marker: f.marker }, reviewedAt: run.finished_at, now: at });
+    if (reviewed) { try { answer = fs.readFileSync(path.resolve(f.answer), "utf8"); } catch { /* none */ } }
+    const r = sealReview({ prepFile: prepFile(a, d), area: a, answer, now: at,
+      evidenceFile: reviewed ? path.resolve(f.evidence) : null,
+      out: f.out ? path.resolve(f.out) : null,
+      reviewer: run ? { ...run, marker: f.marker } : null, reviewedAt: run?.finished_at });
     if (r.problem) return fail(r.problem, r.issues);
-    out(`sealed: the review passed, ${r.review.coverage.length} domains and goals judged`, { ok: true, coverage: r.review.coverage.length });
+    out(reviewed ? `sealed: the review passed, ${r.review.coverage.length} domains and goals judged`
+      : "sealed: no independent review is needed for this area, the preparation is ready as it stands",
+      { ok: true, coverage: r.review?.coverage?.length ?? 0 });
   },
   gate() {
     pullQuietly(mcDir, syncMode);

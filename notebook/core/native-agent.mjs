@@ -3,7 +3,7 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {hash} from './records/store.mjs';
 import {assistantEnvironment} from './assistant-files.mjs';
-import {hermesResponse,hermesFailureMessage,childFailure} from './runtime.mjs';
+import {hermesResponse,hermesFailureMessage,hermesFailure,childFailure} from './runtime.mjs';
 import {runChild} from './child-process.mjs';
 import {savedProviderOrNull} from './saved-provider.mjs';
 import {keepAiFailure} from './ai-failures.mjs';
@@ -71,7 +71,7 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
   if(result.code||!reply){
    const diagnostic=result.stderr+'\n'+reply,secrets=[saved?.key,process.env.OPENAI_API_KEY].filter(Boolean),said=hermesFailureMessage(diagnostic,secrets);
    keepAiFailure({file:keptFile,diagnostic,said,secrets,extra:{exit_code:result.code,model:input.model||saved?.model||null,conversation:String(input.conversation_id||input.note_id||'general').slice(0,80)}});
-   throw new Error(said);
+   throw hermesFailure(diagnostic,secrets);
   }
   return {reply};
  }finally{release?.();}};

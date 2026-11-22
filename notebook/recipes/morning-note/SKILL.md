@@ -24,6 +24,8 @@ For monitoring evidence, read the latest exact observation for each selected bri
 
 ## Choose without making a second plan
 
+Approval requests come only from the supplied current decision and waiting steps. Reproduce only the live proposals they name. Never revive an approval list from an older decision, a work file, or an answered, rejected, expired, cancelled, or undelivered step.
+
 When today's saved decision exists, its reasons and necessary user action drive the note. Do not select a competing action or add another item simply because there is room. When no decision exists, compare the adopted charges and attention plan, and retain that choice honestly in the working notes.
 
 For each charged goal, retain one dated line: what changed, what the assistant does independently today, and whether something only the user can do remains. Silence on a goal is a deliberate recorded choice, not missing bookkeeping.

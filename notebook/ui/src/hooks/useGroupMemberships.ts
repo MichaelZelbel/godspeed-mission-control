@@ -163,6 +163,9 @@ export function useAddMembership() {
           user_id: user.id,
           status: status ?? firstStage,
           priority,
+          // The day the person joined, as the group's List tab shows it.
+          // Without it the column read "Invalid Date" (#913).
+          joined_at: new Date().toISOString(),
         })
         .select()
         .single();
@@ -174,7 +177,7 @@ export function useAddMembership() {
         // Bring the archived membership back instead.
         const { data: restored, error: restoreError } = await supabase
           .from("contact_group_memberships")
-          .update({ archived_at: null, status: status ?? firstStage, priority })
+          .update({ archived_at: null, status: status ?? firstStage, priority, joined_at: new Date().toISOString() })
           .eq("group_id", groupId)
           .eq("contact_id", personId)
           .not("archived_at", "is", null)

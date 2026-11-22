@@ -95,6 +95,20 @@ test('with no AI connected each action keeps its own no-AI sentence and asks no 
   assert.equal(ai.requests,0);
 });
 
+// #808: Analyze media on a note with no picture or PDF answered "Something went wrong on the server"
+// and logged a programming error. It says there is nothing to analyze, and asks no AI.
+test('Analyze media on a note without media says so plainly and logs no server error',async t=>{
+  const ai=await standIn(t),nb=await seeded(t);
+  assert.equal((await nb.post('/api/provider',{url:ai.url,key:KEY,model:'fictional-model'})).status,200);
+  const note=await nb.insert('notes',{title:'No picture',content:'Only words here.'}),asked=ai.requests;
+  const logged=t.mock.method(console,'error',()=>{});
+  const answer=await nb.post('/api/functions/analyze-media',{note_id:note.id,media_type:'image'});
+  assert.equal(answer.status,400);
+  assert.equal(errorOf(answer),'There is no image or PDF to analyze here. Add one to the note first.');
+  assert.equal(logged.mock.callCount(),0,'nothing is logged as a server failure');
+  assert.equal(ai.requests,asked);
+});
+
 test('removing the saved AI connection forgets its key and leaves no AI connected',async t=>{
   const ai=await standIn(t),nb=await seeded(t);
   assert.equal((await nb.post('/api/provider',{url:ai.url,key:KEY,model:'fictional-model'})).status,200);
