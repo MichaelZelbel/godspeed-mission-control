@@ -1656,14 +1656,14 @@ function ItemNotesPanel({
 
   return (
     <section className="mt-8 border-t pt-6">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0 basis-48 flex-1">
           <h3 className="text-sm font-semibold">Notes</h3>
           <p className="text-xs text-muted-foreground">
             Link notes from your vault to this item. Editing happens in the Notes app.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Popover open={linkOpen} onOpenChange={setLinkOpen}>
             <PopoverTrigger asChild>
               <Button type="button" size="sm" variant="outline">
@@ -1988,7 +1988,7 @@ function ItemSheet({
 
   const body = (
     <>
-      <div className={cn("flex-1 overflow-y-auto", inline ? "px-6 py-6" : "-mx-6 px-6 py-4")}>
+      <div className={cn("flex-1 overflow-y-auto", inline ? "min-w-0 px-4 py-6 sm:px-6" : "-mx-6 px-6 py-4")}>
         <form
           className={cn("space-y-5", inline && "mx-auto max-w-2xl")}
           onSubmit={(event) => {
@@ -2032,8 +2032,8 @@ function ItemSheet({
       </div>
       <div
         className={cn(
-          "flex items-center justify-between gap-2 border-t pt-4",
-          inline && "px-6 pb-6",
+          "flex flex-wrap items-center justify-between gap-2 border-t pt-4",
+          inline && "px-4 pb-6 sm:px-6",
         )}
       >
         <div>
@@ -2048,7 +2048,7 @@ function ItemSheet({
             </Button>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button type="button" variant="ghost" onClick={close}>
             {inline ? "Back" : "Cancel"}
           </Button>
