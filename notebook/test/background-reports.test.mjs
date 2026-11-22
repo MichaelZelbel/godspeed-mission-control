@@ -481,3 +481,18 @@ test('a routine that needs a yes asks with a waiting step instead, which a plain
  assert.equal(answered.kind,'answered');assert.equal(answered.reply,'I will stop the six old programs.');
  assert.equal(store.get('approvals',step.id).status,'approved');
 });
+
+// The routine says the oldest unsaid notice, one a run (godspeed_routines.py notice()); a notice the
+// product queued earlier (the spend guard's) is said first, and each report carries its own notice's facts.
+test('the routine says each queued notice in turn, and every recorded report carries its own notice\'s facts',{skip:!python&&'needs Python'},async t=>{
+ const {store,home}=setup(t),script=fileURLToPath(new URL('../core/routine-scripts/godspeed_routines.py',import.meta.url));
+ queueNotice(store,{id:'spend-1',text:'Your balance is low.',about:'OpenRouter spending'});
+ queueNotice(store,notice);
+ const select=()=>{const out=execFileSync(python,['-I','-c','import importlib.util,sys,json,os;s=importlib.util.spec_from_file_location("r",sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);f=m.notice({"notices":sys.argv[2],"home":sys.argv[3]})\nif f:\n n,said,held=f;json.dump({"ids":m.said_ids(said)+[n["id"]]},open(said,"w"));m.release(held);print(json.dumps(n))',script,path.join(store.state,'notices.json'),home],{encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}}).trim();return out?JSON.parse(out):null;};
+ const first=select(),second=select();
+ assert.equal(first.id,'spend-1','the older notice is said first');assert.equal(second.id,notice.id);assert.equal(select(),null,'one notice a run, and nothing more');
+ for(const n of [first,second]){await sayNotice(store,{notice:n,home,provider:provider([{about:n.about,text:'Said: '+n.id}])});}
+ const saved=records(store);assert.equal(saved.length,2);
+ assert.deepEqual(saved.find(r=>r.content==='Said: spend-1').report.facts,['Your balance is low.']);
+ assert.deepEqual(saved.find(r=>r.content==='Said: '+notice.id).report.facts,notice.facts);
+});

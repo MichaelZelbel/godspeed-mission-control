@@ -70,7 +70,7 @@ async function openNote(id: string) {
 
 // What typing a word does: the text goes in wherever the focus and the cursor are.
 function typeInto(target: Element, editor: any, words: string) {
-  if (target instanceof HTMLInputElement) {
+  if (target instanceof HTMLTextAreaElement) {
     fireEvent.change(target, { target: { value: target.value + words } });
   } else {
     act(() => { editor.view.dispatch(editor.state.tr.insertText(words)); });
@@ -79,7 +79,7 @@ function typeInto(target: Element, editor: any, words: string) {
 
 async function titleEnterText(id: string, titleWords: string, textWords: string) {
   const editor = await openNote(id);
-  const title = screen.getByRole("textbox", { name: "Note title" }) as HTMLInputElement;
+  const title = screen.getByRole("textbox", { name: "Note title" }) as HTMLTextAreaElement;
   act(() => { title.focus(); });
   typeInto(title, editor, titleWords);
 
