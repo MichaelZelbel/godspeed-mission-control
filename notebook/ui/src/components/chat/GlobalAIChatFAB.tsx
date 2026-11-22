@@ -559,10 +559,10 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
         >
           <div className={page||embedded?"bg-background overflow-hidden flex flex-col h-full w-full":"bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full w-full"}>
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <Bot className="h-4 w-4 text-primary shrink-0" />
-                <span className="text-sm font-semibold truncate" title={pageChat?.label||noteTitle||contextTitle||"Godspeed"}>
+            <div className="flex items-start justify-between gap-2 px-4 py-2.5 border-b border-border shrink-0">
+              <div className="flex items-start gap-2 min-w-0">
+                <Bot className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                <span className="text-sm font-semibold min-w-0 [overflow-wrap:anywhere]" title={pageChat?.label||noteTitle||contextTitle||"Godspeed"}>
                   {pageChat ? "Godspeed / "+pageChat.label : noteId ? "Godspeed / "+(noteTitle||contextTitle||"Current note") : "Godspeed"}
                 </span>
                 {!embedded && state.messages.length > 0 && (
@@ -571,8 +571,8 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                   </span>
                 )}
               </div>
-              {page&&<Button variant="ghost" className="h-11" onClick={handleClear} disabled={isLoading || isClearing}>Clear conversation</Button>}
-              {!page&&<div className="flex items-center gap-1">
+              {page&&<Button variant="ghost" className="h-11 shrink-0" onClick={handleClear} disabled={isLoading || isClearing}>Clear conversation</Button>}
+              {!page&&<div className="flex items-center gap-1 shrink-0">
                 <a className="inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded hover:bg-muted" href={popOutHref} target="_blank" rel="noreferrer" aria-label="Open chat in a new window" title="Open chat in a new window"><ExternalLink className="h-4 w-4"/></a>
                 {!embedded&&<span className="text-[10px] text-muted-foreground hidden xl:inline mr-1">Ctrl+Shift+K</span>}
                 {state.messages.length > 0 && (
