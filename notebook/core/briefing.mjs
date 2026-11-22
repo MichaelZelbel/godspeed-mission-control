@@ -42,7 +42,10 @@ const BRIEFING_SOURCE_SELECTORS=Object.freeze({
 });
 export const BRIEFING_SOURCE_TABLES=Object.freeze(Object.keys(BRIEFING_SOURCE_SELECTORS));
 // The only job receipts the brief reads: other kinds, such as the spend guard's (#974), are not its source.
-export const briefRehearsals=rows=>rows.filter(r=>r.kind==='brief-rehearsal').slice(-2);
+const briefRehearsals=rows=>rows.filter(r=>r.kind==='brief-rehearsal').slice(-2);
+// What the brief would read out of a table's raw rows: the one place a source table is narrower than the table.
+const BRIEFING_RAW_READS={job_receipts:briefRehearsals};
+export const briefingReads=(table,rows)=>(BRIEFING_RAW_READS[table]||(all=>all))(rows);
 // The day a briefing note belongs to is the day it was asked for (brief_day), which a write that
 // commits after local midnight must not move; notes saved before that field have only created_at.
 const briefedOn=(note,zone)=>note.source_app==='morning-brief'&&(note.brief_day||(note.created_at&&dayOf(new Date(note.created_at),zone)));

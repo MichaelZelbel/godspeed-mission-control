@@ -154,19 +154,15 @@ check() { # <evidence folder>
     fail 'the installed scheduled morning brief has no successful recorded run'
   grep -Eqi 'source[[:space:]]*[:=][[:space:]]*"?builtin' "$folder/brief-cron-runs.txt" ||
     fail 'the morning brief was not triggered by the installed scheduler'
-  if ! reason=$("$NODE" - "$folder" "$GOAL" "$WORK_ID" "$WORK_KEY" "$RESULT_FILE" "${sparse_files[@]}" 2>&1 <<'NODE'
+  "$NODE" "$HERE/../notebook/scripts/briefing-unread-state.mjs" "$folder" "${sparse_files[@]}" ||
+    fail 'the brief was not run with the required sparse installed state'
+  if ! reason=$("$NODE" - "$folder" "$GOAL" "$WORK_ID" "$WORK_KEY" "$RESULT_FILE" 2>&1 <<'NODE'
 const fs=require('fs'),path=require('path');
-const [folder,goal,workId,workKey,resultFile,...sparseFiles]=process.argv.slice(2),read=file=>fs.readFileSync(path.join(folder,file),'utf8');
+const [folder,goal,workId,workKey,resultFile]=process.argv.slice(2),read=file=>fs.readFileSync(path.join(folder,file),'utf8');
 const rows=file=>{const d=JSON.parse(read(file));return Array.isArray(d)?d:d.data||[]};
 const fail=message=>{console.error(message);process.exit(1)};
 const normalized=value=>String(value||'').replace(/\r\n?/g,'\n').trim();
 if(!normalized(read('brief.txt')))fail('the installed morning brief saved no readable text');
-for(const file of sparseFiles){
- const state=JSON.parse(read(file)),all=Array.isArray(state)?state:state.data||[];
- // The spend guard's receipt (#974) is the one row the brief cannot read: it reads only brief-rehearsal receipts.
- const rows=file==='sparse-job-receipts.json'&&Array.isArray(all)?all.filter(row=>row?.kind!=='spend-guard'):all;
- if(!Array.isArray(rows)||rows.length)fail('the brief was not run with the required sparse installed state');
-}
 // The finished work is the scenario's own card when the daily round took it, held to its checklist,
 // or else work the product chose for this goal itself (since 9 November 2026: the choice files its
 // own items and the round takes those first): a card under its own ID, verified by its recorded
