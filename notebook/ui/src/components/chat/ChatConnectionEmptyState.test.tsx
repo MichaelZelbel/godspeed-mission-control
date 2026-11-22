@@ -8,7 +8,7 @@ import {ChatConnectionEmptyState,chatAIState,useChatOptions,stateSaid} from './C
 import {AI_CONNECTION_UNREADABLE_STATUS} from '../../../../core/no-ai.mjs';
 import { WAIT } from "@/test/wait-limits";
 
-afterEach(()=>{cleanup();vi.unstubAllGlobals();window.localStorage.clear();});
+afterEach(()=>{cleanup();vi.unstubAllGlobals();try{window.localStorage.clear();}catch{}});
 
 const surfaces=['floating chat','note chat','collection chat','pop-out chat'];
 function show(options:unknown){
@@ -126,6 +126,31 @@ it('lets a chat read in one tab make a Dashboard arrival in another tab ask for 
   const lib2=await import('@testing-library/react');
   function Probe(){mod2.useChatOptions({confirmOnMount:true});return null;}
   lib2.render(React2.createElement(QueryClientProvider as any,{client:new QueryClient({defaultOptions:{queries:{retry:false}}})},React2.createElement(Probe)));
+  await waitFor(()=>expect(calls.length).toBeGreaterThan(1),WAIT);
+  expect(calls[calls.length-1]).toContain('check=1');
+});
+
+// #963 review: with the browser denying storage, the same tab keeps the flag in memory, as on main.
+it('still asks for a check on a Dashboard arrival after a chat read in the same tab when storage is denied',async()=>{
+  const calls:string[]=[];
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
+    calls.push(String(url));
+    return new Response(JSON.stringify({connected:true,usable:true,availability:'ready'}),{status:200,headers:{'Content-Type':'application/json'}});
+  }));
+  const denied=()=>{throw new DOMException('denied','SecurityError');};
+  vi.stubGlobal('localStorage',{getItem:denied,setItem:denied,removeItem:denied,clear:denied});
+  vi.resetModules();
+  const mod=await import('./ChatConnectionEmptyState');
+  const React=(await import('react')).default;
+  const lib=await import('@testing-library/react');
+  const client=()=>new QueryClient({defaultOptions:{queries:{retry:false}}});
+  function Chat(){mod.useChatOptions();return null;}
+  function Dash(){mod.useChatOptions({confirmOnMount:true});return null;}
+  lib.render(React.createElement(QueryClientProvider as any,{client:client()},React.createElement(Chat)));
+  await waitFor(()=>expect(calls.length).toBeGreaterThan(0),WAIT);
+  expect(calls[0]).not.toContain('check=1');
+  cleanup();
+  lib.render(React.createElement(QueryClientProvider as any,{client:client()},React.createElement(Dash)));
   await waitFor(()=>expect(calls.length).toBeGreaterThan(1),WAIT);
   expect(calls[calls.length-1]).toContain('check=1');
 });

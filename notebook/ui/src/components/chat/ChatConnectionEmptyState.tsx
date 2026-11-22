@@ -34,15 +34,20 @@ async function chatOptions({check}:{check?:boolean}={}){
 // localStorage so it crosses the notebook's tabs and windows (#963): a chat in one tab must still
 // let the Dashboard's arrival in another tab confirm afresh.
 const CHAT_READ_SINCE_CONFIRM='godspeed:chat-read-since-confirm';
+// In-memory copy beside the stored flag: when storage is denied, the same tab still behaves as before.
+let chatReadInMemory=false;
 function markChatRead(){
+  chatReadInMemory=true;
   try{if(localStorage.getItem(CHAT_READ_SINCE_CONFIRM)!=='1')localStorage.setItem(CHAT_READ_SINCE_CONFIRM,'1');}
-  catch{/* no storage: within this window the flag stays what it was, as before */}
+  catch{/* no storage: the in-memory copy carries this tab */}
 }
 function chatReadSinceConfirm(){
+  if(chatReadInMemory)return true;
   try{return localStorage.getItem(CHAT_READ_SINCE_CONFIRM)==='1';}
   catch{return false;}
 }
 function clearChatRead(){
+  chatReadInMemory=false;
   try{localStorage.removeItem(CHAT_READ_SINCE_CONFIRM);}
   catch{/* no storage: nothing to clear */}
 }
