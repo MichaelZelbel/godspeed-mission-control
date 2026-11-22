@@ -113,7 +113,8 @@ const comparisons=new Set(['eq','neq','in','contains','overlaps','gt','gte','lt'
 // {"field":"id","operator":"eq","value":...}, is refused in words; until 12 October 2026 it
 // reached condition() and failed as "object is not iterable", which an assistant is shown only as
 // "Something went wrong on the server" (the book's capture run, Finding 5).
-const filterHelp='Each filter is a list of three: an operator, a column and a value, for example ["eq","id","<id>"]';
+const filterExample='["eq","id","<id>"]';
+const filterHelp='Each filter is a list of three: an operator, a column and a value, for example '+filterExample;
 export function checkFilters(filters){
   if(!Array.isArray(filters))throw new Error('filters is a list. '+filterHelp+'.');
   for(const f of filters){
@@ -360,7 +361,7 @@ export class QueryService {
     // the local door has no record-hash guard (assistant writes do), so an
     // update or delete that does not say which records it means is refused
     // before anything is read or written (issue 936).
-    if ((operation === 'update' || operation === 'delete') && !filters.length) throw new Error('An update or delete needs a filter that names the records it means, for example ["eq","id","<id>"]');
+    if ((operation === 'update' || operation === 'delete') && !filters.length) throw new Error('An update or delete needs a filter that names the records it means, for example '+filterExample);
     // A filter on an embedded column ("contact_groups.is_trashed") waits for
     // the join. Until 6 October 2026 it was checked against the row itself,
     // where that column never is, so a person's Groups tab was always empty.

@@ -19,6 +19,10 @@ test('an update or delete with no filter is refused with 400 and changes nothing
     const removed=await post(base,{table:'contacts',operation:'delete'});
     assert.equal(removed.status,400);
     assert.match((await removed.json()).error,/filter/);
+    // values never selects targets: an update whose only targeting is a values.id
+    // is still a no-filter request and is refused like one.
+    const byValues=await post(base,{table:'contacts',operation:'update',values:{id:'ana',name:'Still overwritten'}});
+    assert.equal(byValues.status,400);
     const left=await people(base);
     assert.deepEqual(left.map(c=>c.name).sort(),['Ana','Bo'],'nothing was changed');
     assert.equal(left.length,2);
