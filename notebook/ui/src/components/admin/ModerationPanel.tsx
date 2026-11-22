@@ -33,7 +33,7 @@ import {
 import {
   ShieldAlert, Bot, BookType, Ban, RefreshCw, Loader2, Play, RotateCcw, Plus, Trash2,
 } from "lucide-react";
-import { format } from "date-fns";
+import { showDate } from "@/lib/local-date";
 
 // ── Shared helpers ──
 
@@ -137,7 +137,7 @@ function ModerationLogTab() {
                     <TableCell>
                       <Badge variant="outline" className="text-[10px]">{e.tier === "ai" ? "AI" : "Stopword"}</Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{format(new Date(e.created_at), "MMM d, HH:mm")}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{showDate(e.created_at, "time")}</TableCell>
                   </TableRow>
                 ))
               )}
@@ -254,7 +254,7 @@ function AIReviewQueueTab() {
                     <TableCell>
                       <Badge variant="outline" className={statusColor(item.status)}>{item.status}</Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{format(new Date(item.created_at), "MMM d, HH:mm")}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{showDate(item.created_at, "time")}</TableCell>
                     <TableCell>
                       {item.status !== "pending" && (
                         <Button variant="ghost" size="icon" className="h-7 w-7" title="Re-review" onClick={() => reReview(item.id)}>
@@ -537,7 +537,7 @@ function SuspensionsTab() {
                         : <Badge variant="outline" className="bg-success/10 text-success">Active</Badge>}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {s.suspended_at ? format(new Date(s.suspended_at), "MMM d, yyyy HH:mm") : "—"}
+                      {s.suspended_at ? showDate(s.suspended_at, "time") : "—"}
                     </TableCell>
                     <TableCell className="text-sm max-w-[200px] truncate">{s.suspension_reason || "—"}</TableCell>
                     <TableCell>

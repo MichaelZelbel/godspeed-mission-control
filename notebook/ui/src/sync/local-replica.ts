@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { OFFLINE_CORE } from "@/lib/flags";
+import { parseInstant } from "@/lib/local-date";
 import { getDb } from "./db";
 import { rowToNote, toSqliteValue, type NoteRow } from "./notes-mapping";
 import type { Note } from "@/hooks/useNotes";
@@ -151,7 +152,7 @@ export async function getReplicaDiagnostics(userId: string): Promise<ReplicaDiag
     serverFavorites: server.filter((r) => r.is_favorite).length,
     missingIds: missingIds.slice(0, MISSING_SAMPLE),
     connected: !!status?.connected,
-    lastSyncedAt: status?.lastSyncedAt ? new Date(status.lastSyncedAt).toISOString() : null,
+    lastSyncedAt: status?.lastSyncedAt ? parseInstant(status.lastSyncedAt)?.toISOString() ?? null : null,
     pendingUploads: (uploadStats as { count?: number })?.count ?? 0,
   };
 }

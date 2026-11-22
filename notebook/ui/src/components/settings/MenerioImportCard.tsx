@@ -4,6 +4,7 @@ import {useQueryClient} from '@tanstack/react-query';
 import {authRequest} from '@/contexts/AuthContext';
 import {Card,CardHeader,CardTitle,CardDescription,CardContent} from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
+import {showDate} from '@/lib/local-date';
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
 import {ArrowRight,CheckCircle2,Download,Loader2} from 'lucide-react';
@@ -48,7 +49,7 @@ export function MenerioImportCard(){
       {job?.state==='expired'&&<p role="status" className="text-sm text-muted-foreground">{job.error} Use the button below.</p>}
       {summary&&(job?.state==='ready'||job?.state==='complete')&&<div className="space-y-4">
         <div className="flex items-center gap-2 font-medium">{job.state==='complete'&&<CheckCircle2 className="h-5 w-5 text-success" aria-hidden="true"/>}{job.state==='ready'?'Your copy is ready to review':'Your Menerio copy is now in Godspeed'}</div>
-        {job.copyDate&&<p className="text-sm text-muted-foreground">Source copy checked {new Date(job.copyDate).toLocaleString()}.</p>}
+        {job.copyDate&&<p className="text-sm text-muted-foreground">Source copy checked {showDate(job.copyDate, "time")}.</p>}
         <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 rounded-lg bg-muted/30 p-4">{[['Notes',summary.notes],['Trashed notes',summary.trashedNotes],['People',summary.contacts],['Attachments',summary.attachments]].map(([label,value])=><div key={label}><dt className="text-sm text-muted-foreground">{label}</dt><dd className="text-2xl font-semibold mt-1">{Number(value).toLocaleString()}</dd></div>)}</dl>
         <p className="text-sm text-muted-foreground">{summary.keptExisting.toLocaleString()} existing items kept. Matching items keep your current Godspeed version. {summary.archivedTables>0&&'Data from features Godspeed does not yet support stays in a private archive.'}</p>
         {job.state==='ready'?<>

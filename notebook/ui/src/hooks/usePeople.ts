@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { showToast } from "@/lib/toast";
 import { usePeopleSync } from "@/hooks/usePeopleSync";
 import { personNames } from "@/components/timeline/people";
+import { parseInstant } from "@/lib/local-date";
 
 export interface Person {
   id: string;
@@ -35,7 +36,7 @@ const FIVE_MINUTES_MS = 5 * 60 * 1000;
  */
 export function shouldTouchViewed(lastViewedAt: string | null, now: Date): boolean {
   if (!lastViewedAt) return true;
-  const lastMs = new Date(lastViewedAt).getTime();
+  const lastMs = parseInstant(lastViewedAt)?.getTime() ?? NaN;
   if (Number.isNaN(lastMs)) return true;
   return now.getTime() - lastMs >= FIVE_MINUTES_MS;
 }
