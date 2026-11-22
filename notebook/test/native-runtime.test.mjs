@@ -47,8 +47,17 @@ test('a talk start whose record the assistant made for another day, or not at al
   domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};if(wrongDay)openTalk(prepared.area,'2030-03-04',{opening:prepared.opening});return {reply:prepared.opening};};
   const result=await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),talk=readTalk(prepared.area,'2030-03-05');
   assert.equal(prepared.day,'2030-03-05');assert.equal(result.reply,prepared.opening);assert.equal(talk.state,'opened');assert.equal(talk.sections['The opening'].trim(),prepared.opening);assert.ok(talk.shown);
+  assert.equal(fs.existsSync(path.join(prepared.area.dir,'talks','2030-03-04.md')),false);
   assert.equal(talk.prep,`${path.relative(root,prepared.area.dir)}/prep/2030-03-05.md`.replace(/\\/g,'/'));assert.equal(talk.sections.Prepared.trim(),prepared.opening);
  }
+});
+test('a talk start never touches a talk the person opened before it for another day (issue #984)',async t=>{
+ const was=process.env.GODSPEED_NOW;process.env.GODSPEED_NOW='2030-03-05T12:00:00Z';t.after(()=>{if(was===undefined)delete process.env.GODSPEED_NOW;else process.env.GODSPEED_NOW=was;});
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),prepared=preparedCoachArea(root);
+ openTalk(prepared.area,'2030-03-04',{opening:'My own talk.'});const file=path.join(prepared.area.dir,'talks','2030-03-04.md'),own=fs.readFileSync(file,'utf8');
+ domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};openTalk(prepared.area,'2030-03-04',{opening:'Assistant words.'});return {reply:prepared.opening};};
+ await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'});
+ assert.equal(fs.readFileSync(file,'utf8'),own);assert.equal(readTalk(prepared.area,'2030-03-04').state,'opened');assert.equal(readTalk(prepared.area,'2030-03-05').sections['The opening'].trim(),prepared.opening);
 });
 test('a native chat accepts only an unprepared opening that its record holds',async t=>{
  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store));coachArea(root);
