@@ -77,8 +77,9 @@ const unquote=value=>value.length>1&&value.startsWith('"')&&value.endsWith('"')?
 const list=value=>Array.isArray(value)?value:splitFilters(String(value).replace(/^\(([\s\S]*)\)$/,'$1')).map(unquote);
 const negate=result=>result===null?null:!result;
 const partPattern=/^(.+?)\.(not\.)?(eq|neq|is|in|like|ilike|gt|gte|lt|lte)\.([\s\S]*)$/;
+const nestedOps=['and','or','not.and','not.or'];
 function filterExpression(row,text){
-  for(const op of ['and','or','not.and','not.or'])if(text.startsWith(op+'(')&&text.endsWith(')')){const result=condition(row,[op.replace('not.',''),'',text.slice(op.length+1,-1)]);return op.startsWith('not.')?negate(result):result;}
+  for(const op of nestedOps)if(text.startsWith(op+'(')&&text.endsWith(')')){const result=condition(row,[op.replace('not.',''),'',text.slice(op.length+1,-1)]);return op.startsWith('not.')?negate(result):result;}
   const match=text.match(partPattern);if(!match)throw new Error('Invalid filter expression');
   const [,key,not,op,raw]=match,value=op==='in'?list(raw):/^(null|true|false)$/.test(raw)?JSON.parse(raw):unquote(raw);
   const result=condition(row,[op,key,value]);return not?negate(result):result;
@@ -154,33 +155,48 @@ export function checkWriteFilters(table,filters,rows){
   // or not.or(), which is true for every row: both are otherwise left to
   // filterExpression and condition, which run per row, so on a kind with no
   // records nothing would refuse them (issue 950).
+  const empty=f=>new Error('The filter '+short(f)+' has an empty value, so it cannot pick any record. '+filterHelp+'.');
+  // negated: inside a not, every empty nested part is refused, since the not
+  // turns the ones that match nothing into ones true for every row.
+  const walk=(f,text,negated,keys)=>{for(const part of splitFilters(String(text))){
+    const nested=nestedOps.find(op=>part.startsWith(op+'(')&&part.endsWith(')'));
+    if(nested){
+      const inner=part.slice(nested.length+1,-1);
+      if(!inner.trim()&&(negated||nested==='and'||nested==='not.or'))throw empty(f);
+      walk(f,inner,negated,keys);
+    }
+    else{const match=part.match(partPattern);if(!match)throw new Error('Invalid filter expression');
+      // An empty in-list matches nothing; negated, by not. or inside a not, it is true for every row.
+      if(match[3]==='in'&&(match[2]||negated)&&!list(match[4]).length)throw empty(f);
+      keys.add(match[1]);}}};
   const keysOf=f=>{
     if(f[0]!=='or'&&f[0]!=='and')return [f[1]];
-    const keys=new Set(),walk=text=>{for(const part of splitFilters(String(text))){
-      const nested=['and','or','not.and','not.or'].find(op=>part.startsWith(op+'(')&&part.endsWith(')'));
-      if(nested){
-        const inner=part.slice(nested.length+1,-1);
-        if(!inner.trim()&&(nested==='and'||nested==='not.or'))throw new Error('The filter '+short(f)+' has an empty value, so it cannot pick any record. '+filterHelp+'.');
-        walk(inner);
-      }
-      else{const match=part.match(partPattern);if(!match)throw new Error('Invalid filter expression');keys.add(match[1]);}}};
-    walk(f[2]);return [...keys];
+    const keys=new Set();walk(f,f[2],false,keys);return [...keys];
   };
   for(const f of filters){
     if(f.length<3)throw new Error('The filter '+short(f)+' is missing its value. '+filterHelp+'.');
+    let keys;
     if(f[0]==='not'){
-      if(f[2].length<2)throw new Error('The filter '+short(f)+' is missing its value. '+filterHelp+'.');
-      // The inner operator is read per row by condition(); on a kind with no
-      // records nothing would read it, so it is refused here like condition
-      // refuses it.
-      if(!['is','or','and'].includes(f[2][0])&&!comparisons.has(f[2][0]))throw new Error('Unsupported filter '+f[2][0]+'. '+filterHelp+'.');
-      if(f[2][0]!=='is'&&(f[2][1]===''||f[2][1]===null))throw new Error('The filter '+short(f)+' has an empty value, so it cannot pick any record. '+filterHelp+'.');
-      // A not over an empty in-list is true for every row: the in matches
-      // nothing and the not turns it around.
-      if(f[2][0]==='in'&&!list(f[2][1]).length)throw new Error('The filter '+short(f)+' has an empty value, so it cannot pick any record. '+filterHelp+'.');
+      keys=[f[1]];
+      // The clause is read per row by condition(); on a kind with no records
+      // nothing would read it, so it is judged here like condition judges it.
+      // A not inside the not is followed down: ["not",["eq","Ana"]].
+      let inner=f[2];
+      for(;;){
+        if(inner.length<2)throw new Error('The filter '+short(f)+' is missing its value. '+filterHelp+'.');
+        if(!['is','or','and','not'].includes(inner[0])&&!comparisons.has(inner[0]))throw new Error('Unsupported filter '+inner[0]+'. '+filterHelp+'.');
+        if(inner[0]!=='not')break;
+        if(!Array.isArray(inner[1])||typeof inner[1][0]!=='string')throw new Error('A "not" filter is ["not","<column>",["<operator>",<value>]].');
+        inner=inner[1];
+      }
+      if(inner[0]!=='is'&&(inner[1]===''||inner[1]===null))throw empty(f);
+      // A not over an empty in-list is true for every row.
+      if(inner[0]==='in'&&!list(inner[1]).length)throw empty(f);
+      // The text of an or/and inside a not gets the walk top-level text gets.
+      if(inner[0]==='or'||inner[0]==='and'){const set=new Set();walk(f,inner[1],true,set);keys.push(...set);}
     }
     else if(f[0]!=='is'&&(f[2]===''||f[2]===null))throw new Error('The filter '+short(f)+' has an empty value, so it cannot pick any record. '+filterHelp+'.');
-    const keys=keysOf(f);
+    if(!keys)keys=keysOf(f);
     if(judged)for(const key of keys)if(!known(head(key)))throw new Error(table+' has no field "'+head(key)+'", so this filter cannot pick any record. '+filterHelp+'.');
   }
 }

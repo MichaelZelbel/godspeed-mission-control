@@ -233,3 +233,37 @@ test('reads keep every filter they accepted before',async()=>{
     }
   }finally{await service.close();}
 });
+
+test('or/and text inside a not gets the same refusals as top-level text, and a not inside a not is accepted',async()=>{
+  const service=await createService({root:root(),port:0}),base='http://127.0.0.1:'+service.address.port;
+  try{
+    const refused=[['not','name',['or','not.and()']],['not','name',['and','not.and()']],['not','name',['or','or()']],['not','name',['and','or()']],
+      ['not','name',['or','and(not.or(name.eq.x),or())']],['not','id',['and','or()']],['not','id',['and','id.in.()']],
+      ['not','name',['or','recrd_id.eq.1']],['not','name',['or','nameeqAna']],['not','name',['not',['in',[]]]]];
+    for(const empty of [true,false]){
+      if(!empty)await post(base,{table:'contacts',operation:'insert',values:[{name:'Ana'},{name:'Bo'}]});
+      for(const filter of refused){
+        const r=await post(base,{table:'contacts',operation:'update',values:{name:'Wiped'},filters:[filter]});
+        assert.equal(r.status,400,JSON.stringify(filter)+(empty?' (empty kind)':''));
+      }
+    }
+    assert.deepEqual((await people(base)).map(c=>c.name).sort(),['Ana','Bo'],'nothing was changed');
+    // A well-formed double not still updates, like on main.
+    const ok=await post(base,{table:'contacts',operation:'update',values:{name:'Ann'},filters:[['not','name',['not',['eq','Ana']]]]});
+    assert.equal(ok.status,200);
+    assert.deepEqual((await people(base)).map(c=>c.name).sort(),['Ann','Bo']);
+    // A well-formed or inside a not that matches nothing stays a 200.
+    const none=await post(base,{table:'contacts',operation:'update',values:{name:'X'},filters:[['not','name',['or','name.eq.Bo,name.eq.Ann']]]});
+    assert.equal(none.status,200);
+  }finally{await service.close();}
+});
+
+test('a not.in over an empty list in or/and text is refused',async()=>{
+  const service=await createService({root:root(),port:0}),base='http://127.0.0.1:'+service.address.port;
+  try{
+    for(const filter of [['or','','id.not.in.()'],['and','','id.not.in.()']]){
+      const r=await post(base,{table:'contacts',operation:'delete',filters:[filter]});
+      assert.equal(r.status,400,JSON.stringify(filter));
+    }
+  }finally{await service.close();}
+});
