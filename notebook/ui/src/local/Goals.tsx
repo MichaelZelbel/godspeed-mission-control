@@ -53,7 +53,7 @@ function workState(w:Work):{icon:JSX.Element;text:string}{
   return {icon:wait,text:w.status};
 }
 
-function Readings({goal}:{goal:Goal}){
+export function Readings({goal}:{goal:Goal}){
   const rs=goal.readings,lastReading=rs.at(-1),weekBefore=lastReading?[...rs].reverse().find(r=>daysBetween(lastReading.date,r.date)>=7):undefined;
   if(!lastReading)return <p className="text-sm text-muted-foreground">Not read yet. The morning decision reads it, or you tell it below.</p>;
   return <div className="space-y-3">

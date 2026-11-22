@@ -44,6 +44,17 @@ const allowed = [
   "const g = (d: Date) => format(d);",
   "// new Date(x).toLocaleString()",
   'const s = "toLocaleDateString()"',
+  // A held "now" Date is not a stored value either, however it is shown.
+  "const now = new Date();",
+  "now.toLocaleString();",
+  "now.toDateString();",
+  "const t = new Date(Date.now());",
+  "t.toLocaleString();",
+  "const stamp = new Date(2000, i, 1);",
+  "stamp.toLocaleString();",
+  "new Date().toLocaleString();",
+  "new Date(Date.now()).toLocaleString();",
+  "new Date(2000, i, 1).toLocaleString();",
 ].join("\n");
 
 describe("direct date use", () => {
@@ -115,6 +126,64 @@ describe("direct date use", () => {
       "evasive.tsx:7: parseISO",
       "evasive.tsx:9: formatRFC3339",
       "evasive.tsx:10: formatISO9075",
+    ]);
+  });
+
+  it("sees the held value through the declaration shapes a stored column invites", () => {
+    const shapes = [
+      "const d = row.at ? parseInstant(row.at) : null; d.toLocaleString();",
+      "const d2: Date = parseInstant(row.at); d2.toLocaleString();",
+      "const d3: Date | null = row.at ? parseInstant(row.at) : null; d3.toLocaleString();",
+      "const a = 1, d4 = parseInstant(row.at); d4.toLocaleString();",
+      'import { parseISO } from "date-fns";',
+      "const d5 = parseISO(row.at); d5.toLocaleString();",
+      'import { parseJSON } from "date-fns";',
+      "const d6 = parseJSON(text); d6.toLocaleString();",
+      'import { toDate } from "date-fns";',
+      "const d7 = toDate(x); d7.toLocaleString();",
+      "const d8 = Date.parse(s); d8.toLocaleString();",
+    ].join("\n");
+    expect(dateUses(shapes, "shapes.tsx").map((entry) => entry.split(" ").slice(0, 2).join(" "))).toEqual([
+      "shapes.tsx:11: Date.parse",
+      "shapes.tsx:1: toLocaleString",
+      "shapes.tsx:2: toLocaleString",
+      "shapes.tsx:3: toLocaleString",
+      "shapes.tsx:4: toLocaleString",
+      "shapes.tsx:6: toLocaleString",
+      "shapes.tsx:8: toLocaleString",
+      "shapes.tsx:10: toLocaleString",
+      "shapes.tsx:11: toLocaleString",
+      "shapes.tsx:6: parseISO",
+      "shapes.tsx:8: parseJSON",
+      "shapes.tsx:10: toDate",
+    ]);
+  });
+
+  it("sees the direct use after a template literal whose interpolation opens with a regex literal", () => {
+    const tricky = [
+      "const a = `${/can't/.test(m)} it's here`;",
+      "const t = new Date(stored).toLocaleString();",
+      "const ok = /can't/.test(s);",
+    ].join("\n");
+    expect(dateUses(tricky, "tricky.tsx").map((entry) => entry.split(" ").slice(0, 2).join(" "))).toEqual([
+      "tricky.tsx:2: new",
+      "tricky.tsx:2: toLocaleString",
+    ]);
+  });
+
+  it("sees the date-fns call through a subpath namespace import and a $-prefixed alias", () => {
+    const imports = [
+      'import * as fp from "date-fns/fp";',
+      'fp.format("PPP", stored);',
+      'import * as $d from "date-fns";',
+      '$d.format(stored, "PPP");',
+      'import { format as $f } from "date-fns";',
+      '$f(stored, "PPP");',
+    ].join("\n");
+    expect(dateUses(imports, "imports.tsx").map((entry) => entry.split(" ").slice(0, 2).join(" "))).toEqual([
+      "imports.tsx:2: format",
+      "imports.tsx:4: format",
+      "imports.tsx:6: format",
     ]);
   });
 });

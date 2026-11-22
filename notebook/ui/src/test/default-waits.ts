@@ -33,9 +33,14 @@ export function blank(source: string): string {
       if (e === "\\") { skip(i + 2); continue; }
       if (e === "\n" && quote !== "`") return;
       if (quote === "`" && e === "$" && source[i + 1] === "{") {
-        skip(i + 2);
-        if (!scanCode(true)) return;
         skip(i + 1);
+        // The interpolation's braces reach out so the code scanner classifies a
+        // `/` right after `${` as a regex literal, like it would in plain code.
+        out += "{";
+        i++;
+        if (!scanCode(true)) return;
+        out += "}";
+        i++;
         continue;
       }
       if (quote === "/") {
