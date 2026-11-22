@@ -25,7 +25,7 @@ export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const navigate = useNavigate();
-  const { session, profile, role, signOut } = useAuth();
+  const { session, profile, role, signOut, local } = useAuth();
   const isLoggedIn = !!session;
   const isPremiumOrAdmin = role === "premium" || role === "premium_gift" || role === "admin";
   const userName = profile?.display_name || session?.user?.email || "User";
@@ -106,10 +106,15 @@ export function Header() {
                 <DropdownMenuItem onClick={() => navigate("/dashboard/settings")}>
                   <Settings className="mr-2 h-4 w-4" /> Settings
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut}>
-                  <LogOut className="mr-2 h-4 w-4" /> Sign Out
-                </DropdownMenuItem>
+                {/* A notebook on this computer needs no sign-in, so it offers no Sign Out (#959). */}
+                {!local && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleSignOut}>
+                      <LogOut className="mr-2 h-4 w-4" /> Sign Out
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
@@ -146,9 +151,12 @@ export function Header() {
                   <Button variant="ghost" className="justify-start" onClick={() => { navigate("/dashboard/settings"); setMobileOpen(false); }}>
                     <Settings className="mr-2 h-4 w-4" /> Settings
                   </Button>
-                  <Button variant="ghost" className="justify-start text-destructive" onClick={handleSignOut}>
-                    <LogOut className="mr-2 h-4 w-4" /> Sign Out
-                  </Button>
+                  {/* No Sign Out on a local notebook (#959). */}
+                  {!local && (
+                    <Button variant="ghost" className="justify-start text-destructive" onClick={handleSignOut}>
+                      <LogOut className="mr-2 h-4 w-4" /> Sign Out
+                    </Button>
+                  )}
                 </>
               ) : (
                 <>

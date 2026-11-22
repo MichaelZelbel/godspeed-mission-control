@@ -47,7 +47,15 @@ test('sameOrNext compares by content', () => {
   const a = {id: 1, tags: ['x']};
   assert.equal(sameOrNext(a, {id: 1, tags: ['x']}), a);
   const b = {id: 2};
-  assert.equal(sameOrNext(a, b), b);
   assert.equal(sameOrNext(null, b), b);
+  assert.equal(sameOrNext(a, b), b);
   assert.equal(sameOrNext(a, null), null);
+});
+
+test('a local notebook keeps its local flag through session reads', () => {
+  const first = read();
+  const signedIn = signedInState(null, first.user, first.profile, true);
+  assert.equal(signedIn.local, true);
+  assert.equal(signedInState(signedIn, read().user, read().profile, true), signedIn, 'nothing changed, so the very same state comes back');
+  assert.equal(signedInState(signedIn, read().user, read().profile, false).local, false);
 });

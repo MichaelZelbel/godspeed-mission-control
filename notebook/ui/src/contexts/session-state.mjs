@@ -17,11 +17,12 @@ export function sameOrNext(previous, next) {
   try { return JSON.stringify(previous) === JSON.stringify(next) ? previous : next; } catch { return next; }
 }
 
-/** The state after a successful session read. */
-export function signedInState(previous, user, profile) {
+/** The state after a successful session read. `local` says the notebook runs on this
+ * computer and needs no sign-in (the server always answers signed in there). */
+export function signedInState(previous, user, profile, local = false) {
   const keptUser = sameOrNext(previous?.user ?? null, user);
   const session = previous?.session && previous.session.user === keptUser ? previous.session : { user: keptUser, access_token: 'local-session' };
-  const next = { loading: false, user: keptUser, session, profile: sameOrNext(previous?.profile ?? null, profile), role: 'premium', roleLoading: false, authError: '', expired: false };
+  const next = { loading: false, user: keptUser, session, profile: sameOrNext(previous?.profile ?? null, profile), role: 'premium', roleLoading: false, authError: '', expired: false, local: !!local };
   if (previous && Object.keys(next).every((key) => previous[key] === next[key]) && Object.keys(previous).length === Object.keys(next).length) return previous;
   return next;
 }

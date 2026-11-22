@@ -17,7 +17,7 @@ export async function authRequest(route:string, body?:any) {
 }
 export function AuthProvider({children}: {children:React.ReactNode}) {
   const [client] = useState(() => new QueryClient({defaultOptions:{queries:{retry:1,refetchOnWindowFocus:true}}}));
-  const [state,setState] = useState<any>({loading:true,user:null,session:null,profile:null,role:'premium',roleLoading:false,authError:'',expired:false});
+  const [state,setState] = useState<any>({loading:true,user:null,session:null,profile:null,role:'premium',roleLoading:false,authError:'',expired:false,local:false});
   const active=useRef(false), mounted=useRef(true), generation=useRef(0);
   const refreshSession=useCallback(async()=>{
     const started=generation.current;
@@ -27,7 +27,7 @@ export function AuthProvider({children}: {children:React.ReactNode}) {
       const data=await authRequest('/api/session');
       if(!active.current) { await hydrateFileChats(); await hydrateFilePreferences(); }
       // signedInState keeps an unchanged user's identity (session-state.mjs says why).
-      if(mounted.current&&started===generation.current) { active.current=true;setState((s:any)=>signedInState(s,data.user,data.profile)); }
+      if(mounted.current&&started===generation.current) { active.current=true;setState((s:any)=>signedInState(s,data.user,data.profile,status.local)); }
     } catch(e:any) {
       if(!mounted.current||started!==generation.current)return;
       if(e.status===401) {

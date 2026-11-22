@@ -44,9 +44,12 @@ function ShortAddress(){
   return <Navigate to={['/dashboard',name,...rest].join('/')+search+hash} replace/>;
 }
 function Layout(){
-  const {user,loading,authError,refreshSession}=useAuth();
+  const {user,loading,authError,refreshSession,local}=useAuth();
   if(loading)return <AuthShell><h2>Opening Godspeed Mission Control</h2><p role="status">Checking your sign-in…</p></AuthShell>;
   if(!user&&authError)return <AuthShell><h2>Let’s reconnect</h2><p className="auth-intro" role="alert">{authError}</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
+  // A notebook on this computer needs no sign-in (the server always answers signed in there), so it
+  // never lands on the server's sign-in, invite or setup screens, even if a read comes back oddly.
+  if(!user&&local)return <AuthShell><h2>Reconnecting to your notebook</h2><p className="auth-intro" role="status">Your notebook is on this computer and needs no sign-in.</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
   if(!user)return <AuthScreen/>;
   return <><KeepUnsavedNotes/><DashboardLayout/></>;
 }

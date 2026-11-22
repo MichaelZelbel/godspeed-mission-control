@@ -35,6 +35,9 @@ export function AuthScreen() {
     setError('');setMode('loading');
     try {
       const status=await authRequest('/api/auth/status');
+      // A notebook on this computer is always open (the server answers signed in there), so its
+      // setup link never opens the server's screens; the dashboard is where the person already was.
+      if(status.local){navigate('/dashboard',{replace:true});return;}
       if(status.configured){setMode('login');return;}
       if(invite.current){await authRequest('/api/auth/invite',{invite:invite.current});setMode('setup');}
       else setMode('invite');
