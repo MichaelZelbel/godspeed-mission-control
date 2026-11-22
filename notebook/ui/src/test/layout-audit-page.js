@@ -160,6 +160,24 @@
     if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return false;
     return document.elementsFromPoint(x, y).some((hit) => hit === el || el.contains(hit));
   };
+  // Whether the coverer is one a scroll of the page can move: the Manager decision on the scroll
+  // escape (#878) narrowed it to sticky covers. A sticky header keeps its place only at one scroll
+  // position, so text under it at the centered position is read clear at another, and only such a
+  // cover may be escaped. Text under a fixed, absolute or floating element (the chat button) stays
+  // covered at every scroll position, so it is always reported: a cover that is fixed or absolute
+  // itself, or sits inside something fixed, is not escaped, and neither is one with no sticky
+  // ancestor at all.
+  const stickyCover = (over) => {
+    const own = getComputedStyle(over).position;
+    if (own === "sticky") return true;
+    if (own === "fixed" || own === "absolute") return false;
+    for (let e = over.parentElement; e && e !== document.body; e = e.parentElement) {
+      const position = getComputedStyle(e).position;
+      if (position === "sticky") return true;
+      if (position === "fixed") return false;
+    }
+    return false;
+  };
   // Whether some scroll of some area the line sits in shows the line clear: text a scroll moves
   // under a sticky header is not drawn under it, so a coverer found at the line's centered position
   // is a fault only when no scroll brings the line out from under it.
@@ -200,12 +218,13 @@
   };
   for (const el of elements) {
     if (!textRects(el).length || !visible(el)) continue;
-    // In the middle of its scroll areas, as far as they go: text a scroll moves under a sticky header is
-    // not drawn under it, text no scroll can bring out is.
+    // In the middle of its scroll areas, as far as they go: text a scroll moves under a sticky header
+    // is not drawn under it there; under anything else, or under a sticky cover no scroll can clear,
+    // it stays a fault (#878).
     el.scrollIntoView({ block: "center", inline: "center" });
     for (let line = 0; line < textRects(el).length; line++) {
       const over = shownOver(el, line);
-      if (over && !escapes(el, line)) { found.push({ rule: "under another element", element: `${describe(el)} under ${describe(over)}` }); break; }
+      if (over && (!stickyCover(over) || !escapes(el, line))) { found.push({ rule: "under another element", element: `${describe(el)} under ${describe(over)}` }); break; }
     }
   }
 

@@ -359,6 +359,15 @@ describe("the audit's rules on pages built for them", { timeout: 20_000 }, () =>
       .toEqual([]);
   });
 
+  // The Manager decision on the scroll escape (#878) narrowed it to sticky covers: text under a
+  // fixed, absolute or floating element is always reported, whatever any scroll shows. A scroll
+  // moves a line past a fixed header and would show it clear, so under the old any-cover rule this
+  // page passed while the line stays under the header at the position a person reads it.
+  it("reports text under a fixed header no matter what a scroll would show", async () => {
+    expect(await audit(`<div style="height:200px;overflow:auto"><h2 style="position:fixed;top:0;left:0;width:100%;height:120px;background:white">Title</h2><div style="height:150px"></div><p style="margin:0">Under the title once scrolled</p><div style="height:400px"></div></div>`))
+      .toEqual(['under another element: p "Under the title once scrolled" under h2 "Title"']);
+  });
+
   it("reports text under a sticky header no scroll can bring it out from", async () => {
     expect(await audit(`<div style="height:400px;overflow:auto"><h2 style="position:sticky;top:0;margin:0;height:100px;background:white">Title</h2><p style="margin:0;margin-top:-90px">Hidden behind the title</p></div>`))
       .toEqual(['under another element: p "Hidden behind the title" under h2 "Title"']);
@@ -589,17 +598,95 @@ describe("every page at a phone's and a desktop's width", () => {
     expect(failures, failures.join("\n")).toEqual([]);
   }, 120_000);
 
+  // The name beside the buttons at a tablet's width with the sidebar open (#878): the review of
+  // 19:16 UTC saw the wrapped h1 squeezed into a 128 px column beside the Add Member, Edit and
+  // archive buttons, where ordinary words like "Partnerships" split with no hyphen and the name
+  // ran 8 to 13 lines tall. The button row must drop under the name when the whole name would not
+  // sit beside it, so the name wraps at whole words in the row's full width: its box must hold its
+  // longest word, and a line may only start inside a word the box could not hold anyway.
+  it("wraps a group name at whole words beside its buttons at a tablet's width", async () => {
+    const name = "International Relationships Partnerships for the 2027 expansion round";
+    const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name }, selection: "id,slug", single: true });
+    expect(group?.slug ?? null).toBeTruthy();
+    const context = await browser.newContext({ viewport: { width: 768, height: 1024 } });
+    try {
+      const page = await context.newPage();
+      const cdp = await context.newCDPSession(page);
+      await page.goto(`${seededNotebook.base}/dashboard/groups/${group.slug}`);
+      await settle(page);
+      const failures = (await auditShown(page, cdp)).filter((f) => f.element.startsWith('h1 "')).map((f) => `768 px, ${f.rule}: ${f.element}`);
+      const wrap = await page.evaluate((nm) => {
+        const h1 = [...document.querySelectorAll("h1")].find((e) => e.textContent === nm);
+        if (!h1) return "the name is missing";
+        const box = h1.getBoundingClientRect();
+        if (box.left < 0 || box.right > innerWidth) return `the name's box spans ${Math.round(box.left)} to ${Math.round(box.right)} on a ${innerWidth} px screen`;
+        if (h1.scrollWidth > h1.clientWidth) return `the name is cut: its box holds ${h1.clientWidth} px, its text needs ${h1.scrollWidth}`;
+        const node = h1.firstChild;
+        if (!node || node.nodeType !== Node.TEXT_NODE) return null;
+        const text = node.textContent;
+        const range = document.createRange();
+        const word = (at) => {
+          let start = at;
+          while (start > 0 && !/\s/.test(text[start - 1])) start--;
+          let end = at;
+          while (end < text.length && !/\s/.test(text[end])) end++;
+          range.setStart(node, start);
+          range.setEnd(node, end);
+          return range.getBoundingClientRect().width;
+        };
+        let widest = 0;
+        let prev = null;
+        for (let i = 0; i < text.length; i++) {
+          range.setStart(node, i);
+          range.setEnd(node, i + 1);
+          const r = range.getBoundingClientRect();
+          if (!(r.width > 0)) continue;
+          widest = Math.max(widest, word(i));
+          // A new line may only start after whitespace (an ordinary wrap at a space) or inside a
+          // word too wide for the box; a split inside a word the box could hold is the fault.
+          if (prev && Math.abs(r.top - prev.top) > 1 && /\S/.test(text[i - 1] ?? "") && word(i) <= box.width + 0.5) {
+            return `a line starts at "${text.slice(i, i + 12)}", inside a word the ${Math.round(box.width)} px box could hold`;
+          }
+          prev = r;
+        }
+        if (box.width + 0.5 < widest) return `the name's box holds ${Math.round(box.width)} px, its longest word needs ${Math.round(widest)}`;
+        return null;
+      }, name);
+      if (wrap) failures.push(`768 px: ${wrap}`);
+      // And the buttons: dropped under the name, they cover none of it.
+      const overlap = await page.evaluate((nm) => {
+        const h1 = [...document.querySelectorAll("h1")].find((e) => e.textContent === nm);
+        const button = (t) => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === t);
+        if (!h1 || !button("Add Member") || !button("Edit")) return "the name or a button is missing";
+        const intersect = (a, b) => !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+        const box = (e) => e.getBoundingClientRect();
+        for (const t of ["Add Member", "Edit"]) {
+          if (intersect(box(h1), box(button(t)))) return `"${t}" overlaps the name`;
+        }
+        return null;
+      }, name);
+      if (overlap) failures.push(`768 px: ${overlap}`);
+      expect(failures, failures.join("\n")).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  }, 60_000);
+
   // The List tab's table at a phone's width (#878): six columns cannot fit a card 272 px wide, and
   // the table's sideways scroller (the shared Table's own wrapper) draws no scrollbar in this
   // browser, so the last headers read as cut off rather than scrolled to. Every header the tab
-  // shows must lie inside its card. On main this fails at 320 and 375 px: "Joined", "Last
-  // Movement" and "Reason" sit outside the card's right edge.
+  // shows must lie inside its card. The members' names are the ones the review of 19:16 UTC saw
+  // push the headers out even after the first fix: at 320 px with only "Ada Lovelace" the
+  // "Joined" header was cut, and "Bartholomew Featherstonehaugh" pushed "Joined" out at 375 px and
+  // "Priority" out at 320 px. On main this fails at both widths: six columns sit outside the card.
   it("fits the List tab's headers inside their card at a phone's width", async () => {
     const name = "Members on the List tab";
     const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name }, selection: "id,slug", single: true });
     expect(group?.slug ?? null).toBeTruthy();
-    const person = await seededNotebook.query({ table: "contacts", operation: "insert", values: { name: "Grace Hopper" }, selection: "id", single: true });
-    await seededNotebook.query({ table: "contact_group_memberships", operation: "insert", values: { group_id: group.id, contact_id: person.id, priority: "high", status: "new", reason: "Met at the conference" }, selection: "id", single: true });
+    const ada = await seededNotebook.query({ table: "contacts", operation: "insert", values: { name: "Ada Lovelace" }, selection: "id", single: true });
+    const bartholomew = await seededNotebook.query({ table: "contacts", operation: "insert", values: { name: "Bartholomew Featherstonehaugh" }, selection: "id", single: true });
+    await seededNotebook.query({ table: "contact_group_memberships", operation: "insert", values: { group_id: group.id, contact_id: ada.id, priority: "high", status: "new", reason: "Met at the conference" }, selection: "id", single: true });
+    await seededNotebook.query({ table: "contact_group_memberships", operation: "insert", values: { group_id: group.id, contact_id: bartholomew.id, priority: "urgent", status: "new", reason: "Met at the conference" }, selection: "id", single: true });
     const failures: string[] = [];
     for (const viewport of [{ width: 320, height: 568 }, { width: 375, height: 812 }]) {
       const context = await browser.newContext({ viewport });
@@ -608,7 +695,7 @@ describe("every page at a phone's and a desktop's width", () => {
         await page.goto(`${seededNotebook.base}/dashboard/groups/${group.slug}`);
         await settle(page);
         await page.getByRole("tab", { name: "List" }).click();
-        await page.getByText("Grace Hopper").first().waitFor({ timeout: 15_000 });
+        await page.getByText("Bartholomew Featherstonehaugh").first().waitFor({ timeout: 15_000 });
         await settle(page);
         const outside = await page.evaluate(() => {
           const table = [...document.querySelectorAll("table")].find((t) => [...t.querySelectorAll("th")].some((th) => th.textContent === "Name"));
