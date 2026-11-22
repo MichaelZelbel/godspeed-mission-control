@@ -38,7 +38,9 @@ STUB_PID=""
 trap '[ -n "$STUB_PID" ] && kill "$STUB_PID" 2>/dev/null; rm -rf "$W" "$TEST_GUARD_HOME"' EXIT
 
 FULL_PATH="$PATH"
-SAFE_PATH="$(dirname "$NODE"):/usr/bin:/bin"
+# Node gets a directory of its own: its real one may also hold codex or claude.
+mkdir -p "$W/safebin" && ln -s "$NODE" "$W/safebin/node"
+SAFE_PATH="$W/safebin:/usr/bin:/bin"
 KEY1="mnr_test_key_ONE_1111"
 KEY2="mnr_test_key_TWO_2222"
 
