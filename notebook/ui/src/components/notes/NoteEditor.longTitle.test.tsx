@@ -96,4 +96,28 @@ describe("A note's long title is shown in full (#987)", () => {
       expect(title.className).toContain("break-words");
     }, 40_000);
   }
+
+  const WORDS = Array.from({ length: 40 }, (_, k) => ["garden", "plan", "tomato", "bed"][k % 4]).join(" ").slice(0, 200);
+  const UNBROKEN = "W".repeat(80);
+  for (const [name, text] of [["200 characters of ordinary words", WORDS], ["one 80-character unbroken word", UNBROKEN]] as const) {
+    for (const width of [375, 1280]) {
+      it(`${name} wraps inside the title at ${width}px, with no ellipsis, also when a note is renamed to it`, async () => {
+        stubLayout(width);
+        const id = await seedNote("Short", "Body.");
+        await openNote(id);
+        const title = screen.getByRole("textbox", { name: "Note title" }) as HTMLTextAreaElement;
+        const oneLine = parseInt(title.style.height, 10);
+        fireEvent.change(title, { target: { value: text } });
+        const perLine = Math.max(8, Math.floor(width / 14));
+        await waitFor(() => expect(parseInt(title.style.height, 10)).toBe(Math.ceil(text.length / perLine) * 32), WAIT);
+        if (text.length > perLine) expect(parseInt(title.style.height, 10)).toBeGreaterThan(oneLine);
+        expect(title.value).toBe(text);
+        expect(title.className).not.toContain("truncate");
+        expect(title.className).not.toContain("text-ellipsis");
+        expect(title.className).toContain("[overflow-wrap:anywhere]");
+        act(() => { window.dispatchEvent(new Event("pagehide")); });
+        await waitFor(async () => expect((await stored(id) as any).title).toBe(text), { timeout: 15_000 });
+      }, 40_000);
+    }
+  }
 });
