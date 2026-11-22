@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {watchTree} from '../core/watch-tree.mjs';
+import {watchTree,nativeRecursive} from '../core/watch-tree.mjs';
 
 const root=()=>fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-watch-tree-'));
 const until=async(check,ms=5000)=>{const end=Date.now()+ms;for(;;){const value=check();if(value||Date.now()>end)return value;await new Promise(r=>setTimeout(r,25));}};
@@ -31,7 +31,7 @@ test('a folder removed and remade while watching is watched again: a write insid
   }finally{watcher.close();}
 });
 
-test('a folder that cannot be watched is skipped: the rest of the tree keeps watching and no error is reported',{skip:process.platform==='darwin'||process.platform==='win32'||process.getuid?.()===0},async()=>{
+test('a folder that cannot be watched is skipped: the rest of the tree keeps watching and no error is reported',{skip:nativeRecursive||process.getuid?.()===0},async()=>{
   const dir=root(),events=[],errors=[];
   fs.mkdirSync(path.join(dir,'Locked'),0o000);
   fs.mkdirSync(path.join(dir,'Open'));
@@ -46,7 +46,7 @@ test('a folder that cannot be watched is skipped: the rest of the tree keeps wat
   } finally { watcher.close(); fs.chmodSync(path.join(dir,'Locked'),0o700); }
 });
 
-test('a watch construction failure that is not a skip reaches the error channel',{skip:process.platform==='darwin'||process.platform==='win32'},async()=>{
+test('a watch construction failure that is not a skip reaches the error channel',{skip:nativeRecursive},async()=>{
   const dir=root(),errors=[];
   fs.mkdirSync(path.join(dir,'Broken'));
   fs.mkdirSync(path.join(dir,'Open'));
@@ -79,7 +79,7 @@ test('a folder replaced by rename over itself is watched again: a write inside i
   }finally{watcher.close();}
 });
 
-test('a replaced root is reported on the error channel, and a same-named child\'s removal is not',{skip:process.platform==='darwin'||process.platform==='win32'},async()=>{
+test('a replaced root is reported on the error channel, and a same-named child\'s removal is not',{skip:nativeRecursive},async()=>{
   // The watched directory itself, renamed away and remade (the whole notebook
   // folder replaced from outside): every watch in the tree is dead either way,
   // so the consumers' recovery has to run, and its signal is this error.
@@ -97,7 +97,7 @@ test('a replaced root is reported on the error channel, and a same-named child\'
   }finally{watcher.close();}
 });
 
-test('a root whose same-named child is removed stays live: no error, later writes are reported',{skip:process.platform==='darwin'||process.platform==='win32'},async()=>{
+test('a root whose same-named child is removed stays live: no error, later writes are reported',{skip:nativeRecursive},async()=>{
   const base=root(),watched=path.join(base,'Watched'),events=[],errors=[];
   fs.mkdirSync(watched);
   fs.mkdirSync(path.join(watched,'Watched'));

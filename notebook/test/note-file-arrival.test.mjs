@@ -145,21 +145,29 @@ test('a second outside edit within five seconds of the first is found by search 
 
 test('a notebook folder replaced from outside still delivers what is written into the new one',async()=>{
   const root=temporary(),service=await createService({root,port:0}),base='http://127.0.0.1:'+service.address.port;
-  const BOUND=5000;
+  const BOUND=5000,notebook=path.join(root,'notebook'),realWatch=fs.watch;
   try{
-    fs.writeFileSync(path.join(root,'notebook','Before the swap.md'),'# quarrymap words\n');
+    fs.writeFileSync(path.join(notebook,'Before the swap.md'),'# quarrymap words\n');
     assert.ok(await until(async()=>(await search(base,'quarrymap')).length?true:null,BOUND),'the note before the replacement is found');
     // The whole folder moved away and a new folder made in its place, the way
-    // a sync tool or a restore replaces a workspace folder.
-    fs.renameSync(path.join(root,'notebook'),path.join(root,'notebook moved away'));
-    fs.mkdirSync(path.join(root,'notebook'));
-    fs.writeFileSync(path.join(root,'notebook','After the swap.md'),'# emberlake words\n');
+    // a sync tool or a restore replaces a workspace folder. Holding the
+    // re-watch (a watch budget that stays exhausted until the later note is
+    // written) keeps that note provably inside the dark window: while the
+    // watcher cannot be rebuilt, a re-armed watcher cannot exist yet, so the
+    // note written here can only be reached by the recovery reading
+    // everything. Letting the re-watch through before the write would let a
+    // watcher that happened to exist report it and mask the recovery.
+    fs.watch=(p,...rest)=>{if(String(p)===notebook){const error=new Error('the watch budget is exhausted');error.code='ENOSPC';throw error;}return realWatch(p,...rest);};
+    fs.renameSync(notebook,notebook+' moved away');
+    fs.mkdirSync(notebook);
+    fs.writeFileSync(path.join(notebook,'After the swap.md'),'# emberlake words\n');
     assert.ok(await until(async()=>(await search(base,'emberlake')).length?true:null,BOUND),'a note written into the replaced folder is found within '+BOUND+' ms');
     // And the folder keeps delivering: a later note in it is found too, not
     // just the first one after the replacement.
-    fs.writeFileSync(path.join(root,'notebook','After the swap 2.md'),'# mistvale words\n');
+    fs.writeFileSync(path.join(notebook,'After the swap 2.md'),'# mistvale words\n');
+    fs.watch=realWatch;
     assert.ok(await until(async()=>(await search(base,'mistvale')).length?true:null,BOUND),'a later note in the replaced folder is found too');
-  }finally{await service.close();fs.rmSync(root,{recursive:true,force:true});}
+  }finally{fs.watch=realWatch;await service.close();fs.rmSync(root,{recursive:true,force:true});}
 });
 
 test('a root watcher that cannot watch keeps retrying instead of giving up',async()=>{
@@ -168,6 +176,7 @@ test('a root watcher that cannot watch keeps retrying instead of giving up',asyn
   fs.writeFileSync(path.join(root,'ideas','Kept.md'),'kept\n');
   const realWatch=fs.watch,target=path.join(root,'ideas');
   let service=null,base=null;
+  const BOUND=5000;
   try{
     service=await createService({root,port:0});
     base='http://127.0.0.1:'+service.address.port;
@@ -179,17 +188,56 @@ test('a root watcher that cannot watch keeps retrying instead of giving up',asyn
     fs.watch=(p,...rest)=>{if(String(p)===target){const error=new Error('the watch budget is exhausted');error.code='ENOSPC';throw error;}return realWatch(p,...rest);};
     fs.renameSync(target,target+' was here');
     fs.mkdirSync(target);
+    // The eviction's rebuild reads the replaced folder once it has settled.
     await new Promise(r=>setTimeout(r,1500));
-    fs.watch=realWatch;
-    // A write made while the root is unwatched would still be covered by a
-    // background rebuild finishing around it; after this wait every attempt
-    // has fired and settled, so only a root that is really watched again can
-    // report what follows.
-    await new Promise(r=>setTimeout(r,3000));
+    // A write made while the root is still unwatched is read by no watcher;
+    // every retry signals the same rebuild, so what was written in the dark is
+    // read even while the failure lasts. Deleting the signal leaves the note
+    // to the ten-minute rebuild that re-reads everything.
     fs.writeFileSync(path.join(target,'Retry words.md'),'retry words unwatched no longer\n');
-    const found=await until(async()=>(await(await fetch(base+'/api/search?'+new URLSearchParams({q:'retry words unwatched no longer',mode:'words'}))).json()).data.some(r=>String(r.title).includes('Retry words')),10000);
+    const dark=await until(async()=>(await(await fetch(base+'/api/search?'+new URLSearchParams({q:'retry words unwatched no longer',mode:'words'}))).json()).data.some(r=>String(r.title).includes('Retry words')),BOUND);
+    assert.ok(dark,'a note written while the root is unwatched is read by the retry\'s rebuild signal within '+BOUND+' ms');
+    // Now let watching become possible again. The re-armed watcher starts
+    // without announcing what is already there, so only what follows is its
+    // proof: after this wait every retry has fired and settled, so a write now
+    // is reported only by a root that is really watched again.
+    fs.watch=realWatch;
+    await new Promise(r=>setTimeout(r,3000));
+    fs.writeFileSync(path.join(target,'Later words.md'),'retry words unwatched no longer\n');
+    const found=await until(async()=>(await(await fetch(base+'/api/search?'+new URLSearchParams({q:'retry words unwatched no longer',mode:'words'}))).json()).data.some(r=>String(r.title).includes('Later words')),10000);
     assert.ok(found,'the failed root is watched again once watching is possible');
   }finally{fs.watch=realWatch;await service?.close();fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('a re-arm that outlives the service builds no watcher for the closed one',async()=>{
+  const root=temporary();
+  fs.mkdirSync(path.join(root,'ideas'));
+  fs.writeFileSync(path.join(root,'ideas','Kept.md'),'kept\n');
+  const realWatch=fs.watch,target=path.join(root,'ideas');
+  let service=null,failing=true,built=null;
+  try{
+    service=await createService({root,port:0});
+    // Replacing the folder makes the eviction and the rootWatcher re-arm the
+    // same root within the same second; without cancelling the pending timer
+    // the second rearm overwrites the map entry and the first chain is
+    // orphaned, running on past close().
+    fs.watch=(p,...rest)=>{
+      if(String(p)===target){
+        if(!failing){built=realWatch(p,...rest);return built;}
+        const error=new Error('the watch budget is exhausted');error.code='ENOSPC';throw error;
+      }
+      return realWatch(p,...rest);
+    };
+    fs.renameSync(target,target+' was here');
+    fs.mkdirSync(target);
+    await new Promise(r=>setTimeout(r,1500));
+    // Watching is possible again from here on; the service is closed first, so
+    // only a retry chain that outlived close() can reach the watch.
+    failing=false;
+    await service.close();service=null;
+    await new Promise(r=>setTimeout(r,2500));
+    assert.equal(built,null,'no watcher is built for a closed service');
+  }finally{fs.watch=realWatch;if(built)built.close();if(service)await service.close();fs.rmSync(root,{recursive:true,force:true});}
 });
 
 test('an adopted note is edited like any note, in the file it came from',async()=>{

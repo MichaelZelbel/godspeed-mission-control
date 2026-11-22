@@ -1005,7 +1005,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // cancel it: a re-arm that outlives the service would construct a live watcher
   // for a closed one. The startup call below stays unguarded: failing to watch a
   // root at startup is a failure to start.
-  const rearm=name=>{rewatches.set(name,setTimeout(()=>{try{watchRoot(name);}catch{rearm(name);}changed(name)('rename',null);},1000).unref?.());};
+  // A root may be re-armed from the eviction, the timer's own catch and the
+  // rootWatcher within the same second: the pending timer is cancelled first,
+  // so one chain retries per root and close() can cancel the one that is there.
+  const rearm=name=>{clearTimeout(rewatches.get(name));rewatches.set(name,setTimeout(()=>{try{watchRoot(name);}catch{rearm(name);}changed(name)('rename',null);},1000).unref?.());};
   const watchRoot=name=>{
     const folder=path.join(store.root,name);
     if(watchers.has(name)||!fs.existsSync(folder))return;

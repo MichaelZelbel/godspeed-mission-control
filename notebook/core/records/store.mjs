@@ -481,6 +481,12 @@ export class Store {
       try{
         this.watcher=watchTree(this.recordsRoot,(event,name)=>this.touched(name==null?null:String(name)));
         this.watcher.on('error',()=>{this.dirtyAll=true;try{this.watcher.close();}catch{}this.watcher=null;this.rewatch=setTimeout(start,1000);this.rewatch.unref?.();});
+        // A recovery re-arm is not a startup: the watcher starts without
+        // announcing what is already there, so whatever was written while the
+        // last watcher was dark is reported by no event and is reached only
+        // when the next scan reads everything. At the first start the
+        // scan(true) below reads everything anyway.
+        this.dirtyAll=true;
       }catch{this.dirtyAll=true;this.rewatch=setTimeout(start,1000);this.rewatch.unref?.();}
     };
     fs.mkdirSync(this.recordsRoot,{recursive:true});start();

@@ -11,8 +11,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+// The platforms whose fs.watch watches recursively natively and has no such
+// fault, so watchTree keeps the native watcher there. The tests of the
+// per-directory branch skip on it, so a platform moving between the branches
+// moves its tests with it instead of leaving them silently skipped.
+export const nativeRecursive = process.platform === 'darwin' || process.platform === 'win32';
+
 export function watchTree(root, listener) {
-  if (process.platform === 'darwin' || process.platform === 'win32') return fs.watch(root, {recursive: true}, listener);
+  if (nativeRecursive) return fs.watch(root, {recursive: true}, listener);
   const watchers = new Map(); // relative directory -> its fs.watch
   const errorHandlers = [];
   let closed = false, lastError = null, rootIno = null;
