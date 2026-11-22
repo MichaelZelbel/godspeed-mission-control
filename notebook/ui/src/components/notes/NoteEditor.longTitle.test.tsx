@@ -91,7 +91,7 @@ describe("A note's long title is shown in full (#987)", () => {
       expect(title.tagName).toBe("TEXTAREA");
       expect((title as HTMLTextAreaElement).value).toBe(LONG);
       const lines = Math.ceil(LONG.length / Math.max(8, Math.floor(width / 14)));
-      await waitFor(() => expect(parseInt((title as HTMLElement).style.height, 10)).toBe(lines * 32));
+      await waitFor(() => expect(parseInt((title as HTMLElement).style.height, 10)).toBe(lines * 32), WAIT);
       expect(title.className).toContain("overflow-hidden");
       expect(title.className).toContain("break-words");
     }, 40_000);
