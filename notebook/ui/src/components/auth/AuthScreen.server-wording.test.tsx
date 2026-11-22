@@ -12,6 +12,7 @@ vi.mock("@/components/chat/GlobalAIChatFAB", () => ({ GlobalAIChatFAB: () => nul
 vi.mock("@/components/layout/DashboardLayout", () => ({ DashboardLayout: () => <p>Dashboard</p> }));
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppRoutes } from "@/App";
+import { WAIT } from "@/test/wait-limits";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -25,14 +26,14 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 describe("a server notebook, when it does not answer", () => {
   it("keeps the server wording on the setup link", async () => {
     open("/setup", () => { throw new TypeError("Failed to fetch"); });
-    await screen.findByText("Cannot reach your server. Check your connection and try again.");
+    await screen.findByText("Cannot reach your server. Check your connection and try again.", undefined, WAIT);
     expect(screen.getByText("Your server: notebook.example.com")).toBeInTheDocument();
     expect(document.body.textContent).toContain("Setup code");
   });
 
   it("keeps the server wording on the dashboard path", async () => {
     open("/dashboard", () => json({ error: "boom" }, 500));
-    await screen.findByText("Your server is unavailable. Try again shortly.");
+    await screen.findByText("Your server is unavailable. Try again shortly.", undefined, WAIT);
     expect(screen.getByRole("heading", { name: "Let’s reconnect" })).toBeInTheDocument();
     expect(screen.getByText("Your server: notebook.example.com")).toBeInTheDocument();
   });

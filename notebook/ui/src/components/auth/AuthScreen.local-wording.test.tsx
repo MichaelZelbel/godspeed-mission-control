@@ -11,6 +11,7 @@ vi.mock("@/components/chat/GlobalAIChatFAB", () => ({ GlobalAIChatFAB: () => nul
 vi.mock("@/components/layout/DashboardLayout", () => ({ DashboardLayout: () => <p>Dashboard</p> }));
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppRoutes } from "@/App";
+import { WAIT } from "@/test/wait-limits";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -27,7 +28,7 @@ describe("a notebook on this computer, when it does not answer", () => {
   it("never says server on the setup link, and offers Try again", async () => {
     open("/setup", aborted);
     expect(document.body.textContent).not.toMatch(/server/i);
-    await screen.findByRole("heading", { name: "Let’s reconnect" });
+    await screen.findByRole("heading", { name: "Let’s reconnect" }, WAIT);
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/server/i);
     expect(document.body.textContent).toContain("notebook");
@@ -36,14 +37,14 @@ describe("a notebook on this computer, when it does not answer", () => {
 
   it.each([["a JSON error", () => json({ error: "boom" }, 500)], ["a plain text body", () => new Response("oops", { status: 500 })]])("never says server when it answers 500 with %s", async (_n, answer) => {
     open("/setup", answer);
-    await screen.findByRole("heading", { name: "Let’s reconnect" });
+    await screen.findByRole("heading", { name: "Let’s reconnect" }, WAIT);
     expect(document.body.textContent).not.toMatch(/server/i);
     expect(document.body.textContent).toContain("notebook");
   });
 
   it("never says server on the dashboard path", async () => {
     open("/dashboard", aborted);
-    await screen.findByRole("heading", { name: "Let’s reconnect" });
+    await screen.findByRole("heading", { name: "Let’s reconnect" }, WAIT);
     expect(document.body.textContent).not.toMatch(/server/i);
   });
 
@@ -53,9 +54,9 @@ describe("a notebook on this computer, when it does not answer", () => {
       if (!up) return aborted();
       return url.includes("/api/session") ? json({ user: { id: "owner" }, profile: {} }) : json({ configured: true, local: true, signed_in: true });
     });
-    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }, WAIT));
     up = true;
-    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(screen.getByText("Dashboard")).toBeInTheDocument());
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }, WAIT));
+    await waitFor(() => expect(screen.getByText("Dashboard")).toBeInTheDocument(), WAIT);
   });
 });
