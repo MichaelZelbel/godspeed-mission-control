@@ -675,10 +675,18 @@ describe("every page at a phone's and a desktop's width", () => {
   // The List tab's table at a phone's width (#878): six columns cannot fit a card 272 px wide, and
   // the table's sideways scroller (the shared Table's own wrapper) draws no scrollbar in this
   // browser, so the last headers read as cut off rather than scrolled to. Every header the tab
-  // shows must lie inside its card. The members' names are the ones the review of 19:16 UTC saw
+  // shows must lie inside its card, and the tab's text must wrap at whole words: the round-4 fix
+  // let the table squeeze the Name column below a member's longest word, and real names then
+  // rendered a letter a line while the headers sat inside the card. So each shown header and name
+  // cell must hold its own longest word, and a line may only start inside a word the cell could
+  // not hold (the rules the 768 px h1 case uses, with a word's true width measured in a hidden
+  // span, since a word already broken across lines cannot say its own width). The members' names
+  // are the ones the review of 19:16 UTC saw
   // push the headers out even after the first fix: at 320 px with only "Ada Lovelace" the
   // "Joined" header was cut, and "Bartholomew Featherstonehaugh" pushed "Joined" out at 375 px and
-  // "Priority" out at 320 px. On main this fails at both widths: six columns sit outside the card.
+  // "Priority" out at 320 px. On main this fails at both widths: six columns sit outside the
+  // card. On the round-4 head it fails too: the Name cell holds 50 px while "Lovelace" needs 52
+  // at 320 px, and 105 px while "Featherstonehaugh" needs 131 at 375 px.
   it("fits the List tab's headers inside their card at a phone's width", async () => {
     const name = "Members on the List tab";
     const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name }, selection: "id,slug", single: true });
@@ -710,6 +718,65 @@ describe("every page at a phone's and a desktop's width", () => {
           });
         });
         failures.push(...(outside as string[]).map((line) => `${viewport.width} px: ${line}`));
+        const wrap = (await page.evaluate(() => {
+          const table = [...document.querySelectorAll("table")].find((t) => [...t.querySelectorAll("th")].some((th) => th.textContent === "Name"));
+          if (!table) return ["the List tab's table is missing"];
+          // A word's true width, measured in a hidden span in the cell's own font: the width a
+          // word has when no line break splits it, which a word already broken across lines
+          // cannot say for itself.
+          const span = document.createElement("span");
+          span.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;top:-1000px";
+          document.body.appendChild(span);
+          const wordWidth = (el: Element, word: string) => {
+            const cs = getComputedStyle(el);
+            span.style.font = cs.font;
+            span.style.letterSpacing = cs.letterSpacing;
+            span.textContent = word;
+            return span.getBoundingClientRect().width;
+          };
+          const faults: string[] = [];
+          // A header, or the button that holds a member's name in its cell.
+          const cells: Element[] = [...table.querySelectorAll("th")];
+          for (const td of table.querySelectorAll("tbody td")) cells.push(td.querySelector("button") ?? td);
+          for (const cell of cells) {
+            const node = [...cell.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? "").trim());
+            if (!node) continue;
+            const text = node.textContent ?? "";
+            const box = cell.getBoundingClientRect();
+            // A header hidden at this width has a zero box and is not shown at all.
+            if (box.width <= 0 || box.height <= 0) continue;
+            const cs = getComputedStyle(cell);
+            const holds = box.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+            const word = (at: number) => {
+              let start = at;
+              while (start > 0 && !/\s/.test(text[start - 1])) start--;
+              let end = at;
+              while (end < text.length && !/\s/.test(text[end])) end++;
+              return text.slice(start, end);
+            };
+            let widest = 0;
+            const range = document.createRange();
+            let prev: DOMRect | null = null;
+            for (let i = 0; i < text.length; i++) {
+              range.setStart(node, i);
+              range.setEnd(node, i + 1);
+              const r = range.getBoundingClientRect();
+              if (!(r.width > 0)) continue;
+              widest = Math.max(widest, wordWidth(cell, word(i)));
+              // A new line may only start at whitespace or after a hyphen, or inside a word the
+              // cell could not hold; a split inside a word the cell has room for is the fault.
+              if (prev && Math.abs(r.top - prev.top) > 1 && /\S/.test(text[i - 1] ?? "") && text[i - 1] !== "-") {
+                const w = wordWidth(cell, word(i));
+                if (w <= holds + 0.5) faults.push(`"${text.trim()}" breaks inside "${word(i)}", a word its ${Math.round(holds)} px box could hold`);
+              }
+              prev = r;
+            }
+            if (holds + 0.5 < widest) faults.push(`"${text.trim()}" sits in a ${Math.round(holds)} px box, its longest word needs ${Math.round(widest)}`);
+          }
+          span.remove();
+          return faults;
+        })) as string[];
+        failures.push(...wrap.map((line) => `${viewport.width} px: ${line}`));
       } finally {
         await context.close();
       }
