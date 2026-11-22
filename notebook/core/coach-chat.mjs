@@ -1,7 +1,7 @@
 import {canStartTalk,findArea,listAreas} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {brief,continuingTalkDay} from '../../third-party/addons/godspeed-coach/lib/brief.mjs';
 import {prepForBrief,prepMissing} from '../../third-party/addons/godspeed-coach/lib/prep.mjs';
-import {readTalk,setOpening,setShown} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';
+import {openTalk,readTalk,setOpening,setShown} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';
 import {localParts,now} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {loadSettings} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 
@@ -66,6 +66,20 @@ export function coachTalkCorrectedOpening(store,start){
   if(!opening)return null;
   setOpening(area,start.day,opening);
   return coachTalkRecordProblem(store,start,opening,{requireShown:false})?null:opening;
+}
+
+// A talk start whose record the assistant never made for the start's day (it wrote another day's, or
+// none) is opened here from what the talk was prepared to say, and that opening is returned for the
+// person to read. Null when a record exists, the talk continues an earlier one, or nothing was
+// prepared to say.
+export function coachTalkOpenedFromStart(store,start){
+  if(start.continuing)return null;
+  const area=findArea(store.root,start.area);
+  if(!area||readTalk(area,start.day))return null;
+  const opening=start.opening?start.opening.trim():start.sentence?`${start.sentence} ${usualQuestion(area)}`:null;
+  if(!opening)return null;
+  openTalk(area,start.day,{opening},now());
+  return opening;
 }
 
 // What the assistant is told when its reply to a talk start failed the guard (issue #489).
