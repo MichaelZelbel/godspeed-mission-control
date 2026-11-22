@@ -53,8 +53,20 @@ act() {
   printf '%s\n' "$FACTS" >"$EVIDENCE/report-facts.json"
 
   phase 'a notice queued, said by its routine, and asked about in a new conversation'
-  server_hold_queued_notices
+  # The routine says the oldest unsaid notice once a run, in the product's own order. Anything the product
+  # queued before this scenario's notice (the spend guard's low-balance one, with a real key) is said first,
+  # so the routine runs once for each of those, each run under its own label, and once more for ours.
+  server_notice_queue "$EVIDENCE/earlier-notices.json"
   server_queue_notice "$NOTICE_TEXT" "$NOTICE_ABOUT" "$FACTS"
+  local count i label
+  count=$("$NODE" -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).length))' "$EVIDENCE/earlier-notices.json")
+  for ((i = 1; i <= count; i++)); do
+    label=earlier-$i
+    "$NODE" -e 'process.stdout.write(JSON.stringify(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))[Number(process.argv[2])-1].facts))' "$EVIDENCE/earlier-notices.json" "$i" >"$EVIDENCE/report-facts-$label.json"
+    server_run_job "$label" 'Coach reminders and habit check' 300
+    server_telegram_mark "$label" cron
+    server_snapshot_table "$label" conversation_messages
+  done
   server_run_job report 'Coach reminders and habit check' 300
   server_telegram_mark report cron
   server_snapshot_table report conversation_messages
@@ -72,6 +84,24 @@ check() { # <evidence folder>
   kept_all "$folder" 'what was sent, recorded and answered' run.json report-facts.json conversation_messages-report.json telegram-requests.json runner.json manifest.json
   text=$(step_failure "$folder/run.json")
   [ -z "$text" ] || fail "a step of the run did not work, so the report could not be asked about: $text"
+
+  # Each notice the product queued before this scenario's was said by a run of its own (earlier-1, earlier-2...).
+  if [ -f "$folder/earlier-notices.json" ]; then
+    local count i label
+    count=$("$NODE" -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).length))' "$folder/earlier-notices.json")
+    for ((i = 1; i <= count; i++)); do
+      label=earlier-$i
+      kept_all "$folder" "the run that said an earlier notice ($label)" "report-facts-$label.json" "conversation_messages-$label.json"
+      interaction_begin "$label"
+      case $("$NODE" "$HERE/telegram-judge.mjs" recorded "$folder/run.json" "$label" "$folder/conversation_messages-$label.json" "$folder/report-facts-$label.json") in
+        ok) ;;
+        not-sent) fail "the routine that says notices did not send exactly one message to the owner for an earlier notice ($label)" ;;
+        not-recorded) fail "the report of an earlier notice ($label) was not recorded where the chat reads it: the chat holds no background message with the words that were sent" ;;
+        *) fail "the recorded report of an earlier notice ($label) does not carry the facts that notice was queued with" ;;
+      esac
+      interaction_passed "$label"
+    done
+  fi
 
   interaction_begin report
   case $("$NODE" "$HERE/telegram-judge.mjs" recorded "$folder/run.json" report "$folder/conversation_messages-report.json" "$folder/report-facts.json") in

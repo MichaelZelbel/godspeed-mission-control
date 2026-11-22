@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {chatContext} from '../core/chat-context.mjs';
-import {queueNotice,readNotices,holdQueuedNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {cardSent,sayNotice,recordRoutine,delivered,followUpFailed,ASKS_FOR_CODE,REPORT_CONTRACT,FOLLOW_UP_CONTRACT,GIVEN_UP_CONTRACT} from '../core/background-reports.mjs';
+import {queueNotice,readNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {cardSent,sayNotice,recordRoutine,delivered,followUpFailed,ASKS_FOR_CODE,REPORT_CONTRACT,FOLLOW_UP_CONTRACT,GIVEN_UP_CONTRACT} from '../core/background-reports.mjs';
 
 // BACKGROUND REPORTS (4 November 2026, #198): a notice is written with the chat's guidance, recorded
 // where the chat reads it, and the chat's next reply is told about it.
@@ -482,12 +482,17 @@ test('a routine that needs a yes asks with a waiting step instead, which a plain
  assert.equal(store.get('approvals',step.id).status,'approved');
 });
 
-test('a notice queued behind a held one is the one recorded, with its own facts',async t=>{
- const {store,home}=setup(t);
- queueNotice(store,{id:'spend-1',text:'Your balance is low.',about:'OpenRouter spending',facts:['Balance $3.38']});
- holdQueuedNotices(store);
+// The routine says the oldest unsaid notice, one a run (godspeed_routines.py notice()); a notice the
+// product queued earlier (the spend guard's) is said first, and each report carries its own notice's facts.
+test('the routine says each queued notice in turn, and every recorded report carries its own notice\'s facts',{skip:!python&&'needs Python'},async t=>{
+ const {store,home}=setup(t),script=fileURLToPath(new URL('../core/routine-scripts/godspeed_routines.py',import.meta.url));
+ queueNotice(store,{id:'spend-1',text:'Your balance is low.',about:'OpenRouter spending'});
  queueNotice(store,notice);
- const next=readNotices(store).find(n=>!n.not_sent);assert.equal(next.id,notice.id);
- await sayNotice(store,{notice:next,home,provider:provider([{about:notice.about,text:'Your backup did not run.'}])});
- const [saved]=records(store);assert.deepEqual(saved.report.facts,notice.facts);
+ const select=()=>{const out=execFileSync(python,['-I','-c','import importlib.util,sys,json,os;s=importlib.util.spec_from_file_location("r",sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);f=m.notice({"notices":sys.argv[2],"home":sys.argv[3]})\nif f:\n n,said,held=f;json.dump({"ids":m.said_ids(said)+[n["id"]]},open(said,"w"));m.release(held);print(json.dumps(n))',script,path.join(store.state,'notices.json'),home],{encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}}).trim();return out?JSON.parse(out):null;};
+ const first=select(),second=select();
+ assert.equal(first.id,'spend-1','the older notice is said first');assert.equal(second.id,notice.id);assert.equal(select(),null,'one notice a run, and nothing more');
+ for(const n of [first,second]){await sayNotice(store,{notice:n,home,provider:provider([{about:n.about,text:'Said: '+n.id}])});}
+ const saved=records(store);assert.equal(saved.length,2);
+ assert.deepEqual(saved.find(r=>r.content==='Said: spend-1').report.facts,['Your balance is low.']);
+ assert.deepEqual(saved.find(r=>r.content==='Said: '+notice.id).report.facts,notice.facts);
 });
