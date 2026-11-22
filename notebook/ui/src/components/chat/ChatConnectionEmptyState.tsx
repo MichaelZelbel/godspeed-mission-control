@@ -30,8 +30,22 @@ async function chatOptions({check}:{check?:boolean}={}){
 
 // A chat surface's read is the evidence that a chat has used the shared state since the Dashboard
 // last confirmed the AI (#822): only then does the next confirming arrival ask for a check, so a
-// Dashboard reached with no chat asks for none, exactly as it did before.
-let chatReadSinceConfirm=false;
+// Dashboard reached with no chat asks for none, exactly as it did before. The flag lives in
+// localStorage so it crosses the notebook's tabs and windows (#963): a chat in one tab must still
+// let the Dashboard's arrival in another tab confirm afresh.
+const CHAT_READ_SINCE_CONFIRM='godspeed:chat-read-since-confirm';
+function markChatRead(){
+  try{if(localStorage.getItem(CHAT_READ_SINCE_CONFIRM)!=='1')localStorage.setItem(CHAT_READ_SINCE_CONFIRM,'1');}
+  catch{/* no storage: within this window the flag stays what it was, as before */}
+}
+function chatReadSinceConfirm(){
+  try{return localStorage.getItem(CHAT_READ_SINCE_CONFIRM)==='1';}
+  catch{return false;}
+}
+function clearChatRead(){
+  try{localStorage.removeItem(CHAT_READ_SINCE_CONFIRM);}
+  catch{/* no storage: nothing to clear */}
+}
 
 export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}={}){
   const queryClient=useQueryClient();
@@ -45,12 +59,12 @@ export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}=
   // from that check, so reading each second costs no AI request and keeps a change inside about five
   // seconds of that check (#590).
   const options=useQuery<ChatOptions>({queryKey:['chat-options'],queryFn:async()=>{
-    if(!confirmOnMount)chatReadSinceConfirm=true;
-    const check=confirm.current&&chatReadSinceConfirm;
+    if(!confirmOnMount)markChatRead();
+    const check=confirm.current&&chatReadSinceConfirm();
     confirm.current=false;
     try{
       const read=await chatOptions(check?{check:true}:{});
-      if(check)chatReadSinceConfirm=false;
+      if(check)clearChatRead();
       return read;
     }catch(error){confirm.current=check;throw error;}
   },refetchInterval:1000,refetchIntervalInBackground:true});

@@ -8,7 +8,7 @@ import {ChatConnectionEmptyState,chatAIState,useChatOptions,stateSaid} from './C
 import {AI_CONNECTION_UNREADABLE_STATUS} from '../../../../core/no-ai.mjs';
 import { WAIT } from "@/test/wait-limits";
 
-afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+afterEach(()=>{cleanup();vi.unstubAllGlobals();window.localStorage.clear();});
 
 const surfaces=['floating chat','note chat','collection chat','pop-out chat'];
 function show(options:unknown){
@@ -97,4 +97,35 @@ it('rides the check flag on the first read only, and gets it back when that read
   expect(calls[calls.length-1]).toContain('check=1');
   await client.refetchQueries({queryKey:['chat-options']});
   expect(calls[calls.length-1]).not.toContain('check=1');
+});
+
+// #963: the flag behind #822 lived in module memory, so a chat in one tab never let a Dashboard
+// arrival in another tab ask for a check: each tab had its own copy of the flag. Two module
+// instances of this module sharing one localStorage stand in for two tabs. The test above is the
+// same-context control: there, the arrival already asked for a check.
+it('lets a chat read in one tab make a Dashboard arrival in another tab ask for a check',async()=>{
+  const calls:string[]=[];
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
+    calls.push(String(url));
+    return new Response(JSON.stringify({connected:true,usable:true,availability:'ready'}),{status:200,headers:{'Content-Type':'application/json'}});
+  }));
+  // Tab A: a chat surface reads the shared state, which is what lets the next arrival confirm afresh.
+  const mod1=await import('./ChatConnectionEmptyState');
+  const {default:React}=await import('react');
+  const {render}=await import('@testing-library/react');
+  function Chat(){mod1.useChatOptions();return null;}
+  render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><Chat/></QueryClientProvider>);
+  await waitFor(()=>expect(calls.length).toBeGreaterThan(0),WAIT);
+  expect(calls[0]).not.toContain('check=1');
+  cleanup();
+
+  // Tab B: a fresh JS context, the same localStorage. Its Dashboard arrival must still ask for a check.
+  vi.resetModules();
+  const mod2=await import('./ChatConnectionEmptyState');
+  const React2=(await import('react')).default;
+  const lib2=await import('@testing-library/react');
+  function Probe(){mod2.useChatOptions({confirmOnMount:true});return null;}
+  lib2.render(React2.createElement(QueryClientProvider as any,{client:new QueryClient({defaultOptions:{queries:{retry:false}}})},React2.createElement(Probe)));
+  await waitFor(()=>expect(calls.length).toBeGreaterThan(1),WAIT);
+  expect(calls[calls.length-1]).toContain('check=1');
 });
