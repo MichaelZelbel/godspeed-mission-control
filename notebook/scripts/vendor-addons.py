@@ -26,8 +26,9 @@ import pathlib,subprocess,json,sys,shutil,hashlib
 ADDONS=['godspeed-coach','godspeed-headache','godspeed-journal','godspeed-workouts','mc-phone','mc-video']
 ACTIVATION='Explicit setup only. No connector or outward action is enabled by packaging.'
 product=pathlib.Path(__file__).resolve().parents[2];target=product/'third-party/addons';pins_file=target/'sources.json'
-# A person is present: a maintainer runs this script by hand. Git's own words are captured, so a
-# failure is said the way this script says it, in one plain line, and not twice over.
+# Git's own words are captured, so a failure is said the way this script says it, in one plain
+# line, and not twice over.
+# A person is present: a maintainer runs this script by hand.
 git=lambda root,*a:subprocess.check_output(['git','-C',str(root),*a],stderr=subprocess.PIPE)
 USAGE='''usage: python notebook/scripts/vendor-addons.py <folder> [add-on ...]
        python notebook/scripts/vendor-addons.py --check <folder>
