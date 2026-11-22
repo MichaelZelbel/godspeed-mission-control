@@ -243,6 +243,30 @@ describe("the saved main AI in Settings", () => {
     } finally { vi.useRealTimers(); }
   });
 
+  // #945: while the saved file cannot be read, the open page's intro line must agree with the
+  // notice below it and say no connected AI answers the chat, the way a freshly loaded page does.
+  it("the intro line stops saying a connected AI answers the chat while the saved file cannot be read, and says it again once repaired", async () => {
+    vi.useFakeTimers();
+    try {
+      let saved: Record<string, unknown> = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true };
+      let damaged = false;
+      serve({ ...supportingRoutes, provider: () => damaged ? [500, { error: "The saved AI connection is not valid." }] : [200, saved] });
+      settings();
+      const connectedLine = "No assistant program is installed here. The notebook runs its own routines, such as reminders and domain watch, and the AI you connected below answers the chat and the routines that need an AI.";
+      const notConnectedLine = "No assistant program is installed here. The notebook still runs its own routines, such as reminders and domain watch. Connect your AI below to add the chat and the routines that need an AI.";
+      await vi.waitFor(() => expect(screen.getByText(connectedLine)).toBeInTheDocument(), WAIT);
+      damaged = true;
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      await vi.waitFor(() => expect(screen.getByText(notConnectedLine)).toBeInTheDocument(), WAIT);
+      expect(screen.queryByText(connectedLine)).toBeNull();
+      // Repaired on disk: the intro line says the connected AI answers the chat again.
+      damaged = false;saved = { ...saved };
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      await vi.waitFor(() => expect(screen.getByText(connectedLine)).toBeInTheDocument(), WAIT);
+      expect(screen.queryByText(notConnectedLine)).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
   it("removes a saved connection that cannot be read, so the person can connect again", async () => {
     const calls = serve({ ...supportingRoutes, provider: () => [500, { error: "The saved AI connection is not valid." }], "provider/remove": () => [200, { removed: true, connected: false, provider: { configured: false, key: false }, routines: { available: false } }] });
     settings();
