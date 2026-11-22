@@ -1,7 +1,8 @@
+import fs from 'node:fs';
 import {canStartTalk,findArea,listAreas} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {brief,continuingTalkDay} from '../../third-party/addons/godspeed-coach/lib/brief.mjs';
-import {prepForBrief,prepMissing} from '../../third-party/addons/godspeed-coach/lib/prep.mjs';
-import {readTalk,setOpening,setShown} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';
+import {prepForBrief,prepMissing,prepPath} from '../../third-party/addons/godspeed-coach/lib/prep.mjs';
+import {openTalk,readTalk,setOpening,setShown,talkDates} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';
 import {localParts,now} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {loadSettings} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 
@@ -18,7 +19,7 @@ export const hasCoachAreas=root=>listAreas(root).some(canStartTalk);
 
 export function coachTalkStart(store,area){
   const settings=loadSettings(store.root),today=localParts(now(),settings.timezone).date,continuing=continuingTalkDay(area,today),prepared=continuing?null:prepForBrief(area,today),missing=continuing||prepared?null:prepMissing(area,today);
-  return {area:area.slug,day:continuing||today,brief:brief(store.root,settings,area,today,{inChat:true}),opening:prepared?.opening||null,sentence:missing?`The preparation for this talk is not ready: ${missing}.`:null,continuing:Boolean(continuing)};
+  return {area:area.slug,day:continuing||today,brief:brief(store.root,settings,area,today,{inChat:true}),opening:prepared?.opening||null,card:prepared?.card||'',prep:prepared?prepPath(store.root,prepared.file):'',sentence:missing?`The preparation for this talk is not ready: ${missing}.`:null,continuing:Boolean(continuing)};
 }
 
 export function coachTalkRecordProblem(store,start,reply,{requireShown=true}={}){
@@ -52,20 +53,45 @@ export function coachTalkRecordOpening(store,start){
 // in the area's style: review asks what changed, compass asks about direction.
 const usualQuestion=area=>area.style==='review'?`What has changed since our last ${area.title} talk?`:`What would you like to try next in ${area.title}?`;
 
+// What a talk was prepared to say: its prepared opening, or the not-ready sentence plus the usual
+// question. Null when nothing was prepared to say.
+const talkOpening=(area,start)=>start.opening?start.opening.trim():start.sentence?`${start.sentence} ${usualQuestion(area)}`:null;
+
 // A talk record the assistant opened with the wrong opening (not the prepared one, none at all, or
-// without the "preparation is not ready" sentence) is corrected to what the talk was prepared to
+// without the "preparation is not ready" sentence), or never made for the start's day (it wrote
+// another day's, or none: issue #971), is corrected to what the talk was prepared to
 // say: the prepared opening, or the not-ready sentence plus the usual question. Returns that opening,
 // which is what the person reads, with no further AI call (issue #495). Null when the record is
-// right, missing or no longer open, the talk continues an earlier one, or nothing was prepared to say.
+// right, no longer open, the talk continues an earlier one, or nothing was prepared to say.
 export function coachTalkCorrectedOpening(store,start){
   if(start.continuing)return null;
   const area=findArea(store.root,start.area),talk=area&&readTalk(area,start.day);
-  if(!talk||talk.state!=='opened')return null;
-  if(!coachTalkRecordProblem(store,start,String(talk.sections['The opening']||'').trim(),{requireShown:false}))return null;
-  const opening=start.opening?start.opening.trim():start.sentence?`${start.sentence} ${usualQuestion(area)}`:null;
+  if(!area||talk&&talk.state!=='opened')return null;
+  if(talk&&!coachTalkRecordProblem(store,start,String(talk.sections['The opening']||'').trim(),{requireShown:false}))return null;
+  const opening=talkOpening(area,start);
   if(!opening)return null;
-  setOpening(area,start.day,opening);
+  if(talk)setOpening(area,start.day,opening);
+  else openTalk(area,start.day,{opening,prepared:start.card,prep:start.prep,read:start.prep?`the prepared talk ${start.prep}`:''},now());
   return coachTalkRecordProblem(store,start,opening,{requireShown:false})?null:opening;
+}
+
+// The days the start's area already holds a talk for, taken before the assistant is asked.
+export function coachTalkDays(store,start){
+  const area=findArea(store.root,start.area);
+  return new Set(area?talkDates(area):[]);
+}
+
+// The assistant's `talk open` follows its own clock and may write the talk under another day than
+// the one the start named (issue #984). That record is today's talk under the wrong date, not a talk
+// the person had, so it is removed; a record that was there before the start is never touched.
+export function removeStrayCoachTalks(store,start,before){
+  const area=findArea(store.root,start.area);
+  if(!area)return;
+  for(const day of talkDates(area)){
+    if(day===start.day||before.has(day))continue;
+    const talk=readTalk(area,day);
+    if(talk.state==='opened')fs.rmSync(talk.file);
+  }
 }
 
 // What the assistant is told when its reply to a talk start failed the guard (issue #489).

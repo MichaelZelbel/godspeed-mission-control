@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { parseInstant } from "@/lib/local-date";
 import { showToast } from "@/lib/toast";
 import {
   ContextMenu,
@@ -345,7 +346,8 @@ const GroupRow = memo(function GroupRow({
             }}
             onDrop={(event) => handlers.onDropOnGroup(event, group.id)}
             className={cn(
-              "flex h-7 w-full items-center gap-1 rounded-md px-2 text-left text-sm transition-colors hover:bg-accent/60 cursor-grab active:cursor-grabbing",
+              // min-h, not h: a long group name wraps onto its own lines instead of clipping (#867).
+              "flex min-h-7 w-full items-center gap-1 rounded-md px-2 py-0.5 text-left text-sm transition-colors hover:bg-accent/60 cursor-grab active:cursor-grabbing",
               isDragOver && "ring-2 ring-primary ring-inset bg-primary/10",
               draggingKey === key && "opacity-40",
             )}
@@ -363,7 +365,9 @@ const GroupRow = memo(function GroupRow({
               {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
             </span>
             <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate">{group.name}</span>
+            {/* break-words: a name whose single word is wider than the row breaks inside it
+                instead of running over the member count (#867). */}
+            <span className="min-w-0 flex-1 break-words">{group.name}</span>
             <span className="text-[10px] text-muted-foreground">{node.subtreeCount}</span>
           </button>
         </ContextMenuTrigger>
@@ -612,7 +616,7 @@ export function PeopleTree({
     () =>
       knownPeople
         .filter((p) => p.last_viewed_at)
-        .sort((a, b) => new Date(b.last_viewed_at!).getTime() - new Date(a.last_viewed_at!).getTime())
+        .sort((a, b) => (parseInstant(b.last_viewed_at!)?.getTime() ?? 0) - (parseInstant(a.last_viewed_at!)?.getTime() ?? 0))
         .slice(0, 15),
     [knownPeople],
   );

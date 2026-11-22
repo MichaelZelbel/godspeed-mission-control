@@ -1,5 +1,5 @@
 import { memo, type Dispatch, type DragEvent, type MouseEvent, type SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
-import { formatDistanceToNow } from "date-fns";
+import { parseInstant, showDate } from "@/lib/local-date";
 import { useNavigate } from "react-router-dom";
 import {
   ChevronDown,
@@ -125,8 +125,8 @@ function sortFolder(
     }
     const aRaw = (a as unknown as Record<string, unknown>)[sortField];
     const bRaw = (b as unknown as Record<string, unknown>)[sortField];
-    const aTs = typeof aRaw === "string" ? new Date(aRaw).getTime() : 0;
-    const bTs = typeof bRaw === "string" ? new Date(bRaw).getTime() : 0;
+    const aTs = typeof aRaw === "string" ? parseInstant(aRaw)?.getTime() ?? 0 : 0;
+    const bTs = typeof bRaw === "string" ? parseInstant(bRaw)?.getTime() ?? 0 : 0;
     return dir * (aTs - bTs);
   });
 
@@ -497,7 +497,7 @@ const NoteRow = memo(function NoteRow({
           <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="min-w-0 flex-1 truncate">{note.title || "Untitled"}</span>
           <span className="hidden text-[10px] text-muted-foreground group-hover:inline">
-            {formatDistanceToNow(new Date(note.updated_at), { addSuffix: true })}
+            {showDate(note.updated_at, "ago")}
           </span>
           {note.is_pinned && <Pin className="h-3 w-3 shrink-0 text-primary" />}
           {note.is_favorite && <Star className="h-3 w-3 shrink-0 fill-warning text-warning" />}
@@ -760,15 +760,15 @@ export function NoteTree({
       if (sortField === "title") return dir * (a.title || "Untitled").localeCompare(b.title || "Untitled");
       const aRaw = (a as unknown as Record<string, unknown>)[sortField];
       const bRaw = (b as unknown as Record<string, unknown>)[sortField];
-      const aTs = typeof aRaw === "string" ? new Date(aRaw).getTime() : 0;
-      const bTs = typeof bRaw === "string" ? new Date(bRaw).getTime() : 0;
+      const aTs = typeof aRaw === "string" ? parseInstant(aRaw)?.getTime() ?? 0 : 0;
+      const bTs = typeof bRaw === "string" ? parseInstant(bRaw)?.getTime() ?? 0 : 0;
       return dir * (aTs - bTs);
     });
   }, [notePool, sortField, sortDirection]);
 
   const recentList = useMemo(() => {
     return [...notePool]
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .sort((a, b) => (parseInstant(b.updated_at)?.getTime() ?? 0) - (parseInstant(a.updated_at)?.getTime() ?? 0))
       .slice(0, 20);
   }, [notePool]);
 
@@ -776,8 +776,8 @@ export function NoteTree({
   const trashList = useMemo(() => {
     const list = trashedNotes ?? [];
     return [...list].sort((a, b) => {
-      const aTs = new Date((a.trashed_at as string | null) ?? a.updated_at).getTime();
-      const bTs = new Date((b.trashed_at as string | null) ?? b.updated_at).getTime();
+      const aTs = parseInstant((a.trashed_at as string | null) ?? a.updated_at)?.getTime() ?? 0;
+      const bTs = parseInstant((b.trashed_at as string | null) ?? b.updated_at)?.getTime() ?? 0;
       return bTs - aTs;
     });
   }, [trashedNotes]);

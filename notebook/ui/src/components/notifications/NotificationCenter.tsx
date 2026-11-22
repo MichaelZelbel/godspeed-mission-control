@@ -22,6 +22,7 @@ import {
   Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { parseInstant } from "@/lib/local-date";
 
 interface Notification {
   id: string;
@@ -109,7 +110,7 @@ export function NotificationCenter() {
   };
 
   const timeAgo = (date: string) => {
-    const diff = Date.now() - new Date(date).getTime();
+    const diff = Date.now() - (parseInstant(date)?.getTime() ?? NaN);
     const mins = Math.floor(diff / 60000);
     if (mins < 60) return `${mins}m ago`;
     const hours = Math.floor(mins / 60);

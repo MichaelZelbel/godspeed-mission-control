@@ -22,9 +22,9 @@ export default function ChatComposer(p:Props){
   useEffect(()=>listenForChatOptions(data=>{setOptions(data);p.onModel(data.usable===false?'':data.current);if(data.usable===false)p.onEffort('');}),[p.onModel,p.onEffort]);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;clearTimeout(recordingTimer.current);audioRequest.current?.abort();if(recorder.current?.state==='recording')recorder.current.stop();recorder.current?.stream.getTracks().forEach(t=>t.stop());window.speechSynthesis?.cancel();};},[]);
   const noAI=options.connected===false,unusable=options.usable===false,efforts=noAI||unusable?[]:options.models.find(m=>m.id===p.model)?.efforts||[];
-  // An AI that cannot answer keeps its model's name in the picker, which is off; the chat's notice
-  // (ChatConnectionEmptyState) says why, once (#808).
-  const unusableModel=noAI?'No AI connected':options.current||options.label||'Connected model';
+  // The disabled picker can still name the model when the saved connection is readable (#808).
+  const unusableModel=options.availability==='unreadable'?'Connection unreadable'
+    :noAI?'No AI connected':options.current||options.label||'Connected model';
   const addFiles=async(list:FileList|File[])=>{
     const files=Array.from(list);if(p.files.length+files.length>10){p.onError('Attach up to 10 files per message');return;}
     if(files.reduce((n,f)=>n+f.size,0)>20*1024*1024){p.onError('Choose files totaling at most 20 MB');return;}

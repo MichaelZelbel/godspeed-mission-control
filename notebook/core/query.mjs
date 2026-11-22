@@ -17,7 +17,9 @@ import {momentDates} from './timestamps.mjs';
 import {personNames} from './person-names.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
-export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
+// Tables of the unreachable pages Menerio shipped, whose files are gone from the tree but whose records stay.
+const deleted = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../data/deleted-source-inventory.json', import.meta.url)), 'utf8'));
+export const tables = new Set([...inventory.dependencies.flatMap(d => d.tables), ...deleted.tables].filter(t => t !== 'note-attachments'));
 for (const table of ['goals', 'jobs', 'job_receipts', 'settings', 'permissions', 'decisions', 'habits', 'journal', 'deadlines', 'comments', 'notifications', 'note_conversations', 'import_mappings','record_history','event_corrections','embeddings']) tables.add(table);
 for(const table of ['health_episodes','medications','health_observations','watch_topics','watch_observations','domain_watches','domain_watch_observations','outside_numbers','subscriptions','forecasts','work_items','coach_talks','connector_status','work_tool_receipts','approvals','command_receipts'])tables.add(table);
 // The Lexicon's records (Menerio's wiki pages, their sources and revisions)
@@ -113,7 +115,8 @@ const comparisons=new Set(['eq','neq','in','contains','overlaps','gt','gte','lt'
 // {"field":"id","operator":"eq","value":...}, is refused in words; until 12 October 2026 it
 // reached condition() and failed as "object is not iterable", which an assistant is shown only as
 // "Something went wrong on the server" (the book's capture run, Finding 5).
-const filterHelp='Each filter is a list of three: an operator, a column and a value, for example ["eq","id","<id>"]';
+const filterExample='["eq","id","<id>"]';
+const filterHelp='Each filter is a list of three: an operator, a column and a value, for example '+filterExample;
 export function checkFilters(filters){
   if(!Array.isArray(filters))throw new Error('filters is a list. '+filterHelp+'.');
   for(const f of filters){
@@ -355,7 +358,21 @@ export class QueryService {
   execute(request) {
     const { table, operation = 'select', values, filters = [], orders = [], selection = '*', options = {}, single = false, maybeSingle = false, expected = {}, baselines = {} } = request;
     if (!tables.has(table)) throw new Error('Unknown record domain ' + table);
+    // A writer that sends its record under a misnamed field (the assistant's
+    // "data" instead of "values") used to crash on the record itself and
+    // answer the server's generic sentence, with no hint how to fix the
+    // request (#914). Refuse it here, where every writer's request passes.
+    if (operation === 'insert' || operation === 'upsert') {
+      const records = Array.isArray(values) ? values : [values];
+      const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+      if (!records.every(isRecord)) throw new Error((operation === 'insert' ? 'An insert' : 'An upsert') + ' needs its record under "values": an object, or a list of objects.' + ('data' in request ? ' This request sent "data" instead.' : ''));
+    }
     checkFilters(filters);
+    // One forgotten filter would rewrite or wipe every record of the kind, and
+    // the local door has no record-hash guard (assistant writes do), so an
+    // update or delete that does not say which records it means is refused
+    // before anything is read or written (issue 936).
+    if ((operation === 'update' || operation === 'delete') && !filters.length) throw new Error('An update or delete needs a filter that names the records it means, for example '+filterExample);
     // A filter on an embedded column ("contact_groups.is_trashed") waits for
     // the join. Until 6 October 2026 it was checked against the row itself,
     // where that column never is, so a person's Groups tab was always empty.
@@ -363,6 +380,12 @@ export class QueryService {
     let rows = this.rows(table).filter(row => filters.every(f => embedded(f) || condition(row, f) === true));
     if (operation !== 'select') {
       if(filters.some(embedded))throw new Error('Filters on embedded records narrow reads only');
+      // A delete stamped with the version the screen saw, matched against no
+      // record, removed nothing: the record had already gone (another tab or
+      // device, a second click). An empty success said "deleted" for a record
+      // that was still listed. An unstamped delete (the journal's background
+      // cleanup) stays idempotent.
+      if(operation==='delete'&&!rows.length&&filters.some(f=>f[0]==='eq'&&f[1]==='id'&&typeof expected[f[2]]==='string'))throw new Error('The record to delete is already gone');
       const privateKeys=/^(access_token|refresh_token|api_key|secret|password|token|token_hash|encrypted_token|credentials)$/i;
       const inspect=value=>{if(value&&typeof value==='object')for(const [key,next] of Object.entries(value)){if(privateKeys.test(key))throw new Error('Connector credentials belong in local device configuration, never synced records');inspect(next);}};inspect(values);
       if (views.has(table)||rows.some(r=>r.native_file&&table==='deadlines')) throw new Error('Derived views are read-only; use the personal obligation operation');

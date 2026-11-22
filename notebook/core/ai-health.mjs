@@ -1,5 +1,5 @@
 // WHAT THE AI'S NEWEST ANSWER SAYS ABOUT IT (#590). Every place that shows whether the AI can be
-// used (the chats, their model pickers and the Dashboard card) reads one state from here:
+// used (the chats, their model pickers and the Dashboard card) reads one state from here (#806):
 //   'ready'       the AI answered,
 //   'refused'     the provider refused the key or sign-in (HTTP 401 or 403, or Hermes saying so),
 //   'unreachable' an outage: a provider error, no route, or no answer at all yet,
@@ -24,14 +24,23 @@ export const AI_HEALTH_WAIT_MS=3000;
 export const AI_HEALTH_FIRST_WAIT_MS=8000;
 
 const REFUSED=/HTTP (?:401|403)\b|needs sign-in|authenticationerror|invalid_api_key|incorrect api key|token expired|unauthorized|authentication failed/i;
-// Failures of the request itself, not of the AI: they say nothing about whether it can be reached.
-const NOT_THE_AI=/document-capable model endpoint|Reply stopped/i;
+// Failures that say nothing about whether the AI can be reached: a request the AI cannot take, a
+// chat the person stopped, a chat an update holds the door for (#806's recorded chats), an answer
+// longer than the limit, and an assistant program that never started.
+const NOT_THE_AI=/document-capable model endpoint|Reply stopped|is updating; try the chat again in a moment|Assistant output exceeded its limit|The Godspeed assistant could not start/i;
 const STALLED=/did not answer the connection check/i;
 
 /** What a failed provider request says about the AI: 'refused', 'unreachable', 'stalled', or null (nothing). */
 export function aiFailure(error){
   const message=String(error?.message||error||'');
   if(NOT_THE_AI.test(message))return null;
+  // The cause travels as aiCause since #861, decided from the status at the provider, not from the
+  // message: a 500 whose body mentions a refused key is an outage, not a refusal (#833). The
+  // availability has no out-of-credit or busy state (#806), so those read as an outage here too.
+  if(error?.aiCause==='refused')return 'refused';
+  if(error?.aiCause==='stalled')return 'stalled';
+  if(error?.aiCause==='unusable')return null;
+  if(error?.aiCause)return 'unreachable';
   return REFUSED.test(message)?'refused':error?.code==='AI_STALLED'||STALLED.test(message)?'stalled':'unreachable';
 }
 
@@ -50,6 +59,12 @@ export function trackAIHealth(inner,{waitMs=AI_HEALTH_WAIT_MS,firstWaitMs=AI_HEA
   };
   Object.assign(run,inner);
   run.health=()=>state;
+  // A result that reached the AI outside this wrapper settles the same state: the original
+  // runtime's chats ask Hermes directly (native-agent.mjs), not through the tracked provider, so
+  // the caller records what the chat said (#806). An answer is the newest word ('ready'); a failure
+  // is its category, and a failure of the request itself says nothing. Whether the person stopped
+  // the request is the caller's to say, because only it sees the input.
+  run.record=error=>{const order=++started;settle(order,error?aiFailure(error):'ready');};
   if(typeof inner.check==='function'){
     run.check=async()=>{
       const order=++started;
@@ -72,7 +87,7 @@ export function trackAIHealth(inner,{waitMs=AI_HEALTH_WAIT_MS,firstWaitMs=AI_HEA
         settle(order,'stalled');
         // When the slow answer does arrive, it is the newest word on the AI unless something newer settled.
         void request.then(late=>settle(order,late.ok?'ready':aiFailure(late.error)));
-        throw new Error('The AI did not answer the connection check within '+Math.round(wait()/1000)+' seconds.');
+        throw Object.assign(new Error('The AI did not answer the connection check within '+Math.round(wait()/1000)+' seconds.'),{aiCause:'stalled'});
       }
       if(result.ok){settle(order,'ready');return;}
       settle(order,aiFailure(result.error));

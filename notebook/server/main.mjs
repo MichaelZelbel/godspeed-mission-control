@@ -14,6 +14,7 @@ import { Domains } from '../core/domains.mjs';
 import { Scheduler } from '../core/jobs/scheduler.mjs';
 import {controlRoutine} from '../core/jobs/routine-control.mjs';
 import { modelProvider, jobExecutor,hermesProvider,isHermesExecutable } from '../core/runtime.mjs';
+import {readSavedProvider,savedProviderOrNull} from '../core/saved-provider.mjs';
 import {assistantEnvironment} from '../core/assistant-files.mjs';
 import { FileSync } from '../core/sync/git.mjs';
 import {conflictView,resolveSavedConflict} from '../core/conflicts.mjs';
@@ -39,6 +40,7 @@ import {browserChat} from './browser-chat.mjs';
 import {KEPT_FILE} from '../core/ai-failures.mjs';
 import {transcribeRecording} from '../core/dictation.mjs';
 import {durableRoots,durableFiles} from '../core/file-policy.mjs';
+import {watchTree} from '../core/watch-tree.mjs';
 import { WebAuth, safeReturn } from './web-auth.mjs';
 import { MenerioImport } from './menerio-import.mjs';
 import {TelegramConnection} from './telegram-connect.mjs';
@@ -48,6 +50,7 @@ import {PlanSignIn,PLAN_PROVIDER} from '../core/plan-signin.mjs';
 import {voiceStatus,saveVoice} from '../core/voice-replies.mjs';
 import {goalOverview} from '../core/goal-overview.mjs';
 import {nativeAgent} from '../core/native-agent.mjs';
+import {chatAvailability} from '../core/chat-availability.mjs';
 import {NativeScheduler,hermesJobs} from '../core/native-scheduler.mjs';
 import {WorkoutsAddon} from '../core/workouts.mjs';
 import {enableKinds,readNotebookRoutines} from '../core/notebook-routines.mjs';
@@ -75,8 +78,9 @@ import {recordRunningNotebook} from '../core/running-notebook.mjs';
 import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/hermes-update.mjs';
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
-import {trackAIHealth,aiFailure} from '../core/ai-health.mjs';
-import {SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS,AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS,AI_STALLED_STATUS,NO_AI_STATUS} from '../core/no-ai.mjs';
+import {trackAIHealth} from '../core/ai-health.mjs';
+import {SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS,NO_AI_STATUS,AI_CONNECTION_UNREADABLE_STATUS} from '../core/no-ai.mjs';
+import {plainAIError,connectionTestError} from '../core/ai-outcome.mjs';
 import {MEDIA_CARRY_MAX_MB,MEDIA_PRESENCE_BATCH_SIZE,MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
 import {spendGuardStatus,saveSpendGuardSettings} from '../core/spend-guard.mjs';
 
@@ -94,26 +98,6 @@ export const startupReadiness=publication=>{
 };
 export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
 const providerView=config=>({configured:true,url:baseAddress(config.url),model:config.model,key:!!config.key});
-const readSavedProvider=file=>{
-  let text;try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code==='ENOENT')return null;throw error;}
-  const config=JSON.parse(text);
-  if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error('The saved AI connection is not valid. Connect it again after checking the server log.');
-  return config;
-};
-// A failed request to the AI, said as the chats say it (#590): a refused key, an outage, or an AI that
-// took the request and stopped answering (#808), each with what to do, never the provider's words,
-// which can quote the key. Godspeed's own no-AI sentences are not provider failures, though they
-// name an "AI service". null when the error is not the AI's.
-const PROVIDER_FAILURE=/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d|could not be reached|did not finish within|did not answer|needs sign-in|returned no text|connection could not start/i;
-const plainAIFailure=error=>{
-  const message=String(error?.message||'');
-  if(message.startsWith(NO_AI_STATUS)||message.startsWith(SETTINGS_ONLY_AI_STATUS)||!PROVIDER_FAILURE.test(message))return null;
-  const kind=aiFailure(error);
-  return kind==='refused'?AI_REFUSED_STATUS+'. Check it in Settings, Your AI, then try again.':kind==='stalled'?AI_STALLED_STATUS+'. Try again in a moment, or check it in Settings, Your AI.':kind?AI_UNREACHABLE_STATUS+'. Check its connection in Settings, Your AI, then try again.':null;
-};
-// The AI actions outside the chats that say a refused key or an outage the same way (#779); Process
-// note says it in Domains.invoke, so its background run does too (#808).
-const AI_ACTIONS=['draft-event','extract-moment-profile'];
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
@@ -184,7 +168,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const backupFor=()=>{const saved=readBackupEndpoint(store.state);if(saved){try{return modelProvider(saved);}catch{return null;}}
     try{return routineAI&&fallbackChain(fs.readFileSync(path.join(routineAI.home,'config.yaml'),'utf8')).length?hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot}):null;}catch{return null;}};
   const guarded=main=>withBackup(main,backupFor,{state:store.state,model:()=>readBackupEndpoint(store.state)?.model});
-  if(!provider&&fs.existsSync(providerPath))provider=guarded(modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8'))));
+  // The saved config the running connection was built from, or null when it was built from anything
+  // else (an env address, a Hermes with its own AI, a provider handed in): what a changed file on
+  // disk is compared against (#826).
+  let savedConfig=null;
+  // A saved connection that cannot be read leaves the notebook running with no AI connected, and
+  // Settings, Your AI, says so; the file stays for a look (#805). Until then it stopped startup.
+  if(!provider){try{const saved=readSavedProvider(providerPath);if(saved){provider=guarded(modelProvider(saved));savedConfig=saved;}}
+    catch(error){if(!error.savedProviderLogged)console.error('Godspeed Mission Control: the saved AI connection in '+providerPath+' cannot be read, so no AI is connected from it:',error.message);}}
   provider ||= guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}));
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
   // Where this notebook really runs from, for the tools (core/running-notebook.mjs): Windows only.
@@ -213,23 +204,44 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   provider=trackAIHealth(provider);
   const descriptor=originalRuntime?assistant.descriptor??null:null;
   const lifecycle=originalRuntime?new HermesLifecycle():null,domains=new Domains(query,{provider}),recordRoutines=()=>new Scheduler(store,{device,executor:jobExecutor(provider,query),only:NativeScheduler.recordKinds,delivery:'notebook'}),scheduler=assistantMissing?recordRoutines():originalRuntime?new NativeScheduler(store,{...descriptor,device,lifecycle,records:recordRoutines()}):new Scheduler(store,{device,query,executor:jobExecutor(provider,query)});scheduler.onProgress=beat;scheduler.onFailure=error=>console.error('Godspeed Mission Control: a routine could not be created, the next tick tries again:',error.message);
-  let chatAIUsable=!!domains.provider,chatAICheckedAt=0,chatAICheck=null;
-  // An AI connected from Settings answered its own test just now, so it is usable at once:
-  // the Dashboard, the chat and every feature reading runtimeConfigured see it without a
-  // chat having been opened first (#764). A check still running for the AI it replaced
-  // does not overwrite this.
-  const aiConnected=()=>{chatAIUsable=true;chatAICheckedAt=Date.now();};
+  // The one AI-availability state lives in the provider itself (provider.health(),
+  // core/ai-health.mjs), fed by every connection check and every chat or AI action. Nothing here
+  // keeps a second answer to whether the AI can be used (#806). These two only pace and share the
+  // connection check the chat options route runs, so the chats' one-second reads ask the provider
+  // at most once every five seconds.
+  let lastChatCheckAt=0,chatAICheck=null;
   let workouts=null;
   const automaticUpdate=new AutomaticUpdate({store,lifecycle,start:()=>startUpdate({root:store.root})});
   domains.assistantProblem=assistantMissing?assistantProblem:null;
   if(originalRuntime&&!assistantMissing){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root,providerFile:providerPath,keptFile:path.join(store.state,KEPT_FILE),lifecycle});const scenarioReleaseUrl=process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL;const updater=new HermesUpdate({store,descriptor,ask:askDirectly,lifecycle,releaseUrl:isScenarioHermesReleaseUrl(scenarioReleaseUrl)?scenarioReleaseUrl:undefined});scheduler.updater=updater;scheduler.chatHealth=new ChatHealth({store,descriptor,lifecycle});domains.hermesUpdate=updater;domains.nativeScheduler=scheduler;query.nativeHermesHome=descriptor.home;}
+  // The original runtime's chats ask Hermes directly (native-agent.mjs), not through the health
+  // tracked provider, so their outcome settles the same one state here: an answering chat is the
+  // AI's newest word, and a failed one too, unless the person stopped it (#806).
+  if(domains.nativeAgent){const agent=domains.nativeAgent;domains.nativeAgent=async input=>{try{const reply=await agent(input);provider?.record?.();return reply;}catch(error){if(!input?.signal?.aborted)provider?.record?.(error);throw error;}};}
   // Where the routines' AI is set: the Hermes home the routines run in (core/routine-ai.mjs).
   const routineAI=originalRuntime&&descriptor?.verified&&descriptor.home?{home:descriptor.home,state:store.state}:null;
   // An AI connected in Settings for the notebook only, while Hermes, which answers the chats, has no
   // AI of its own: the chats and the card say so, with the step that changes it (#590).
-  const settingsOnlyAI=()=>{if(!routineAI||!fs.existsSync(providerPath))return false;try{return routineAIStatus(routineAI).source==='none';}catch{return false;}};
-  // The chats' state: the newest provider result wins; before any, the last connection check (#590).
-  const chatAIAvailability=()=>{const health=provider?.health?.();return health&&health!=='unknown'?health:chatAIUsable?'ready':'unreachable';};
+  const settingsOnlyAI=()=>{if(!routineAI||!savedProviderOrNull(providerPath))return false;try{return routineAIStatus(routineAI).source==='none';}catch{return false;}};
+  // The saved file is the connection Settings shows (#826): read it the way Settings does. A file
+  // that exists but cannot be read makes the one availability 'unreadable'; a file repaired or
+  // replaced on disk while the notebook runs is followed, so the chats serve the saved AI again,
+  // not the one loaded before the change. No provider call is spent on any of it.
+  const readSavedConnection=()=>{
+    let saved;try{saved=readSavedProvider(providerPath);}catch{return 'unreadable';}
+    // The whole saved object is compared, not a hand-listed subset: every field modelProvider reads
+    // (beyond url, key and model: maxTokens, retryWaits, stallWatch) must decide the rebuild (#826).
+    // A hand edit that only reorders keys rebuilds needlessly but harmlessly: no provider call.
+    if(saved&&savedConfig&&JSON.stringify(saved)!==JSON.stringify(savedConfig)){
+      provider=trackAIHealth(guarded(modelProvider(saved)));domains.provider=provider;scheduler.executor=jobExecutor(provider,query);lastChatCheckAt=0;savedConfig=saved;
+    }
+    return saved;
+  };
+  // The one availability every surface reads (#806): the provider's newest result, 'none' with no
+  // AI connected, or 'unreadable' when the saved connection exists but cannot be read (#826).
+  // 'unknown' (connected, nothing asked yet) reads as ready, so a saved working
+  // connection and one just connected in Settings are usable before the first check or chat (#764).
+  const chatAIAvailability=()=>{if(!domains.provider)return 'none';if(readSavedConnection()==='unreadable')return 'unreadable';const health=provider?.health?.();return chatAvailability(!health||health==='unknown'?'ready':health);};
   const ensureSpendGuard=()=>{
     if(store.get('jobs','spend-guard')||!spendGuardStatus(store,{hermesHome:routineAI?.home}).openrouter_connected)return;
     store.save('jobs',{id:'spend-guard',kind:'spend-guard',owner:store.get('settings','installation')?.owner||store.device,paused:false,state:'pending',next_run:new Date().toISOString(),interval_ms:3600000});
@@ -245,7 +257,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     connectPlanMain({...routineAI,model:found.model});
     try{fs.unlinkSync(providerPath);}catch{}
     const hermes=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});
-    provider=trackAIHealth(hermes);domains.provider=provider;scheduler.executor=jobExecutor(provider,query);aiConnected();
+    provider=trackAIHealth(hermes);domains.provider=provider;scheduler.executor=jobExecutor(provider,query);lastChatCheckAt=Date.now();savedConfig=null;
     await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot});
     return found;
   }}):null;
@@ -304,11 +316,45 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // A file is opened before the reply starts, so a missing one is a 404, and a
   // read that fails halfway ends that one reply. Until 6 October 2026 either
   // stopped the whole server (an 'error' nobody listened for).
-  async function sendFile(res, file, headers, missing) {
+  async function sendFile(res, req, file, headers, missing) {
     let handle; try { handle = await fs.promises.open(file, 'r'); } catch { return missing ? missing() : send(res, 404, { error: 'This file is missing.' }); }
     let size; try { size = (await handle.stat()).size; } catch (error) { await handle.close().catch(() => {}); throw error; }
-    res.writeHead(200, { ...headers, 'Content-Length': size });
-    pipeline(handle.createReadStream(), res, error => { if (error) res.destroy(); });
+    // A browser may ask for part of a file (`Range: bytes=a-b`, `bytes=a-` or
+    // `bytes=-n`): audio and video players scrub by fetching the piece they
+    // need, and Safari asks for a byte range before it plays anything, so a
+    // server that answers every request with the whole file cannot be played
+    // from at all there (#889). A well-formed range the file cannot satisfy,
+    // such as a start past its end, is refused with 416 and the file's size;
+    // anything else that is not a plain single range (a malformed header,
+    // several ranges at once, a start after the end inside the header) is
+    // ignored, and the whole file goes out as before, which the standard lets
+    // a server do. The access checks ran before sendFile, so a range changes
+    // nothing about who may read the file.
+    let start = 0, end = size - 1, ranged = false, unsatisfiable = false;
+    const asked = /^\s*bytes=(\d*)-(\d*)\s*$/.exec(String(req.headers.range || ''));
+    if (asked && size > 0) {
+      const a = asked[1], b = asked[2];
+      if (a === '' && b !== '') { if (Number(b) > 0) { start = Math.max(0, size - Number(b)); ranged = true; } else unsatisfiable = true; }
+      else if (a !== '' && (b === '' || Number(b) >= Number(a))) {
+        if (Number(a) < size) { start = Number(a); end = b === '' ? size - 1 : Math.min(Number(b), size - 1); ranged = true; }
+        else unsatisfiable = true;
+      }
+    } else if (asked && size === 0) unsatisfiable = true;
+    if (unsatisfiable) { await handle.close().catch(() => {}); return send(res, 416, { error: 'The requested part of this file does not exist.' }, { 'Content-Range': 'bytes */' + size, 'Accept-Ranges': 'bytes' }); }
+    // The browser can give up on a page file at any moment: before the reply
+    // starts, between opening the file and piping it, or part way through.
+    // Piping into a reply that is already gone throws
+    // (ERR_STREAM_UNABLE_TO_PIPE), and until 21 November 2026 nothing caught
+    // that throw in a server process that was not started from main.mjs
+    // itself (the screen tests and the layout audit start it that way), so
+    // the process ended and every open tab lost the notebook while pages
+    // were still loading. The reply is already beyond saving, so it only
+    // ends here, and the server answers everyone else.
+    if (res.destroyed) { await handle.close().catch(() => {}); return; }
+    res.writeHead(ranged ? 206 : 200, { ...headers, ...(ranged ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}), 'Content-Length': ranged ? end - start + 1 : size, 'Accept-Ranges': 'bytes' });
+    const stream = ranged ? handle.createReadStream({ start, end }) : handle.createReadStream();
+    try { pipeline(stream, res, error => { if (error) res.destroy(); }); }
+    catch { stream.destroy(); res.destroy(); await handle.close().catch(() => {}); }
   }
   async function body(req, limit = 2 * 1024 * 1024) {
     let size = 0; const chunks = [];
@@ -436,7 +482,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!auth.authorized(req)&&!accessKey)return send(res,401,{error:'Authentication required'});
         if(req.method!=='POST'){res.writeHead(405,{'Allow':'POST'});return res.end();}
         const input=JSON.parse(await body(req));if(accessKey&&input.method==='tools/call'&&!accessKey.scopes.includes(toolScope(input.params.name,input.params.arguments||{})))return send(res,403,{error:'This API key does not grant that capability'});
-        const explain=error=>{const shown=userFacing(error,[store.root,store.state,mediaRoot,uiRoot,os.homedir(),os.tmpdir()]);if(!shown||error instanceof SyntaxError)console.error('Godspeed Mission Control: MCP '+String(input.params?.name||input.method)+' failed:',error);return shown||'Something went wrong on the server. The details are in its log.';};
+        const explain=error=>{const shown=userFacing(plainAIError(error),[store.root,store.state,mediaRoot,uiRoot,os.homedir(),os.tmpdir()]);if(!shown||error instanceof SyntaxError)console.error('Godspeed Mission Control: MCP '+String(input.params?.name||input.method)+' failed:',error);return shown||'Something went wrong on the server. The details are in its log.';};
         const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes,delegated:!!accessKey&&!apiKeys.installationAssistant(accessKey),explain});if(response===null){res.writeHead(202);return res.end();}return send(res,200,response);
       }
       if(route==='/api/pair/keys'&&req.method==='GET')return send(res,200,{data:pairKeys.map(({id,created_at,revoked_at})=>({id,created_at,revoked_at:revoked_at||null}))});
@@ -447,7 +493,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/media/offline'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['all','selected'].includes(input.offline))throw new Error('Choose all or selected media');const config=mediaSync.config();if(!config)throw new Error('Pair this device first');atomic(mediaSync.configPath,JSON.stringify({...config,offline:input.offline,selected:input.selected||[]}));return send(res,200,{ok:true});}
       if(route==='/api/media/manifest')return send(res,200,{data:mediaSync.manifest()});
       if(route==='/api/media/tombstone'&&req.method==='POST'){const input=JSON.parse(await body(req)),old=mediaSync.manifest().find(m=>m.path===input.path);if(!old||old.sha256!==input.sha256||!input.removed_at||!Number.isFinite(Date.parse(input.removed_at)))throw new Error('This removal does not match the saved media version');atomic(path.join(mediaRoot,hash(old.path)+'.mapping.json'),JSON.stringify({...old,removed_at:input.removed_at}));return send(res,200,{ok:true});}
-      if(route.startsWith('/api/media/blob/')&&req.method==='GET'){const filename=mediaFileName(decodeURIComponent(route.slice('/api/media/blob/'.length)));if(!mediaSync.manifest().some(m=>m.file===filename&&!m.removed_at))return send(res,404,{error:'Unknown media object'});return sendFile(res,path.join(mediaRoot,filename),{'Content-Type':'application/octet-stream','X-Content-Type-Options':'nosniff'});}
+      if(route.startsWith('/api/media/blob/')&&req.method==='GET'){const filename=mediaFileName(decodeURIComponent(route.slice('/api/media/blob/'.length)));if(!mediaSync.manifest().some(m=>m.file===filename&&!m.removed_at))return send(res,404,{error:'Unknown media object'});return sendFile(res,req,path.join(mediaRoot,filename),{'Content-Type':'application/octet-stream','X-Content-Type-Options':'nosniff'});}
       if(route==='/api/media/transfer'&&req.method==='POST'){
         const input=JSON.parse(await body(req,140*1024*1024)),mapping=input.mapping,data=Buffer.from(input.data,'base64');
         if(hash(data)!==mapping.sha256||data.length!==mapping.size)throw new Error('Transfer integrity mismatch');
@@ -469,7 +515,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(req.method!=='POST')return send(res,405,{error:'Use POST'});
         return send(res,200,automaticUpdate.save(JSON.parse(await body(req,4096))));
       }
-      if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,aiConfigured:!!domains.provider,runtimeConfigured:!!domains.provider&&!assistantMissing&&chatAIUsable,aiAvailability:!domains.provider?'none':chatAIAvailability(),assistantProblem:domains.provider&&!assistantMissing?null:assistantProblem,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime&&!assistantMissing?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
+      if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation'),aiAvailability=chatAIAvailability();return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,aiConfigured:!!domains.provider,runtimeConfigured:aiAvailability==='ready'&&!assistantMissing,aiAvailability,assistantProblem:domains.provider&&!assistantMissing?null:assistantProblem,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime&&!assistantMissing?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
       if(route==='/api/hermes-update'){
         if(!domains.hermesUpdate)return send(res,200,{available:false});
         if(req.method==='GET')return send(res,200,{available:true,...updateStatus(store)});
@@ -487,7 +533,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const saved=readSavedProvider(providerPath);return send(res,200,saved?providerView(saved):{configured:false,key:false});
       }
       if(route==='/api/provider'&&req.method==='POST'){
-        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),saved=readSavedProvider(providerPath),submittedKey=typeof input.key==='string'?input.key.trim():input.key;
+        // Reconnecting reads over a damaged saved file as if none were saved (#861 review D4): the
+        // new connection is tested and written whole, so the log line's instruction works. The
+        // damaged file's one plain log line per request is kept by readSavedProvider.
+        let saved=null;try{saved=readSavedProvider(providerPath);}catch{saved=null;}
+        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),submittedKey=typeof input.key==='string'?input.key.trim():input.key;
         const normalizedAddress=!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions';
         const retainedKey=!submittedKey&&saved&&baseAddress(normalizedAddress)===baseAddress(saved.url)?saved.key:submittedKey;
         const config={url:normalizedAddress,key:retainedKey,model:typeof input.model==='string'?input.model.trim():input.model};
@@ -499,11 +549,13 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           const backups=[saved&&backupEntryFor(saved),routineAI&&fallbackChain(fs.readFileSync(path.join(routineAI.home,'config.yaml'),'utf8'))[0]];
           if(backups.some(b=>sameService(want,b)))throw Object.assign(new Error(BACKUP_SERVICE),{backupService:true});}
         catch(error){if(error.backupService)throw error;}
-        await chosen({kind:'connection-test',contract:'Reply with Connected.'});
+        // Settings' own sentence for whatever the answer says, chosen here (ai-outcome.mjs), so the
+        // provider's raw words no longer travel to the browser for it to be worded (#861).
+        try{await chosen({kind:'connection-test',contract:'Reply with Connected.'});}catch(error){throw connectionTestError(error);}
         const kept=guarded(chosen);
         atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);
         // The test just above answered, so the new AI starts ready, and the next reader checks it again in five seconds (#590, #764).
-        provider=trackAIHealth(kept,{initial:'ready'});domains.provider=provider;scheduler.executor=jobExecutor(provider,query);aiConnected();
+        provider=trackAIHealth(kept,{initial:'ready'});domains.provider=provider;scheduler.executor=jobExecutor(provider,query);lastChatCheckAt=Date.now();savedConfig=config;
         ensureSpendGuard();
         if(!routines)return send(res,200,{connected:true,provider:providerView(config),routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
         connectRoutineAI({...routineAI,config});
@@ -520,7 +572,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         let removed=true;try{fs.unlinkSync(providerPath);}catch(error){if(error.code!=='ENOENT')throw error;removed=false;}
         const next=guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}))
           ||(routineAI&&routineAIStatus(routineAI).source!=='none'?hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot}):null);
-        provider=next?trackAIHealth(next):null;domains.provider=provider;scheduler.executor=jobExecutor(provider,query);chatAIUsable=!!provider;chatAICheckedAt=0;
+        provider=next?trackAIHealth(next):null;domains.provider=provider;scheduler.executor=jobExecutor(provider,query);lastChatCheckAt=0;savedConfig=null;
         return send(res,200,{removed,connected:!!provider,provider:{configured:false,key:false},routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
       }
       if(route==='/api/spend-guard'&&req.method==='GET')return send(res,200,spendGuardStatus(store,{hermesHome:routineAI?.home}));
@@ -548,7 +600,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         let main=null;try{main=backupEntryFor(JSON.parse(fs.readFileSync(providerPath,'utf8')));}catch{}
         const hermesMain=backupHome?routineAIStatus(routineAI):null;
         if(sameService(entry,main)||sameService(entry,hermesMain))throw new Error(SAME_SERVICE);
-        await candidate({kind:'connection-test',contract:'Reply with Connected.'});
+        try{await candidate({kind:'connection-test',contract:'Reply with Connected.'});}catch(error){throw connectionTestError(error);}
         return send(res,200,{connected:true,hermes:!!backupHome,...connectBackupAI({home:backupHome,state:store.state,config})});
       }
       // The ChatGPT plan sign-in (planSignIn above): its state, start it for the main AI or the
@@ -756,7 +808,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!found)return send(res,404,{error:'Media not found'});
         if(found.removed)return send(res,404,{error:'Media removed'});
         const keptElsewhere=()=>{res.writeHead(404,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>File kept on another computer</title><body style="font-family:system-ui,sans-serif;max-width:34rem;margin:4rem auto;padding:0 1rem;line-height:1.5"><h1 style="font-size:1.3rem">This file is kept on the computer where it was added.</h1><p>Open it on that computer, or make the file smaller than '+MEDIA_CARRY_MAX_MB+' MB so it can travel to this one.</p></body></html>');};
-        return sendFile(res, found.file, { 'Content-Type': found.mapping.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }, found.mapping.size>CARRY_LIMIT ? keptElsewhere : null);
+        return sendFile(res, req, found.file, { 'Content-Type': found.mapping.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }, found.mapping.size>CARRY_LIMIT ? keptElsewhere : null);
       }
       if(route==='/api/media/kept-here'&&req.method==='GET')return send(res,200,{data:keptHere(media)});
       if(route==='/api/media/kept-elsewhere'&&req.method==='GET')return send(res,200,{data:keptElsewhere(media)});
@@ -769,25 +821,40 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       // With no AI connected (the same test as runtimeConfigured in /api/status), the picker says so instead of naming a "Connected model" (#563).
       if(route==='/api/chat/options'&&req.method==='GET'){
-        if(domains.provider&&!assistantMissing&&settingsOnlyAI()){const options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};return send(res,200,{connected:true,usable:false,availability:'settings-only',...options});}
+        // Reading the state follows a saved connection repaired or replaced on disk (#826), so the
+        // model named below is the saved one, not the one loaded before the change. This first read
+        // decides the settings-only branch; the read at the end is fresh, after the awaited check.
+        const savedAvailability=chatAIAvailability();
+        if(domains.provider&&!assistantMissing&&settingsOnlyAI()&&savedAvailability!=='unreadable'){const options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};return send(res,200,{connected:true,usable:false,availability:'settings-only',...options});}
         if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]});
+        // A saved connection Settings cannot be read (#826): it is answered here, before anything is
+        // asked of the connection loaded before the damage. It names no model (the saved one cannot
+        // be read), and nothing is spent on it, not even the paced check.
+        if(savedAvailability==='unreadable')return send(res,200,{connected:true,usable:false,availability:'unreadable',current:'',models:[{id:'',efforts:[]}]});
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
         if(provider?.check){
-          if(!chatAICheck&&Date.now()-chatAICheckedAt>=5000){
-            chatAICheckedAt=Date.now();
-            const checking=provider;chatAICheck=(async()=>{try{await checking.check();if(provider===checking)chatAIUsable=true;}catch(error){if(provider===checking)chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}})().finally(()=>{chatAICheck=null;});
+          // A read may ask for a fresh check (the Dashboard's arrival, #822): it still shares the
+          // in-flight check, but jumps the five-second pacing other reads keep (#794). A check that
+          // costs a billed chat (the assistant runtime's, #905) is run only by reads that ask for
+          // one, so idle pages never bill it (#762).
+          if(!chatAICheck&&(url.searchParams.has('check')||(!provider.checkBilled&&Date.now()-lastChatCheckAt>=5000))){
+            lastChatCheckAt=Date.now();
+            chatAICheck=(async()=>{try{await provider.check();}catch(error){console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}})().finally(()=>{chatAICheck=null;});
           }
           if(chatAICheck)await chatAICheck;
         }
         // Refused and outage are told apart, and a real chat request newer than the check counts too (#590).
         {const availability=chatAIAvailability();return send(res,200,{connected:true,usable:availability==='ready',availability,...options});}
-        return send(res,200,{connected:true,usable:chatAIUsable,...options});
       }
       if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}
       if (route.startsWith('/api/functions/') && req.method === 'POST') {
         const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));
         // A chat summary is read-only (Domains.summarizeChat): no message, receipt or retained conversation.
         const isChat=NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode!=='summarize',id=isChat?input.request_id:undefined;
+        // A saved connection the notebook can no longer read (#826): every chat function, a summary
+        // included, says what Settings says and asks the provider loaded before the damage nothing.
+        // Read before the settings-only check: with the file damaged, its advice cannot be followed.
+        if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&domains.provider&&!assistantMissing&&chatAIAvailability()==='unreadable')throw new Error(AI_CONNECTION_UNREADABLE_STATUS);
         if(isChat&&domains.provider&&!assistantMissing&&settingsOnlyAI())throw new Error(SETTINGS_ONLY_AI_STATUS+'. '+SETTINGS_ONLY_AI_HELP);
         if(isChat&&id&&(!/^[a-f0-9-]{36}$/.test(id)||chatRequests.has(id)))throw new Error('Invalid chat request');
         const receiptId=isChat&&id?'chat-request-'+id:null,requestHash=hash({name,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
@@ -814,10 +881,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});
         }catch(error){
           if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});
-          // A refused key and an outage are said apart, each with what to do (#590). Only the category is said, never the provider's words.
-          if(isChat&&domains.provider&&!assistantMissing&&!controller.signal.aborted){const said=plainAIFailure(error);if(said){chatAIUsable=false;chatAICheckedAt=Date.now();throw new Error(said);}}
-          if(isChat&&domains.provider&&!assistantMissing&&!controller.signal.aborted&&/model provider|AI service|assistant runtime|Hermes|fetch failed|HTTP [45]\d\d/i.test(error.message)){chatAIUsable=false;chatAICheckedAt=Date.now();throw new Error('Your AI could not be used. Check Settings, Your AI, then try again.');}
-          if(AI_ACTIONS.includes(name)&&domains.provider&&!controller.signal.aborted){const said=plainAIFailure(error);if(said)throw new Error(said);}
+          // Every AI failure is already the one plain sentence a person reads: Domains.invoke
+          // translated it (core/ai-outcome.mjs), for this route and for every other one, so no
+          // route builds its own AI error text (#861). The chats' live state reads the cause where
+          // the provider is tracked (trackAIHealth): an answer the AI gave but that could not be
+          // used says nothing about whether the AI answers (ai-health.mjs aiFailure), so it is left
+          // alone here, like every other failure the route itself has already recorded.
           throw error;
         }finally{if(isChat&&id)chatRequests.delete(id);if(isSearch){req.off('aborted',abortSearch);res.off('close',abortSearch);}}
       }
@@ -832,13 +901,19 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       const cache = file.startsWith(path.join(uiRoot,'assets')+path.sep) ? 'public, max-age=31536000, immutable' : 'no-cache';
       // Only the notebook itself may frame its pages: another site could show
       // them in a frame made to look like something else (7 October 2026).
-      return sendFile(res, file, { 'Content-Type': mime, 'Cache-Control': cache, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"frame-ancestors 'self'",'X-Frame-Options':'SAMEORIGIN' });
+      return sendFile(res, req, file, { 'Content-Type': mime, 'Cache-Control': cache, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"frame-ancestors 'self'",'X-Frame-Options':'SAMEORIGIN' });
     } catch (e) {
       // A reply already under way cannot carry an error; it is cut off instead
       // (writing headers twice stopped the server until 6 October 2026).
       if (res.headersSent) { console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed after the reply started:', e); res.destroy(); return; }
-      const shown = userFacing(e, [store.root, store.state, mediaRoot, uiRoot, os.homedir(), os.tmpdir()]);
+      // Every AI failure left says its one plain sentence here, for the routes whose errors do not
+      // pass through Domains.invoke: the browser chat, and the connection tests above (#861).
+      const shown = userFacing(plainAIError(e), [store.root, store.state, mediaRoot, uiRoot, os.homedir(), os.tmpdir()]);
       if (!shown || e instanceof SyntaxError) console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed:', e);
+      // An answer the AI gave but that could not be used leaves the operator one plain line, so the
+      // shape the provider actually answered is not lost with it (#861 review R3): the sentence the
+      // person sees says nothing about what was wrong.
+      if (e?.aiCause==='unusable') console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' could not use the AI\'s answer: '+e.message);
       send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: shown || 'Something went wrong on the server. The details are in its log.', ...(shown && e.code ? { code: e.code } : {}) });
     }
   };
@@ -914,7 +989,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const telegram=!originalRuntime&&process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN&&process.env.GODSPEED_CANDIDATE_BOT_OWNER?new Telegram({store,domains,token:process.env.GODSPEED_CANDIDATE_BOT_TOKEN,owner:process.env.GODSPEED_CANDIDATE_BOT_OWNER,loginLink:process.env.GODSPEED_BROWSER_ORIGIN?destination=>{const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return process.env.GODSPEED_BROWSER_ORIGIN+'/login/'+code+'?next='+encodeURIComponent(destination);}:undefined}):null;
   const telegramTimer=telegram?setInterval(()=>{if(!menerioImport.mutating)telegram.tick().catch(()=>{});},3000):null;
   scheduler.deliver=telegram?(id,result)=>telegram.deliver(id,result):null;
-  let debounce,indexDebounce;const watchers=new Map(),changedFiles=new Set();
+  let debounce,indexDebounce;const watchers=new Map(),rewatches=new Map(),changedFiles=new Set();
   // A changed workspace file is read into the index on its own; the store
   // watches its records itself. An owner's page in the notebook folder is a
   // file to the index too. Any change schedules a sync round.
@@ -934,14 +1009,44 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>{if(!menerioImport.mutating)void syncRunner.run();},5000);}
   };
   // Private backups and Git merge workspaces are outside the watched knowledge.
-  const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed(name)));};
+  // A watcher that fails (the resource failures the error channel carries, and a
+  // durable root replaced under its own watch) is dropped here, the whole root is
+  // rebuilt, and the root is watched again after a second, like the store's own
+  // recovery: left in the map it would block the rootWatcher's re-watch route for
+  // the life of the process and the root would go dark. The watcher is stored
+  // before the error handler is attached, because watchTree replays a
+  // construction failure on attach and the identity guard needs the entry in the
+  // map to evict the dead watcher. The re-entry is asynchronous (from the timer
+  // or from the rootWatcher's callback), so a root that still cannot be watched
+  // one second later (a watch budget or handle table still exhausted, a folder
+  // raced between the existsSync guard and the watch) would throw out of the
+  // timer into the process's uncaughtException exit. The retry is contained the
+  // way the store contains its own recovery (records/store.mjs): give up for
+  // now, try again after another second; the rebuild the eviction signalled
+  // already covered the gap; the re-arm signals the same rebuild again, so what
+  // was written while no watcher was armed is read too, whatever the attempt's
+  // outcome. The timer is kept in `rewatches` so close() can
+  // cancel it: a re-arm that outlives the service would construct a live watcher
+  // for a closed one. The startup call below stays unguarded: failing to watch a
+  // root at startup is a failure to start.
+  // A root may be re-armed from the eviction, the timer's own catch and the
+  // rootWatcher within the same second: the pending timer is cancelled first,
+  // so one chain retries per root and close() can cancel the one that is there.
+  const rearm=name=>{clearTimeout(rewatches.get(name));rewatches.set(name,setTimeout(()=>{try{watchRoot(name);}catch{rearm(name);}changed(name)('rename',null);},1000).unref?.());};
+  const watchRoot=name=>{
+    const folder=path.join(store.root,name);
+    if(watchers.has(name)||!fs.existsSync(folder))return;
+    const watcher=watchTree(folder,changed(name));
+    watchers.set(name,watcher);
+    watcher.on('error',()=>{try{watcher.close();}catch{}if(watchers.get(name)===watcher){watchers.delete(name);changed(name)('rename',null);rearm(name);}});
+  };
   for(const name of durableRoots)watchRoot(name);
   // A manual or extra instructions changed by anything (a sync from another machine, a session, an
   // editor) bring the assistant's own identity file in step with them (assistant-soul.mjs).
   let soulDebounce;const followPersona=()=>{clearTimeout(soulDebounce);soulDebounce=setTimeout(()=>{try{shelf.followPersona();}catch{}},2000);soulDebounce.unref?.();};
-  const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
+  const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){try{watchRoot(name);}catch{rearm(name);}changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
   let localServer = null;
-  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(automaticTimer);clearInterval(factTimer);clearInterval(journalMomentsTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
+  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(automaticTimer);clearInterval(factTimer);clearInterval(journalMomentsTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();watchers.clear();for(const timer of rewatches.values())clearTimeout(timer);rewatches.clear();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
   // A container's main door listens on its network interface and always needs sign-in.
   // Add-ons and tools in that same container may use this opt-in, loopback-only door,
   // with the exact Host/Origin guards and API contract of a native local installation.

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import fs from "node:fs";
@@ -76,7 +76,9 @@ describe("the saved main AI in Settings", () => {
     const calls = serve({ ...supportingRoutes, provider: () => [200, saved], "provider/remove": () => { saved = { configured: false, key: false };return [200, { removed: true, provider: saved, routines: { available: false } }]; } });
     settings();
     fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }, WAIT));
-    expect(await screen.findByRole("alertdialog", { name: "Remove your AI connection?" }, WAIT)).toBeInTheDocument();
+    const confirmation = await screen.findByRole("alertdialog", { name: "Remove your AI connection?" }, WAIT);
+    expect(confirmation).toHaveTextContent("Godspeed forgets its key and stops using this AI. The notebook, the chat and the routines that used it have no AI until you connect one again.");
+    expect(confirmation).not.toHaveTextContent(/can't be read|deletes it/);
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull(), WAIT);
     expect(calls.some(c => c.route === "provider/remove")).toBe(false);
@@ -215,14 +217,100 @@ describe("the saved main AI in Settings", () => {
     expect(screen.queryByRole("button", { name: "Test and connect" })).toBeNull();
   });
 
+  // An open page follows a saved connection damaged and repaired on disk (#826): the unreadable
+  // notice and the form replace each other within one status refresh, with no reload, and while the
+  // saved connection stays the same the form keeps what the person is typing.
+  it("an open Settings page follows a damaged and repaired connection without a reload", async () => {
+    vi.useFakeTimers();
+    try {
+      let saved: Record<string, unknown> = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true };
+      let damaged = false;
+      serve({ ...supportingRoutes, provider: () => damaged ? [500, { error: "The saved AI connection is not valid." }] : [200, saved] });
+      settings();
+      await vi.waitFor(() => expect(screen.getByLabelText("Model, written the way your service writes it")).toHaveValue("fictional/model"), WAIT);
+      damaged = true;
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      await vi.waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/form is unavailable/), WAIT);
+      expect(screen.queryByLabelText("Model, written the way your service writes it")).toBeNull();
+      // Repaired on disk: the form is back within one refresh, showing the saved connection again.
+      damaged = false;saved = { ...saved };
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      await vi.waitFor(() => expect(screen.getByLabelText("Model, written the way your service writes it")).toHaveValue("fictional/model"), WAIT);
+      // While the saved connection stays the same, the person's edits are not dropped.
+      fireEvent.change(screen.getByLabelText("Model, written the way your service writes it"), { target: { value: "edited/model" } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+      expect(screen.getByLabelText("Model, written the way your service writes it")).toHaveValue("edited/model");
+    } finally { vi.useRealTimers(); }
+  });
+
+  // #945: while the saved file cannot be read, the open page's intro line must agree with the
+  // notice below it and say no connected AI answers the chat, the way a freshly loaded page does.
+  it("the intro line stops saying a connected AI answers the chat while the saved file cannot be read, and says it again once repaired", async () => {
+    vi.useFakeTimers();
+    try {
+      let saved: Record<string, unknown> = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true };
+      let damaged = false;
+      serve({ ...supportingRoutes, provider: () => damaged ? [500, { error: "The saved AI connection is not valid." }] : [200, saved] });
+      settings();
+      const connectedLine = "No assistant program is installed here. The notebook runs its own routines, such as reminders and domain watch, and the AI you connected below answers the chat and the routines that need an AI.";
+      const notConnectedLine = "No assistant program is installed here. The notebook still runs its own routines, such as reminders and domain watch. Connect your AI below to add the chat and the routines that need an AI.";
+      await vi.waitFor(() => expect(screen.getByText(connectedLine)).toBeInTheDocument(), WAIT);
+      damaged = true;
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      await vi.waitFor(() => expect(screen.getByText(notConnectedLine)).toBeInTheDocument(), WAIT);
+      expect(screen.queryByText(connectedLine)).toBeNull();
+      // Repaired on disk: the intro line says the connected AI answers the chat again.
+      damaged = false;saved = { ...saved };
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      await vi.waitFor(() => expect(screen.getByText(connectedLine)).toBeInTheDocument(), WAIT);
+      expect(screen.queryByText(notConnectedLine)).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
   it("removes a saved connection that cannot be read, so the person can connect again", async () => {
     const calls = serve({ ...supportingRoutes, provider: () => [500, { error: "The saved AI connection is not valid." }], "provider/remove": () => [200, { removed: true, connected: false, provider: { configured: false, key: false }, routines: { available: false } }] });
     settings();
     fireEvent.click(await screen.findByRole("button", { name: "Remove this AI connection" }, WAIT));
+    // #825: the confirmation says the unreadable file is deleted and no copy is kept.
+    expect(await screen.findByRole("alertdialog", { name: "Remove your AI connection?" }, WAIT)).toHaveTextContent("The saved connection file can't be read, so Godspeed deletes it. No copy of it is kept.");
     fireEvent.click(await screen.findByRole("button", { name: "Remove" }, WAIT));
     expect(await screen.findByText("Removed. No AI is connected now. Connect one here whenever you like.", undefined, WAIT)).toBeInTheDocument();
     expect(calls.filter(c => c.route === "provider/remove")).toEqual([{ route: "provider/remove", body: {} }]);
     expect(screen.getByLabelText("Key")).toBeRequired();
+  });
+
+  it("clears the connection message when the saved AI becomes unreadable on the open page", async () => {
+    vi.useFakeTimers();
+    try {
+      let damaged = false;
+      let saved: unknown = { configured: false, key: false };
+      serve({
+        ...supportingRoutes,
+        provider: body => {
+          if (damaged) return [500, { error: "The saved AI connection is not valid." }];
+          if (!body) return [200, saved];
+          saved = { configured: true, url: body.url, model: body.model, key: true };
+          return [200, { provider: saved, routines: { available: false } }];
+        },
+      });
+      settings();
+      await vi.waitFor(() => expect(screen.getByLabelText("Key")).toBeInTheDocument(), WAIT);
+      fireEvent.change(screen.getByLabelText(/Model, written/), { target: { value: "fictional/model" } });
+      fireEvent.change(screen.getByLabelText("Key"), { target: { value: "fictional-key" } });
+      fireEvent.click(screen.getByRole("button", { name: "Test and connect" }));
+      const success = "Connected. The notebook uses it.";
+      await vi.waitFor(() => expect(screen.getByText(success)).toBeInTheDocument(), WAIT);
+
+      damaged = true;
+      await act(() => vi.advanceTimersByTimeAsync(5000));
+      await vi.waitFor(() => expect(screen.getByText(/The saved AI connection could not be read/)).toBeInTheDocument(), WAIT);
+      expect(screen.queryByText(success)).not.toBeInTheDocument();
+
+      damaged = false;
+      await act(() => vi.advanceTimersByTimeAsync(5000));
+      await vi.waitFor(() => expect(screen.getByRole("button", { name: "Test and connect" })).toBeInTheDocument(), WAIT);
+      expect(screen.queryByText(success)).not.toBeInTheDocument();
+    } finally { vi.useRealTimers(); }
   });
 
   it("says the notebook keeps the AI it had before when one is left after removal", async () => {

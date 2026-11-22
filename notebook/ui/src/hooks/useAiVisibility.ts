@@ -1,18 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { showToast } from "@/lib/toast";
 
-// Where the AI switch's toasts show. The switch sits in the note's toolbar at
-// the top of the page, where the usual top-right toast covered it (#809). At
-// the bottom centre they covered the note's status bar and its save status
-// (#819). In the bottom-left corner they sit over the app sidebar, away from
-// the note, and they are lifted by more than the status bar's height (28px
-// under 24px of page margin) so the save status stays clear even when the
-// sidebar and the notes list are closed and the note reaches the left edge.
-const AI_SWITCH_TOAST = {
-  position: "bottom-left",
-  style: { bottom: "40px" },
-} as const;
+// These hooks show no toast of their own: the switch that calls them
+// (AiVisibilityButton) says what happened right above itself, where a page
+// toast covered part of the open note in one layout or another (#809, #819,
+// #831).
 
 export type AiVisibility = "visible" | "hidden";
 export type AiKind = "notes" | "contacts" | "moments" | "collection_items" | "action_items";
@@ -47,15 +39,6 @@ export function useToggleAiVisibility(kind: AiKind) {
       if (kind === "notes") qc.invalidateQueries({ queryKey: ["note", id] });
       qc.invalidateQueries({ queryKey: ["contacts"] });
       qc.invalidateQueries({ queryKey: ["ai_hidden_counts"] });
-      showToast.success(
-        visibility === "hidden"
-          ? "Hidden from AI - excluded from People, Graph, AI Chat & MCP"
-          : "Visible to AI again",
-        AI_SWITCH_TOAST,
-      );
-    },
-    onError: (e: any) => {
-      showToast.error(e.message ?? "Failed to update AI visibility", AI_SWITCH_TOAST);
     },
   });
 }
@@ -81,15 +64,6 @@ export function useToggleSensitivePerson() {
       qc.invalidateQueries({ queryKey: ["contacts"] });
       qc.invalidateQueries({ queryKey: ["people"] });
       qc.invalidateQueries({ queryKey: ["ai_hidden_counts"] });
-      showToast.success(
-        isSensitive
-          ? "Marked sensitive - hidden from all AI features"
-          : "No longer sensitive - visible to AI again",
-        AI_SWITCH_TOAST,
-      );
-    },
-    onError: (e: any) => {
-      showToast.error(e.message ?? "Failed to update sensitive flag", AI_SWITCH_TOAST);
     },
   });
 }

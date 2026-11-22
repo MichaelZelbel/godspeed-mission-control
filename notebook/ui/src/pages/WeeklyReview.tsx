@@ -5,7 +5,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { SEOHead } from "@/components/SEOHead";
 import { showToast } from "@/lib/toast";
 import { dbErrorMessage, functionErrorMessage } from "@/lib/function-error";
-import { parseDateOnly } from "@/lib/local-date";
+import { useAICredits } from "@/hooks/useAICredits";
+import { NO_AI_CONNECT, noAiAnswer } from "../../../core/no-ai.mjs";
+import { showDate } from "@/lib/local-date";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -75,6 +77,10 @@ const urgencyColors: Record<string, string> = {
 export default function WeeklyReview() {
   const { user } = useAuth();
   const qc = useQueryClient();
+  // The connection the tab has heard of (/api/status, refetched every few seconds). A status of
+  // "none" is a decision made from something the tab has seen; a request sent before the status
+  // arrived, or a connection removed seconds ago, is answered by the server and mapped below (#886).
+  const { aiAvailability } = useAICredits();
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
   const [reviewDays, setReviewDays] = useState("7");
 
@@ -121,11 +127,21 @@ export default function WeeklyReview() {
     onError: async (err: unknown) => {
       const message = await functionErrorMessage(err, "The review could not be created. Try again.");
       const noNotes = message.includes("No notes found") || (err instanceof Error && err.message.includes("No notes found"));
-      showToast.error(noNotes ? "No notes found for this period yet. Capture a few notes first, then try again." : message);
+      // The server's own "Connect a model before generating a review" names no place, so it is said
+      // the way the other AI actions say it (core/no-ai.mjs) (#886).
+      showToast.error(noNotes ? "No notes found for this period yet. Capture a few notes first, then try again." : noAiAnswer(message) ? NO_AI_CONNECT : message);
     },
   });
 
-  const handleGenerate = () => generateReview.mutate(Number(reviewDays));
+  const handleGenerate = () => {
+    // With no AI connected the request would only fail with 400, so the shared line is said and
+    // nothing is sent (#886).
+    if (aiAvailability === "none") {
+      showToast.error(NO_AI_CONNECT);
+      return;
+    }
+    generateReview.mutate(Number(reviewDays));
+  };
 
   const currentReview = selectedReviewId
     ? reviews.find((r) => r.id === selectedReviewId)
@@ -233,9 +249,9 @@ export default function WeeklyReview() {
                 <ChevronLeft className="h-4 w-4 mr-1" /> Older
               </Button>
               <span className="text-sm text-muted-foreground">
-                {/* Date columns: new Date("2026-09-21") is UTC midnight and showed the day before west of UTC. */}
-                {parseDateOnly(currentReview.week_start)?.toLocaleDateString()} –{" "}
-                {parseDateOnly(currentReview.week_end)?.toLocaleDateString()}
+                {/* A plain stored day reads as the day it names, not the day before west of UTC. */}
+                {showDate(currentReview.week_start, "day")} –{" "}
+                {showDate(currentReview.week_end, "day")}
               </span>
               <Button
                 variant="ghost"

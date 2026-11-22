@@ -23,9 +23,9 @@ test('an old contact without a name is still read, and can be named, but not cha
   const read=contacts(query);
   assert.deepEqual(read.map(c=>c.id),['old']);
   assert.equal(read[0].name,undefined);
-  assert.throws(()=>query.execute({table:'contacts',operation:'update',values:{id:'old',relationship:'colleague'}}),{message:MESSAGE});
+  assert.throws(()=>query.execute({table:'contacts',operation:'update',values:{id:'old',relationship:'colleague'},filters:[['eq','id','old']]}),{message:MESSAGE});
   assert.equal(contacts(query)[0].relationship,'friend','the old record was not rewritten');
-  query.execute({table:'contacts',operation:'update',values:{id:'old',name:'Grace'}});
+  query.execute({table:'contacts',operation:'update',values:{name:'Grace'},filters:[['eq','id','old']]});
   assert.equal(contacts(query)[0].name,'Grace');
 });
 

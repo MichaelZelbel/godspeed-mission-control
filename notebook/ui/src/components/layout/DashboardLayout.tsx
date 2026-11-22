@@ -28,7 +28,9 @@ export function DashboardLayout() {
       <div className="min-h-screen flex w-full">
         <DashboardSidebar />
         <div className="flex-1 min-w-0 flex flex-col">
-          <header className="h-14 flex items-center gap-2 sm:gap-4 border-b bg-background px-4">
+          {/* On a narrow phone the top bar's controls leave the search box so little room that its
+              own padding ate the rest (#868), so below sm the bar's edge padding is 12 px, not 16. */}
+          <header className="h-14 flex items-center gap-2 sm:gap-4 border-b bg-background px-3 sm:px-4">
             <SidebarTrigger />
             <DashboardSearch />
             <GlobalCreateButton />
@@ -40,10 +42,13 @@ export function DashboardLayout() {
 
 
           
-          {/* Where the floating chat button shows, the page keeps room below its content for it (6rem:
-              the button's 3.5rem and its 1.5rem from the edge, and a gap), so scrolled to the end
-              nothing on a narrow window lies under it (issue #530). */}
-          <main className={floatingChat?"flex-1 overflow-auto p-6 pb-24":"flex-1 overflow-auto p-6"}>
+          {/* Where the floating chat button shows, main holds the space above the button's zone
+              (3.5rem header + 5rem button zone and a gap) and scrolls within it: the button is
+              pinned to the viewport's corner, so room kept only at the end of the content (issue
+              #530's pb-24) still left a card under it at every scroll before the end (#878).
+              --page-h is main's content box (the cap minus main's own 3rem of vertical padding);
+              pages that fill it use it, so their budget cannot drift from this cap. */}
+          <main className={floatingChat?"flex-1 overflow-auto p-6 max-h-[calc(100dvh-9.5rem)] [--page-h:calc(100dvh-12.5rem)]":"flex-1 overflow-auto p-6"}>
             {/* A crashing page no longer takes the sidebar with it, and the
                 boundary clears on the next navigation. Loading a page's code
                 keeps the sidebar and header on screen. */}

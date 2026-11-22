@@ -11,6 +11,18 @@ test('a refused key, an outage and a stall are told apart',()=>{
  assert.equal(aiFailure(Error('The AI did not answer the connection check within 3 seconds.')),'stalled');
  assert.equal(aiFailure(Object.assign(Error('The model provider at example.test stopped answering.'),{code:'AI_STALLED'})),'stalled');
  assert.equal(aiFailure(Error('Use a document-capable model endpoint for PDF analysis')),null,'a request the AI cannot take says nothing about the AI');
+ for(const message of ['Godspeed is updating; try the chat again in a moment.','The assistant is updating; try the chat again in a moment.','Assistant output exceeded its limit','The Godspeed assistant could not start'])assert.equal(aiFailure(Error(message)),null,message);
+});
+
+// #861: the cause travels as aiCause, decided from the status, never from the message. A 500 whose
+// body mentions a refused key is an outage (#833), and an answer that could not be used says nothing.
+test('an error that carries its aiCause is read by it, whatever its message says',()=>{
+ assert.equal(aiFailure(Object.assign(Error('Model provider failed with HTTP 500: invalid_api_key was mentioned'),{aiCause:'unavailable'})),'unreachable');
+ assert.equal(aiFailure(Object.assign(Error('Anything at all'),{aiCause:'refused'})),'refused');
+ assert.equal(aiFailure(Object.assign(Error('Anything at all'),{aiCause:'stalled'})),'stalled');
+ assert.equal(aiFailure(Object.assign(Error('Anything at all'),{aiCause:'unusable'})),null);
+ assert.equal(aiFailure(Object.assign(Error('Anything at all'),{aiCause:'no-credit'})),'unreachable');
+ assert.equal(aiFailure(Object.assign(Error('Anything at all'),{aiCause:'busy'})),'unreachable');
 });
 
 test('the newest result wins, whether a check or a chat request',async()=>{
@@ -31,6 +43,14 @@ test('an older check that settles late does not overrule a newer chat result',as
  const check=provider.check();await new Promise(r=>setImmediate(r));
  await assert.rejects(provider({kind:'conversation-chat'}));assert.equal(provider.health(),'refused');
  release();await check;assert.equal(provider.health(),'refused');
+});
+
+test('a chat failure recorded while a check is in flight is not overruled by that check',async()=>{
+ let release;const inner=Object.assign(async()=>{throw Error('Model provider failed with HTTP 403');},{check:()=>new Promise(resolve=>{release=resolve;})});
+ const provider=trackAIHealth(inner,{waitMs:60000});
+ const check=provider.check();await new Promise(r=>setImmediate(r));
+ provider.record(Error('Model provider failed with HTTP 403'));assert.equal(provider.health(),'refused');
+ release();await check;assert.equal(provider.health(),'refused','the older check, answered ready, does not overrule the recorded chat failure');
 });
 
 test('a stopped chat request says nothing about the AI',async()=>{

@@ -4082,9 +4082,12 @@ refuses 'a selected work card that names another result file' first-day "$FD/wro
 for table in "${SERVER_SPARSE_TABLES[@]}"; do
   sparse=${table//_/-}
   copy "$FD/good" "$FD/populated-$sparse"
-  printf '{"data":[{"id":"seeded-%s"}]}\n' "$sparse" >"$FD/populated-$sparse/sparse-$sparse.json"
+  printf '{"data":[{"id":"seeded-%s","kind":"brief-rehearsal"}]}\n' "$sparse" >"$FD/populated-$sparse/sparse-$sparse.json"
   refuses "a brief with seeded $sparse context" first-day "$FD/populated-$sparse" 'required sparse installed state'
 done
+copy "$FD/good" "$FD/spend-guard-receipt"
+printf '{"data":[{"id":"spend-guard-1","kind":"spend-guard"}]}\n' >"$FD/spend-guard-receipt/sparse-job-receipts.json"
+passes 'a first day whose only job receipt is the spend guard, which the brief never reads' first-day "$FD/spend-guard-receipt" 'a fresh Docker install'
 copy "$FD/good" "$FD/no-brief-sources"
 : >"$FD/no-brief-sources/briefing-source-tables.txt"
 refuses 'a first day whose installed product names no briefing sources' first-day "$FD/no-brief-sources" 'briefing-source-tables.txt is not in what the scenario kept'
@@ -5573,6 +5576,23 @@ refuses "a removal that never reached the first computer" media-travels "$M/remo
 copy "$M/good" "$M/bytes-deleted"; : >"$M/bytes-deleted/a-media-root-after-removal.txt"
 refuses "a removal that deleted the first computer's own bytes" media-travels "$M/bytes-deleted" "lost the picture's bytes"
 
+# ================================================= established daily trust (2.0.0-beta.28, item 2, #279)
+section established-daily-trust
+EDT=$TMP/established-daily-trust
+mkdir -p "$EDT/good"
+printf 'attempted\n' >"$EDT/good/incomplete-status.txt"
+printf 'verified\n' >"$EDT/good/complete-status.txt"
+printf 'UNVERIFIED content review: third candidate: Cedar\n' >"$EDT/good/incomplete-card.txt"
+printf 'the third candidate is absent\n' >"$EDT/good/incomplete-run.txt"
+printf 'all three candidates are present\n' >"$EDT/good/complete-run.txt"
+printf '{}\n' >"$EDT/good/brief-run.json"
+printf 'Atlas proposal and River proposal are waiting.\n' >"$EDT/good/brief-note.txt"
+passes 'an established workspace rejects weak content and briefs only live proposals' established-daily-trust "$EDT/good" 'briefed only the two live proposals'
+copy "$EDT/good" "$EDT/weak-verified"; printf 'verified\n' >"$EDT/weak-verified/incomplete-status.txt"
+refuses 'a shape-only result called verified' established-daily-trust "$EDT/weak-verified" 'incomplete result was called verified'
+copy "$EDT/good" "$EDT/stale-brief"; printf 'Atlas proposal, River proposal, and Old three.\n' >"$EDT/stale-brief/brief-note.txt"
+refuses 'a briefing that repeats a historical proposal' established-daily-trust "$EDT/stale-brief" 'historical approval list'
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 BASH_SCENARIOS=(settings-on-install night-tidy voice local-voice update-keeps-everything
@@ -5580,7 +5600,7 @@ BASH_SCENARIOS=(settings-on-install night-tidy voice local-voice update-keeps-ev
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge
   no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language
   brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check
-  first-day phone-health-days incomplete-day phone-goes-quiet mail-count talk-on-talk-day
+  first-day established-daily-trust phone-health-days incomplete-day phone-goes-quiet mail-count talk-on-talk-day
   chat-tidy-at-night disk-filling missed-routine deadline-closes-itself held-by-a-claim
   workouts-from-hevy day-becomes-facts hermes-update-rollback server-update-keeps-everything)
 for file in scenario-lib.sh numbers-lib.sh server-lib.sh update-keeps-everything-release.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do
@@ -6147,6 +6167,28 @@ if node --test "$ROOT/scenarios/test-scenario-verdict.mjs" >"$TMP/scenario-verdi
 else
   cat "$TMP/scenario-verdict.log"
   bad "scenario-verdict.mjs: its node --test cases fail"
+fi
+
+# A note file that arrives in the notes folder from outside becomes a note (#897). The test that
+# proves it starts a real notebook and writes pages into its folder while it runs, so it belongs
+# in this gate, which every pull request runs, and not only in the notebook's own suite.
+section "note-file-arrival.test.mjs: a note file that arrives becomes a note (#897)"
+if node "$ROOT/notebook/scripts/run-tests.mjs" "$ROOT/notebook/test/note-file-arrival.test.mjs" >"$TMP/note-file-arrival.log" 2>&1; then
+  ok "note-file-arrival.test.mjs: its cases pass"
+else
+  cat "$TMP/note-file-arrival.log"
+  bad "note-file-arrival.test.mjs: its cases fail"
+fi
+
+# A carried add-on copy that drifted from its recorded hash is found here, by the gate every pull
+# request runs (#862). The test recomputes the hashes in sources.json from the copies alone, with
+# no network and no add-on checkout, so any pull request can ask the question.
+section "addon-carried-hashes.test.mjs: carried add-on copies agree with their recorded hashes (#862)"
+if node "$ROOT/notebook/scripts/run-tests.mjs" "$ROOT/notebook/test/addon-carried-hashes.test.mjs" >"$TMP/addon-carried-hashes.log" 2>&1; then
+  ok "addon-carried-hashes.test.mjs: its cases pass"
+else
+  cat "$TMP/addon-carried-hashes.log"
+  bad "addon-carried-hashes.test.mjs: its cases fail"
 fi
 
 printf '\n%s of %s pass.\n' "$PASS" "$((PASS + FAIL))"
