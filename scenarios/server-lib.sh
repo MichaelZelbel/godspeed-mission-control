@@ -374,6 +374,17 @@ server_set_telegram_token() { # <token>
   in_server_as_hermes sh -c 'key=$1; f="$HERMES_HOME/.env"; test -f "$f" && sed -i "s|^TELEGRAM_BOT_TOKEN=.*|TELEGRAM_BOT_TOKEN=$key|" "$f"' sh "$1" ||
     fail 'the installed Hermes Telegram key could not be changed for the connection check'
 }
+# A notice the product queued on its own (the spend guard's low-balance one, with a real key) would be said
+# before the scenario's, since a routine says the oldest unsaid notice once per run.
+server_hold_queued_notices() {
+  in_server_as_hermes node --input-type=module -e '
+import {holdQueuedNotices} from "/opt/godspeed/kit/notebook/core/notices.mjs";
+import {Store} from "/opt/godspeed/kit/notebook/core/records/store.mjs";
+import {machineDevice} from "/opt/godspeed/kit/notebook/core/device-id.mjs";
+const root=process.env.GODSPEED_WORKSPACE;
+holdQueuedNotices(new Store(root,{device:machineDevice(root).id}));
+' || fail 'the installed notice queue would not set aside the notices queued before the scenario'
+}
 server_queue_notice() { # <text> <about> <facts JSON>
   in_server_as_hermes env NOTICE_TEXT="$1" NOTICE_ABOUT="$2" NOTICE_FACTS="$3" node --input-type=module -e '
 import {queueNotice} from "/opt/godspeed/kit/notebook/core/notices.mjs";

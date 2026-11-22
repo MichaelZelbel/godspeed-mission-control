@@ -53,6 +53,7 @@ act() {
   printf '%s\n' "$FACTS" >"$EVIDENCE/report-facts.json"
 
   phase 'a notice queued, said by its routine, and asked about in a new conversation'
+  server_hold_queued_notices
   server_queue_notice "$NOTICE_TEXT" "$NOTICE_ABOUT" "$FACTS"
   server_run_job report 'Coach reminders and habit check' 300
   server_telegram_mark report cron
