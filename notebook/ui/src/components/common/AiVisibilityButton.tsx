@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { fetchAiFootprint } from "@/hooks/useAiFootprint";
 import {
@@ -44,7 +43,11 @@ interface Props {
  *  - Eye + "Shown to AI"       = visible to AI (People, AI Chat, MCP)
  *  - EyeOff + "Hidden from AI" = hidden from all AI surfaces
  * Its label says the state and its name the click's effect too: a bare "AI"
- * read like an AI action (#809).
+ * read like an AI action (#809). Its tooltip begins with the words its
+ * name says and then keeps main's explanation of what a click does - for
+ * a person that the hide spreads to the linked notes and moments - as one
+ * `title`, like its neighbours have (#890); the name itself stays the
+ * short one #809 decided.
  *
  * For `kind="person"` this flips `is_sensitive` (which also cascades to
  * linked notes/moments/actions). For all other kinds it flips
@@ -128,13 +131,21 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
     }
   };
 
+  // The hover's explanation, restored from main: before the click it says
+  // what hiding means - for a person that the hide spreads to their linked
+  // notes and moments, for anything else where the item still appears and
+  // that local search still finds it (#890, loop review of 6e2572e97). The
+  // tooltip leads with the words the button announces, then explains; what
+  // a click does is already in the name, so the trailing "Click to ..." of
+  // main's sentences is not repeated. The name stays #809's decided
+  // "Shown to AI. Hide from AI"; only the tooltip carries the explanation.
   const tooltip = optimistic
     ? kind === "person"
-      ? "Hidden from AI. Linked notes & moments are hidden too. Click to make visible."
-      : "Hidden from AI: excluded from People, the Note Graph, AI Chat and MCP. Local search still finds it. Click to make visible."
+      ? "Hidden from AI. Show to AI again. Linked notes & moments are hidden too."
+      : "Hidden from AI. Show to AI again. Excluded from People, the Note Graph, AI Chat and MCP. Local search still finds it."
     : kind === "person"
-      ? "Visible to AI. Click to hide this person and everything linked to them from all AI features."
-      : "Visible to AI: used in People profiles, the Note Graph, AI Chat, and MCP clients. Click to hide.";
+      ? "Shown to AI. Hide from AI. Click to hide this person and everything linked to them from all AI features."
+      : "Shown to AI. Hide from AI. Used in People profiles, the Note Graph, AI Chat, and MCP clients.";
 
   const Icon = pending ? Loader2 : optimistic ? EyeOff : Eye;
   const label = optimistic ? "Hidden from AI" : "Shown to AI";
@@ -145,36 +156,28 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
       open={confirmation !== null}
       onOpenChange={(open) => { if (!open) setConfirmation(null); }}
     >
-      <TooltipProvider delayDuration={200}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <PopoverPrimitive.Anchor asChild>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onClick}
-                aria-disabled={pending}
-                aria-busy={pending}
-                aria-label={`${label}. ${action}`}
-                className={cn(
-                  "h-7 gap-1.5 px-2 text-xs font-normal aria-disabled:opacity-50 aria-disabled:pointer-events-none",
-                  optimistic
-                    ? "text-muted-foreground border-dashed"
-                    : "text-foreground",
-                  className,
-                )}
-              >
-                <Icon className={cn("h-3.5 w-3.5", pending && "animate-spin")} />
-                {!iconOnly && <span>{label}</span>}
-              </Button>
-            </PopoverPrimitive.Anchor>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-xs">
-            {tooltip}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <PopoverPrimitive.Anchor asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onClick}
+          aria-disabled={pending}
+          aria-busy={pending}
+          title={tooltip}
+          aria-label={`${label}. ${action}`}
+          className={cn(
+            "h-7 gap-1.5 px-2 text-xs font-normal aria-disabled:opacity-50 aria-disabled:pointer-events-none",
+            optimistic
+              ? "text-muted-foreground border-dashed"
+              : "text-foreground",
+            className,
+          )}
+        >
+          <Icon className={cn("h-3.5 w-3.5", pending && "animate-spin")} />
+          {!iconOnly && <span>{label}</span>}
+        </Button>
+      </PopoverPrimitive.Anchor>
       <PopoverPrimitive.Portal>
         {/* Above the switch, its right edge at the switch's, 10px clear of
             it: the toolbar the switch sits in starts 6px above the button. It
