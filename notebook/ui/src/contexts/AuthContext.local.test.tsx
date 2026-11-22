@@ -1,10 +1,20 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
 import { AuthProvider, useAuth } from "./AuthContext";
 import { AppRoutes } from "@/App";
+
+// The pages behind the dashboard load lazily; the probe only reads where the routes land.
+vi.mock("@/hooks/useUnsavedNotes", () => ({ KeepUnsavedNotes: () => null }));
+vi.mock("@/components/chat/GlobalAIChatFAB", () => ({ GlobalAIChatFAB: () => null }));
+vi.mock("@/components/layout/DashboardLayout", () => ({
+  DashboardLayout: () => {
+    const { pathname } = useLocation();
+    return <p data-testid="address">{pathname}</p>;
+  },
+}));
 
 // The plumbing that makes a notebook "local": the server answers /api/auth/status with
 // local:true and refreshSession must carry that into the auth state everything else reads.
@@ -39,6 +49,25 @@ it("carries the server's local flag into the auth state", async () => {
   await waitFor(() => expect(latest?.local).toBe(true));
   expect(latest?.user?.id).toBe("owner");
   expect(latest?.loading).toBe(false);
+});
+
+it("a stale setup link on a local notebook goes back to the dashboard, not to the server's screens", async () => {
+  // The second status read is a tripwire: the /setup gate must navigate on the context's answer
+  // before AuthScreen's own read runs, so a failing second read can never reach the invite screen.
+  let statusReads = 0;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/api/auth/status")) {
+      if (++statusReads > 1) throw new TypeError("Failed to fetch");
+      return answer({ signed_in: true, local: true, configured: false });
+    }
+    if (url.includes("/api/session")) return answer({ user: { id: "owner" }, profile: { display_name: "Owner" } });
+    return answer({});
+  }));
+  render(<AuthProvider><MemoryRouter initialEntries={["/setup"]}><AppRoutes /></MemoryRouter></AuthProvider>);
+  await waitFor(() => expect(screen.getByTestId("address")).toHaveTextContent("/dashboard"));
+  expect(screen.queryByText("Your first visit")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Setup code")).not.toBeInTheDocument();
 });
 
 it("a failed status read on /setup reconnects instead of showing the server's screens", async () => {
