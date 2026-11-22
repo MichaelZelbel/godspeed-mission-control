@@ -29,4 +29,8 @@ it.each([
   const heading = await screen.findByText("Godspeed / " + title, undefined, WAIT);
   expect(heading.className).not.toMatch(/\btruncate\b|whitespace-nowrap|text-ellipsis/);
   expect(heading.className).toContain("overflow-wrap:anywhere");
+  // the title block is capped and scrolls inside itself, so the composer stays in the panel
+  const box = screen.getByTestId("chat-header-title");
+  expect(box.className).toContain("max-h-16");
+  expect(box.className).toContain("overflow-y-auto");
 });

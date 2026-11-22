@@ -560,7 +560,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
           <div className={page||embedded?"bg-background overflow-hidden flex flex-col h-full w-full":"bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full w-full"}>
             {/* Header */}
             <div className="flex items-start justify-between gap-2 px-4 py-2.5 border-b border-border shrink-0">
-              <div className="flex items-start gap-2 min-w-0">
+              <div className="flex items-start gap-2 min-w-0 max-h-16 overflow-y-auto" data-testid="chat-header-title">
                 <Bot className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                 <span className="text-sm font-semibold min-w-0 [overflow-wrap:anywhere]" title={pageChat?.label||noteTitle||contextTitle||"Godspeed"}>
                   {pageChat ? "Godspeed / "+pageChat.label : noteId ? "Godspeed / "+(noteTitle||contextTitle||"Current note") : "Godspeed"}
