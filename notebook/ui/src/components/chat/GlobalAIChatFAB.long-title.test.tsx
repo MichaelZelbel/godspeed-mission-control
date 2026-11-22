@@ -32,5 +32,6 @@ it.each([
   // the title block is capped and scrolls inside itself, so the composer stays in the panel
   const box = screen.getByTestId("chat-header-title");
   expect(box.className).toContain("max-h-16");
+  expect(box.className).toContain("sm:max-h-none"); // no cap from 640px up
   expect(box.className).toContain("overflow-y-auto");
 });
