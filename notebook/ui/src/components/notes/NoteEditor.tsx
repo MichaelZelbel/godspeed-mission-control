@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, createRef } from "react";
+import { useState, useEffect, useCallback, useRef, createRef, useLayoutEffect } from "react";
 import { useEditor, useEditorState, EditorContent } from "@tiptap/react";
 import { Markdown } from "tiptap-markdown";
 import StarterKit from "@tiptap/starter-kit";
@@ -503,7 +503,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
 
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
-  const titleInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const lastLocalContentRef = useRef(restored.content ?? note.content ?? "");
   const pendingSaveContentRef = useRef<string | null>(restored.content ?? null);
   const lastLocalTitleRef = useRef(restored.title ?? note.title ?? "");
@@ -1186,6 +1186,25 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     return data as unknown as Note | null;
   };
 
+  // Size the title field to its wrapped text (also when the value is set from
+  // outside, or the panel is resized), so no line of the title is hidden.
+  const fitTitleHeight = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+  useLayoutEffect(() => {
+    fitTitleHeight(titleInputRef.current);
+    const el = titleInputRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let width = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth !== width) { width = el.clientWidth; fitTitleHeight(el); }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [title]);
+
   const handleTitleChange = (val: string) => {
     setTitle(val);
     lastLocalTitleRef.current = val;
@@ -1829,10 +1848,14 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             beside the title it took the room the title needed, so on a narrow
             window the end of the title scrolled out of sight behind it. */}
         <div className="mb-4">
-          <input aria-label="Note title"
+          <textarea aria-label="Note title"
             ref={titleInputRef}
+            rows={1}
             value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
+            // A long title wraps onto further lines and the field grows to
+            // show all of it, instead of cutting it off at the panel's edge.
+            onInput={(e) => fitTitleHeight(e.currentTarget)}
+            onChange={(e) => handleTitleChange(e.target.value.replace(/[\r\n]+/g, " "))}
             onKeyDown={(e) => {
               // Enter ends the title and goes on in the note's text, as a
               // person expects; without this the next words joined the title
@@ -1848,7 +1871,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
               ed.view.focus();
             }}
             placeholder="Untitled"
-            className="w-full min-w-0 text-2xl font-bold font-display bg-transparent border-none outline-none placeholder:text-muted-foreground/40"
+            className="block w-full min-w-0 resize-none overflow-hidden break-words [overflow-wrap:anywhere] text-2xl font-bold font-display bg-transparent border-none outline-none placeholder:text-muted-foreground/40"
             disabled={note.is_trashed || note.is_external}
           />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 empty:hidden">
