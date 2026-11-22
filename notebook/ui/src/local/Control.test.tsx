@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import Control from "./Control";
+import { WAIT } from "@/test/wait-limits";
 
 // The sidebar's "Connect AI" opens Settings at the AI connection (18 October 2026). It went to
 // ?tab=mcp, which the notebook's Settings does not have, so it opened the top of the page.
@@ -16,7 +17,10 @@ vi.mock("./Notifications", () => ({ Notifications: () => null }));
 vi.mock("@/components/settings/AboutTab", () => ({ AboutTab: () => null }));
 vi.mock("./PersonalControl", () => ({ PersonalControl: () => null }));
 vi.mock("./MeaningSearch", () => ({ MeaningSearch: () => null }));
-vi.mock("./ConnectTelegram", () => ({ TelegramConnect: () => null, telegramStatus: async () => ({ available: false }) }));
+// The Telegram status the mocked ConnectTelegram module answers with; tests that need a reason
+// in it (issue #919) set telegramStatusData.value before rendering.
+const telegramStatusData = vi.hoisted(() => ({ value: { available: false } as Record<string, unknown> }));
+vi.mock("./ConnectTelegram", () => ({ TelegramConnect: () => null, telegramStatus: async () => telegramStatusData.value, telegramUnavailable: "Telegram cannot be connected on this notebook.", telegramSwitchedOff: "The person who runs this server has switched Telegram off; asking them to switch it on is the way to get it here." }));
 vi.mock("./RecordSync", () => ({ RecordSyncForm: () => null }));
 const scrolled: string[] = [];
 Element.prototype.scrollIntoView = function () { scrolled.push((this as Element).id); };
@@ -40,13 +44,13 @@ describe("Settings opened at one of its sections", () => {
     const section = container.querySelector("#connect-ai") as HTMLElement;
     expect(section).not.toBeNull();
     expect(section.textContent).toContain("Your AI");
-    await waitFor(() => expect(scrolled).toContain("connect-ai"));
+    await waitFor(() => expect(scrolled).toContain("connect-ai"), WAIT);
     expect((container.querySelector("#connect-other-assistants") as HTMLDetailsElement).open).toBe(false);
   });
 
   it("opens Connect other assistants for a link to it", async () => {
     const { container } = settings("/dashboard/settings#connect-other-assistants");
-    await waitFor(() => expect((container.querySelector("#connect-other-assistants") as HTMLDetailsElement).open).toBe(true));
+    await waitFor(() => expect((container.querySelector("#connect-other-assistants") as HTMLDetailsElement).open).toBe(true), WAIT);
   });
 
   it("stays at the top without a section named", async () => {
@@ -59,12 +63,12 @@ describe("Settings opened at one of its sections", () => {
   // Issue #4: the button started the Windows assistant and showed on every install, though it works on Windows only.
   it("shows Open the Windows assistant on Windows", async () => {
     const { findByText } = settings("/dashboard/settings", { platform: "win32" });
-    expect(await findByText("Open the Windows assistant")).toBeInTheDocument();
+    expect(await findByText("Open the Windows assistant", undefined, WAIT)).toBeInTheDocument();
   });
 
   it.each(["darwin", "linux"])("does not show Open the Windows assistant on %s", async (platform) => {
     const { queryByText, findByText } = settings("/dashboard/settings", { platform });
-    await findByText("Settings");
+    await findByText("Settings", undefined, WAIT);
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(queryByText("Open the Windows assistant")).toBeNull();
   });
@@ -78,10 +82,30 @@ describe("New rules in Settings", () => {
     const { container } = settings("/dashboard/settings", { new_rules: "ask-first" });
     const section = container.querySelector("#new-rules") as HTMLElement;
     const choice = (label: string) => [...section.querySelectorAll("label")].find(l => l.textContent === label)!.querySelector("input") as HTMLInputElement;
-    await waitFor(() => expect(choice("Ask first").checked).toBe(true));
+    await waitFor(() => expect(choice("Ask first").checked).toBe(true), WAIT);
     expect(choice("Add new rules automatically").checked).toBe(false);
     choice("Add new rules automatically").click();
-    await waitFor(() => expect((fetch as ReturnType<typeof vi.fn>).mock.calls.some(([url, init]) => url === "/api/identity/rules-setting" && init?.method === "POST" && init.body === JSON.stringify({ new_rules: "automatic" }))).toBe(true));
+    await waitFor(() => expect((fetch as ReturnType<typeof vi.fn>).mock.calls.some(([url, init]) => url === "/api/identity/rules-setting" && init?.method === "POST" && init.body === JSON.stringify({ new_rules: "automatic" }))).toBe(true), WAIT);
+  });
+});
+
+// Issue #919: where the server's operator switched Telegram off, the section says to ask them
+// instead of naming the installer, which would not turn Telegram on there. Where the assistant
+// does not run the notebook, #917's installer sentence stays.
+describe("The Telegram section where Telegram cannot be connected", () => {
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); telegramStatusData.value = { available: false }; });
+
+  it("says the operator switched Telegram off, and not the installer advice, when the status says so", async () => {
+    telegramStatusData.value = { available: false, managed: null, connected: false, phase: "none", reason: "switched-off" };
+    const { findByText, queryByText } = settings("/dashboard/settings");
+    expect(await findByText(/switched Telegram off/, undefined, WAIT)).toBeInTheDocument();
+    expect(queryByText("Telegram cannot be connected on this notebook.")).toBeNull();
+  });
+
+  it("keeps the installer advice where the assistant does not run the notebook", async () => {
+    telegramStatusData.value = { available: false, managed: null, connected: false, phase: "none", reason: "no-assistant" };
+    const { findByText } = settings("/dashboard/settings");
+    expect(await findByText("Telegram cannot be connected on this notebook.", undefined, WAIT)).toBeInTheDocument();
   });
 });
 
@@ -92,6 +116,6 @@ describe("The Routines line", () => {
   it("says which setting the assistant needs", async () => {
     const problem = 'The assistant program set in /state/assistant.json is "/usr/bin/python3", which is not Hermes. Set "executable" in that file to your Hermes program (its name is hermes), or run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.';
     const { findByText } = settings("/dashboard/settings", { runtimeConfigured: false, assistantProblem: problem });
-    expect((await findByText(/which is not Hermes/)).textContent).toContain("not configured. " + problem + " Account access");
+    expect((await findByText(/which is not Hermes/, undefined, WAIT)).textContent).toContain("not configured. " + problem + " Account access");
   });
 });

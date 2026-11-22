@@ -81,7 +81,9 @@ What runs where: `notebook/server/telegram-connect.mjs` (the page's key check an
 `docker/full-candidate/telegram-runner.mjs` (the chat, then the gateway, never both), and
 `docker/rootfs/usr/local/bin/godspeed-telegram-setup` with `GODSPEED_TG_FLOW=notebook` (the chat,
 the same program the plain Docker image uses). `GODSPEED_TELEGRAM=off` in the environment
-switches all of it off; `on` keeps an operator's bot set by environment instead.
+switches all of it off; the web app's Telegram page then tells the person who uses the server that
+you switched Telegram off, so they know to ask you rather than run the installer again. `on` keeps
+an operator's bot set by environment instead.
 
 The hostname must resolve to this VPS and incoming ports 80 and 443 must be available.
 The bundled HTTPS service obtains and renews the public certificate automatically.

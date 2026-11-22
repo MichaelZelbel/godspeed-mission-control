@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import { AboutTab, type AboutInfo, type AutomaticInfo, type UpdateInfo } from "./AboutTab";
+import { WAIT } from "@/test/wait-limits";
 
 // Settings, About (18 October 2026): the README and the food tracker send readers here.
 const food: AboutInfo["food"] = {
@@ -36,7 +37,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe("AboutTab", () => {
   it("names the version, the release code, the folders, the food table's licence and the guide", async () => {
     show(computer);
-    expect(await screen.findByText("2.0.0-beta.1")).toBeInTheDocument();
+    expect(await screen.findByText("2.0.0-beta.1", undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByText("69967129e488417d8d5acb42340363239427092a")).toBeInTheDocument();
     for (const folder of Object.values(computer.folders)) expect(screen.getByText(folder)).toBeInTheDocument();
     expect(screen.getByText("Your mission control folder")).toBeInTheDocument();
@@ -51,48 +52,48 @@ describe("AboutTab", () => {
 
   it("says plainly when no release code was recorded, when the folders are on a server and when the food table is not there yet", async () => {
     show({ ...computer, on: "server", release: null, food: { ...food, installed: false, notice: null, downloaded_at: null } });
-    expect(await screen.findByText(/Not recorded\. This copy was not set up by one of the installers\./)).toBeInTheDocument();
+    expect(await screen.findByText(/Not recorded\. This copy was not set up by one of the installers\./, undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByText("These folders are on your server.")).toBeInTheDocument();
     expect(screen.getByText(/The food table is not on your server yet\./)).toBeInTheDocument();
   });
 
   it("says when the newest version is installed", async () => {
     show(computer);
-    expect(await screen.findByText("You have the newest version.")).toBeInTheDocument();
+    expect(await screen.findByText("You have the newest version.", undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "What changed" })).toHaveAttribute("href", notes);
     expect(screen.queryByRole("button", { name: "Update now" })).not.toBeInTheDocument();
   });
 
   it("offers Update now when a newer version exists, and starts the update", async () => {
     show(computer, { ...upToDate, installed: "2.0.0-beta.20", newer: true });
-    expect(await screen.findByText(/Newest version: 2\.0\.0-beta\.30/)).toBeInTheDocument();
+    expect(await screen.findByText(/Newest version: 2\.0\.0-beta\.30/, undefined, WAIT)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Update now" }));
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/update", { method: "POST" }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/update", { method: "POST" }), WAIT);
   });
 
   it("after Update now, an earlier update's failure does not bring the button back before this one reports", async () => {
     show(computer, { ...upToDate, installed: "2.0.0-beta.20", newer: true, status: { state: "failed", from: "2.0.0-beta.20", to: "2.0.0-beta.30", message: "The update to 2.0.0-beta.30 did not finish. The version you have is still running.", at: "2026-11-11T10:00:00.000Z" } });
-    fireEvent.click(await screen.findByRole("button", { name: "Update now" }));
-    expect(await screen.findByText("Starting the update…")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Update now" }, WAIT));
+    expect(await screen.findByText("Starting the update…", undefined, WAIT)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Update now" })).not.toBeInTheDocument();
   });
 
   it("on a Docker server shows the line to run on the server instead of a button", async () => {
     show({ ...computer, on: "server" }, { ...upToDate, installed: "2.0.0-beta.20", newer: true, way: "server", command: "sudo godspeed-update" });
-    expect(await screen.findByText("sudo godspeed-update")).toBeInTheDocument();
+    expect(await screen.findByText("sudo godspeed-update", undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByText(/one click is updated in that company's panel/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Update now" })).not.toBeInTheDocument();
   });
 
   it("says plainly when an update failed", async () => {
     show(computer, { ...upToDate, installed: "2.0.0-beta.20", newer: true, status: { state: "failed", from: "2.0.0-beta.20", to: "2.0.0-beta.30", message: "The download of 2.0.0-beta.30 does not match the checksum its release publishes, so nothing was installed. The version you have keeps running.", at: "2026-11-11T10:00:00.000Z" } });
-    expect(await screen.findByRole("alert")).toHaveTextContent(/does not match the checksum.*The version you have keeps running\./);
+    expect(await screen.findByRole("alert", undefined, WAIT)).toHaveTextContent(/does not match the checksum.*The version you have keeps running\./);
   });
 
   it("on a Docker server says in one line why it cannot update itself automatically, and offers no choice", async () => {
     const reason = "On a Docker server Godspeed is updated on the server itself (sudo godspeed-update), so it cannot update itself automatically.";
     show({ ...computer, on: "server" }, { ...upToDate, way: "server", automatic: { offered: false, reason, choice: "myself", time: "04:00", paused: null, last: null } });
-    expect(await screen.findByText(reason)).toBeInTheDocument();
+    expect(await screen.findByText(reason, undefined, WAIT)).toBeInTheDocument();
     expect(screen.queryByRole("radio", { name: "Update automatically" })).not.toBeInTheDocument();
   });
 
@@ -105,13 +106,13 @@ describe("AboutTab", () => {
       return json(computer);
     }));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AboutTab /></QueryClientProvider>);
-    expect(await screen.findByRole("radio", { name: "Update myself" })).toBeChecked();
+    expect(await screen.findByRole("radio", { name: "Update myself" }, WAIT)).toBeChecked();
     expect(screen.queryByLabelText("Install at")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "Update automatically" }));
-    await waitFor(() => expect(asked).toEqual([{ body: { choice: "automatic" } }]));
-    expect(await screen.findByLabelText("Install at")).toHaveValue("04:00");
+    await waitFor(() => expect(asked).toEqual([{ body: { choice: "automatic" } }]), WAIT);
+    expect(await screen.findByLabelText("Install at", undefined, WAIT)).toHaveValue("04:00");
     expect(screen.getByRole("radio", { name: "Update automatically" })).toBeChecked();
     fireEvent.click(screen.getByRole("radio", { name: "Pause until I turn it back on" }));
-    await waitFor(() => expect(asked.at(-1)).toEqual({ body: { paused: { until: null } } }));
+    await waitFor(() => expect(asked.at(-1)).toEqual({ body: { paused: { until: null } } }), WAIT);
   });
 });

@@ -32,7 +32,9 @@ test('the Goals page shows the weekly number, the bets and their verdicts, the d
  fs.writeFileSync(path.join(root,'moves.md'),'### 1. Chapter two\nAPPLY: '+w1+'\nGOAL: novel\nBET: 1200 -> 2400\n');
  cli('goals.js','bets','--moves',path.join(root,'moves.md'),'--date','2026-10-01');
  fs.mkdirSync(path.join(root,'drafts'));fs.writeFileSync(path.join(root,'drafts','novel.md'),'Chapter two\n');
- cli('work.js','verify',w1,'--date','2026-10-01');
+ const review=path.join(root,'chapter-two-review.json');
+ fs.writeFileSync(review,JSON.stringify({passed:true,reason:'the draft has chapter two',missing:[]}));
+ cli('work.js','verify',w1,'--content-review',review,'--date','2026-10-01');
  fs.writeFileSync(path.join(root,'drafts','outline.md'),'nothing yet\n');
  cli('work.js','take',w2,'--runner','fixture','--date','2026-10-01');cli('work.js','attempt',w2,'--runner','fixture','--ok','--result','outlined','--date','2026-10-01');
  try{cli('work.js','verify',w2,'--date','2026-10-01');}catch{}

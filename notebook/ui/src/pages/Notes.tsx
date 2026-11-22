@@ -19,6 +19,7 @@ import { NoteTree } from "@/components/notes/NoteTree";
 import { GlobalAIChatFAB } from "@/components/chat/GlobalAIChatFAB";
 import { useSidebar } from "@/components/ui/sidebar";
 import { NoteEditor } from "@/components/notes/NoteEditor";
+import { useTypedTitles } from "@/hooks/useUnsavedNotes";
 
 
 import { Button } from "@/components/ui/button";
@@ -114,6 +115,7 @@ const defaultDirections: Record<SortField, SortDirection> = {
 };
 
 const SORT_STORAGE_KEY = "menerio:notelist:sort";
+const NO_RESULTS: SemanticSearchResult[] = [];
 
 export default function Notes() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -192,6 +194,9 @@ export default function Notes() {
   } = useNotes("all");
   const { data: favNotes = [] } = useNotes("favorites");
   const { data: trashNotes = [] } = useNotes("trash");
+  // The sidebar shows a title as it is typed, before its save lands (#809).
+  const listedNotes = useTypedTitles(allNotes);
+  const listedFavNotes = useTypedTitles(favNotes);
   const createNote = useCreateNote();
   const updateNote = useUpdateNote();
   const ilikeSearch = useIlikeSearch();
@@ -653,10 +658,11 @@ export default function Notes() {
     return semanticResults || keywordResults;
   }, [searchMode, searchQuery, searchType, semanticResults, keywordResults]);
 
+  const listedSearchResults = useTypedTitles(searchResults ?? NO_RESULTS);
   const currentNotes = useMemo(() => {
     let notes: (Note | SemanticSearchResult)[];
-    if (searchMode && searchResults) notes = searchResults;
-    else notes = allNotes;
+    if (searchMode && searchResults) notes = listedSearchResults;
+    else notes = listedNotes;
 
 
     if (entityFilter) {
@@ -711,7 +717,7 @@ export default function Notes() {
       return dir * (aTs - bTs);
     });
     return sorted;
-  }, [allNotes, searchMode, searchResults, entityFilter, topicFilter, personFilter, metaTypeFilter, sortField, sortDirection]);
+  }, [listedNotes, searchMode, searchResults, listedSearchResults, entityFilter, topicFilter, personFilter, metaTypeFilter, sortField, sortDirection]);
 
   // The open note is fetched as a single row so it is always fresh without
   // refetching the whole (potentially very large) notes list. The list copy is
@@ -874,7 +880,7 @@ export default function Notes() {
                 size="icon"
                 className="h-8 w-7 shrink-0 max-sm:h-11 max-sm:w-11"
                 title={`Sort by ${sortLabels[sortField]}${sortField === "manual" ? "" : sortDirection === "asc" ? ": ascending" : ": descending"}`}
-                aria-label={`Sort notes by ${sortLabels[sortField]}${sortField === "manual" ? "" : sortDirection === "asc" ? ", ascending" : ", descending"}`}
+                aria-label={`Sort by ${sortLabels[sortField]}${sortField === "manual" ? "" : sortDirection === "asc" ? ": ascending" : ": descending"}`}
               >
                 {sortField === "manual" ? <ArrowUpDown className="h-4 w-4" /> : sortDirection === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
               </Button>
@@ -934,7 +940,7 @@ export default function Notes() {
                 variant={hasActiveMetaFilter ? "secondary" : "ghost"}
                 size="icon"
                 className="h-8 w-7 shrink-0 max-sm:h-11 max-sm:w-11"
-                title="Tags & Insights"
+                title="Tags and insights"
                 aria-label="Tags and insights"
               >
                 <Hash className="h-4 w-4" />
@@ -1260,7 +1266,7 @@ export default function Notes() {
             onDeleteNotePermanently={handleDeleteNotePermanently}
             sortField={sortField === "manual" ? "updated_at" : sortField}
             sortDirection={sortDirection}
-            favoriteNotes={favNotes}
+            favoriteNotes={listedFavNotes}
             trashedNotes={trashNotes}
           />
 

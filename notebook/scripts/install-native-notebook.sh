@@ -124,6 +124,21 @@ fetch_version() {
   printf '%s' "$state/versions/$commit"
 }
 
+# The shared bootstrap gets commands from the product repository's default branch. A release's
+# default branch is normally the version being installed, but a pinned candidate or pull-request
+# stage can be newer. Keep the daily-work command and the libraries it loads on the exact product
+# commit named by the stage, just as the notebook itself is. Otherwise an installed candidate can
+# run an older verifier while its notebook reports the candidate version.
+install_pinned_work_tools() {
+  local source=$1 target="$HOME/.local/bin" name
+  mkdir -p "$target" || return 1
+  for name in mc-work mc-work-run work.js run-log-folders.js mc-cards.js unattended-git.cjs; do
+    [ -f "$source/tools/$name" ] || continue
+    cp "$source/tools/$name" "$target/$name" || return 1
+    case $name in mc-work|mc-work-run) chmod 755 "$target/$name" || return 1 ;; esac
+  done
+}
+
 # --- The service --------------------------------------------------------------------
 systemd_here() { [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; }
 
@@ -596,6 +611,8 @@ fi
 # Inside the service also its web address, which only the administrator could make again, and
 # the Hermes it used, which a terminal names in its own environment.
 restore_kept_settings
+# After the saved settings are read, so a settings file that cannot be read stops the installer first.
+install_pinned_work_tools "$version" || { echo 'The daily work commands could not be installed.' >&2; exit 1; }
 SERVICE=${GODSPEED_SERVICE:-godspeed-integrated-notebook.service}
 if [ -z "${GODSPEED_INTEGRATED_BESIDE:-}" ] && [ "$(previous_setting HERMES_HOME)" = "$state/hermes" ]; then GODSPEED_INTEGRATED_BESIDE=1; fi
 export GODSPEED_WORKSPACE="$root" GODSPEED_ORIGINAL_RUNTIME=on

@@ -11,7 +11,13 @@ import {knownTelegramPhase, telegramPollingPhases} from '../../../shared/telegra
 // Telegram on the one-click server: right after the account is made (/dashboard/telegram?welcome=1)
 // and in Settings. The key goes to this server only (notebook/server/telegram-connect.mjs); the
 // bot's link carries a one-time code, so whoever opens it from this page becomes its owner.
-type Status={available:boolean;managed:'web'|'environment'|null;connected:boolean;phase:unknown;bot?:{username:string;name:string};link?:string;start_message?:string;owner?:string|null};
+type Status={available:boolean;managed:'web'|'environment'|null;connected:boolean;phase:unknown;reason?:'switched-off'|'no-assistant';bot?:{username:string;name:string};link?:string;start_message?:string;owner?:string|null};
+// What the page says where Telegram cannot be connected on this notebook (issue #915), instead of
+// an empty card: the same one sentence on the Telegram page and in the Settings' Telegram section.
+export const telegramUnavailable='Telegram cannot be connected on this notebook; it becomes available once the assistant is installed and runs this notebook (run the Godspeed installer again to install it).';
+// Where the server's operator switched Telegram off, running the installer would not help; the
+// way to get Telegram there is to ask the person who runs the server (issue #919).
+export const telegramSwitchedOff='The person who runs this server has switched Telegram off; asking them to switch it on is the way to get it here.';
 function record(value:unknown):value is Record<string,unknown>{return !!value&&typeof value==='object'&&!Array.isArray(value);}
 function stringOrNull(value:unknown):string|null|undefined{if(typeof value==='string')return value;if(value===null)return null;}
 async function call(route:string,body?:unknown):Promise<unknown>{const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data:unknown=await r.json(),message=record(data)&&typeof data.error==='string'?data.error:'Telegram did not answer as expected.';if(!r.ok)throw new Error(message);return data;}
@@ -20,6 +26,7 @@ function status(value:unknown):Status{
   const owner=stringOrNull(data?.owner);
   if(!data||typeof data.available!=='boolean'||typeof data.connected!=='boolean')throw new Error('Telegram returned an invalid status.');
   const result:Status={available:data.available,managed:data.managed==='web'||data.managed==='environment'?data.managed:null,connected:data.connected,phase:data.phase,
+    ...(data.reason==='switched-off'||data.reason==='no-assistant'?{reason:data.reason}:{}),
     ...(bot&&typeof bot.username==='string'&&typeof bot.name==='string'?{bot:{username:bot.username,name:bot.name}}:{}),
     ...(typeof data.link==='string'?{link:data.link}:{}),...(typeof data.start_message==='string'?{start_message:data.start_message}:{}),};
   if(typeof owner==='string'||owner===null)result.owner=owner;
@@ -57,7 +64,7 @@ export function TelegramConnect({welcome=false,onContinue}:{welcome?:boolean;onC
   if(query.isLoading)return <p role="status">Checking Telegram…</p>;
   if(query.isError)return <p role="alert">Telegram's status could not be read. <button className="underline" onClick={()=>query.refetch()}>Try again</button></p>;
   if(data?.managed==='environment')return <p>Telegram is set up by this server's own settings.</p>;
-  if(!data?.available)return null;
+  if(!data?.available)return <p>{data?.reason==='switched-off'?telegramSwitchedOff:telegramUnavailable}</p>;
   const continueButton=welcome&&onContinue&&<Button variant={phase==='none'||phase==='refused'?'ghost':'default'} className="min-h-11" onClick={onContinue}>{phase==='none'||phase==='refused'?'Skip for now':'Continue to your notebook'}</Button>;
   const form=<form className="space-y-3" onSubmit={connect}>
     <ol className="list-decimal pl-5 space-y-2">

@@ -28,7 +28,9 @@ export function DashboardLayout() {
       <div className="min-h-screen flex w-full">
         <DashboardSidebar />
         <div className="flex-1 min-w-0 flex flex-col">
-          <header className="h-14 flex items-center gap-2 sm:gap-4 border-b bg-background px-4">
+          {/* On a narrow phone the top bar's controls leave the search box so little room that its
+              own padding ate the rest (#868), so below sm the bar's edge padding is 12 px, not 16. */}
+          <header className="h-14 flex items-center gap-2 sm:gap-4 border-b bg-background px-3 sm:px-4">
             <SidebarTrigger />
             <DashboardSearch />
             <GlobalCreateButton />
