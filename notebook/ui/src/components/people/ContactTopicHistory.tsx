@@ -1,4 +1,5 @@
 import { useContactTopicHistory } from '@/hooks/useContactTopics';
+import { showDate } from '@/lib/local-date';
 
 const labels: Record<string, string> = { create: 'Added', update: 'Edited', discuss: 'Discussed', archive: 'Archived', reopen: 'Reopened', undo: 'Change undone', reassign: 'Moved to this person' };
 export function ContactTopicHistory({ topicId }: { topicId: string }) {
@@ -10,7 +11,7 @@ export function ContactTopicHistory({ topicId }: { topicId: string }) {
     {query.isError && <p role="status" className="text-sm text-muted-foreground">History may be out of date. Showing the last loaded events.</p>}
     <ol aria-label="Topic history" className="space-y-2 border-l-2 border-border pl-3 text-xs text-muted-foreground">
     {query.data.map(event => <li key={event.id} className="break-words">
-      <span>{labels[event.action]}{reversed.has(event.id) ? ' (undone)' : ''} <time dateTime={event.happened_at}>{new Date(event.happened_at).toLocaleString()}</time></span>
+      <span>{labels[event.action]}{reversed.has(event.id) ? ' (undone)' : ''} <time dateTime={event.happened_at}>{showDate(event.happened_at, "time")}</time></span>
       <p className="mt-1 text-foreground">{event.after_state.title}</p>
     </li>)}
     {query.data.length === 0 && <li>No history yet.</li>}

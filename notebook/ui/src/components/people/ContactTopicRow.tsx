@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ContactTopicHistory } from './ContactTopicHistory';
+import { showDate } from '@/lib/local-date';
 import { topicModeLabels, topicPriorityLabels, type ContactTopic, type TopicCommand, type TopicPriority, type TopicMode } from '@/lib/contact-topics';
 
 export const topicSelectClass = 'min-h-11 max-w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
@@ -46,7 +47,7 @@ export function ContactTopicRow({ topic, pending, onCommand, onEditingChange }: 
           <span className={`block break-words text-sm leading-5 ${topic.status === 'completed' ? 'text-muted-foreground line-through decoration-muted-foreground/40' : 'text-foreground'}`}>{topic.title}
             {topic.mode === 'recurring' && <span className="ml-1.5 inline-flex align-middle text-muted-foreground" title="Recurring"><Repeat aria-hidden="true" className="h-3 w-3" /><span className="sr-only">Recurring</span></span>}
             {topic.priority !== 'normal' && <span aria-label={`${topicPriorityLabels[topic.priority]} priority`} className="ml-2 inline-block align-middle text-[10px] font-medium text-muted-foreground no-underline">{topicPriorityLabels[topic.priority]}</span>}
-            {topic.last_discussed_at && <span className="ml-2 inline-block align-middle text-[10px] text-muted-foreground" title={`Last discussed ${new Date(topic.last_discussed_at).toLocaleDateString()}`}><span className="sr-only">Last discussed </span><time dateTime={topic.last_discussed_at}>{new Date(topic.last_discussed_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</time></span>}
+            {topic.last_discussed_at && <span className="ml-2 inline-block align-middle text-[10px] text-muted-foreground" title={`Last discussed ${showDate(topic.last_discussed_at, "date")}`}><span className="sr-only">Last discussed </span><time dateTime={topic.last_discussed_at}>{showDate(topic.last_discussed_at, "date")}</time></span>}
           </span>
         </span>
       </label>

@@ -6,6 +6,7 @@ const ModerationPanel = lazy(() => import("@/components/admin/ModerationPanel"))
 const LLMConfigPanel = lazy(() => import("@/components/admin/LLMConfigPanel"));
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { showDate } from "@/lib/local-date";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -441,7 +442,7 @@ function UsersTab() {
                         <Badge variant={ROLE_COLORS[userRole] as any} className="text-[10px]">{userRole}</Badge>
                       </TableCell>
                       <TableCell className="hidden sm:table-cell text-xs text-muted-foreground">
-                        {new Date(u.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        {showDate(u.created_at, "date")}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -800,10 +801,7 @@ function UsageLogTable() {
 
   const totalPages = Math.ceil(total / USAGE_PAGE_SIZE);
 
-  const formatDate = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-  };
+  const formatDate = (iso: string) => showDate(iso, "time");
 
   const getUsageSource = (metadata: any): string => {
     if (!metadata) return "unknown";

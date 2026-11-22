@@ -11,7 +11,7 @@ import {
   FileText as FileTextIcon,
 } from "lucide-react";
 import { showToast } from "@/lib/toast";
-import { formatDistanceToNow } from "date-fns";
+import { showDate } from "@/lib/local-date";
 import { getNotePreviewText } from "@/lib/note-content";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useBulkSelect } from "./useBulkSelect";
@@ -60,7 +60,7 @@ const NoteRow = memo(function NoteRow({
   const isMediaMatch = matchSource === "media" || matchSource === "both";
 
   const relativeTime = useMemo(
-    () => formatDistanceToNow(new Date(note.updated_at), { addSuffix: true }),
+    () => showDate(note.updated_at, "ago"),
     [note.updated_at]
   );
   const previewText = useMemo(() => getNotePreviewText(note.content ?? (note as { content_preview?: string }).content_preview), [note.content, (note as { content_preview?: string }).content_preview]);

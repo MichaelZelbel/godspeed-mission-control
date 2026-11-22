@@ -110,7 +110,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { VersionHistoryPanel } from "./VersionHistoryPanel";
-import { formatDistanceToNow, format } from "date-fns";
+import { localDateISO, parseInstant, showDate } from "@/lib/local-date";
 import { showToast } from "@/lib/toast";
 import { openExternalUrl } from "@/lib/safe-url";
 import { normalizeNoteContent, stripLeadingH1, coalesceTaskList, looksLikeHtml } from "@/lib/note-content";
@@ -550,7 +550,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const queuedContentRef = useRef<string | null>(null);
   const lastSavedContentRef = useRef<string | null>(null);
   const lastSavedUpdatedAtRef = useRef<number>(
-    note.updated_at ? new Date(note.updated_at).getTime() : 0,
+    note.updated_at ? parseInstant(note.updated_at)?.getTime() ?? 0 : 0,
   );
 
   const saveContentNow = useCallback(
@@ -567,7 +567,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           onSuccess: (saved) => {
             savingRef.current = false;
             lastSavedContentRef.current = md;
-            const ts = saved?.updated_at ? new Date(saved.updated_at).getTime() : Date.now();
+            const ts = saved?.updated_at ? parseInstant(saved.updated_at)?.getTime() ?? Date.now() : Date.now();
             if (ts > lastSavedUpdatedAtRef.current) lastSavedUpdatedAtRef.current = ts;
             if (pendingSaveContentRef.current === md) pendingSaveContentRef.current = null;
             setSaveStatus("saved");
@@ -953,7 +953,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     // pre-edit text back into the editor, and the next autosave would then
     // persist it - silently losing the user's work. Ignore anything older than
     // the newest version this editor successfully wrote.
-    const incomingTs = note.updated_at ? new Date(note.updated_at).getTime() : 0;
+    const incomingTs = note.updated_at ? parseInstant(note.updated_at)?.getTime() ?? 0 : 0;
     if (noteChanged) {
       lastSavedUpdatedAtRef.current = incomingTs;
       lastSavedContentRef.current = null;
@@ -1027,11 +1027,11 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             lastSavedContentRef.current = pending;
             queuedContentRef.current = null;
             if (pendingSaveContentRef.current === pending) pendingSaveContentRef.current = null;
-            const ts = saved?.updated_at ? new Date(saved.updated_at).getTime() : Date.now();
+            const ts = saved?.updated_at ? parseInstant(saved.updated_at)?.getTime() ?? Date.now() : Date.now();
             if (ts > lastSavedUpdatedAtRef.current) lastSavedUpdatedAtRef.current = ts;
             setSaveStatus("saved");
             respond(
-              saved?.updated_at ?? new Date(lastSavedUpdatedAtRef.current).toISOString(),
+              saved?.updated_at ?? parseInstant(lastSavedUpdatedAtRef.current)!.toISOString(),
               pending,
             );
             return;
@@ -1040,7 +1040,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           }
         }
         const latest = lastSavedUpdatedAtRef.current
-          ? new Date(lastSavedUpdatedAtRef.current).toISOString()
+          ? parseInstant(lastSavedUpdatedAtRef.current)!.toISOString()
           : (note.updated_at ?? null);
         respond(latest, lastSavedContentRef.current ?? note.content ?? null);
       } catch {
@@ -1104,7 +1104,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           lastLocalContentRef.current = content;
           lastSavedContentRef.current = content;
           if (updatedAt) {
-            const ts = new Date(updatedAt).getTime();
+            const ts = parseInstant(updatedAt)?.getTime() ?? NaN;
             if (ts > lastSavedUpdatedAtRef.current) lastSavedUpdatedAtRef.current = ts;
           }
           if (wasFocused) {
@@ -1218,7 +1218,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const mergeDuplicate = async () => {
     if (!duplicateTarget) return;
     const currentContent = pendingSaveContentRef.current ?? (editor ? editorToMarkdown(editor) : note.content ?? "");
-    const mergedContent = `${duplicateTarget.content || ""}\n\n---\n\n## Merged on ${format(new Date(), "yyyy-MM-dd")}\n\n${currentContent}`.trimEnd();
+    const mergedContent = `${duplicateTarget.content || ""}\n\n---\n\n## Merged on ${localDateISO(new Date())}\n\n${currentContent}`.trimEnd();
     const tags = [...new Set([...(duplicateTarget.tags || []), ...(note.tags || [])])];
     await updateNote.mutateAsync({ id: duplicateTarget.id, content: mergedContent, tags });
     await updateNote.mutateAsync({ id: note.id, is_trashed: true, trashed_at: new Date().toISOString() });
@@ -1288,7 +1288,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           if (queuedContentRef.current === content) queuedContentRef.current = null;
         }
         if (pendingSaveTitleRef.current === pendingTitle) pendingSaveTitleRef.current = null;
-        if (saved?.updated_at) lastSavedUpdatedAtRef.current = Math.max(lastSavedUpdatedAtRef.current, new Date(saved.updated_at).getTime());
+        if (saved?.updated_at) lastSavedUpdatedAtRef.current = Math.max(lastSavedUpdatedAtRef.current, parseInstant(saved.updated_at)?.getTime() ?? NaN);
         setSaveStatus("saved");
       }
       // Says why it failed: no AI, a refused key or an outage (#779). It said nothing before.
@@ -1579,8 +1579,8 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       {/* Info panel */}
       {showInfo && (
         <div className="px-4 py-3 border-b border-border bg-muted/30 text-xs text-muted-foreground space-y-1 shrink-0">
-          <p>Created: {format(new Date(note.created_at), "PPp")}</p>
-          <p>Updated: {format(new Date(note.updated_at), "PPp")}</p>
+          <p>Created: {showDate(note.created_at, "time")}</p>
+          <p>Updated: {showDate(note.updated_at, "time")}</p>
           <p>{wordsLabel} · {charsLabel}</p>
           {metadata?.type && <p>Type: {String(metadata.type)}</p>}
           {metadata?.summary && <p>Summary: {String(metadata.summary)}</p>}
@@ -1999,7 +1999,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       <div className="flex items-center justify-between px-4 py-1.5 border-t border-border bg-muted/30 text-[10px] text-muted-foreground shrink-0">
         <div className="flex items-center gap-2">
           <span>
-            {updateNote.isPending ? "Saving…" : `Saved ${formatDistanceToNow(new Date(note.updated_at), { addSuffix: true })}`}
+            {updateNote.isPending ? "Saving…" : `Saved ${showDate(note.updated_at, "ago")}`}
           </span>
           {ghConn?.sync_enabled && (
             <span className="flex items-center gap-1">
