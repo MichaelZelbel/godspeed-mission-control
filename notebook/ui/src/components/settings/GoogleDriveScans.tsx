@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2, HardDrive, ChevronRight, Folder, Home, RefreshCw, Trash2, CheckCircle2 } from "lucide-react";
 import { showToast } from "@/lib/toast";
 import { functionErrorMessage } from "@/lib/function-error";
-import { formatDistanceToNow } from "date-fns";
+import { showDate } from "@/lib/local-date";
 
 interface GDriveConnection {
   connected?: boolean;
@@ -347,7 +347,7 @@ export function GoogleDriveScans() {
                 <div className="font-medium">{connection?.google_email || "Google account"}</div>
                 <div className="text-muted-foreground">
                   {connection?.last_sync_at
-                    ? `Last sync ${formatDistanceToNow(new Date(connection.last_sync_at), { addSuffix: true })}`
+                    ? `Last sync ${showDate(connection.last_sync_at, "ago")}`
                     : "No sync yet"}
                 </div>
               </div>
@@ -490,7 +490,7 @@ export function GoogleDriveScans() {
                           {imp.status}
                         </Badge>
                         <span className="text-xs text-muted-foreground">
-                          {formatDistanceToNow(new Date(imp.imported_at), { addSuffix: true })}
+                          {showDate(imp.imported_at, "ago")}
                         </span>
                       </span>
                     </li>

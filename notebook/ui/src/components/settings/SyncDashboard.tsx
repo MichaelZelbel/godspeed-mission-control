@@ -25,7 +25,7 @@ import {
   FolderTree,
   Users,
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { showDate } from "@/lib/local-date";
 
 interface SyncStats {
   totalNotes: number;
@@ -166,7 +166,7 @@ export function SyncDashboard() {
 
         {connection.last_sync_at && (
           <p className="text-xs text-muted-foreground">
-            Last sync: {formatDistanceToNow(new Date(connection.last_sync_at), { addSuffix: true })}
+            Last sync: {showDate(connection.last_sync_at, "ago")}
           </p>
         )}
 
@@ -201,7 +201,7 @@ export function SyncDashboard() {
                 </Badge>
                 {entry.synced_at && (
                   <span className="text-muted-foreground whitespace-nowrap">
-                    {formatDistanceToNow(new Date(entry.synced_at), { addSuffix: true })}
+                    {showDate(entry.synced_at, "ago")}
                   </span>
                 )}
               </div>

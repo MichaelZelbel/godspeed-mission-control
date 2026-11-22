@@ -1,10 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { format } from "date-fns";
 import { Calendar } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { parseDateOnly } from "@/lib/local-date";
+import { showDate } from "@/lib/local-date";
 import { Badge } from "@/components/ui/badge";
 
 interface LifeEventsStripProps {
@@ -73,7 +72,7 @@ export function LifeEventsStrip({ contactId }: LifeEventsStripProps) {
             className="shrink-0 w-44 rounded-md border border-border bg-background p-2 hover:border-primary/40 transition-colors"
           >
             <div className="text-[10px] text-muted-foreground">
-              {m.happened_at ? format(parseDateOnly(m.happened_at) ?? new Date(m.happened_at), "MMM d, yyyy") : ""}
+              {m.happened_at ? showDate(m.happened_at, "day") : ""}
             </div>
             <div className="text-xs font-medium line-clamp-2 mt-0.5">{m.title}</div>
             {m.category && (
