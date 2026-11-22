@@ -748,7 +748,9 @@ function CollectionItemsTree({
   onMoveItemToFolder,
   onDuplicateItem,
   onDeleteItem,
+  itemOpen,
 }: {
+  itemOpen?: boolean;
   collection: Collection | null;
   folders: FolderLite[];
   treeItems: ItemLite[];
@@ -768,7 +770,10 @@ function CollectionItemsTree({
   onDeleteItem: (itemId: string) => void;
 }) {
   return (
-    <aside className="flex w-full shrink-0 flex-col border-b bg-background lg:h-full lg:w-80 lg:border-b-0 lg:border-r">
+    <aside
+      data-testid="collection-items-list"
+      className={`${itemOpen ? "hidden lg:flex" : "flex"} w-full shrink-0 flex-col border-b bg-background lg:h-full lg:w-80 lg:border-b-0 lg:border-r`}
+    >
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <CollectionIcon icon={collection?.icon} className="h-4 w-4" />
         <div className="min-w-0 flex-1">
@@ -3379,8 +3384,21 @@ function CollectionDetailPage() {
         onMoveItemToFolder={handleMoveItemToFolder}
         onDuplicateItem={handleDuplicateItemFromTree}
         onDeleteItem={handleDeleteItemFromTree}
+        itemOpen={!!selectedItem}
       />
-      <section className="min-w-0 flex-1 overflow-y-auto p-6">
+      <section data-testid="collection-item-view" className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
+      {selectedItem && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="-ml-2 mb-2 lg:hidden"
+          onClick={closeItem}
+        >
+          <ChevronLeft className="mr-1 h-4 w-4" />
+          Back to list
+        </Button>
+      )}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <p className="text-sm text-muted-foreground">
@@ -3394,7 +3412,7 @@ function CollectionDetailPage() {
                   {collection?.name}
                 </Link>{" "}
                 /{" "}
-                <span className="text-foreground">
+                <span className="text-foreground [overflow-wrap:anywhere]">
                   {selectedItem.id === "new"
                     ? "New item"
                     : selectedItem.title || "Untitled"}
