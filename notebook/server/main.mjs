@@ -14,6 +14,7 @@ import { Domains } from '../core/domains.mjs';
 import { Scheduler } from '../core/jobs/scheduler.mjs';
 import {controlRoutine} from '../core/jobs/routine-control.mjs';
 import { modelProvider, jobExecutor,hermesProvider,isHermesExecutable } from '../core/runtime.mjs';
+import {readSavedProvider,savedProviderOrNull} from '../core/saved-provider.mjs';
 import {assistantEnvironment} from '../core/assistant-files.mjs';
 import { FileSync } from '../core/sync/git.mjs';
 import {conflictView,resolveSavedConflict} from '../core/conflicts.mjs';
@@ -97,17 +98,6 @@ export const startupReadiness=publication=>{
 };
 export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
 const providerView=config=>({configured:true,url:baseAddress(config.url),model:config.model,key:!!config.key});
-// What a damaged saved connection answers with, its own sentence instead of the generic
-// invalid-JSON one (#861 review D4), naming the step that recovers it.
-const DAMAGED_PROVIDER='The saved AI connection could not be read. Connect your AI again in Settings, Your AI.';
-const readSavedProvider=file=>{
-  let text;try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code==='ENOENT')return null;throw error;}
-  // A damaged file is one plain log line per request, never a stack trace, and never the file's own
-  // text, which holds the key (#833).
-  let config;try{config=JSON.parse(text);}catch{console.error('Godspeed Mission Control: the saved AI connection ('+file+') is not valid JSON. Connect your AI again in Settings, Your AI.');throw new Error(DAMAGED_PROVIDER);}
-  if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error(DAMAGED_PROVIDER);
-  return config;
-};
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
@@ -182,7 +172,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // else (an env address, a Hermes with its own AI, a provider handed in): what a changed file on
   // disk is compared against (#826).
   let savedConfig=null;
-  if(!provider&&fs.existsSync(providerPath)){const saved=JSON.parse(fs.readFileSync(providerPath,'utf8'));provider=guarded(modelProvider(saved));savedConfig=saved;}
+  // A saved connection that cannot be read leaves the notebook running with no AI connected, and
+  // Settings, Your AI, says so; the file stays for a look (#805). Until then it stopped startup.
+  if(!provider){try{const saved=readSavedProvider(providerPath);if(saved){provider=guarded(modelProvider(saved));savedConfig=saved;}}
+    catch(error){if(!error.savedProviderLogged)console.error('Godspeed Mission Control: the saved AI connection in '+providerPath+' cannot be read, so no AI is connected from it:',error.message);}}
   provider ||= guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}));
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
   // Where this notebook really runs from, for the tools (core/running-notebook.mjs): Windows only.
@@ -229,7 +222,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const routineAI=originalRuntime&&descriptor?.verified&&descriptor.home?{home:descriptor.home,state:store.state}:null;
   // An AI connected in Settings for the notebook only, while Hermes, which answers the chats, has no
   // AI of its own: the chats and the card say so, with the step that changes it (#590).
-  const settingsOnlyAI=()=>{if(!routineAI||!fs.existsSync(providerPath))return false;try{return routineAIStatus(routineAI).source==='none';}catch{return false;}};
+  const settingsOnlyAI=()=>{if(!routineAI||!savedProviderOrNull(providerPath))return false;try{return routineAIStatus(routineAI).source==='none';}catch{return false;}};
   // The saved file is the connection Settings shows (#826): read it the way Settings does. A file
   // that exists but cannot be read makes the one availability 'unreadable'; a file repaired or
   // replaced on disk while the notebook runs is followed, so the chats serve the saved AI again,
