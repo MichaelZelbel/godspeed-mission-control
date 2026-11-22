@@ -10,6 +10,11 @@
 // does (its sameUser), and when nothing changed at all the previous state is
 // returned, so React does not render again.
 
+/** The state AuthProvider starts with, and the shape every state after a read keeps. The
+ * session is read again every 30 seconds, so a field that exists on only one side either
+ * disappears from the state on the first read or breaks the identity preservation below. */
+export const initialAuthState = { loading:true, user:null, session:null, profile:null, role:'premium', roleLoading:false, authError:'', expired:false, local:false };
+
 /** The previous value when the next one carries the same data, otherwise the next one. */
 export function sameOrNext(previous, next) {
   if (previous === next) return previous;
@@ -22,7 +27,7 @@ export function sameOrNext(previous, next) {
 export function signedInState(previous, user, profile, local = false) {
   const keptUser = sameOrNext(previous?.user ?? null, user);
   const session = previous?.session && previous.session.user === keptUser ? previous.session : { user: keptUser, access_token: 'local-session' };
-  const next = { loading: false, user: keptUser, session, profile: sameOrNext(previous?.profile ?? null, profile), role: 'premium', roleLoading: false, authError: '', expired: false, local: !!local };
+  const next = { ...initialAuthState, loading:false, user:keptUser, session, profile: sameOrNext(previous?.profile ?? null, profile), local: !!local };
   if (previous && Object.keys(next).every((key) => previous[key] === next[key]) && Object.keys(previous).length === Object.keys(next).length) return previous;
   return next;
 }

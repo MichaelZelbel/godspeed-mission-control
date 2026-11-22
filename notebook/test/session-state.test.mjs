@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {sameOrNext, signedInState} from '../ui/src/contexts/session-state.mjs';
+import {initialAuthState, sameOrNext, signedInState} from '../ui/src/contexts/session-state.mjs';
 
 const read = () => ({user: {id: 'owner', email: null, name: 'Fictional Owner'}, profile: {display_name: 'Fictional Owner', timezone: 'Europe/Berlin'}});
 
 test('reading the same session again keeps the state, so pages keyed on the user do not reload', () => {
   // The timeline reloaded its whole list every 30 seconds because each read made a new user object.
   const first = read();
-  const signedIn = signedInState({loading: true, user: null, session: null, profile: null, role: 'premium', roleLoading: false, authError: '', expired: false}, first.user, first.profile);
+  const signedIn = signedInState(initialAuthState, first.user, first.profile);
   assert.equal(signedIn.user, first.user);
   assert.equal(signedIn.session.user, first.user);
   const again = read();
@@ -50,6 +50,14 @@ test('sameOrNext compares by content', () => {
   assert.equal(sameOrNext(null, b), b);
   assert.equal(sameOrNext(a, b), b);
   assert.equal(sameOrNext(a, null), null);
+});
+
+test('a state after a read keeps every field the initial state declares', () => {
+  // AuthContext starts from initialAuthState and signedInState derives from it, so the two
+  // enumerations cannot drift: a field added to one side only would show up here.
+  const signedIn = signedInState(initialAuthState, read().user, read().profile, true);
+  assert.deepEqual(Object.keys(signedIn).sort(), Object.keys(initialAuthState).sort());
+  assert.equal(signedInState(signedIn, read().user, read().profile, true), signedIn, 'an unchanged read still keeps the state object');
 });
 
 test('a local notebook keeps its local flag through session reads', () => {
