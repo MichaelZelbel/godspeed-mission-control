@@ -42,10 +42,13 @@ export function DashboardLayout() {
 
 
           
-          {/* Where the floating chat button shows, the page keeps room below its content for it (6rem:
-              the button's 3.5rem and its 1.5rem from the edge, and a gap), so scrolled to the end
-              nothing on a narrow window lies under it (issue #530). */}
-          <main className={floatingChat?"flex-1 overflow-auto p-6 pb-24":"flex-1 overflow-auto p-6"}>
+          {/* Where the floating chat button shows, main holds the space above the button's zone
+              (3.5rem header + 5rem button zone and a gap) and scrolls within it: the button is
+              pinned to the viewport's corner, so room kept only at the end of the content (issue
+              #530's pb-24) still left a card under it at every scroll before the end (#878).
+              --page-h is main's content box (the cap minus main's own 3rem of vertical padding);
+              pages that fill it use it, so their budget cannot drift from this cap. */}
+          <main className={floatingChat?"flex-1 overflow-auto p-6 max-h-[calc(100dvh-9.5rem)] [--page-h:calc(100dvh-12.5rem)]":"flex-1 overflow-auto p-6"}>
             {/* A crashing page no longer takes the sidebar with it, and the
                 boundary clears on the next navigation. Loading a page's code
                 keeps the sidebar and header on screen. */}

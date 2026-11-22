@@ -356,6 +356,15 @@ export class QueryService {
   execute(request) {
     const { table, operation = 'select', values, filters = [], orders = [], selection = '*', options = {}, single = false, maybeSingle = false, expected = {}, baselines = {} } = request;
     if (!tables.has(table)) throw new Error('Unknown record domain ' + table);
+    // A writer that sends its record under a misnamed field (the assistant's
+    // "data" instead of "values") used to crash on the record itself and
+    // answer the server's generic sentence, with no hint how to fix the
+    // request (#914). Refuse it here, where every writer's request passes.
+    if (operation === 'insert' || operation === 'upsert') {
+      const records = Array.isArray(values) ? values : [values];
+      const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+      if (!records.every(isRecord)) throw new Error((operation === 'insert' ? 'An insert' : 'An upsert') + ' needs its record under "values": an object, or a list of objects.' + ('data' in request ? ' This request sent "data" instead.' : ''));
+    }
     checkFilters(filters);
     // One forgotten filter would rewrite or wipe every record of the kind, and
     // the local door has no record-hash guard (assistant writes do), so an
