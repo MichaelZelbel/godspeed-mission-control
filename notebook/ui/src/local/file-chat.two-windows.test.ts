@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
+import {WAIT} from '../test/wait-limits';
 
 const toastError=vi.hoisted(()=>vi.fn());
 vi.mock('sonner',()=>({toast:{error:toastError}}));
@@ -54,7 +55,7 @@ it('keeps every turn from a note panel and its pop-out, in send order, without a
   const q1=user('Fictional first question'),a1=assistant('Fictional first answer');
   const panel=await openWindow();
   panel.saveFileChat(key,chat(q1,a1));
-  await vi.waitFor(async()=>expect(await stored()).toHaveLength(2));
+  await vi.waitFor(async()=>expect(await stored()).toHaveLength(2), WAIT);
   const popout=await openWindow();
   const q2=user('Fictional panel question'),a2=assistant('Fictional panel answer');
   const q3=user('Fictional pop-out question'),a3=assistant('Fictional pop-out answer');
@@ -63,10 +64,10 @@ it('keeps every turn from a note panel and its pop-out, in send order, without a
   popout.saveFileChat(key,chat(q1,a1,q3));
   popout.saveFileChat(key,chat(q1,a1,q3,a3));
   const both=[q1,a1,q2,a2,q3,a3];
-  await vi.waitFor(()=>{expect(popout.loadFileChat(key).messages).toEqual(both);expect(panel.loadFileChat(key).messages).toEqual(both);});
+  await vi.waitFor(()=>{expect(popout.loadFileChat(key).messages).toEqual(both);expect(panel.loadFileChat(key).messages).toEqual(both);}, WAIT);
   const q4=user('Fictional second panel question'),a4=assistant('Fictional second panel answer');
   panel.saveFileChat(key,chat(...both,q4,a4));
-  await vi.waitFor(()=>expect(popout.loadFileChat(key).messages).toEqual([...both,q4,a4]));
+  await vi.waitFor(()=>expect(popout.loadFileChat(key).messages).toEqual([...both,q4,a4]), WAIT);
   expect(await stored()).toEqual([...both,q4,a4]);
   expect(toastError).not.toHaveBeenCalled();
 });
@@ -75,10 +76,10 @@ it('shows a failed save once and not again for the save that works after it',asy
   const panel=await openWindow(),q1=user('Fictional question'),a1=assistant('Fictional answer');
   failSaves=true;
   panel.saveFileChat(key,chat(q1));
-  await vi.waitFor(()=>expect(toastError).toHaveBeenCalledTimes(1));
+  await vi.waitFor(()=>expect(toastError).toHaveBeenCalledTimes(1), WAIT);
   failSaves=false;
   panel.saveFileChat(key,chat(q1,a1));
-  await vi.waitFor(async()=>expect(await stored()).toEqual([q1,a1]));
+  await vi.waitFor(async()=>expect(await stored()).toEqual([q1,a1]), WAIT);
   expect(toastError).toHaveBeenCalledTimes(1);
   expect(toastError).toHaveBeenCalledWith('Conversation history was not saved. Keep this window open and retry.');
 });
@@ -87,11 +88,11 @@ it('names a save that cannot reach the server the same way, once',async()=>{
   const panel=await openWindow(),q1=user('Fictional question'),a1=assistant('Fictional answer');
   unreachable=true;
   panel.saveFileChat(key,chat(q1));
-  await vi.waitFor(()=>expect(toastError).toHaveBeenCalledTimes(1));
+  await vi.waitFor(()=>expect(toastError).toHaveBeenCalledTimes(1), WAIT);
   expect(toastError).toHaveBeenCalledWith('Conversation history was not saved. Keep this window open and retry.');
   unreachable=false;
   panel.saveFileChat(key,chat(q1,a1));
-  await vi.waitFor(async()=>expect(await stored()).toEqual([q1,a1]));
+  await vi.waitFor(async()=>expect(await stored()).toEqual([q1,a1]), WAIT);
   expect(toastError).toHaveBeenCalledTimes(1);
 });
 
@@ -99,19 +100,19 @@ it('keeps each message once when both windows save a question before either hear
   const q1=user('Fictional first question'),a1=assistant('Fictional first answer');
   const panel=await openWindow();
   panel.saveFileChat(key,chat(q1,a1));
-  await vi.waitFor(async()=>expect(await stored()).toHaveLength(2));
+  await vi.waitFor(async()=>expect(await stored()).toHaveLength(2), WAIT);
   const popout=await openWindow();
   const q2=user('Fictional panel question'),a2=assistant('Fictional panel answer');
   const q3=user('Fictional pop-out question'),a3=assistant('Fictional pop-out answer');
   panel.saveFileChat(key,chat(q1,a1,q2));
   popout.saveFileChat(key,chat(q1,a1,q3));
-  await vi.waitFor(()=>{expect(panel.loadFileChat(key).messages).toEqual([q1,a1,q2,q3]);expect(popout.loadFileChat(key).messages).toEqual([q1,a1,q2,q3]);});
+  await vi.waitFor(()=>{expect(panel.loadFileChat(key).messages).toEqual([q1,a1,q2,q3]);expect(popout.loadFileChat(key).messages).toEqual([q1,a1,q2,q3]);}, WAIT);
   // Each chat panel adds its reply to the history it held when it sent.
   panel.saveFileChat(key,chat(q1,a1,q2,a2));
-  await vi.waitFor(()=>expect(popout.loadFileChat(key).messages).toEqual([q1,a1,q2,q3,a2]));
+  await vi.waitFor(()=>expect(popout.loadFileChat(key).messages).toEqual([q1,a1,q2,q3,a2]), WAIT);
   popout.saveFileChat(key,chat(q1,a1,q3,a3));
   const all=[q1,a1,q2,q3,a2,a3];
-  await vi.waitFor(()=>{expect(panel.loadFileChat(key).messages).toEqual(all);expect(popout.loadFileChat(key).messages).toEqual(all);});
+  await vi.waitFor(()=>{expect(panel.loadFileChat(key).messages).toEqual(all);expect(popout.loadFileChat(key).messages).toEqual(all);}, WAIT);
   expect(await stored()).toEqual(all);
   expect(toastError).not.toHaveBeenCalled();
 });
@@ -120,16 +121,16 @@ it('keeps a turn whose save failed once the other window saves, and both windows
   const q1=user('Fictional question'),a1=assistant('Fictional answer');
   const panel=await openWindow();
   panel.saveFileChat(key,chat(q1,a1));
-  await vi.waitFor(async()=>expect(await stored()).toHaveLength(2));
+  await vi.waitFor(async()=>expect(await stored()).toHaveLength(2), WAIT);
   const popout=await openWindow();
   const unsaved=user('Fictional panel question that failed to save'),later=user('Fictional pop-out question');
   failSaves=true;
   panel.saveFileChat(key,chat(q1,a1,unsaved));
-  await vi.waitFor(()=>expect(toastError).toHaveBeenCalledTimes(1));
+  await vi.waitFor(()=>expect(toastError).toHaveBeenCalledTimes(1), WAIT);
   failSaves=false;
   popout.saveFileChat(key,chat(q1,a1,later));
   const both=[q1,a1,later,unsaved];
-  await vi.waitFor(()=>{expect(panel.loadFileChat(key).messages).toEqual(both);expect(popout.loadFileChat(key).messages).toEqual(both);});
+  await vi.waitFor(()=>{expect(panel.loadFileChat(key).messages).toEqual(both);expect(popout.loadFileChat(key).messages).toEqual(both);}, WAIT);
   expect(await stored()).toEqual(both);
   expect(toastError).toHaveBeenCalledTimes(1);
 });
@@ -137,14 +138,14 @@ it('keeps a turn whose save failed once the other window saves, and both windows
 it('clears the conversation in the other window too, which then saves its next turn',async()=>{
   const panel=await openWindow();
   panel.saveFileChat(key,chat(user('Fictional old question'),assistant('Fictional old answer')));
-  await vi.waitFor(async()=>expect(await stored()).toHaveLength(2));
+  await vi.waitFor(async()=>expect(await stored()).toHaveLength(2), WAIT);
   const popout=await openWindow();
   const cleared=await panel.clearFileChat(key);
-  await vi.waitFor(()=>expect(popout.loadFileChat(key)).toEqual(cleared));
+  await vi.waitFor(()=>expect(popout.loadFileChat(key)).toEqual(cleared), WAIT);
   expect(cleared.messages).toEqual([]);
   const next=user('Fictional question after clearing');
   popout.saveFileChat(key,{...popout.loadFileChat(key),messages:[next]});
-  await vi.waitFor(()=>expect(panel.loadFileChat(key).messages).toEqual([next]));
+  await vi.waitFor(()=>expect(panel.loadFileChat(key).messages).toEqual([next]), WAIT);
   expect(await stored()).toEqual([next]);
   expect(toastError).not.toHaveBeenCalled();
 });
