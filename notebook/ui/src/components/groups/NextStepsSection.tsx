@@ -101,9 +101,13 @@ export function NextStepsSection({ group, membership }: { group: ContactGroup; m
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
+      {/* The heading and its two buttons stack below sm: at a phone's width the three did not fit
+          one row inside the member sheet, the row forced the sheet's content 367 px wide inside a
+          319 px sheet, and "Add Next Step" ran past its edge (#941). The two buttons still wrap
+          apart at 320 px, where even they do not fit side by side. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <h3 className="text-sm font-medium">Next Steps</h3>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => suggestNextStep.mutate()} disabled={suggestNextStep.isPending}>
             {suggestNextStep.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Suggest Next Step
           </Button>
