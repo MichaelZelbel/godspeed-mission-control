@@ -296,9 +296,11 @@ export default function People() {
           onMergePerson={(id) => setMergeTreeId(id)}
           onDeletePerson={handleDeletePerson}
         />
-        <div className="shrink-0 border-t p-2">
-          <Button className="w-full" variant="ghost" disabled={peopleQuery.isFetching} onClick={() => peopleQuery.refetch()}>Refresh people</Button>
-        </div>
+        {(people.length > 0 || searchQuery.trim() !== "") && (
+          <div className="shrink-0 border-t p-2">
+            <Button className="w-full" variant="ghost" disabled={peopleQuery.isFetching} onClick={() => peopleQuery.refetch()}>Refresh people</Button>
+          </div>
+        )}
       </div>
 
       {/* Right panel - detail */}
