@@ -55,9 +55,9 @@ test('a file edited by hand (no lock, no journal) is seen once the watcher repor
 test('an outside edit to a note that arrived is seen, though the adoption wrote its file by rename',async()=>{
   const dir=root(),store=new Store(dir,{watch:true});
   try{
-    // The adoption's atomic write replaces the page's file by rename; the folder-level
-    // watch reports the folder's name however often the file under it is replaced, so
-    // the outside edits an arrived note exists for are still seen (#897).
+    // The adoption's atomic write replaces the page's file by rename, which on this platform
+    // makes the watcher stop reporting that path; the store re-arms its watcher after an
+    // adoption, so the outside edits an arrived note exists for are still seen (#897).
     const other=path.join(store.recordsRoot,'Arrived.md');fs.writeFileSync(other,'# arrived words\n');
     assert.equal(await until(()=>{store.scan();return store.list('notes').some(n=>n.title==='Arrived');}),true,'the page becomes a note');
     const note=store.list('notes').find(n=>n.title==='Arrived'),file=store.file(note);

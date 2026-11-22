@@ -4,7 +4,6 @@ import path from 'node:path';
 import { threadId } from 'node:worker_threads';
 import { randomUUID, createHash } from 'node:crypto';
 import { durable,durableRoots,durableFiles,recordsFolder,legacyRecordsFolder,isRecordPath } from '../file-policy.mjs';
-import { watchTree } from '../watch-tree.mjs';
 import { touchesSuggestions, suggestionChanges } from '../review-sources.mjs';
 import { encode as encodeFile, decode as decodeFile, safe as safeName, candidate, fits, folderFor, nameFor, candidateName, systemPath, isReadable, key as nameKey, childrenOf, own } from './layout.mjs';
 import { parse as parseYaml } from './yaml.mjs';
@@ -355,7 +354,7 @@ export class Store {
     // workspace (16,000 files, 114 MB) a read took longer than the two
     // seconds it was allowed to be reused, so an open dashboard kept the
     // server reading for 138 of 240 seconds and the health check waited 30.
-    if (!force && this.watching && this.records) { this.readJournal(); if (!this.dirtyAll) { this.applyDirty(); this.settlePages(); return this.records; } force = true; }
+    if (!force && this.watching && this.records) { this.readJournal(); if (!this.dirtyAll) { this.applyDirty(); this.settlePages(); this.rearm(); return this.records; } force = true; }
     if (!force && this.reuseFor && this.records && !this.holding && !this.stale && Date.now() - this.scannedAt < this.reuseFor) return this.records;
     this.stale = false; this.scannedAt = Date.now(); this.dirtyAll = false; this.dirty?.clear();
     // How often the vault was actually read, which is what a save costs.
@@ -377,6 +376,7 @@ export class Store {
     this.entries=entries;
     this.derive();
     this.settlePages();
+    this.rearm();
     return this.records;
   }
   // One file as the store holds it: its text and either its record, the fact
@@ -479,7 +479,7 @@ export class Store {
     // in between is at worst read twice, never missed.
     const start=()=>{
       try{
-        this.watcher=watchTree(this.recordsRoot,(event,name)=>this.touched(name==null?null:String(name)));
+        this.watcher=fs.watch(this.recordsRoot,{recursive:true},(event,name)=>this.touched(name==null?null:String(name)));
         this.watcher.on('error',()=>{this.dirtyAll=true;try{this.watcher.close();}catch{}this.watcher=null;this.rewatch=setTimeout(start,1000);this.rewatch.unref?.();});
       }catch{this.dirtyAll=true;this.rewatch=setTimeout(start,1000);this.rewatch.unref?.();}
     };
@@ -516,6 +516,7 @@ export class Store {
   // folder as the note's folder, so nothing moves and nothing is lost.
   adoptPending(){
     const files=[...this.pendingAdoption];this.pendingAdoption.clear();this.adopting=true;
+    // True when pages became notes: the caller then re-arms the watcher (rearm).
     try{
       const records=[],paths=new Map(),kept=new Map();
       this.withLock(()=>{
@@ -538,6 +539,7 @@ export class Store {
         }
         if(records.length)this.commit(records,{paths,cascade:false});
       });
+      if(records.length)this.rearmWatcher=true;
       // A page left unadopted (the retired Lexicon's, a JSON one) is decided about too, so it
       // is never asked about again.
       for(const [file] of kept){const relative=posix(path.relative(this.recordsRoot,file)),k=nameKey(relative);if(!this.knownPages.has(k)){this.knownPages.set(k,relative);this.pagesDirty=true;}}
@@ -548,6 +550,17 @@ export class Store {
       for(const file of files)if(this.entries.get(file)?.document)this.pendingAdoption.add(file);
       throw error;
     }finally{this.adopting=false;}
+    return this.rearmWatcher===true;
+  }
+  // A rename that replaces an existing file (the atomic write every save and every adoption
+  // uses) makes this platform's file watcher stop reporting that path for good: an adopted
+  // note then never hears of the outside edits it exists for (#897). A watcher started while
+  // the file is already there reports it again, so a batch of adoptions is followed by one
+  // close and start. The full read that start does covers what changed while it was off.
+  rearm(){
+    if(!this.rearmWatcher||!this.watching)return;
+    this.rearmWatcher=false;
+    this.unwatch();this.watch();
   }
   persistPages(){
     if(!this.pageFile)return;
