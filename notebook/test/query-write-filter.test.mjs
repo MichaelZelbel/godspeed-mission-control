@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {createService} from '../server/main.mjs';
+import {Store,envelopeFields} from '../core/records/store.mjs';
 
 // Issue 936: an update or delete with no filter applied to every record of the
 // kind and answered 200. One forgotten filter from a screen, a script or an
@@ -65,6 +66,10 @@ test('a filter on a field the kind does not have is refused with 400 and changes
     const byOr=await post(base,{table:'contacts',operation:'delete',filters:[['or','','nme.eq.Ana,name.eq.Bo']]});
     assert.equal(byOr.status,400);
     assert.match((await byOr.json()).error,/contacts has no field "nme"/);
+    // A name Object.prototype carries is not a field of the kind either.
+    const byPrototype=await post(base,{table:'contacts',operation:'update',values:{name:'Overwritten'},filters:[['eq','toString','x']]});
+    assert.equal(byPrototype.status,400);
+    assert.match((await byPrototype.json()).error,/contacts has no field "toString"/);
     const left=await people(base);
     assert.deepEqual(left.map(c=>c.name).sort(),['Ana','Bo'],'nothing was changed');
   }finally{await service.close();}
@@ -89,7 +94,7 @@ test('a filter with an empty or null value is refused with 400 and changes nothi
   const service=await createService({root:root(),port:0}),base='http://127.0.0.1:'+service.address.port;
   try{
     await post(base,{table:'contacts',operation:'insert',values:[{name:'Ana'},{name:'Bo'}]});
-    for(const filter of [['eq','id',''],['eq','id',null],['in','id',null],['not','name',['eq',null]]]){
+    for(const filter of [['eq','id',''],['eq','id',null],['in','id',null],['not','name',['eq',null]],['neq','name','']]){
       const empty=await post(base,{table:'contacts',operation:'update',values:{name:'Overwritten'},filters:[filter]});
       assert.equal(empty.status,400,JSON.stringify(filter));
       assert.match((await empty.json()).error,/empty value/);
@@ -147,12 +152,74 @@ test('well-formed filters still update and delete the records they match',async(
 test('a schema column no record has set yet still answers a well-formed no-match with 200',async()=>{
   const service=await createService({root:root(),port:0}),base='http://127.0.0.1:'+service.address.port;
   try{
+    // The refusal side, on a kind with no records: a typo in a real column is
+    // still judged, by the schema alone (a silent parse failure there would
+    // restore the 200/count-0 bug this refuses).
+    const typo=await post(base,{table:'contact_group_memberships',operation:'delete',filters:[['eq','grp_id','no-such-group']]});
+    assert.equal(typo.status,400);
+    assert.match((await typo.json()).error,/contact_group_memberships has no field "grp_id"/);
     // The shape CollectionDetail.tsx (collection_id) and ReviewQueue.tsx
     // (moment_id) delete by: a real column the schema knows and no row carries.
     const removed=await post(base,{table:'contact_group_memberships',operation:'delete',filters:[['eq','group_id','no-such-group']]});
     assert.equal(removed.status,200);
     assert.deepEqual((await removed.json()).data,[]);
   }finally{await service.close();}
+});
+
+test('a kind the schema does not know is judged by its rows once it holds one',async()=>{
+  const service=await createService({root:root(),port:0}),base='http://127.0.0.1:'+service.address.port;
+  try{
+    await post(base,{table:'record_history',operation:'insert',values:{record_id:'r1'}});
+    const typo=await post(base,{table:'record_history',operation:'update',values:{record_id:'r2'},filters:[['eq','recrd_id','r1']]});
+    assert.equal(typo.status,400);
+    assert.match((await typo.json()).error,/record_history has no field "recrd_id"/);
+    const read=await post(base,{table:'record_history',operation:'select'});
+    assert.deepEqual((await read.json()).data.map(r=>r.record_id),['r1'],'nothing was changed');
+    const renamed=await post(base,{table:'record_history',operation:'update',values:{record_id:'r2'},filters:[['eq','record_id','r1']]});
+    assert.equal(renamed.status,200);
+  }finally{await service.close();}
+});
+
+test('a nested expression that is true for every record is refused with 400 and changes nothing',async()=>{
+  const service=await createService({root:root(),port:0}),base='http://127.0.0.1:'+service.address.port;
+  try{
+    await post(base,{table:'contacts',operation:'insert',values:[{name:'Ana'},{name:'Bo'}]});
+    // An empty and() and an empty not.or() answer true for every row, and a
+    // not over an empty in-list turns "none of these" into "all of them":
+    // like ["and","",""], each would rewrite or wipe the whole kind.
+    for(const filter of [['or','','and()'],['and','','and()'],['or','','not.or()'],['and','','not.or()'],['not','name',['in',[]]]]){
+      const vacuous=await post(base,{table:'contacts',operation:'update',values:{name:'Overwritten'},filters:[filter]});
+      assert.equal(vacuous.status,400,JSON.stringify(filter));
+      assert.match((await vacuous.json()).error,/empty value/);
+    }
+    const left=await people(base);
+    assert.deepEqual(left.map(c=>c.name).sort(),['Ana','Bo'],'nothing was changed');
+  }finally{await service.close();}
+});
+
+test('a filter part the grammar cannot read is refused even when the kind holds no records',async()=>{
+  const service=await createService({root:root(),port:0}),base='http://127.0.0.1:'+service.address.port;
+  try{
+    // filterExpression and condition read these per row, so on a kind with no
+    // records nothing used to refuse them and the request answered 200.
+    for(const filter of [['or','','nameeqAna'],['not','name',['q','x']]]){
+      const unreadable=await post(base,{table:'contacts',operation:'delete',filters:[filter]});
+      assert.equal(unreadable.status,400,JSON.stringify(filter));
+    }
+    await post(base,{table:'contacts',operation:'insert',values:[{name:'Ana'}]});
+    for(const filter of [['or','','nameeqAna'],['not','name',['q','x']]]){
+      const unreadable=await post(base,{table:'contacts',operation:'delete',filters:[filter]});
+      assert.equal(unreadable.status,400,JSON.stringify(filter));
+    }
+    const left=await people(base);
+    assert.deepEqual(left.map(c=>c.name),['Ana'],'nothing was changed');
+  }finally{await service.close();}
+});
+
+test('the envelope field list is exactly what records/store.mjs writes',()=>{
+  const self={device:'test'},record=Store.prototype.prepare.call(self,'contacts',{}),tombstone=Store.prototype.purgeRecord.call(self,record);
+  const written=new Set([...Object.keys(record),...Object.keys(tombstone)].filter(k=>k!=='purged'));
+  assert.deepEqual([...envelopeFields].sort(),[...written].sort());
 });
 
 test('reads keep every filter they accepted before',async()=>{
