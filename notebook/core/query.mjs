@@ -356,6 +356,11 @@ export class QueryService {
     const { table, operation = 'select', values, filters = [], orders = [], selection = '*', options = {}, single = false, maybeSingle = false, expected = {}, baselines = {} } = request;
     if (!tables.has(table)) throw new Error('Unknown record domain ' + table);
     checkFilters(filters);
+    // One forgotten filter would rewrite or wipe every record of the kind, and
+    // the local door has no record-hash guard (assistant writes do), so an
+    // update or delete that does not say which records it means is refused
+    // before anything is read or written (issue 936).
+    if ((operation === 'update' || operation === 'delete') && !filters.length) throw new Error('An update or delete needs a filter that names the records it means, for example ["eq","id","<id>"]');
     // A filter on an embedded column ("contact_groups.is_trashed") waits for
     // the join. Until 6 October 2026 it was checked against the row itself,
     // where that column never is, so a person's Groups tab was always empty.
