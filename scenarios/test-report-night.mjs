@@ -900,7 +900,7 @@ test('the verdict job reports the night and the week, and tells the report which
   assert.ok(at > 0, 'the report step is missing');
   const step = text.slice(at);
   assert.ok(step.includes("WEEKLY: ${{ github.event_name != 'schedule' }}"), 'the report is not told when it is the week');
-  assert.ok(step.includes("if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.all && inputs.stage == '' && inputs.pr == '')) }}"), 'it reports the night and the weekly run only');
+  assert.ok(step.includes("if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.all && inputs.stage == '' && inputs.pr == '' && inputs.only == '')) }}"), 'it reports the night and the weekly run only');
   assert.ok(text.includes('      PICKED: ${{ needs.stage.outputs.picked }}'), 'the verdict job passes the pick on to the report');
 });
 

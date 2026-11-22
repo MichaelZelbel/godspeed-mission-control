@@ -1329,11 +1329,11 @@ jobs:
         server-update-keeps-everything=${{ needs.server-update-keeps-everything.result }}
     steps:
       - uses: actions/checkout@v4
-        if: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.all && inputs.stage == '' && inputs.pr == '')) }}
+        if: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.all && inputs.stage == '' && inputs.pr == '' && inputs.only == '')) }}
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
-        if: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.all && inputs.stage == '' && inputs.pr == '')) }}
+        if: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.all && inputs.stage == '' && inputs.pr == '' && inputs.only == '')) }}
         with: { node-version: '22.19.0' }
       - name: Every scenario passed, or the run fails
         run: |
@@ -1366,7 +1366,7 @@ jobs:
           done
           exit $bad
       - name: Tell the night or the week in issues (one per failing scenario, closed when it passes)
-        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.all && inputs.stage == '' && inputs.pr == '')) }}
+        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.all && inputs.stage == '' && inputs.pr == '' && inputs.only == '')) }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           # The night's failures are "Nightly scenario failed" issues; the week's run is not a
