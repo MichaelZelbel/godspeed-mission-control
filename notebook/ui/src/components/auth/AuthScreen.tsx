@@ -43,7 +43,10 @@ export function AuthScreen() {
       else setMode('invite');
     } catch(e:any){setMode('invite');setError(e.message);}
   }
-  useEffect(()=>{inspect();},[]);
+  // The /setup gate (App.tsx SetupRoute) decides from the auth context whether the server's
+  // screens may show at all; inspect waits for that answer, so a failing read can never land on
+  // the invite screen before the gate has spoken.
+  useEffect(()=>{if(!auth.loading)inspect();},[auth.loading]);
   useEffect(()=>{if(error)errorRef.current?.focus();},[error]);
   const changeMode=(value:typeof mode)=>{setMode(value);setError('');setPassword('');setConfirmation('');setVisible(false);};
   const submit=async(e:React.FormEvent)=>{
