@@ -102,14 +102,19 @@ export function MembershipSheet({ group, membership, notes, open, onOpenChange }
       <SheetContent className="w-full overflow-y-auto sm:max-w-md">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-3 pr-6">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm text-primary">{initials(membership.contacts?.name)}</span>
-            <span className="min-w-0"><span className="block truncate">{membership.contacts?.name || "Unknown person"}</span><Link to={`/dashboard/people/${membership.contact_id}`} className="text-sm font-normal text-muted-foreground hover:text-foreground">Open profile</Link></span>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm text-primary">{initials(membership.contacts?.name)}</span>
+            {/* The name wraps instead of truncating: at a phone's width a long name ended in
+                "…" with nothing in the sheet showing the whole name (#941). anywhere keeps a
+                name that is one long word inside the box too. */}
+            <span className="min-w-0 [overflow-wrap:anywhere]"><span className="block">{membership.contacts?.name || "Unknown person"}</span><Link to={`/dashboard/people/${membership.contact_id}`} className="text-sm font-normal text-muted-foreground hover:text-foreground">Open profile</Link></span>
           </SheetTitle>
         </SheetHeader>
         <div className="mt-6 space-y-5">
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2"><Label>Status</Label><Select value={membership.status || ""} onValueChange={(value) => updateField("status", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{stages.map((stage) => <SelectItem key={stage.id} value={stage.id}>{stage.label}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Priority</Label><Select value={membership.priority} onValueChange={(value) => updateField("priority", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PRIORITIES.map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}</SelectContent></Select></div>
+            {/* The label names the select, as the AddEventDialog fields do: the sheet was never
+                under the layout audit, and its rules found these two unnamed comboboxes (#941). */}
+            <div className="space-y-2"><Label htmlFor="membership-status">Status</Label><Select value={membership.status || ""} onValueChange={(value) => updateField("status", value)}><SelectTrigger id="membership-status"><SelectValue /></SelectTrigger><SelectContent>{stages.map((stage) => <SelectItem key={stage.id} value={stage.id}>{stage.label}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label htmlFor="membership-priority">Priority</Label><Select value={membership.priority} onValueChange={(value) => updateField("priority", value)}><SelectTrigger id="membership-priority"><SelectValue /></SelectTrigger><SelectContent>{PRIORITIES.map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}</SelectContent></Select></div>
           </div>
           {/* The List tab hides Last Movement below sm, and the pipeline card that shows the date
               otherwise only renders for a member with a stage, so the sheet is the one place a
@@ -121,8 +126,8 @@ export function MembershipSheet({ group, membership, notes, open, onOpenChange }
             <h3 className="text-sm font-medium">Attributes</h3>
             {Object.entries(schema).length === 0 ? <p className="text-sm text-muted-foreground">No attributes configured.</p> : Object.entries(schema).map(([key, config]) => (
               <div key={key} className="space-y-2">
-                <Label>{config.label}</Label>
-                {config.type === "select" ? <Select value={draft.attributes[key] ?? ""} onValueChange={(value) => saveDraft({ [key]: value })}><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger><SelectContent>{(config.options || []).map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent></Select> : <Input aria-label={config.label} type={config.type === "number" ? "number" : "text"} min={config.min} max={config.max} value={draft.attributes[key] ?? ""} onChange={(e) => setDraftAttribute(key, e.target.value)} onBlur={() => saveDraft()} />}
+                <Label htmlFor={`membership-attr-${key.replace(/\W+/g, "-")}`}>{config.label}</Label>
+                {config.type === "select" ? <Select value={draft.attributes[key] ?? ""} onValueChange={(value) => saveDraft({ [key]: value })}><SelectTrigger id={`membership-attr-${key.replace(/\W+/g, "-")}`}><SelectValue placeholder="Select..." /></SelectTrigger><SelectContent>{(config.options || []).map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent></Select> : <Input aria-label={config.label} type={config.type === "number" ? "number" : "text"} min={config.min} max={config.max} value={draft.attributes[key] ?? ""} onChange={(e) => setDraftAttribute(key, e.target.value)} onBlur={() => saveDraft()} />}
               </div>
             ))}
           </div>
