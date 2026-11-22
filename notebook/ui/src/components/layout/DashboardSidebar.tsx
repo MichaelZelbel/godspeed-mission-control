@@ -195,7 +195,7 @@ export function DashboardSidebar() {
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                       {item.title === "My Profile" && !collapsed && (
-                        <span className={`ml-auto h-2 w-2 rounded-full ${profileDotColor}`} />
+                        <span role="img" aria-label={`Profile ${completeness}% complete`} title={`Profile ${completeness}% complete`} className={`ml-auto h-2 w-2 rounded-full ${profileDotColor}`} />
                       )}
                     </NavLink>
                   </SidebarMenuButton>
