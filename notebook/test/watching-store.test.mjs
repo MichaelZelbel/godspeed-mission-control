@@ -38,11 +38,31 @@ test('a file edited by hand (no lock, no journal) is seen once the watcher repor
     const note=store.save('notes',{id:'hand',title:'Hand',content:'before'}),file=store.file(note);
     fs.writeFileSync(file,encode({...note,content:'edited in Obsidian'}));
     assert.equal(await until(()=>store.get('notes','hand').content==='edited in Obsidian'),true);
-    // A new page and a removed one.
+    // A page that arrives from outside becomes a note: its words, name and place are kept
+    // and the notebook gives it frontmatter, so it is listed and searched like any note (#897).
     const other=path.join(store.recordsRoot,'Ideas','Owner page.md');fs.mkdirSync(path.dirname(other),{recursive:true});fs.writeFileSync(other,'# my own words\n');
-    assert.equal(await until(()=>{store.scan();return store.documents.has(other);}),true,'an owner page is noticed');
+    assert.equal(await until(()=>{store.scan();return store.list('notes').some(n=>n.title==='Owner page');}),true,'an arriving page becomes a note');
+    const adopted=fs.readFileSync(other,'utf8');
+    assert.match(adopted,/^---/,'the file gains the record\'s frontmatter in place');
+    assert.match(adopted,/---\n# my own words\n$/,'the page\'s words are kept whole as the body');
+    assert.equal(store.get('notes',store.list('notes').find(n=>n.title==='Owner page').id).folder_path,'Ideas','the page stays in its folder');
+    assert.ok(![...store.documents].some(f=>f===other),'it is a note now, not a page');
     fs.unlinkSync(file);
     assert.equal(await until(()=>!store.get('notes','hand')),true,'a deleted file is gone from the view');
+  }finally{store.unwatch();}
+});
+
+test('an outside edit to a note that arrived is seen, though the adoption wrote its file by rename',async()=>{
+  const dir=root(),store=new Store(dir,{watch:true});
+  try{
+    // The adoption's atomic write replaces the page's file by rename, which on this platform
+    // makes the watcher stop reporting that path; the store re-arms its watcher after an
+    // adoption, so the outside edits an arrived note exists for are still seen (#897).
+    const other=path.join(store.recordsRoot,'Arrived.md');fs.writeFileSync(other,'# arrived words\n');
+    assert.equal(await until(()=>{store.scan();return store.list('notes').some(n=>n.title==='Arrived');}),true,'the page becomes a note');
+    const note=store.list('notes').find(n=>n.title==='Arrived'),file=store.file(note);
+    fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace('# arrived words','# arrived words quokkafern'));
+    assert.equal(await until(()=>{store.scan();return store.get('notes',note.id)?.content.includes('quokkafern');}),true,'the outside edit reaches the note without a restart');
   }finally{store.unwatch();}
 });
 

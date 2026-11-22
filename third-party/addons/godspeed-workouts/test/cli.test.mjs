@@ -98,7 +98,7 @@ test("setup with a new key while Hevy does not answer keeps the earlier key and 
   try {
     const before = fs.readFileSync(w.paths.hevy);
     w.hevy.fh.down = true;
-    const env = { ...process.env, ...w.env, GODSPEED_WORKOUTS_STATE: w.paths.root, GODSPEED_WORKOUTS_APP: path.join(home, "app"), HOME: home, HEVY_API_KEY: "11111111-1111-4111-8111-111111111111" };
+    const env = { ...process.env, ...w.env, GODSPEED_WORKOUTS_STATE: w.paths.root, GODSPEED_WORKOUTS_APP: path.join(home, "app"), HOME: home, USERPROFILE: home, HEVY_API_KEY: "11111111-1111-4111-8111-111111111111" };
     const r = await cmd(["setup", "--no-run", "--no-schedule"], { env, cwd: home });
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /Hevy did not answer just now \(Hevy answered 500\), so the key was not kept\. Try again in a while: godspeed-workouts connect/);
@@ -114,7 +114,7 @@ test("help names every command", async () => {
   for (const c of ["setup", "connect", "run", "status", "settings", "uninstall"]) assert.match(out.join("\n"), new RegExp(`^  ${c} `, "m"));
 });
 
-test("uninstall returns a failure when the scheduler refuses removal", async () => {
+test("uninstall returns a failure when the scheduler refuses removal", { skip: process.platform === "win32" && "a POSIX script cannot stand in for powershell.exe on Windows; the real script is run in schedule.test.mjs" }, async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed-workouts-uninstall-"));
   const bin = path.join(root, "bin");
   const platform = Object.getOwnPropertyDescriptor(process, "platform");

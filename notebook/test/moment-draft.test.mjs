@@ -2,6 +2,8 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains,momentDraft} from '../core/domains.mjs';
+import {AI_STALLED} from '../core/no-ai.mjs';
+import {DRAFT_BUDGET_MS} from '../core/runtime.mjs';
 import {createService} from '../server/main.mjs';
 
 // The Add Moment form's "Suggest title and other values" got "scheduled",
@@ -70,8 +72,10 @@ test('the suggestion HTTP endpoint answers while an unrelated notebook writer ho
 test('a suggestion stops after twenty seconds and aborts the underlying AI call',async t=>{
   t.mock.timers.enable({apis:['setTimeout']});
   const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-timeout-draft-'))),domains=new Domains(new QueryService(store));let signal;
-  domains.provider=request=>{signal=request.signal;assert.equal(request.timeout_ms,20000);return new Promise(()=>{});};
+  domains.provider=request=>{signal=request.signal;assert.equal(request.timeout_ms,DRAFT_BUDGET_MS);return new Promise(()=>{});};
   const pending=domains.invoke('draft-event',{messages:[{role:'user',content:'Dinner tomorrow'}],today:'2026-10-16'});
-  const rejected=assert.rejects(pending,/20 seconds.*try again/i);
-  t.mock.timers.tick(20000);await rejected;assert.equal(signal.aborted,true);assert.equal(store.list('moments').length,0);
+  // The form's 20-second budget is the shared one (DRAFT_BUDGET_MS), and the timeout is the module's
+  // stalled outcome, said by the route's shared wording (#861 review D3).
+  const rejected=assert.rejects(pending,error=>error.message===AI_STALLED);
+  t.mock.timers.tick(DRAFT_BUDGET_MS);await rejected;assert.equal(signal.aborted,true);assert.equal(store.list('moments').length,0);
 });

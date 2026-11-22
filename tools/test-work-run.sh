@@ -18,11 +18,12 @@ done
 TMP="$(mktemp -d)"
 OUTSIDE="$(mktemp -d)"   # stands in for the machine outside the mission control's folder
 trap 'rm -rf "$TMP" "$OUTSIDE" "$TEST_GUARD_HOME"' EXIT
-mkdir -p "$TMP/rules" "$TMP/bin" "$TMP/goals/playbooks" "$TMP/skills/work-item" "$TMP/research"
+mkdir -p "$TMP/rules" "$TMP/bin" "$TMP/goals/playbooks" "$TMP/skills/work-item" "$TMP/skills/work-result-review" "$TMP/research"
 : > "$TMP/AGENTS.md"
 printf 'receipt\n' > "$TMP/rules/machine-words.txt"
 for f in work.js run-log-folders.js goals.js mc-cards.js mc-work-run check-written.js; do cp "$HERE/$f" "$TMP/bin/"; done
 cp "$HERE/../starter-godspeed/skills/work-item/SKILL.md" "$TMP/skills/work-item/SKILL.md"
+cp "$HERE/../starter-godspeed/skills/work-result-review/SKILL.md" "$TMP/skills/work-result-review/SKILL.md"
 chmod +x "$TMP/bin/mc-work-run"
 
 # THE FAKE ASSISTANT. It reads the prompt the runner built, finds the path DONE WHEN names,
@@ -31,9 +32,18 @@ cat > "$TMP/bin/mc-run" <<'FAKE'
 #!/usr/bin/env bash
 PF=""; OUT=""; SKILL=""
 while [ $# -gt 0 ]; do case "$1" in --prompt-file) PF="$2"; shift 2;; --out) OUT="$2"; shift 2;; --godspeed|--cwd|--prompt|--timeout|--allowed-tools) shift 2;; *) [ -z "$SKILL" ] && SKILL="$1"; shift;; esac; done
+mkdir -p "$(dirname "$OUT")"
+if [ "$SKILL" = "work-result-review" ]; then
+  cp "$PF" "$(dirname "$OUT")/review-prompt-seen.txt"
+  case "${FAKE_REVIEW:-pass}" in
+    fail) printf '%s\n' '{"passed":false,"reason":"the draft omits a required candidate","missing":["the third named candidate"]}' ;;
+    malformed) printf '%s\n' 'not json' ;;
+    *) printf '%s\n' '{"passed":true,"reason":"the file meets every content requirement in DONE WHEN","missing":[]}' ;;
+  esac > "$OUT"
+  exit 0
+fi
 [ "$SKILL" = "work-item" ] || { echo "wrong recipe: $SKILL" >&2; exit 9; }
 cp "$PF" "$(dirname "$OUT")/prompt-seen.txt"
-mkdir -p "$(dirname "$OUT")"
 P="$(grep -m1 '^DONE WHEN:' "$PF" | grep -oE '[A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0-9_./-]+\.(md|csv|txt)' | head -1)"
 KEEP="$GODSPEED_ROOT/$(grep -o 'copy it whole under [^,]*' "$PF" | head -1 | sed 's/^copy it whole under //; s:/$::')"   # where a repair is told to keep its copies
 case "${FAKE_MODE:-ok}" in
@@ -104,8 +114,8 @@ contains "  the playbook item was taken first" "$OUT" "W-20260915-02 taken (lear
 contains "  the assistant saw the goal's own words" "$(cat "$TMP/routines/work/2026-09-15/W-20260915-02/prompt-seen.txt")" "five really good friends"
 contains "  and where the answer goes" "$(cat "$TMP/routines/work/2026-09-15/W-20260915-02/prompt-seen.txt")" "How this goal is won"
 contains "  what it said is ATTEMPTED" "$(grep -c 'ATTEMPTED attempt 1 by work-2026-09-15-01' "$TMP/work/W-20260915-02.md")" "1"
-check "  the check, not the runner, made it verified" "$(status_of W-20260915-02)" "verified"
-contains "  verified by its check on the record" "$(cat "$TMP/work/W-20260915-02.md")" "VERIFIED check passed"
+check "  the check and reader, not the runner, made it verified" "$(status_of W-20260915-02)" "verified"
+contains "  verified by both judgments on the record" "$(cat "$TMP/work/W-20260915-02.md")" "content review passed"
 check "  the other two were left alone" "$(grep -l '^STATUS: planned' "$TMP/work"/W-*.md | wc -l | tr -d ' ')" "2"
 # A file, a SAY line, a passing check and a publish command are not permission (#268).
 contains "  an item that never asked for a page stays private, and the run says why" "$OUT" "W-20260915-02 kept private, not published: its register says OUTWARD: no"
@@ -410,6 +420,15 @@ OUT="$(GODSPEED_NOW=2026-09-15T19:01:00.000Z run --only "$C2" 2>&1)"
 contains "a step stopped a minute before its time is never run" "$OUT" "not runnable now"
 check "  and stays stopped" "$(status_of "$C2")" "cancelled"
 check "  no assistant ever saw it" "$([ -d "$TMP/routines/work/2026-09-15/$C2" ] && echo ran || echo never)" "never"
+
+# The old structural check still passes, but the independent review compares content with DONE WHEN.
+hw file --what "Write the three-candidate shortlist" --done-when "research/review-gap.md names all three candidates" --check "test -s research/review-gap.md" --key review-gap --source test >/dev/null
+GAP="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="review-gap").id))')"
+OUT="$(FAKE_REVIEW=fail run --only "$GAP" 2>&1)"; check "a missing content requirement is an honest run outcome" "$?" "0"
+check "  the shape-only draft stays attempted" "$(status_of "$GAP")" "attempted"
+contains "  the missing requirement is named to the run" "$OUT" "the third named candidate"
+contains "  and retained on the card" "$(cat "$TMP/work/$GAP.md")" "UNVERIFIED content review"
+contains "  the reviewer read the exact result file" "$(cat "$TMP/routines/work/2026-09-15/$GAP/review-prompt-seen.txt")" "RESULT FILE: research/review-gap.md"
 
 echo
 echo "$PASS passed, $FAIL failed"

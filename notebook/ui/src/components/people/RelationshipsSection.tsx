@@ -73,7 +73,9 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
   const [formTargetType, setFormTargetType] = useState<"contact" | "self">("contact");
   const [formTargetId, setFormTargetId] = useState("");
 
-  // Fetch user's display name for "self" references
+  // Fetch user's display name for "self" references. A fresh notebook has no
+  // profiles row yet; the read is optional, so the name falls back to "Me"
+  // instead of the request failing.
   const { data: profile } = useQuery({
     queryKey: ["my-profile-name"],
     queryFn: async () => {
@@ -81,7 +83,7 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
         .from("profiles")
         .select("display_name")
         .eq("id", user!.id)
-        .single();
+        .maybeSingle();
       return data;
     },
     enabled: !!user,
