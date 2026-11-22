@@ -68,6 +68,15 @@ const allowed = [
   'fpFormat("PPP")(new Date());',
   'import * as fpNow from "date-fns/fp";',
   'fpNow.format("PPP", new Date());',
+  // fp now-only code stays clean through every application shape: a held
+  // pre-curried formatter, a parenthesized callee and a pipe composition.
+  'const f = fpFormat("PPP"); f(new Date());',
+  '(fpFormat("PPP"))(new Date());',
+  'fpNow.pipe(new Date(), fpNow.format("PPP"));',
+  'fpFormat("PPP", Date.now());',
+  'fpFormat({ locale: es })(new Date());',
+  // A held "now" Date passed to a date-fns call is not a stored value either.
+  'fmt2(clock, "yyyy-MM-dd");',
 ].join("\n");
 
 describe("direct date use", () => {
@@ -260,6 +269,53 @@ describe("direct date use", () => {
     expect(dateUses(tricky, "tricky.tsx").map((entry) => entry.split(" ").slice(0, 2).join(" "))).toEqual([
       "tricky.tsx:2: new",
       "tricky.tsx:2: toLocaleString",
+    ]);
+  });
+
+  it("sees the stored date a held fp partial is fed, a pipe carries and a curried chain applies, and spares the same shapes fed now", () => {
+    const fp = [
+      'import { format } from "date-fns/fp";',
+      'import * as fpNow from "date-fns/fp";',
+      'import { parseISO } from "date-fns";',
+      // The fp call whose date argument is not resolvable through the immediate
+      // parent call is traced to its consumer: a held partial's call, a pipe's
+      // first argument, or the outermost curried call.
+      'const f = format("PPP"); f(stored);',
+      'fpNow.pipe(parseISO(s), fpNow.format("PPP"));',
+      'format("PPP")("2026-01-01");',
+      // The same shapes fed now stay clean.
+      'const g = format("PPP"); g(new Date());',
+      'fpNow.pipe(new Date(), fpNow.format("PPP"));',
+      'format("PPP")(new Date());',
+    ].join("\n");
+    expect(dateUses(fp, "fp.tsx").map((entry) => entry.split(" ").slice(0, 2).join(" "))).toEqual([
+      "fp.tsx:4: format",
+      "fp.tsx:5: parseISO",
+      "fp.tsx:5: format",
+      "fp.tsx:6: format",
+    ]);
+  });
+
+  it("sees the stored date shown through a parameter, an arrow parameter and a catch binding, and leaves another function's now-only display alone", () => {
+    const scopes = [
+      "const d = new Date();",
+      // The parameter shadows the module's now-local: its own scope decides.
+      'function b(d){ return d.toLocaleString("en-US", { day: "numeric" }); }',
+      'rows.map((d) => d.toLocaleString("en-US", { month: "short" }));',
+      "try {} catch (e) { (e as Date).toDateString(); }",
+      // Two functions, each with its own binding of the same name: a's own
+      // now-local decides for a's display, b's stored binding for b's.
+      "function a() { const d2 = new Date(); return d2.toDateString(); }",
+      "function b2() { const d2 = parseInstant(row.at); return d2.toLocaleString(); }",
+    ].join("\n");
+    expect(dateUses(scopes, "scopes.tsx").map((entry) => entry.split(" ").slice(0, 2).join(" "))).toEqual([
+      "scopes.tsx:2: toLocaleString",
+      "scopes.tsx:3: toLocaleString",
+      "scopes.tsx:4: toDateString",
+      "scopes.tsx:6: toLocaleString",
+    ]);
+    expect(dateUses("function a() { const d = new Date(); return d.toLocaleString(); }\nfunction b() { const d = parseInstant(row.at); return d.toLocaleString(); }", "twofn.tsx").map((entry) => entry.split(" ").slice(0, 2).join(" "))).toEqual([
+      "twofn.tsx:2: toLocaleString",
     ]);
   });
 
