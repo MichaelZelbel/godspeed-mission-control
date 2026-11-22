@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Send, Globe, Brain, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/brand";
+import { telegramStatus, telegramUnavailable, telegramSwitchedOff } from "@/local/ConnectTelegram";
 
 interface CaptureEmptyStateProps {
   onCreateNote?: () => void;
@@ -75,6 +77,12 @@ function TileBody({
 
 export function CaptureEmptyState({ onCreateNote, variant = "full", className }: CaptureEmptyStateProps) {
   const compact = variant === "compact";
+  const telegram = useQuery({ queryKey: ["telegram-status"], queryFn: telegramStatus });
+  const telegramData = telegram.data;
+  const telegramDescription =
+    telegramData && !telegramData.available && telegramData.managed !== "environment"
+      ? telegramData.reason === "switched-off" ? telegramSwitchedOff : telegramUnavailable
+      : undefined;
 
   return (
     <div className={cn("w-full", compact ? "p-4" : "p-6", className)}>
@@ -105,7 +113,7 @@ export function CaptureEmptyState({ onCreateNote, variant = "full", className }:
             <TileBody
               icon={opt.icon}
               title={opt.title}
-              description={opt.description}
+              description={opt.key === "telegram" && telegramDescription ? telegramDescription : opt.description}
               iconWrapClassName="bg-muted"
               iconClassName="text-muted-foreground"
             />
