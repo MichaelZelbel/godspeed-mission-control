@@ -165,11 +165,7 @@ def _words(text, quotes=False):
     """The words of the text outside its protected parts, each with whether it is written capitalized
     where a sentence does not start (a name, or a German noun). `quotes`: words in quotation marks
     count too."""
-    if quotes:
-        for pattern in (CODE, URL, MEDIA):
-            text = pattern.sub(" ", text)
-    else:
-        text = _plain(text)
+    text = _plain(text, keep=(QUOTE,) if quotes else ())
     out, start = [], True
     for match in re.finditer(r"[A-Za-zÄÖÜäöüß']+|[.!?:\n]", text):
         token = match.group(0)

@@ -49,8 +49,11 @@ QUOTE = re.compile(r'"[^"\n]{2,}"|“[^”\n]{2,}”|„[^“”\n]{2,}[“”]|
 MEDIA = re.compile(r"^[ \t]*MEDIA:[^\n]*$", re.M)
 
 
-def _plain(text):
+def _plain(text, keep=()):
+    """The text without its protected parts: code, links, media lines and quotes, except the `keep` patterns."""
     for pattern in (CODE, URL, MEDIA, QUOTE):
+        if pattern in keep:
+            continue
         text = pattern.sub(" ", text)
     return text
 
