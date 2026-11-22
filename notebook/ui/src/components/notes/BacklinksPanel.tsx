@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link2, ChevronDown, ChevronRight } from "lucide-react";
 import { useStickyPanelPreference } from "@/hooks/useStickyPanelPreference";
-import { formatDistanceToNow } from "date-fns";
+import { showDate } from "@/lib/local-date";
 import { dbErrorMessage } from "@/lib/function-error";
 
 interface BacklinksPanelProps {
@@ -113,7 +113,7 @@ export function BacklinksPanel({ noteId, onNavigate }: BacklinksPanelProps) {
                     {bl.title || "Untitled"}
                   </span>
                   <span className="text-[9px] text-muted-foreground shrink-0 ml-2">
-                    {formatDistanceToNow(new Date(bl.updated_at), { addSuffix: true })}
+                    {showDate(bl.updated_at, "ago")}
                   </span>
                 </div>
                 {snippet && (

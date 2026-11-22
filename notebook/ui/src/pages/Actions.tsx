@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { showToast } from "@/lib/toast";
-import { isPastDay, parseDateOnly } from "@/lib/local-date";
+import { isPastDay, parseInstant, showDate } from "@/lib/local-date";
 import { dbErrorMessage } from "@/lib/function-error";
 import { SEOHead } from "@/components/SEOHead";
 import { Button } from "@/components/ui/button";
@@ -66,7 +66,7 @@ const priorityIcon: Record<string, { color: string; label: string }> = {
 };
 
 function daysSince(dateStr: string): number {
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24));
+  return Math.floor((Date.now() - (parseInstant(dateStr)?.getTime() ?? NaN)) / (1000 * 60 * 60 * 24));
 }
 
 export default function Actions() {
@@ -450,7 +450,7 @@ export default function Actions() {
                                   variant="outline"
                                   className={`text-[10px] ${isOverdue ? "text-destructive border-destructive/30" : ""}`}
                                 >
-                                  {parseDateOnly(item.due_date)?.toLocaleDateString()}
+                                  {showDate(item.due_date, "day")}
                                 </Badge>
                               )}
                               {cName && (

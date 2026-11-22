@@ -7,7 +7,7 @@ import { showToast } from "@/lib/toast";
 import { dbErrorMessage, functionErrorMessage } from "@/lib/function-error";
 import { useAICredits } from "@/hooks/useAICredits";
 import { NO_AI_CONNECT, noAiAnswer } from "../../../core/no-ai.mjs";
-import { parseDateOnly } from "@/lib/local-date";
+import { showDate } from "@/lib/local-date";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -249,9 +249,9 @@ export default function WeeklyReview() {
                 <ChevronLeft className="h-4 w-4 mr-1" /> Older
               </Button>
               <span className="text-sm text-muted-foreground">
-                {/* Date columns: new Date("2026-09-21") is UTC midnight and showed the day before west of UTC. */}
-                {parseDateOnly(currentReview.week_start)?.toLocaleDateString()} –{" "}
-                {parseDateOnly(currentReview.week_end)?.toLocaleDateString()}
+                {/* A plain stored day reads as the day it names, not the day before west of UTC. */}
+                {showDate(currentReview.week_start, "day")} –{" "}
+                {showDate(currentReview.week_end, "day")}
               </span>
               <Button
                 variant="ghost"

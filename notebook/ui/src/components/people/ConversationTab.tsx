@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Chat } from "@/components/people/conversation/Chat";
 import { cn } from "@/lib/utils";
+import { showDate } from "@/lib/local-date";
 
 const TONES = [
   { label: "Loving", value: "loving", icon: Heart },
@@ -121,7 +122,7 @@ export function ConversationTab({ personId, personName, initialContext = "" }: C
               <Input value={customTone} placeholder="Describe your tone" onChange={(e) => { setCustomTone(e.target.value); debouncedSave({ conversation_custom_tone: e.target.value }); }} onBlur={() => blurSave({ conversation_custom_tone: customTone })} />
             </div>
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{lastUpdated ? `Last updated ${new Date(lastUpdated).toLocaleString()}` : "Not saved yet"}</span>
+              <span>{lastUpdated ? `Last updated ${showDate(lastUpdated, "time")}` : "Not saved yet"}</span>
               <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="sm">Clear fields</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Clear conversation fields?</AlertDialogTitle><AlertDialogDescription>This removes the saved context, intent, and tone for {personName}.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={clearFields}>Clear</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
             </div>
           </CardContent>

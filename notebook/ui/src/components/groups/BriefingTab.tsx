@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import { localDateISO, parseInstant } from "@/lib/local-date";
 import type { Database } from "@/integrations/supabase/types";
 import { showToast } from "@/lib/toast";
 import { functionErrorMessage } from "@/lib/function-error";
@@ -22,7 +23,7 @@ export function BriefingTab({ groupId }: { groupId: string }) {
     },
   });
   const latest = briefings[0];
-  const generatedToday = latest ? new Date(latest.generated_at).toDateString() === new Date().toDateString() : false;
+  const generatedToday = latest ? localDateISO(parseInstant(latest.generated_at) ?? new Date()) === localDateISO(new Date()) : false;
   const generateBriefing = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke<{ briefing_markdown: string; generated_at: string }>("generate-group-briefing", { body: { group_id: groupId, period_days: 7 } });

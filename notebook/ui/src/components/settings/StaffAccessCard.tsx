@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { showDate } from "@/lib/local-date";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BRAND } from "@/lib/brand";
@@ -53,7 +53,7 @@ export function StaffAccessCard() {
             {data.map((e, i) => (
               <li key={`${e.created_at}-${i}`} className="flex justify-between gap-4 text-sm">
                 <span>{describeStaffAction(e.action)}</span>
-                <span className="shrink-0 text-muted-foreground">{format(new Date(e.created_at), "MMM d, yyyy HH:mm")}</span>
+                <span className="shrink-0 text-muted-foreground">{showDate(e.created_at, "time")}</span>
               </li>
             ))}
           </ul>

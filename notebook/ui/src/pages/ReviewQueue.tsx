@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { BRAND } from "@/lib/brand";
 import { personLabel } from "@/components/timeline/people";
+import { parseInstant } from "@/lib/local-date";
 
 const typeConfig: Record<string, { icon: typeof UserPlus; label: string; color: string }> = {
   add_contact: { icon: UserPlus, label: "Add to People", color: "text-green-500" },
@@ -886,7 +887,7 @@ export default function ReviewQueue() {
           .filter((item) => !contactFilter || (item.payload as { contact_id?: string } | null)?.contact_id === contactFilter)
           // Kept changes sort by when they were kept, so the latest Keep is the first to undo.
           .map((item) => ({ kind: "review" as const, created_at: view === "kept" ? item.applied_at || item.created_at : item.created_at, item })),
-      ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+      ].sort((a, b) => (parseInstant(b.created_at)?.getTime() ?? 0) - (parseInstant(a.created_at)?.getTime() ?? 0)),
     [items, contactFilter, view],
   );
 

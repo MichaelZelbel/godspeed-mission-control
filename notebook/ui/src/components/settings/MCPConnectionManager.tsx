@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { parseInstant, showDate } from "@/lib/local-date";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -156,12 +157,12 @@ type McpApiToken = {
 
 function formatDate(value: string | null) {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString();
+  return showDate(value, "date");
 }
 
 function getTokenStatus(token: McpApiToken) {
   if (token.revoked_at) return { label: "Revoked", variant: "destructive" as const };
-  if (token.expires_at && new Date(token.expires_at) <= new Date()) {
+  if (token.expires_at && (parseInstant(token.expires_at)?.getTime() ?? Infinity) <= Date.now()) {
     return { label: "Expired", variant: "secondary" as const };
   }
   return { label: "Active", variant: "outline" as const };
