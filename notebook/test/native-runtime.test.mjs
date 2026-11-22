@@ -32,12 +32,23 @@ function coachArea(root){
 function preparedCoachArea(root){
  const area=addArea(root,{slug:'health',title:'Health',rhythm:'daily',time:'19:00',starts:'2020-01-01'}),day=localParts(coachNow(),'UTC').date,opening='Good evening. Here is the prepared opening.',prepared=new Date(coachNow().getTime()-60000).toISOString();fs.mkdirSync(path.join(area.dir,'prep'),{recursive:true});fs.writeFileSync(path.join(area.dir,'prep',day+'.md'),`AREA: health\nTALK: ${day} 19:00\nPREPARED: ${prepared}\nSTATE: ready\n\n## The opening\n${opening}\n\n## Talk card\n${opening}\n`);return {area:findArea(root,'health'),day,opening};
 }
-test('a native chat refuses an unresolved coach opening instead of saving its unrelated reply',async t=>{
+test('a native chat never saves an unrelated reply to a talk start: the talk opens from what it was prepared to say',async t=>{
  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store));coachArea(root);
  let attempts=0;domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'{"area":"health"}'}:(attempts++,{reply:'I do not have your profile information or goals yet in the notebook.'});
- await assert.rejects(domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),/talk record .* was not created/);
- assert.equal(attempts,1);assert.equal(store.list('conversation_messages').length,0);
- assert.equal(fs.existsSync(path.join(root,'coach','health','talks')),false);
+ const result=await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),start=coachTalkStart(store,findArea(root,'health')),talk=readTalk(findArea(root,'health'),start.day);
+ assert.equal(attempts,1);assert.match(result.reply,/^The preparation for this talk is not ready: .+\. What would you like to try next in Health\?$/);
+ assert.equal(talk.state,'opened');assert.equal(talk.sections['The opening'].trim(),result.reply);assert.ok(talk.shown);
+ assert.equal(store.list('conversation_messages').map(m=>m.content).join('|'),result.reply);
+});
+test('a talk start whose record the assistant made for another day, or not at all, opens the start\'s day (issue #971)',async t=>{
+ const was=process.env.GODSPEED_NOW;process.env.GODSPEED_NOW='2030-03-05T12:00:00Z';t.after(()=>{if(was===undefined)delete process.env.GODSPEED_NOW;else process.env.GODSPEED_NOW=was;});
+ for(const wrongDay of [true,false]){
+  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),prepared=preparedCoachArea(root);
+  domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};if(wrongDay)openTalk(prepared.area,'2030-03-04',{opening:prepared.opening});return {reply:prepared.opening};};
+  const result=await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),talk=readTalk(prepared.area,'2030-03-05');
+  assert.equal(prepared.day,'2030-03-05');assert.equal(result.reply,prepared.opening);assert.equal(talk.state,'opened');assert.equal(talk.sections['The opening'].trim(),prepared.opening);assert.ok(talk.shown);
+  assert.equal(talk.prep,`${path.relative(root,prepared.area.dir)}/prep/2030-03-05.md`.replace(/\\/g,'/'));assert.equal(talk.sections.Prepared.trim(),prepared.opening);
+ }
 });
 test('a native chat accepts only an unprepared opening that its record holds',async t=>{
  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store));coachArea(root);
