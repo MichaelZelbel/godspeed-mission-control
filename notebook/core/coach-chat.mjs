@@ -57,33 +57,21 @@ const usualQuestion=area=>area.style==='review'?`What has changed since our last
 const talkOpening=(area,start)=>start.opening?start.opening.trim():start.sentence?`${start.sentence} ${usualQuestion(area)}`:null;
 
 // A talk record the assistant opened with the wrong opening (not the prepared one, none at all, or
-// without the "preparation is not ready" sentence) is corrected to what the talk was prepared to
+// without the "preparation is not ready" sentence), or never made for the start's day (it wrote
+// another day's, or none: issue #971), is corrected to what the talk was prepared to
 // say: the prepared opening, or the not-ready sentence plus the usual question. Returns that opening,
 // which is what the person reads, with no further AI call (issue #495). Null when the record is
-// right, missing or no longer open, the talk continues an earlier one, or nothing was prepared to say.
+// right, no longer open, the talk continues an earlier one, or nothing was prepared to say.
 export function coachTalkCorrectedOpening(store,start){
   if(start.continuing)return null;
   const area=findArea(store.root,start.area),talk=area&&readTalk(area,start.day);
-  if(!talk||talk.state!=='opened')return null;
-  if(!coachTalkRecordProblem(store,start,String(talk.sections['The opening']||'').trim(),{requireShown:false}))return null;
+  if(!area||talk&&talk.state!=='opened')return null;
+  if(talk&&!coachTalkRecordProblem(store,start,String(talk.sections['The opening']||'').trim(),{requireShown:false}))return null;
   const opening=talkOpening(area,start);
   if(!opening)return null;
-  setOpening(area,start.day,opening);
+  if(talk)setOpening(area,start.day,opening);
+  else openTalk(area,start.day,{opening,prepared:start.card,prep:start.prep,read:start.prep?`the prepared talk ${start.prep}`:''},now());
   return coachTalkRecordProblem(store,start,opening,{requireShown:false})?null:opening;
-}
-
-// A talk start whose record the assistant never made for the start's day (it wrote another day's, or
-// none) is opened here from what the talk was prepared to say, and that opening is returned for the
-// person to read. Null when a record exists, the talk continues an earlier one, or nothing was
-// prepared to say.
-export function coachTalkOpenedFromStart(store,start){
-  if(start.continuing)return null;
-  const area=findArea(store.root,start.area);
-  if(!area||readTalk(area,start.day))return null;
-  const opening=talkOpening(area,start);
-  if(!opening)return null;
-  openTalk(area,start.day,{opening,prepared:start.card,prep:start.prep,read:start.prep?`the prepared talk ${start.prep}`:''},now());
-  return opening;
 }
 
 // What the assistant is told when its reply to a talk start failed the guard (issue #489).
