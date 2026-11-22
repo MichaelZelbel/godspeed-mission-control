@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { setMonth, setYear, lastDayOfMonth } from "date-fns";
+import { format, setMonth, setYear, lastDayOfMonth } from "date-fns";
 import { localDateISO, parseTypedDay, showDate } from "@/lib/local-date";
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";

@@ -456,7 +456,7 @@ function isLinkValue(value: unknown): value is LinkValue {
 
 function parseDate(value: unknown) {
   if (!value) return null;
-  return parseInstant(value);
+  return parseInstant(value as string | number | Date);
 }
 
 function toDateInput(value: unknown) {
@@ -473,7 +473,9 @@ function renderDate(value: unknown) {
   const date = parseDate(value);
   if (!date) return "—";
   const age = Math.abs(Date.now() - date.getTime());
-  return age <= 7 * 24 * 60 * 60 * 1000 ? showDate(value, "ago") : showDate(value, "date");
+  return age <= 7 * 24 * 60 * 60 * 1000
+    ? showDate(value as string | number | Date, "ago")
+    : showDate(value as string | number | Date, "date");
 }
 
 function optionClass(value: string) {

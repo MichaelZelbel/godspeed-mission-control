@@ -26,7 +26,3 @@ export function habitDayLabel(day: { status: HabitDayStatus; answer: string | nu
   return day.status === "missed" && day.answer === null ? "Gap in record" : HABIT_DAY_LABELS[day.status];
 }
 
-// A date-only value has no browser timezone; showDate reads it as the day it names.
-export function habitDateLabel(date: string) {
-  return showDate(date, "day");
-}

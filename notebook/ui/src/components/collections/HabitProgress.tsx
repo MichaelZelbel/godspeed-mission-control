@@ -46,7 +46,7 @@ export function HabitProgress({ progress, habitStatus = "active", children }: { 
     {week.length > 0 && <div className="habit-week-section">
       <h3 className="habit-week-heading">Seven little steps</h3>
       <ol className="habit-week" aria-label="Recent days">
-        {week.map(day => <li key={day.date} className={"habit-calendar-day habit-day-" + day.status + (day.date === progress.today ? " habit-is-today" : "")} aria-label={showDate(day.date, "day") + ": " + habitDayLabel(day) + (day.reason ? ". " + day.reason : "")}>
+        {week.map(day => <li key={day.date} className={"habit-calendar-day habit-day-" + day.status + (day.date === progress.today ? " habit-is-today" : "")} aria-label={day.weekday + ", " + showDate(day.date, "day") + ": " + habitDayLabel(day) + (day.reason ? ". " + day.reason : "")}>
           <span className="habit-weekday">{day.weekday}</span>
           <span className="habit-day-symbol">{calm ? <span className="habit-calm-symbol" aria-hidden="true">{day.status === "completed" ? "✓" : day.status === "protected" ? "◇" : day.status === "missed" ? "○" : "·"}</span> : day.status === "unknown" ? day.date === progress.today ? <svg className="habit-waiting-spark" viewBox="0 0 48 56" aria-hidden="true"><path d="M25 6c2 10-5 13-5 20-5-1-7-5-6-9C4 27 3 39 9 46c7 8 23 8 30-1 7-9 3-19-3-25 1 7-2 9-4 9 2-10-2-16-7-23Z" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round"/><path d="m24 35 3 5-3 5-3-5Z" fill="currentColor" opacity=".5"/></svg> : <span className="habit-unrecorded-dot" aria-hidden="true" /> : <HabitDayIcon status={day.status === "missed" && day.answer === null ? "gap" : day.status} />}</span>
           <time dateTime={day.date} className="habit-date">{showDate(day.date, "day")}</time>
