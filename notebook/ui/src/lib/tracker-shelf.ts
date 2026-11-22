@@ -1,5 +1,6 @@
 import { LENGTH } from "../../../../third-party/addons/godspeed-charm/lib/count.mjs";
 import { formatDay } from "../../../../third-party/addons/godspeed-charm/lib/texts.mjs";
+import { parseInstant } from "./local-date";
 
 // Trackers sit on their own shelf; one with no entry for 30 days rests in a
 // folded part of it (D-321). Nothing here deletes or hides data. The same
@@ -8,7 +9,7 @@ const REST_DAYS = 30;
 type Row = { id: string; created_at?: string | null; tracker?: unknown };
 const rests = (c: Row, lastWhen: Record<string, string | undefined>, now: Date) => {
   const day = (lastWhen[c.id] || c.created_at || "").slice(0, 10);
-  return (now.getTime() - Date.parse(day + "T00:00:00Z")) / 86400000 > REST_DAYS;
+  return (now.getTime() - (parseInstant(day + "T00:00:00Z")?.getTime() ?? NaN)) / 86400000 > REST_DAYS;
 };
 
 // The Charm Challenge's tracker has a card of its own (charmShelf), so it is never also a plain tracker card.

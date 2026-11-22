@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import { RecentPeopleCard } from "./RecentPeopleCard";
+import { WAIT } from "@/test/wait-limits";
 
 // Issue 266: Recent People listed a person saved without a name, as "Unnamed person".
 const rows = [
@@ -23,7 +24,7 @@ describe("Recent People with people saved without a name", () => {
   it("leaves them out and still shows five people", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={client}><MemoryRouter><RecentPeopleCard /></MemoryRouter></QueryClientProvider>);
-    expect(await screen.findByText("Ada")).toBeInTheDocument();
+    expect(await screen.findByText("Ada", undefined, WAIT)).toBeInTheDocument();
     expect(screen.queryByText("Unnamed person")).toBeNull();
     expect(["Ada", "Ben", "Cleo", "Dan", "Eve"].every((name) => screen.queryByText(name))).toBe(true);
     expect(screen.queryByText("Finn")).toBeNull();

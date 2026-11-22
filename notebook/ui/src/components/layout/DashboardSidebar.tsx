@@ -32,6 +32,7 @@ import { NavLink } from "@/components/NavLink";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { BRAND, GUIDE_URL } from "@/lib/brand";
 import { brandLogo } from "@/lib/brand-assets";
+import { localDateISO, localTimeHM, parseInstant } from "@/lib/local-date";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -62,10 +63,9 @@ const newTab = (url: string) => (/^https?:/.test(url) ? { target: "_blank", rel:
 // old cached build shows an older time than a fresh load does.
 const BUILD_LABEL = (() => {
   const iso = typeof __BUILD_TIME__ === "string" ? __BUILD_TIME__ : "";
-  const d = iso ? new Date(iso) : null;
-  if (!d || Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const d = parseInstant(iso);
+  if (!d) return "";
+  return `${localDateISO(d)} ${localTimeHM(d)}`;
 })();
 
 export function DashboardSidebar() {
@@ -195,7 +195,7 @@ export function DashboardSidebar() {
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                       {item.title === "My Profile" && !collapsed && (
-                        <span className={`ml-auto h-2 w-2 rounded-full ${profileDotColor}`} />
+                        <span role="img" aria-label={`Profile ${completeness}% complete`} title={`Profile ${completeness}% complete`} className={`ml-auto h-2 w-2 rounded-full ${profileDotColor}`} />
                       )}
                     </NavLink>
                   </SidebarMenuButton>

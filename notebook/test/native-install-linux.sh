@@ -190,6 +190,7 @@ made=$(cd "$state/backups" && ls -d 2*-"$second" 2>/dev/null | sort | tail -1)
 [ "$(copies)" = 1 ] || fail "the handed-over update kept $(copies) copies made before updates, not only its own"
 [ ! -e "$state/versions/$first" ] && [ -d "$state/versions/$second" ] || fail 'the versions kept are not this one and the one before'
 grep -qxF "root=$(printf '%q' "$root")" "$HOME/.local/bin/godspeed-update" || fail 'godspeed-update does not update this installation'
+cmp -s "$here/tools/work.js" "$HOME/.local/bin/work.js" || fail 'the installed work verifier is not the pinned product version'
 
 echo '== a handed-over update whose notebook never answers is undone'
 ls -A "$state/backups" > "$work/kept"

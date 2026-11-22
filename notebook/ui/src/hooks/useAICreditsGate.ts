@@ -1,13 +1,12 @@
 import { useCallback } from "react";
+import { showDate } from "@/lib/local-date";
 import { useAICredits, type AICredits } from "./useAICredits";
 import { showToast } from "@/lib/toast";
 
-/** "15 October 2026", or null when the period end is missing or unreadable. */
+/** "Nov 21, 2026", or null when the period end is missing. */
 function formatReset(periodEnd: string | null | undefined): string | null {
   if (!periodEnd) return null;
-  const date = new Date(periodEnd);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+  return showDate(periodEnd, "date");
 }
 
 /** The sentence a blocked AI action shows, so the click never does nothing. */
@@ -20,7 +19,7 @@ export function creditsBlockedMessage(credits: Pick<AICredits, "creditsGranted" 
 }
 
 export function useAICreditsGate() {
-  const { credits, providerConfigured, isLoading, refetch } = useAICredits();
+  const { credits, providerConfigured, aiAvailability, isLoading, refetch } = useAICredits();
 
   const checkCredits = useCallback((): boolean => {
     // Fail-open while loading
@@ -41,5 +40,5 @@ export function useAICreditsGate() {
     return true;
   }, [credits, isLoading]);
 
-  return { checkCredits, credits, providerConfigured, isLoading, refetch };
+  return { checkCredits, credits, providerConfigured, aiAvailability, isLoading, refetch };
 }

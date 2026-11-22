@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import "@testing-library/jest-dom/vitest";
 import { createFakeSupabase, filterValue, type RecordedQuery } from "@/test/fake-supabase";
 import AddEventDialog, { type TimelineContact } from "./AddEventDialog";
+import { WAIT } from "@/test/wait-limits";
 
 // Adding a moment by hand can add a person who is not in People yet, right in
 // the People picker (#581). Until then only a suggestion's names could be
@@ -59,7 +60,7 @@ function typeInPicker(text: string) {
 // visible, and it is clicked, not chosen with Enter. cmdk hides a group it
 // counts no matching items in, and that hid this item once (#581 review).
 async function clickAddNew(name: string) {
-  const option = await screen.findByRole("option", { name: `Add "${name}" as a new person` });
+  const option = await screen.findByRole("option", { name: `Add "${name}" as a new person` }, WAIT);
   expect(option).toBeVisible();
   expect(option.closest("[hidden]")).toBeNull();
   fireEvent.click(option);
@@ -80,7 +81,7 @@ describe("adding a new person while adding a moment by hand", () => {
     expect(within(chip).getByText("new")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Create/ }));
-    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    await waitFor(() => expect(onCreated).toHaveBeenCalled(), WAIT);
     expect(fake.current.on("contacts", "insert").map((q: RecordedQuery) => q.payload)).toEqual([{ user_id: "owner", name: "Fictional Bea" }]);
     expect(participants()).toEqual(["c-new-1"]);
     expect((fake.current.on("moments", "insert")[0].payload as any).person_id).toBe("c-new-1");
@@ -91,10 +92,10 @@ describe("adding a new person while adding a moment by hand", () => {
     const onCreated = openDialog([{ id: "c-ada", name: "Fictional Ada", relationship: null }]);
     typeInPicker("fictional ada");
     expect(screen.queryByText(/as a new person/)).not.toBeInTheDocument();
-    fireEvent.click(await screen.findByRole("option", { name: "Fictional Ada" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Fictional Ada" }, WAIT));
 
     fireEvent.click(screen.getByRole("button", { name: /Create/ }));
-    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    await waitFor(() => expect(onCreated).toHaveBeenCalled(), WAIT);
     expect(fake.current.on("contacts", "insert")).toHaveLength(0);
     expect(participants()).toEqual(["c-ada"]);
   });
@@ -104,7 +105,7 @@ describe("adding a new person while adding a moment by hand", () => {
     openDialog([{ id: "c-anna", name: "Anna Fictional", relationship: null }]);
     typeInPicker("Ann");
 
-    expect(await screen.findByRole("option", { name: "Anna Fictional" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("option", { name: "Anna Fictional" }, WAIT)).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("option", { name: 'Add "Ann" as a new person' })).toHaveAttribute("aria-selected", "false");
     fireEvent.keyDown(screen.getByPlaceholderText(/Search or type a new name/), { key: "Enter" });
 
@@ -120,7 +121,7 @@ describe("adding a new person while adding a moment by hand", () => {
     await clickAddNew("FICTIONAL CLEO");
 
     fireEvent.click(screen.getByRole("button", { name: /Create/ }));
-    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    await waitFor(() => expect(onCreated).toHaveBeenCalled(), WAIT);
     expect(fake.current.on("contacts", "insert")).toHaveLength(0);
     expect(participants()).toEqual(["c-cleo"]);
   });
@@ -130,12 +131,12 @@ describe("adding a new person while adding a moment by hand", () => {
     const onCreated = openDialog([]);
     expect(screen.getByText("People")).toBeInTheDocument();
     fireEvent.click(screen.getByText(/^Add (person|more)$/).closest("button")!);
-    expect(await screen.findByText("Type a name to add a new person.")).toBeInTheDocument();
+    expect(await screen.findByText("Type a name to add a new person.", undefined, WAIT)).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText(/Search or type a new name/), { target: { value: "Fictional Dora" } });
     await clickAddNew("Fictional Dora");
 
     fireEvent.click(screen.getByRole("button", { name: /Create/ }));
-    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    await waitFor(() => expect(onCreated).toHaveBeenCalled(), WAIT);
     expect(fake.current.on("contacts", "insert").map((q: RecordedQuery) => (q.payload as any).name)).toEqual(["Fictional Dora"]);
     expect(participants()).toEqual(["c-new-1"]);
   });
@@ -146,11 +147,11 @@ describe("adding a new person while adding a moment by hand", () => {
     typeInPicker("Fictional Eli");
     await clickAddNew("Fictional Eli");
     fireEvent.keyDown(document.activeElement || document.body, { key: "Escape" });
-    fireEvent.click(await screen.findByRole("button", { name: "Remove new person Fictional Eli" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove new person Fictional Eli" }, WAIT));
     expect(document.querySelector('[data-new-person="Fictional Eli"]')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Create/ }));
-    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    await waitFor(() => expect(onCreated).toHaveBeenCalled(), WAIT);
     expect(fake.current.on("contacts")).toHaveLength(0);
     expect(participants()).toEqual([]);
   });
@@ -162,7 +163,7 @@ describe("adding a new person while adding a moment by hand", () => {
     await clickAddNew("Fictional Finn");
 
     fireEvent.click(screen.getByRole("button", { name: /Create/ }));
-    await waitFor(() => expect(fake.current.on("contacts", "insert")).toHaveLength(1));
+    await waitFor(() => expect(fake.current.on("contacts", "insert")).toHaveLength(1), WAIT);
     await new Promise((r) => setTimeout(r, 20));
     expect(onCreated).not.toHaveBeenCalled();
     expect(fake.current.on("moments")).toHaveLength(0);
@@ -185,7 +186,7 @@ describe("adding a new person while adding a moment by hand", () => {
     await clickAddNew("Fictional Gus");
 
     fireEvent.click(screen.getByRole("button", { name: /Save|Update/ }));
-    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    await waitFor(() => expect(onCreated).toHaveBeenCalled(), WAIT);
     expect(fake.current.on("contacts", "insert").map((q: RecordedQuery) => (q.payload as any).name)).toEqual(["Fictional Gus"]);
     expect(participants()).toEqual(["c-ada", "c-new-1"]);
   });

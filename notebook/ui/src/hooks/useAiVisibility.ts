@@ -1,6 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { showToast } from "@/lib/toast";
+
+// These hooks show no toast of their own: the switch that calls them
+// (AiVisibilityButton) says what happened right above itself, where a page
+// toast covered part of the open note in one layout or another (#809, #819,
+// #831).
 
 export type AiVisibility = "visible" | "hidden";
 export type AiKind = "notes" | "contacts" | "moments" | "collection_items" | "action_items";
@@ -35,14 +39,6 @@ export function useToggleAiVisibility(kind: AiKind) {
       if (kind === "notes") qc.invalidateQueries({ queryKey: ["note", id] });
       qc.invalidateQueries({ queryKey: ["contacts"] });
       qc.invalidateQueries({ queryKey: ["ai_hidden_counts"] });
-      showToast.success(
-        visibility === "hidden"
-          ? "Hidden from AI - excluded from People, Graph, AI Chat & MCP"
-          : "Visible to AI again"
-      );
-    },
-    onError: (e: any) => {
-      showToast.error(e.message ?? "Failed to update AI visibility");
     },
   });
 }
@@ -68,14 +64,6 @@ export function useToggleSensitivePerson() {
       qc.invalidateQueries({ queryKey: ["contacts"] });
       qc.invalidateQueries({ queryKey: ["people"] });
       qc.invalidateQueries({ queryKey: ["ai_hidden_counts"] });
-      showToast.success(
-        isSensitive
-          ? "Marked sensitive - hidden from all AI features"
-          : "No longer sensitive - visible to AI again"
-      );
-    },
-    onError: (e: any) => {
-      showToast.error(e.message ?? "Failed to update sensitive flag");
     },
   });
 }

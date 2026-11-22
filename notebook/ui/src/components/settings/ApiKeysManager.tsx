@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { showDate } from "@/lib/local-date";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -314,10 +315,10 @@ export function ApiKeysManager() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {key.last_used_at
-                      ? `Last used ${new Date(key.last_used_at).toLocaleDateString()}`
+                      ? `Last used ${showDate(key.last_used_at, "date")}`
                       : "Never used"}
                     {" · "}
-                    Created {new Date(key.created_at).toLocaleDateString()}
+                    Created {showDate(key.created_at, "date")}
                   </p>
                 </div>
                 {key.is_active && (

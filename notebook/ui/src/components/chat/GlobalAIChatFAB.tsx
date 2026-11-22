@@ -322,9 +322,13 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
       const apiMessages = buildApiMessages(nextState);
       const chatFn = collectionId ? "collection-chat" : noteId ? "note-chat" : "conversation-chat";
       // Flush the open editor's pending autosave so the agent edits on top of
-      // the user's newest text (and knows which version it is based on).
+      // the user's newest text (and knows which version it is based on). The
+      // chat in its own window (/dashboard/chat?note=...) has no editor to ask:
+      // waiting for one held every send there for the whole flush timeout, with
+      // the reply spinning and nothing sent to the AI (#758). The note's own
+      // window saves its text as the person types, as it always did.
       const flushed =
-        noteId && !collectionId
+        noteId && !collectionId && !page
           ? await flushNoteSave(noteId)
           : { updatedAt: null, content: null };
       const invokeBody = collectionId
@@ -446,7 +450,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
     } finally {
       setIsLoading(false);requestRef.current=null;
     }
-  }, [input, files, model, effort, isLoading, session, state, noteId, personId,talkId, pageChat, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
+  }, [input, files, model, effort, isLoading, session, state, page, noteId, personId,talkId, pageChat, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
 
   // A message handed in with openFloatingChat goes out once the panel is open and free; after a
   // moment, so the conversation the panel just loaded is the one it is added to.
@@ -567,7 +571,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                   </span>
                 )}
               </div>
-              {page&&<Button variant="ghost" className="h-11" onClick={handleClear} disabled={isLoading || isClearing}>Clear conversation</Button>}
+              {page&&state.messages.length>0&&<Button variant="ghost" className="h-11" onClick={handleClear} disabled={isLoading || isClearing}>Clear conversation</Button>}
               {!page&&<div className="flex items-center gap-1">
                 <a className="inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded hover:bg-muted" href={popOutHref} target="_blank" rel="noreferrer" aria-label="Open chat in a new window" title="Open chat in a new window"><ExternalLink className="h-4 w-4"/></a>
                 {!embedded&&<span className="text-[10px] text-muted-foreground hidden xl:inline mr-1">Ctrl+Shift+K</span>}

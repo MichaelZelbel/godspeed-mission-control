@@ -178,13 +178,24 @@ test('a merge never acts on a view of the vault older than the lock it holds',()
   assert.equal(new Store(a.root).list('contacts').length,1);
 });
 
-test('a sync refused for lack of a GitHub sign-in stays pending and queues one Connect notice a day',()=>{
+test('a sync refused for lack of a GitHub sign-in stays pending and queues one Connect notice a day',t=>{
+  // The notice is one per day, and the day comes from the wall clock; a full-suite run that
+  // crossed local midnight saw two and failed. The clock is held at 23:59:59 local so the day
+  // this test runs in is fixed, then pushed one day on for a third round, which must queue the
+  // next day's notice and no more.
+  const now=new Date();now.setHours(23,59,59,0);
+  t.mock.timers.enable({apis:['Date'],now});
   const {a}=fixture(),sync=new FileSync(a),original=sync.git.bind(sync);
   sync.git=(args,cwd)=>{
     if(['fetch','ls-remote'].includes(args[0]))throw Object.assign(new Error('git failed'),{stderr:'fatal: could not read Username for \'https://github.com\': terminal prompts disabled'});
     return original(args,cwd);
   };
+  const notices=()=>JSON.parse(fs.readFileSync(path.join(a.state,'notices.json'),'utf8')).notices.filter(n=>/^git-sign-in-/.test(n.id));
   assert.equal(sync.reconcile().state,'pending');assert.equal(sync.reconcile().state,'pending');
-  const notices=JSON.parse(fs.readFileSync(path.join(a.state,'notices.json'),'utf8')).notices.filter(n=>/^git-sign-in-/.test(n.id));
-  assert.equal(notices.length,1);assert.match(notices[0].text,/Connect record sync/);
+  assert.equal(notices().length,1);assert.match(notices()[0].text,/Connect record sync/);
+  t.mock.timers.setTime(now.getTime()+24*60*60*1000);
+  assert.equal(sync.reconcile().state,'pending');
+  assert.equal(notices().length,2,'a new day queues the next day\'s notice');
+  assert.equal(sync.reconcile().state,'pending');
+  assert.equal(notices().length,2,'a second round the same day queues nothing more');
 });

@@ -252,5 +252,186 @@
     "agent_instructions": "Capture entries when the user mentions drinking, buying, tasting, liking, disliking, or wanting to remember a specific wine. Extract the wine name, vintage, region, location, date, rating, and tasting notes when available. Ask a short follow-up only if the wine name is unclear or the user seems to want a rating but did not give one. Preserve subjective impressions and context because they are often more useful than formal tasting vocabulary.",
     "official": true,
     "usage_count": 0
+  },
+  {
+    "slug": "books",
+    "name": "Books",
+    "icon": "📚",
+    "category": "personal",
+    "description": "Books you want to read, are reading, and have finished, with your rating and notes",
+    "field_schema": [
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "primary": true
+      },
+      {
+        "key": "author",
+        "label": "Author",
+        "type": "text",
+        "indexable": true
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "indexable": true,
+        "options": [
+          "want to read",
+          "reading",
+          "finished",
+          "stopped"
+        ]
+      },
+      {
+        "key": "genre",
+        "label": "Genre",
+        "type": "text",
+        "indexable": true
+      },
+      {
+        "key": "rating",
+        "label": "Rating (1-5)",
+        "type": "number"
+      },
+      {
+        "key": "finished_on",
+        "label": "Finished",
+        "type": "date",
+        "indexable": true
+      },
+      {
+        "key": "notes",
+        "label": "Notes",
+        "type": "longtext"
+      }
+    ],
+    "agent_instructions": "Keep track of books the user mentions wanting to read, starting, finishing, or giving up on. Fill in the title, author, status, genre, rating, the date they finished, and their own notes when they give them. Update an existing book rather than adding it twice. Confirm with the user before the first capture in a session.",
+    "official": true,
+    "usage_count": 0
+  },
+  {
+    "slug": "recipes",
+    "name": "Recipes",
+    "icon": "🍳",
+    "category": "home",
+    "description": "Recipes you cook or want to try: ingredients, steps, time and where they came from",
+    "field_schema": [
+      {
+        "key": "name",
+        "label": "Recipe",
+        "type": "text",
+        "primary": true
+      },
+      {
+        "key": "course",
+        "label": "Course",
+        "type": "select",
+        "indexable": true,
+        "options": [
+          "breakfast",
+          "lunch",
+          "dinner",
+          "dessert",
+          "snack",
+          "drink"
+        ]
+      },
+      {
+        "key": "cuisine",
+        "label": "Cuisine",
+        "type": "text",
+        "indexable": true
+      },
+      {
+        "key": "total_minutes",
+        "label": "Total time (minutes)",
+        "type": "number"
+      },
+      {
+        "key": "servings",
+        "label": "Servings",
+        "type": "number"
+      },
+      {
+        "key": "ingredients",
+        "label": "Ingredients",
+        "type": "longtext"
+      },
+      {
+        "key": "steps",
+        "label": "Steps",
+        "type": "longtext"
+      },
+      {
+        "key": "source",
+        "label": "Source",
+        "type": "url"
+      }
+    ],
+    "agent_instructions": "Capture recipes the user cooks, shares, or wants to try. Fill in the name, course, cuisine, total time, servings, ingredients, steps, and the link or book it came from when available. Keep the user's own changes to a recipe in the steps. Confirm with the user before the first capture in a session.",
+    "official": true,
+    "usage_count": 0
+  },
+  {
+    "slug": "movies",
+    "name": "Movies",
+    "icon": "🎬",
+    "category": "personal",
+    "description": "Films you want to watch and have watched, with your rating and notes",
+    "field_schema": [
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "primary": true
+      },
+      {
+        "key": "year",
+        "label": "Year",
+        "type": "number"
+      },
+      {
+        "key": "director",
+        "label": "Director",
+        "type": "text",
+        "indexable": true
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "indexable": true,
+        "options": [
+          "want to watch",
+          "watched"
+        ]
+      },
+      {
+        "key": "rating",
+        "label": "Rating (1-5)",
+        "type": "number"
+      },
+      {
+        "key": "watched_on",
+        "label": "Watched",
+        "type": "date",
+        "indexable": true
+      },
+      {
+        "key": "where_to_watch",
+        "label": "Where to watch",
+        "type": "text"
+      },
+      {
+        "key": "notes",
+        "label": "Notes",
+        "type": "longtext"
+      }
+    ],
+    "agent_instructions": "Keep track of films the user mentions wanting to watch or having watched. Fill in the title, year, director, status, rating, the date they watched it, where to watch it, and their own notes when they give them. Update an existing film rather than adding it twice. Confirm with the user before the first capture in a session.",
+    "official": true,
+    "usage_count": 0
   }
 ]

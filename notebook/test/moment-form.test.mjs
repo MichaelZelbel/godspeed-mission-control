@@ -43,6 +43,18 @@ test('a suggestion fills the empty fields beside the filled ones', () => {
   assert.ok(!changed.includes('dateStart') && !changed.includes('impactLevel'));
 });
 
+test('a moment saved without scores leaves them open to a suggestion, and its saved scores are its own', () => {
+  const sparse = {title: 'Sparse', description: null, happened_at: '2026-10-05T00:00:00+00:00', happened_end: null, status: 'past_fact', impact_level: null, confidence_date: null, confidence_truth: null};
+  assert.deepEqual(filledOnOpen(sparse), {title: true, dateStart: true, dateEnd: false, status: true, impactLevel: false, confDate: false, confTruth: false});
+  const form = {title: sparse.title, dateStart: '2026-10-05', dateEnd: '', status: 'past_fact', impactLevel: null, confDate: null, confTruth: null, matchedPeople: []};
+  const merged = mergeSuggestion(form, filledOnOpen(sparse), draft, people).form;
+  assert.equal(merged.dateStart, '2026-10-05', 'the saved day stays');
+  assert.deepEqual([merged.impactLevel, merged.confDate, merged.confTruth], [1, 9, 8], 'the missing scores are gaps the suggestion fills');
+  const undated = {...sparse, happened_at: null};
+  assert.equal(filledOnOpen(undated).dateStart, false, 'a moment with no day at all leaves its date open too');
+  assert.equal(mergeSuggestion({...form, dateStart: ''}, filledOnOpen(undated), draft, people).form.dateStart, '2026-10-09');
+});
+
 test('a cleared start date counts as empty again, and an end date never lands before the start', () => {
   const cleared = {...blank, dateStart: ''};
   assert.equal(mergeSuggestion(cleared, {...filledOnOpen(null), dateStart: true}, draft, people).form.dateStart, '2026-10-09');
@@ -113,4 +125,39 @@ test('a save creates the suggested and the typed new people, each once and only 
   assert.deepEqual(newPeopleToCreate(['Fictional Cleo'], ['Fictional Dora', 'fictional cleo']), ['Fictional Cleo', 'Fictional Dora']);
   assert.deepEqual(newPeopleToCreate([], []), [], 'a new chip removed before saving creates nobody');
   assert.deepEqual(newPeopleToCreate(['  '], ['']), []);
+});
+
+// #779: a saved moment's confirmation says when no facts were pulled out because of the AI.
+test('a refused or unreachable AI is told apart from anything else the extraction says', async () => {
+  const {aiFailureKind, factsNotPulledOut} = await import('../ui/src/components/timeline/moment-form.mjs');
+  const {AI_REFUSED_STATUS, AI_UNREACHABLE_STATUS, NO_AI_ANALYSIS} = await import('../core/no-ai.mjs');
+  assert.equal(aiFailureKind(AI_REFUSED_STATUS + '. Check it in Settings, Your AI, then try again.'), 'refused');
+  assert.equal(aiFailureKind(AI_UNREACHABLE_STATUS + '. Check its connection in Settings, Your AI, then try again.'), 'unreachable');
+  for (const other of [NO_AI_ANALYSIS, 'Source note missing', '', undefined]) assert.equal(aiFailureKind(other), null);
+  assert.equal(factsNotPulledOut('refused'), 'No facts were pulled out of it. ' + AI_REFUSED_STATUS + '. Check it in Settings, Your AI.');
+  assert.equal(factsNotPulledOut('unreachable'), 'No facts were pulled out of it. ' + AI_UNREACHABLE_STATUS + '. Check its connection in Settings, Your AI.');
+  for (const other of ['none', 'ready', null, undefined]) assert.equal(factsNotPulledOut(other), null);
+});
+
+// #861: a 402 (no credit) and a 429 (busy or limited) are causes of their own, said in the route's
+// shared words, never as an outage.
+test('a service with no credit or a busy one is named as its own cause in the moment save', async () => {
+  const {aiFailureKind, factsNotPulledOut} = await import('../ui/src/components/timeline/moment-form.mjs');
+  const {AI_NO_CREDIT, AI_BUSY, AI_NO_CREDIT_STATUS, AI_BUSY_STATUS} = await import('../core/no-ai.mjs');
+  assert.equal(aiFailureKind(AI_NO_CREDIT), 'no-credit');
+  assert.equal(aiFailureKind(AI_BUSY), 'busy');
+  assert.equal(factsNotPulledOut('no-credit'), 'No facts were pulled out of it. ' + AI_NO_CREDIT);
+  assert.equal(factsNotPulledOut('busy'), 'No facts were pulled out of it. ' + AI_BUSY);
+  assert.ok(AI_NO_CREDIT.startsWith(AI_NO_CREDIT_STATUS));
+  assert.ok(AI_BUSY.startsWith(AI_BUSY_STATUS));
+});
+
+// #812: a moment saved by hand while no AI is connected says so, with the shared wording.
+test('the extraction\'s no-AI answer becomes the shared no-AI sentence, anything else does not', async () => {
+  const {noAiFacts, NO_AI_FACTS} = await import('../ui/src/components/timeline/moment-form.mjs');
+  const {AI_REFUSED_STATUS, NO_AI_ANALYSIS, NO_AI_STATUS} = await import('../core/no-ai.mjs');
+  assert.equal(noAiFacts(NO_AI_ANALYSIS), NO_AI_FACTS);
+  assert.equal(NO_AI_FACTS, 'No facts were pulled out of it. ' + NO_AI_STATUS + '. Connect your AI service in Settings, Your AI.');
+  assert.ok(NO_AI_FACTS.includes('Settings, Your AI'));
+  for (const other of [AI_REFUSED_STATUS + '. Check it in Settings, Your AI, then try again.', 'Source note missing', '', null, undefined]) assert.equal(noAiFacts(other), null);
 });
