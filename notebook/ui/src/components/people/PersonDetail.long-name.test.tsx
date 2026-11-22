@@ -53,6 +53,8 @@ describe("a person page with a 200-character name", () => {
     // A header taller than a phone screen must scroll with the page, not stay pinned.
     const header = h.closest(".bg-background")!;
     expect(header.className).not.toMatch(/(^|\s)sticky/);
-    expect(header.className).toContain("sm:sticky");
+    expect(header.className).not.toContain("sm:sticky");
+    // Pinned only when the window is wide and tall enough (a phone held sideways is short).
+    expect(header.className).toContain("min-height:600px)]:sticky");
   });
 });
