@@ -9,7 +9,9 @@ import {impactLabels, impactDescriptions} from "../../../../core/impact-scale.mj
 export {impactLabels};
 
 interface ImportanceSliderProps {
-  value: number;
+  // Null while the moment has no impact saved and the person has not set one:
+  // the label reads Not set, and the thumb sits at 1 without claiming a value.
+  value: number | null;
   onChange: (value: number) => void;
 }
 
@@ -19,7 +21,7 @@ export default function ImportanceSlider({ value, onChange }: ImportanceSliderPr
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">
-        <Label id={labelId} onClick={(e) => { e.preventDefault(); document.getElementById(thumbId)?.focus(); }}>Impact: {value} - {impactLabels[value]}</Label>
+        <Label id={labelId} onClick={(e) => { e.preventDefault(); document.getElementById(thumbId)?.focus(); }}>{value == null ? "Impact: Not set" : `Impact: ${value} - ${impactLabels[value]}`}</Label>
         <Popover>
           <PopoverTrigger asChild>
             <Button aria-label="What importance means" type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
@@ -39,7 +41,7 @@ export default function ImportanceSlider({ value, onChange }: ImportanceSliderPr
           </PopoverContent>
         </Popover>
       </div>
-      <Slider value={[value]} onValueChange={([v]) => onChange(v)} min={1} max={4} step={1} thumbProps={{ id: thumbId, "aria-labelledby": labelId }} />
+      <Slider value={[value ?? 1]} onValueChange={([v]) => onChange(v)} min={1} max={4} step={1} thumbProps={{ id: thumbId, "aria-labelledby": labelId }} />
     </div>
   );
 }

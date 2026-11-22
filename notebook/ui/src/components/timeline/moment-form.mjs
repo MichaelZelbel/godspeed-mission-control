@@ -20,7 +20,8 @@ function formDay(value) {
  * not theirs, so a later suggestion may replace it. A new moment's starting
  * values (today, Unknown, the middle of each slider) are placeholders, not
  * choices. An existing moment's saved values are filled, except an empty
- * title or date and the status Unknown.
+ * title or date, the status Unknown, and a score the writer left out (a gap
+ * a suggestion may fill, like the empty title and date).
  */
 export function filledOnOpen(editEvent) {
   if (!editEvent) return { title: false, dateStart: false, dateEnd: false, status: false, impactLevel: false, confDate: false, confTruth: false };
@@ -29,9 +30,9 @@ export function filledOnOpen(editEvent) {
     dateStart: !!formDay(editEvent.happened_at),
     dateEnd: !!formDay(editEvent.happened_end),
     status: !!editEvent.status && editEvent.status !== 'unknown',
-    impactLevel: true,
-    confDate: true,
-    confTruth: true,
+    impactLevel: editEvent.impact_level != null,
+    confDate: editEvent.confidence_date != null,
+    confTruth: editEvent.confidence_truth != null,
   };
 }
 

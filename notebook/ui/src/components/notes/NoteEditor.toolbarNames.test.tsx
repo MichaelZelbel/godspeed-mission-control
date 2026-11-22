@@ -11,8 +11,10 @@ import { WAIT } from "@/test/wait-limits";
 // a `title`, no `aria-label`, so tabbing to them reached a button with an
 // empty name. These render the note editor and check that every button in it
 // has an accessible name, and that every button with a tooltip says the same
-// as its tooltip - including the tooltips that change with the note's state
-// (favorited, pinned, Markdown source).
+// as its tooltip - or a tooltip that begins with the name's words and then
+// explains more, the way the AI switch's tooltip does (#890) - including the
+// tooltips that change with the note's state (favorited, pinned, Markdown
+// source).
 //
 // The name here is what a screen reader says from the button's own markup:
 // aria-labelledby, then aria-label, then the button's text. A `title` is
@@ -86,7 +88,7 @@ function accessibleName(button: HTMLButtonElement): string {
   return (button.textContent ?? "").trim();
 }
 
-/** Every button in scope is named; every button with a tooltip is named the same as its tooltip. */
+/** Every button in scope is named; every button with a tooltip says its name's words - the same words, or the name's words first and then more (#890). */
 function expectEveryTooltipNamed(scope: Element, where: string, atLeast: number) {
   const buttons = Array.from(scope.querySelectorAll<HTMLButtonElement>("button"));
   expect(buttons.length, `${where}: only ${buttons.length} buttons found`).toBeGreaterThanOrEqual(atLeast);
@@ -95,7 +97,8 @@ function expectEveryTooltipNamed(scope: Element, where: string, atLeast: number)
     expect(name, `${where}: a button has no accessible name: ${button.outerHTML.slice(0, 200)}`).not.toBe("");
     const title = button.getAttribute("title")?.trim();
     if (title !== undefined) {
-      expect(name, `${where}: the button with tooltip "${title}" says "${name}" instead: ${button.outerHTML.slice(0, 200)}`).toBe(title);
+      expect(name === title || title.startsWith(name),
+        `${where}: the button with tooltip "${title}" says "${name}" instead: ${button.outerHTML.slice(0, 200)}`).toBe(true);
     }
   }
 }
