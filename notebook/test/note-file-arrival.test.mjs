@@ -12,7 +12,7 @@ import { createService } from '../server/main.mjs';
 // record's frontmatter is written around them.
 
 const temporary=()=>fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-note-arrival-'));
-const until=async(check,ms=10000)=>{const end=Date.now()+ms;for(;;){const value=check();if(value||Date.now()>end)return value;await new Promise(r=>setTimeout(r,50));}};
+const until=async(check,ms=10000)=>{const end=Date.now()+ms;for(;;){const value=await check();if(value||Date.now()>end)return value;await new Promise(r=>setTimeout(r,50));}};
 const notes=async base=>(await(await fetch(base+'/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'notes',operation:'select'})})).json()).data;
 const search=async(base,q)=>(await(await fetch(base+'/api/search?'+new URLSearchParams({q,types:'notes',mode:'words',format:'notes'}))).json()).data;
 
@@ -121,6 +121,75 @@ test('a page the notebook saw before it first looked stays the owner\'s own page
       assert.equal(await until(()=>again.list('notes').some(n=>n.title==='New page')),true,'a later page becomes a note');
     }finally{again.unwatch();}
   }finally{store.unwatch();}
+});
+
+test('a second outside edit within five seconds of the first is found by search as fast as the first',async()=>{
+  const root=temporary(),service=await createService({root,port:0}),base='http://127.0.0.1:'+service.address.port;
+  const BOUND=5000; // the issue's window: well above the milliseconds a working edit takes
+  try{
+    const file=path.join(root,'notebook','Twice edited.md');
+    fs.writeFileSync(file,'# Twice edited\n\nfirst words\n');
+    const listed=await until(async()=>{const rows=await notes(base);return rows.find(n=>n.title==='Twice edited')||null;});
+    assert.ok(listed,'the page is a note');
+    // The atomic replace every save and every adoption uses: the new text is
+    // written beside the file and renamed over it. An outside editor keeps
+    // the file's frontmatter and adds to the body.
+    const edit=(file,words)=>{fs.writeFileSync(file+'.tmp',fs.readFileSync(file,'utf8')+'\n'+words+'\n');fs.renameSync(file+'.tmp',file);};
+    edit(file,'quartzforge');
+    assert.ok(await until(async()=>(await search(base,'quartzforge')).length?true:null,BOUND),'the first edit is found within '+BOUND+' ms');
+    await new Promise(r=>setTimeout(r,2000));
+    edit(file,'emberglass');
+    assert.ok(await until(async()=>(await search(base,'emberglass')).length?true:null,BOUND),'the second edit, within five seconds of the first, is found within the same bound');
+  }finally{await service.close();fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('a notebook folder replaced from outside still delivers what is written into the new one',async()=>{
+  const root=temporary(),service=await createService({root,port:0}),base='http://127.0.0.1:'+service.address.port;
+  const BOUND=5000;
+  try{
+    fs.writeFileSync(path.join(root,'notebook','Before the swap.md'),'# quarrymap words\n');
+    assert.ok(await until(async()=>(await search(base,'quarrymap')).length?true:null,BOUND),'the note before the replacement is found');
+    // The whole folder moved away and a new folder made in its place, the way
+    // a sync tool or a restore replaces a workspace folder.
+    fs.renameSync(path.join(root,'notebook'),path.join(root,'notebook moved away'));
+    fs.mkdirSync(path.join(root,'notebook'));
+    fs.writeFileSync(path.join(root,'notebook','After the swap.md'),'# emberlake words\n');
+    assert.ok(await until(async()=>(await search(base,'emberlake')).length?true:null,BOUND),'a note written into the replaced folder is found within '+BOUND+' ms');
+    // And the folder keeps delivering: a later note in it is found too, not
+    // just the first one after the replacement.
+    fs.writeFileSync(path.join(root,'notebook','After the swap 2.md'),'# mistvale words\n');
+    assert.ok(await until(async()=>(await search(base,'mistvale')).length?true:null,BOUND),'a later note in the replaced folder is found too');
+  }finally{await service.close();fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('a root watcher that cannot watch keeps retrying instead of giving up',async()=>{
+  const root=temporary();
+  fs.mkdirSync(path.join(root,'ideas'));
+  fs.writeFileSync(path.join(root,'ideas','Kept.md'),'kept\n');
+  const realWatch=fs.watch,target=path.join(root,'ideas');
+  let service=null,base=null;
+  try{
+    service=await createService({root,port:0});
+    base='http://127.0.0.1:'+service.address.port;
+    // From now on the ideas root itself cannot be watched (an exhausted watch
+    // budget). Replacing the folder makes the running watcher notice, evict it
+    // and re-arm a second later; the re-arm keeps retrying while the failure
+    // lasts instead of giving up, so once watching is possible again the root
+    // is watched without a restart.
+    fs.watch=(p,...rest)=>{if(String(p)===target){const error=new Error('the watch budget is exhausted');error.code='ENOSPC';throw error;}return realWatch(p,...rest);};
+    fs.renameSync(target,target+' was here');
+    fs.mkdirSync(target);
+    await new Promise(r=>setTimeout(r,1500));
+    fs.watch=realWatch;
+    // A write made while the root is unwatched would still be covered by a
+    // background rebuild finishing around it; after this wait every attempt
+    // has fired and settled, so only a root that is really watched again can
+    // report what follows.
+    await new Promise(r=>setTimeout(r,3000));
+    fs.writeFileSync(path.join(target,'Retry words.md'),'retry words unwatched no longer\n');
+    const found=await until(async()=>(await(await fetch(base+'/api/search?'+new URLSearchParams({q:'retry words unwatched no longer',mode:'words'}))).json()).data.some(r=>String(r.title).includes('Retry words')),10000);
+    assert.ok(found,'the failed root is watched again once watching is possible');
+  }finally{fs.watch=realWatch;await service?.close();fs.rmSync(root,{recursive:true,force:true});}
 });
 
 test('an adopted note is edited like any note, in the file it came from',async()=>{
