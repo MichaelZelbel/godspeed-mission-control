@@ -1070,11 +1070,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     const inode=inodeOf();
     if(inode===null)return;
     if(inode!==rootInode){
-      // The new folder's watcher is opened before anything is torn down and
-      // before the inode is remembered: a failure here (a folder not yet
-      // readable, no handles left) is retried on the next tick, never thrown
-      // out of the timer.
+      // The new folder's watcher and the notes store are armed before anything
+      // else is torn down and before the inode is remembered: a failure here (a
+      // folder or its notes folder not yet readable or writable, no handles
+      // left) is retried on the next tick, never thrown out of the timer.
       let next;try{next=openRootWatcher();}catch{return;}
+      try{store.unwatch();store.watch();}catch{store.unwatch();try{next.close();}catch{}return;}
       rootInode=inode;
       try{rootWatcher?.close();}catch{}
       rootWatcher=next;
@@ -1082,7 +1083,6 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       watchers.clear();
       for(const timer of rewatches.values())clearTimeout(timer);
       rewatches.clear();
-      store.unwatch();store.watch();
       changed('')('rename',null);
     }
     for(const name of durableRoots){

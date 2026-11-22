@@ -30,6 +30,19 @@ test('after the workspace folder is replaced, a note written into the new folder
   }finally{await done();}
 });
 
+test('a replacement folder whose notes folder is unreadable does not end the notebook, and a readable one after it is indexed',{skip:process.getuid?.()===0||process.platform==='win32'},async()=>{
+  const {tmp,root,service,done}=await workspace();
+  const uncaught=[],onUncaught=error=>uncaught.push(error);process.on('uncaughtException',onUncaught);
+  try{
+    fs.renameSync(root,root+'.old');fs.mkdirSync(path.join(root,'work'),{recursive:true});fs.mkdirSync(path.join(root,recordsFolder));fs.chmodSync(path.join(root,recordsFolder),0);
+    await new Promise(r=>setTimeout(r,2500));
+    assert.deepEqual(uncaught,[]);
+    fs.chmodSync(path.join(root,recordsFolder),0o755);
+    write(root,'work/after.md','afterone');
+    assert.equal(await until(()=>found(service,'afterone')),true,'the folder is taken in once readable');
+  }finally{process.off('uncaughtException',onUncaught);try{fs.chmodSync(path.join(root,recordsFolder),0o755);}catch{}await done();}
+});
+
 test('durable folders created after start are watched, at the top and under routines/',async()=>{
   const {root,service,done}=await workspace();
   try{
