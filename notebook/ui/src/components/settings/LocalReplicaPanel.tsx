@@ -23,7 +23,7 @@ export function LocalReplicaPanel() {
   const sync = useSyncHealth();
   const [repairing, setRepairing] = useState(false);
 
-  const { data, isFetching, refetch } = useQuery({
+  const { data, isFetching, refetch, isError, error } = useQuery({
     queryKey: ["local-replica-diagnostics", user?.id],
     enabled: !!user && OFFLINE_CORE,
     queryFn: () => getReplicaDiagnostics(user!.id),
@@ -34,7 +34,9 @@ export function LocalReplicaPanel() {
 
   const gap = data ? data.serverTotal - data.localTotal : 0;
   const favGap = data ? data.serverFavorites - data.localFavorites : 0;
-  const healthy = data ? gap === 0 && favGap === 0 && data.missingIds.length === 0 : true;
+  // "In sync" may only be said when the diagnostics answered and found no gap.
+  // While they load, or after their request failed, the panel cannot know.
+  const healthy = data ? gap === 0 && favGap === 0 && data.missingIds.length === 0 : false;
 
   const handleRepair = async () => {
     if (!user) return;
@@ -84,8 +86,8 @@ export function LocalReplicaPanel() {
               : "unknown"}
           </span>
           <span>Pending uploads: {data?.pendingUploads ?? 0}</span>
-          <Badge variant={healthy ? "secondary" : "destructive"}>
-            {healthy ? "In sync" : "Gap detected"}
+          <Badge variant={data ? (healthy ? "secondary" : "destructive") : isError ? "destructive" : "outline"}>
+            {data ? (healthy ? "In sync" : "Gap detected") : isError ? "Not checked" : "Checking"}
           </Badge>
         </div>
 
@@ -95,6 +97,16 @@ export function LocalReplicaPanel() {
             <p className="text-muted-foreground">
               {sync.error} Your notes are being read from the server directly, so this
               screen is current, but the local copy below will not update on its own.
+            </p>
+          </div>
+        )}
+
+        {isError && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs">
+            <p className="font-medium mb-1">The local copy could not be checked.</p>
+            <p className="text-muted-foreground">
+              {error instanceof Error ? error.message : "The check did not run."} A note can be missing
+              from this device without the panel knowing until the check succeeds.
             </p>
           </div>
         )}
@@ -116,7 +128,7 @@ export function LocalReplicaPanel() {
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
             <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isFetching ? "animate-spin" : ""}`} />
-            Re-check
+            {isError ? "Try again" : "Re-check"}
           </Button>
           <Button size="sm" onClick={handleRepair} disabled={repairing}>
             <Wrench className="h-3.5 w-3.5 mr-1.5" />

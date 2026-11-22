@@ -168,7 +168,10 @@ export function ConnectAI(){
   </AlertDialog>;
   return <section id="connect-ai" className="border rounded p-4 space-y-4" aria-labelledby="connect-ai-title">
     <h2 id="connect-ai-title" className="text-xl">Your AI</h2>
-    {status.isLoading?<p role="status">Reading which AI your routines use…</p>:<RoutineAIState status={data} checking={checking} onCheck={check} connected={!!saved.data?.configured}/>}
+    {/* #945: while the saved file cannot be read (the refetch fails), react-query keeps the last
+    good data, so "configured" alone would keep saying a connected AI answers the chat while the
+    notice below says the file cannot be read. The two must agree. */}
+    {status.isLoading?<p role="status">Reading which AI your routines use…</p>:<RoutineAIState status={data} checking={checking} onCheck={check} connected={!saved.error&&!!saved.data?.configured}/>}
     {saved.error?<div className="space-y-3"><p role="alert" className="text-red-500">{AI_CONNECTION_UNREADABLE_STATUS} The form is unavailable so it cannot be overwritten. Remove it to connect one again.</p>{removeControl}{error&&<p role="alert" className="text-red-500">{error}</p>}</div>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
       <p>Connect the AI account you pay for. The key stays on this device and never goes into your notes.</p>
       <div><label className="block" htmlFor={id+'service'}>Your AI service</label>

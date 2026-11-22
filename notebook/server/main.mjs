@@ -39,6 +39,7 @@ import {browserChat} from './browser-chat.mjs';
 import {KEPT_FILE} from '../core/ai-failures.mjs';
 import {transcribeRecording} from '../core/dictation.mjs';
 import {durableRoots,durableFiles} from '../core/file-policy.mjs';
+import {watchTree} from '../core/watch-tree.mjs';
 import { WebAuth, safeReturn } from './web-auth.mjs';
 import { MenerioImport } from './menerio-import.mjs';
 import {TelegramConnection} from './telegram-connect.mjs';
@@ -995,7 +996,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const telegram=!originalRuntime&&process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN&&process.env.GODSPEED_CANDIDATE_BOT_OWNER?new Telegram({store,domains,token:process.env.GODSPEED_CANDIDATE_BOT_TOKEN,owner:process.env.GODSPEED_CANDIDATE_BOT_OWNER,loginLink:process.env.GODSPEED_BROWSER_ORIGIN?destination=>{const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return process.env.GODSPEED_BROWSER_ORIGIN+'/login/'+code+'?next='+encodeURIComponent(destination);}:undefined}):null;
   const telegramTimer=telegram?setInterval(()=>{if(!menerioImport.mutating)telegram.tick().catch(()=>{});},3000):null;
   scheduler.deliver=telegram?(id,result)=>telegram.deliver(id,result):null;
-  let debounce,indexDebounce;const watchers=new Map(),changedFiles=new Set();
+  let debounce,indexDebounce;const watchers=new Map(),rewatches=new Map(),changedFiles=new Set();
   // A changed workspace file is read into the index on its own; the store
   // watches its records itself. An owner's page in the notebook folder is a
   // file to the index too. Any change schedules a sync round.
@@ -1015,14 +1016,44 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>{if(!menerioImport.mutating)void syncRunner.run();},5000);}
   };
   // Private backups and Git merge workspaces are outside the watched knowledge.
-  const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed(name)));};
+  // A watcher that fails (the resource failures the error channel carries, and a
+  // durable root replaced under its own watch) is dropped here, the whole root is
+  // rebuilt, and the root is watched again after a second, like the store's own
+  // recovery: left in the map it would block the rootWatcher's re-watch route for
+  // the life of the process and the root would go dark. The watcher is stored
+  // before the error handler is attached, because watchTree replays a
+  // construction failure on attach and the identity guard needs the entry in the
+  // map to evict the dead watcher. The re-entry is asynchronous (from the timer
+  // or from the rootWatcher's callback), so a root that still cannot be watched
+  // one second later (a watch budget or handle table still exhausted, a folder
+  // raced between the existsSync guard and the watch) would throw out of the
+  // timer into the process's uncaughtException exit. The retry is contained the
+  // way the store contains its own recovery (records/store.mjs): give up for
+  // now, try again after another second; the rebuild the eviction signalled
+  // already covered the gap; the re-arm signals the same rebuild again, so what
+  // was written while no watcher was armed is read too, whatever the attempt's
+  // outcome. The timer is kept in `rewatches` so close() can
+  // cancel it: a re-arm that outlives the service would construct a live watcher
+  // for a closed one. The startup call below stays unguarded: failing to watch a
+  // root at startup is a failure to start.
+  // A root may be re-armed from the eviction, the timer's own catch and the
+  // rootWatcher within the same second: the pending timer is cancelled first,
+  // so one chain retries per root and close() can cancel the one that is there.
+  const rearm=name=>{clearTimeout(rewatches.get(name));rewatches.set(name,setTimeout(()=>{try{watchRoot(name);}catch{rearm(name);}changed(name)('rename',null);},1000).unref?.());};
+  const watchRoot=name=>{
+    const folder=path.join(store.root,name);
+    if(watchers.has(name)||!fs.existsSync(folder))return;
+    const watcher=watchTree(folder,changed(name));
+    watchers.set(name,watcher);
+    watcher.on('error',()=>{try{watcher.close();}catch{}if(watchers.get(name)===watcher){watchers.delete(name);changed(name)('rename',null);rearm(name);}});
+  };
   for(const name of durableRoots)watchRoot(name);
   // A manual or extra instructions changed by anything (a sync from another machine, a session, an
   // editor) bring the assistant's own identity file in step with them (assistant-soul.mjs).
   let soulDebounce;const followPersona=()=>{clearTimeout(soulDebounce);soulDebounce=setTimeout(()=>{try{shelf.followPersona();}catch{}},2000);soulDebounce.unref?.();};
-  const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
+  const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){try{watchRoot(name);}catch{rearm(name);}changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
   let localServer = null;
-  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(automaticTimer);clearInterval(factTimer);clearInterval(journalMomentsTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
+  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(automaticTimer);clearInterval(factTimer);clearInterval(journalMomentsTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();watchers.clear();for(const timer of rewatches.values())clearTimeout(timer);rewatches.clear();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
   // A container's main door listens on its network interface and always needs sign-in.
   // Add-ons and tools in that same container may use this opt-in, loopback-only door,
   // with the exact Host/Origin guards and API contract of a native local installation.
