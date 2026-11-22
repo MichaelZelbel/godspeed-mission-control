@@ -161,11 +161,17 @@ LOANWORDS = {"login", "logout", "api", "apis", "test", "tests", "update", "updat
 SHORT_WORDS = 25       # an answer of fewer words than this may not keep a single word of the other language
 
 
-def _words(text):
+def _words(text, quotes=False):
     """The words of the text outside its protected parts, each with whether it is written capitalized
-    where a sentence does not start (a name, or a German noun)."""
+    where a sentence does not start (a name, or a German noun). `quotes`: words in quotation marks
+    count too."""
+    if quotes:
+        for pattern in (CODE, URL, MEDIA):
+            text = pattern.sub(" ", text)
+    else:
+        text = _plain(text)
     out, start = [], True
-    for match in re.finditer(r"[A-Za-zÄÖÜäöüß']+|[.!?:\n]", _plain(text)):
+    for match in re.finditer(r"[A-Za-zÄÖÜäöüß']+|[.!?:\n]", text):
         token = match.group(0)
         if token in ".!?:\n":
             start = True
@@ -185,7 +191,11 @@ def rejection(answer, draft, target, kept_word=True):
     that keeps one word of the other language (#486); the second try is sent with such a word."""
     if answer.strip() == draft.strip():
         return "repeats-the-draft: unchanged"
-    drafted, answered = _words(draft), _words(answer)
+    # Quotes the draft itself held are kept verbatim by the model and are not judged. Any other quoted
+    # text is the model's own, such as the draft wrapped in quotation marks above its translation.
+    for part in _protect(draft)[1]:
+        answer = answer.replace(part, " ", 1)
+    drafted, answered = _words(draft), _words(answer, quotes=True)
     named = {w for w, capital in drafted + answered if capital}
     # Names are the same in both languages ("Jürgen Müller in München"), so a run is counted without them.
     plain = [w for w, _ in drafted if w not in named]
