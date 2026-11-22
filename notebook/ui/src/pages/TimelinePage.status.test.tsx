@@ -47,8 +47,8 @@ describe("the timeline's status and scores", () => {
     render(<MemoryRouter><TimelinePage /></MemoryRouter>);
     expect(await screen.findByText("From elsewhere", undefined, WAIT)).toBeInTheDocument();
     expect(screen.queryByText("confirmed")).toBeNull();
-    expect(screen.getAllByText("unknown").length).toBeGreaterThan(0);
-    expect(screen.getByText("past fact", { selector: "div" })).toBeInTheDocument();
+    expect(screen.getAllByText("Unknown").length).toBeGreaterThan(0);
+    expect(screen.getByText("Past Fact", { selector: "div" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Done: See the dentist"));
     expect(await screen.findByText("1/4", undefined, WAIT)).toBeInTheDocument();
