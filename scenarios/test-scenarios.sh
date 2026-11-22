@@ -4082,9 +4082,12 @@ refuses 'a selected work card that names another result file' first-day "$FD/wro
 for table in "${SERVER_SPARSE_TABLES[@]}"; do
   sparse=${table//_/-}
   copy "$FD/good" "$FD/populated-$sparse"
-  printf '{"data":[{"id":"seeded-%s"}]}\n' "$sparse" >"$FD/populated-$sparse/sparse-$sparse.json"
+  printf '{"data":[{"id":"seeded-%s","kind":"brief-rehearsal"}]}\n' "$sparse" >"$FD/populated-$sparse/sparse-$sparse.json"
   refuses "a brief with seeded $sparse context" first-day "$FD/populated-$sparse" 'required sparse installed state'
 done
+copy "$FD/good" "$FD/spend-guard-receipt"
+printf '{"data":[{"id":"spend-guard-1","kind":"spend-guard"}]}\n' >"$FD/spend-guard-receipt/sparse-job-receipts.json"
+passes 'a first day whose only job receipt is the spend guard, which the brief never reads' first-day "$FD/spend-guard-receipt" 'a fresh Docker install'
 copy "$FD/good" "$FD/no-brief-sources"
 : >"$FD/no-brief-sources/briefing-source-tables.txt"
 refuses 'a first day whose installed product names no briefing sources' first-day "$FD/no-brief-sources" 'briefing-source-tables.txt is not in what the scenario kept'
