@@ -17,6 +17,16 @@ import {momentDates} from './timestamps.mjs';
 import {personNames} from './person-names.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
+// The columns each kind has in the app's schema (the screens were written
+// against notebook/ui/src/integrations/supabase/types.ts), parsed rather than
+// kept as a second list that would drift, for the write-filter check below
+// (issue 950). Kinds the schema does not know are judged by their rows instead.
+const schemaColumns = new Map();
+{
+  const text = fs.readFileSync(fileURLToPath(new URL('../ui/src/integrations/supabase/types.ts', import.meta.url)), 'utf8');
+  for (const kind of text.slice(0, text.indexOf('\n    Functions: {')).matchAll(/\n      ([a-z_0-9]+): \{\n        Row: \{\n([\s\S]*?)\n        \}/g))
+    schemaColumns.set(kind[1], new Set([...kind[2].matchAll(/^          ([a-z_0-9]+)\??:/gm)].map(column => column[1])));
+}
 export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
 for (const table of ['goals', 'jobs', 'job_receipts', 'settings', 'permissions', 'decisions', 'habits', 'journal', 'deadlines', 'comments', 'notifications', 'note_conversations', 'import_mappings','record_history','event_corrections','embeddings']) tables.add(table);
 for(const table of ['health_episodes','medications','health_observations','watch_topics','watch_observations','domain_watches','domain_watch_observations','outside_numbers','subscriptions','forecasts','work_items','coach_talks','connector_status','work_tool_receipts','approvals','command_receipts'])tables.add(table);
@@ -66,9 +76,10 @@ function splitFilters(text){let depth=0,quoted=false,part='',items=[];for(let i=
 const unquote=value=>value.length>1&&value.startsWith('"')&&value.endsWith('"')?value.slice(1,-1).replace(/\\([\s\S])/g,'$1'):value;
 const list=value=>Array.isArray(value)?value:splitFilters(String(value).replace(/^\(([\s\S]*)\)$/,'$1')).map(unquote);
 const negate=result=>result===null?null:!result;
+const partPattern=/^(.+?)\.(not\.)?(eq|neq|is|in|like|ilike|gt|gte|lt|lte)\.([\s\S]*)$/;
 function filterExpression(row,text){
   for(const op of ['and','or','not.and','not.or'])if(text.startsWith(op+'(')&&text.endsWith(')')){const result=condition(row,[op.replace('not.',''),'',text.slice(op.length+1,-1)]);return op.startsWith('not.')?negate(result):result;}
-  const match=text.match(/^(.+?)\.(not\.)?(eq|neq|is|in|like|ilike|gt|gte|lt|lte)\.([\s\S]*)$/);if(!match)throw new Error('Invalid filter expression');
+  const match=text.match(partPattern);if(!match)throw new Error('Invalid filter expression');
   const [,key,not,op,raw]=match,value=op==='in'?list(raw):/^(null|true|false)$/.test(raw)?JSON.parse(raw):unquote(raw);
   const result=condition(row,[op,key,value]);return not?negate(result):result;
 }
@@ -121,6 +132,41 @@ export function checkFilters(filters){
     if(!Array.isArray(f)||f.length<2||typeof f[0]!=='string'||typeof f[1]!=='string')throw new Error(filterHelp+'; got '+String(JSON.stringify(f)).slice(0,120)+'.');
     if(!['or','and','not','is'].includes(f[0])&&!comparisons.has(f[0]))throw new Error('Unsupported filter '+f[0]+'. '+filterHelp+'.');
     if(f[0]==='not'&&(!Array.isArray(f[2])||typeof f[2][0]!=='string'))throw new Error('A "not" filter is ["not","<column>",["<operator>",<value>]].');
+  }
+}
+// The fields every stored record carries (records/store.mjs, prepare), plus
+// the tombstone marker a delete writes. A filter may name one of these on any
+// kind without the kind being judged field by field.
+const envelopeFields=new Set(['id','uid','type','format','device','revision','created_at','updated_at','tags','aliases','references','metadata','user_id','removed_at']);
+// Issue 950: an update or delete whose filter could never pick a record used to
+// answer 200 with nothing changed, so a typo in a field name looked the same as
+// "no record matched". Refused here, before anything is read or written, the
+// way the no-filter refusal in execute() is: a clause with no value or an empty
+// or null one (null is the value "is" is for), or a field the kind does not
+// have. A well-formed filter that simply matches nothing still answers 200, and
+// reads keep every filter they accept.
+const head=key=>key.replaceAll('->>','.').replaceAll('->','.').split('.')[0];
+const short=f=>String(JSON.stringify(f)).slice(0,120);
+export function checkWriteFilters(table,filters,rows){
+  const columns=schemaColumns.get(table),judged=!!columns||rows.length>0;
+  const known=field=>envelopeFields.has(field)||field in (defaults[table]||{})||columns?.has(field)||rows.some(r=>r&&Object.hasOwn(r,field));
+  // The fields an or() or and() text names, nested parts included. A part the
+  // PostgREST grammar does not read is left to filterExpression's own refusal.
+  const keysOf=f=>{
+    if(f[0]!=='or'&&f[0]!=='and')return [f[1]];
+    const keys=new Set(),walk=text=>{for(const part of splitFilters(String(text))){
+      if(/^(?:not\.)?(?:and|or)\(/.test(part))walk(part.slice(part.indexOf('(')+1,-1));
+      else{const match=part.match(partPattern);if(match)keys.add(match[1]);}}};
+    walk(f[2]);return [...keys];
+  };
+  for(const f of filters){
+    if(f.length<3)throw new Error('The filter '+short(f)+' is missing its value. '+filterHelp+'.');
+    if(f[0]==='not'){
+      if(f[2].length<2)throw new Error('The filter '+short(f)+' is missing its value. '+filterHelp+'.');
+      if(f[2][0]!=='is'&&(f[2][1]===''||f[2][1]===null))throw new Error('The filter '+short(f)+' has an empty value, so it cannot pick any record. '+filterHelp+'.');
+    }
+    else if(f[0]!=='is'&&(f[2]===''||f[2]===null))throw new Error('The filter '+short(f)+' has an empty value, so it cannot pick any record. '+filterHelp+'.');
+    if(judged)for(const key of keysOf(f))if(!known(head(key)))throw new Error(table+' has no field "'+head(key)+'", so this filter cannot pick any record. '+filterHelp+'.');
   }
 }
 function condition(row, [op, key, value]) {
@@ -375,7 +421,12 @@ export class QueryService {
     // the join. Until 6 October 2026 it was checked against the row itself,
     // where that column never is, so a person's Groups tab was always empty.
     const embeds=embedsOf(selection),names=new Set(embeds.map(e=>e.alias)),embedded=f=>{const key=String(f[1]??''),dot=key.indexOf('.');return dot>0&&names.has(key.slice(0,dot));};
-    let rows = this.rows(table).filter(row => filters.every(f => embedded(f) || condition(row, f) === true));
+    // An update or delete whose filter cannot pick any record is refused before
+    // anything is read or written (issue 950); embedded-column filters are left
+    // to the embedded-records refusal below.
+    const all = this.rows(table);
+    if (operation === 'update' || operation === 'delete') checkWriteFilters(table, filters.filter(f => !embedded(f)), all);
+    let rows = all.filter(row => filters.every(f => embedded(f) || condition(row, f) === true));
     if (operation !== 'select') {
       if(filters.some(embedded))throw new Error('Filters on embedded records narrow reads only');
       // A delete stamped with the version the screen saw, matched against no
