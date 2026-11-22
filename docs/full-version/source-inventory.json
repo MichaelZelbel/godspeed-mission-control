@@ -438,7 +438,7 @@
       "rpcs": []
     },
     {
-      "source": "src/components/notes/NoteChatPanel.tsx",
+      "source": "src/components/chat/GlobalAIChatFAB.tsx",
       "tables": [
         "notes"
       ],
@@ -727,12 +727,6 @@
         "profile_facts",
         "profiles"
       ],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/profile/AgentInstructionsTab.tsx",
-      "tables": [],
       "functions": [],
       "rpcs": []
     },
@@ -1687,16 +1681,6 @@
       "tables": [],
       "functions": [],
       "rpcs": []
-    },
-    {
-      "source": "src/lib/note-ai-enrollment.ts",
-      "tables": [],
-      "functions": [
-        "wiki-ingest"
-      ],
-      "rpcs": [
-        "capture_note_with_lexicon"
-      ]
     },
     {
       "source": "src/lib/note-content.ts",
