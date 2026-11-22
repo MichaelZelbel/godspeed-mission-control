@@ -31,7 +31,7 @@ import { useArchiveGroup, useGroup, useRestoreGroup, useTrashGroup, useUpdateGro
 import { useGroupMemberships, useMoveMembershipStage } from "@/hooks/useGroupMemberships";
 import { toast } from "sonner";
 import { showToast } from "@/lib/toast";
-import { parseArray, pretty, relativeDate } from "@/lib/group-utils";
+import { parseArray, pretty, relativeDate, shortDate } from "@/lib/group-utils";
 import { AddMemberDialog } from "@/components/groups/AddMemberDialog";
 import { BriefingTab } from "@/components/groups/BriefingTab";
 import { GoalsTab } from "@/components/groups/GoalsTab";
@@ -140,12 +140,14 @@ export default function GroupDetail() {
   return (
     <div className="max-w-5xl">
       <SEOHead title={`${group.name} - Groups - Godspeed Mission Control`} noIndex />
-      <div className="mb-4 flex items-center justify-between gap-3">
+      {/* On a phone the buttons would squeeze the name down to a letter, so below sm the button
+          row drops under the name and the name wraps instead of truncating (#863). */}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/groups")} className="mb-3"><ArrowLeft className="mr-1 h-4 w-4" />Back to Groups</Button>
-          <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary"><GroupIcon icon={group.icon} /></div><h1 className="truncate text-2xl font-display font-bold">{group.name}</h1></div>
+          <div className="flex items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><GroupIcon icon={group.icon} /></div>{/* min-w-0 lets the h1 shrink below its longest word, so break-words can wrap a name that is one long word (#871). */}<h1 className="min-w-0 break-words text-2xl font-display font-bold sm:truncate">{group.name}</h1></div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap shrink-0 items-center gap-2">
           <AddMemberDialog group={group} existingPersonIds={existingPersonIds} />
           <Button variant="outline" size="sm" onClick={() => setActiveTab("about")}>Edit</Button>
           {group.archived_at ? (
@@ -198,7 +200,7 @@ export default function GroupDetail() {
           <BriefingTab groupId={group.id} />
         </TabsContent>
         <TabsContent value="list" className="mt-0">
-          <Card><Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Status</TableHead><TableHead>Priority</TableHead><TableHead>Joined</TableHead><TableHead>Last Movement</TableHead><TableHead>Reason</TableHead></TableRow></TableHeader><TableBody>{memberships.map((membership) => <TableRow key={membership.id} className="cursor-pointer" onClick={() => setSelectedMembershipId(membership.id)}><TableCell className="font-medium">{/* A button, so the row is reachable with Tab and opens with Enter. */}<button type="button" className="rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={(event) => { event.stopPropagation(); setSelectedMembershipId(membership.id); }}>{membership.contacts?.name || "Unknown"}</button></TableCell><TableCell>{stages.find((s) => s.id === membership.status)?.label || membership.status}</TableCell><TableCell><Badge variant="secondary" className="capitalize">{membership.priority}</Badge></TableCell><TableCell>{new Date(membership.joined_at).toLocaleDateString()}</TableCell><TableCell>{relativeDate(membership.last_movement_at)}</TableCell><TableCell className="max-w-48 truncate">{membership.reason || "—"}</TableCell></TableRow>)}</TableBody></Table></Card>
+          <Card><Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Status</TableHead><TableHead>Priority</TableHead><TableHead>Joined</TableHead><TableHead>Last Movement</TableHead><TableHead>Reason</TableHead></TableRow></TableHeader><TableBody>{memberships.map((membership) => <TableRow key={membership.id} className="cursor-pointer" onClick={() => setSelectedMembershipId(membership.id)}><TableCell className="font-medium">{/* A button, so the row is reachable with Tab and opens with Enter. */}<button type="button" className="rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={(event) => { event.stopPropagation(); setSelectedMembershipId(membership.id); }}>{membership.contacts?.name || "Unknown"}</button></TableCell><TableCell>{stages.find((s) => s.id === membership.status)?.label || membership.status}</TableCell><TableCell><Badge variant="secondary" className="capitalize">{membership.priority}</Badge></TableCell><TableCell>{shortDate(membership.joined_at)}</TableCell><TableCell>{relativeDate(membership.last_movement_at)}</TableCell><TableCell className="max-w-48 truncate">{membership.reason || "—"}</TableCell></TableRow>)}</TableBody></Table></Card>
         </TabsContent>
         <TabsContent value="goals" className="mt-0">
           <GoalsTab group={group} />

@@ -2,7 +2,7 @@
 // apart from the dialog so it can be tested with node --test
 // (notebook/test/moment-form.test.mjs).
 
-import { AI_REFUSED_STATUS, AI_UNREACHABLE_STATUS, NO_AI_STATUS } from '../../../../core/no-ai.mjs';
+import { AI_BUSY, AI_BUSY_STATUS, AI_NO_CREDIT, AI_NO_CREDIT_STATUS, AI_REFUSED_STATUS, AI_STALLED, AI_STALLED_STATUS, AI_UNREACHABLE_STATUS, NO_AI_STATUS } from '../../../../core/no-ai.mjs';
 
 const DAY = /^(\d{4}-\d{2}-\d{2})/;
 
@@ -20,7 +20,8 @@ function formDay(value) {
  * not theirs, so a later suggestion may replace it. A new moment's starting
  * values (today, Unknown, the middle of each slider) are placeholders, not
  * choices. An existing moment's saved values are filled, except an empty
- * title or date and the status Unknown.
+ * title or date, the status Unknown, and a score the writer left out (a gap
+ * a suggestion may fill, like the empty title and date).
  */
 export function filledOnOpen(editEvent) {
   if (!editEvent) return { title: false, dateStart: false, dateEnd: false, status: false, impactLevel: false, confDate: false, confTruth: false };
@@ -29,9 +30,9 @@ export function filledOnOpen(editEvent) {
     dateStart: !!formDay(editEvent.happened_at),
     dateEnd: !!formDay(editEvent.happened_end),
     status: !!editEvent.status && editEvent.status !== 'unknown',
-    impactLevel: true,
-    confDate: true,
-    confTruth: true,
+    impactLevel: editEvent.impact_level != null,
+    confDate: editEvent.confidence_date != null,
+    confTruth: editEvent.confidence_truth != null,
   };
 }
 
@@ -130,22 +131,35 @@ export function newPeopleToCreate(suggested = [], typed = []) {
   return out;
 }
 
-// What the server says when the AI refused the key or could not be reached
-// (server/main.mjs plainAIFailure): 'refused', 'unreachable', or null.
+// What the server says when the AI fails, by its status line (core/no-ai.mjs, decided in
+// core/ai-outcome.mjs): 'refused', 'unreachable', 'stalled', 'no-credit', 'busy', or null.
 export function aiFailureKind(message) {
   const text = String(message ?? '');
   if (text.startsWith(AI_REFUSED_STATUS)) return 'refused';
   if (text.startsWith(AI_UNREACHABLE_STATUS)) return 'unreachable';
+  if (text.startsWith(AI_STALLED_STATUS)) return 'stalled';
+  if (text.startsWith(AI_NO_CREDIT_STATUS)) return 'no-credit';
+  if (text.startsWith(AI_BUSY_STATUS)) return 'busy';
   return null;
 }
 
 // What a saved moment's confirmation adds when no facts were pulled out of it
-// because of the AI (#779), or null when there is nothing to add. With no AI
-// connected it says so in the other AI actions' words (#784); the dialog asks
-// for it only when the moment has people, since otherwise nothing was to be pulled out.
+// because of the AI (#779), or null when there is nothing to add.
 export function factsNotPulledOut(kind) {
-  if (kind === 'none') return NO_AI_STATUS + ', so no facts about its people were pulled out. Connect your AI service in Settings, Your AI.';
+  if (kind === 'none') return NO_AI_FACTS;
   if (kind === 'refused') return 'No facts were pulled out of it. ' + AI_REFUSED_STATUS + '. Check it in Settings, Your AI.';
   if (kind === 'unreachable') return 'No facts were pulled out of it. ' + AI_UNREACHABLE_STATUS + '. Check its connection in Settings, Your AI.';
+  // The stalled sentence is the shared one (AI_STALLED, core/no-ai.mjs), so a reword there keeps
+  // this notice and the Groups button's reason saying the same words (#861 review R8).
+  if (kind === 'stalled') return 'No facts were pulled out of it. ' + AI_STALLED;
+  if (kind === 'no-credit') return 'No facts were pulled out of it. ' + AI_NO_CREDIT;
+  if (kind === 'busy') return 'No facts were pulled out of it. ' + AI_BUSY;
   return null;
+}
+
+// A moment with people gets the same explanation whether the tab already knows no AI is
+// connected or learns it from the extraction response (#784, #812).
+export const NO_AI_FACTS = NO_AI_STATUS + ', so no facts about its people were pulled out. Connect your AI service in Settings, Your AI.';
+export function noAiFacts(message) {
+  return String(message ?? '').startsWith(NO_AI_STATUS) ? NO_AI_FACTS : null;
 }

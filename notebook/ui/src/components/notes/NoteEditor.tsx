@@ -1454,6 +1454,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       return { wordCount: trimmed ? trimmed.split(/\s+/).length : 0, charCount: text.length };
     },
   }) ?? { wordCount: 0, charCount: 0 };
+  // "1 word", not "1 words" (#818).
+  const wordsLabel = `${wordCount} ${wordCount === 1 ? "word" : "words"}`;
+  const charsLabel = `${charCount} ${charCount === 1 ? "character" : "characters"}`;
   const metadata = note.metadata as Record<string, unknown> | null;
   const mentionedPeople = Array.isArray(metadata?.people) ? (metadata.people as string[]) : [];
   const { data: mentionedGroupMatches = [] } = useQuery({
@@ -1556,14 +1559,14 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </>
           ) : (
             <>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"} aria-label={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
                 <Star className={cn("h-4 w-4", note.is_favorite && "fill-warning text-warning")} />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"} aria-label={note.is_pinned ? "Unpin" : "Pin to top"}>
                 <Pin className={cn("h-4 w-4", note.is_pinned && "text-primary")} />
               </Button>
               {!note.is_external && (
-                <Button variant="ghost" size="icon" className={cn("h-8 w-8", sourceMode && "bg-accent text-accent-foreground")} onClick={toggleSourceMode} title={sourceMode ? "Rich text mode" : "Markdown source"}>
+                <Button variant="ghost" size="icon" className={cn("h-8 w-8", sourceMode && "bg-accent text-accent-foreground")} onClick={toggleSourceMode} title={sourceMode ? "Rich text mode" : "Markdown source"} aria-label={sourceMode ? "Rich text mode" : "Markdown source"}>
                   <Code2 className="h-4 w-4" />
                 </Button>
               )}
@@ -1578,7 +1581,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
         <div className="px-4 py-3 border-b border-border bg-muted/30 text-xs text-muted-foreground space-y-1 shrink-0">
           <p>Created: {format(new Date(note.created_at), "PPp")}</p>
           <p>Updated: {format(new Date(note.updated_at), "PPp")}</p>
-          <p>{wordCount} words · {charCount} characters</p>
+          <p>{wordsLabel} · {charsLabel}</p>
           {metadata?.type && <p>Type: {String(metadata.type)}</p>}
           {metadata?.summary && <p>Summary: {String(metadata.summary)}</p>}
           {Array.isArray(metadata?.topics) && (metadata.topics as string[]).length > 0 && (
@@ -1622,10 +1625,10 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           }}
           quickActions={
             <>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"} aria-label={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
                 <Star className={cn("h-3.5 w-3.5", note.is_favorite && "fill-warning text-warning")} />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"} aria-label={note.is_pinned ? "Unpin" : "Pin to top"}>
                 <Pin className={cn("h-3.5 w-3.5", note.is_pinned && "text-primary")} />
               </Button>
               {sharedNote?.is_active && (
@@ -1646,6 +1649,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                 className="h-7 w-7"
                 onClick={() => window.open(`/dashboard/notes/${note.id}`, "_blank")}
                 title="Open in new tab"
+                aria-label="Open in new tab"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
               </Button>
@@ -1655,6 +1659,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                 className="h-7 w-7 hover:text-destructive"
                 onClick={moveToTrash}
                 title="Move to trash"
+                aria-label="Move to trash"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
@@ -1663,7 +1668,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           noteActions={
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7" title="More actions">
+                <Button variant="ghost" size="icon" className="h-7 w-7" title="More actions" aria-label="More actions">
                   <MoreHorizontal className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
@@ -2021,7 +2026,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </span>
           )}
         </div>
-        <span>{wordCount} words</span>
+        <span>{wordsLabel}</span>
       </div>
 
       {/* Delete confirmation */}

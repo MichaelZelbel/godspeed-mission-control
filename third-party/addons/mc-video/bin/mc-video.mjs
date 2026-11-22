@@ -204,12 +204,16 @@ function stepHyperframes() {
     return true;
   }
   fs.mkdirSync(dir, { recursive: true });
+  // HyperFrames pulls onnxruntime-node, whose install script otherwise downloads a large GPU (CUDA)
+  // archive that is no longer published on Linux x64 and answers 404 every time, so a retry never helps.
+  // The CPU build is all HyperFrames needs here. The variable is read by onnxruntime-node's install
+  // script on any npm; the equivalent --onnxruntime-node-install-cuda flag is refused by npm 12.
   console.log("   Installing it once, here, so your assistant never has to download a program while it works (about 370 MB)...");
   const npm = path.join(path.dirname(process.execPath), isWin ? "npm.cmd" : "npm");
   const installed = L.retryInstall(
     () => spawnSync(fs.existsSync(npm) ? `"${npm}"` : "npm",
       ["install", "--prefix", ".", `hyperframes@${L.HYPERFRAMES_VERSION}`, "--no-audit", "--no-fund", "--loglevel", "error"],
-      { cwd: dir, stdio: "inherit", shell: true }),
+      { cwd: dir, stdio: "inherit", shell: true, env: { ...process.env, ONNXRUNTIME_NODE_INSTALL_CUDA: "skip" } }),
     hyperframesInstalled,
     () => console.log(`   Retrying the pinned HyperFrames ${L.HYPERFRAMES_VERSION} installation once after the first attempt did not finish cleanly...`),
   );

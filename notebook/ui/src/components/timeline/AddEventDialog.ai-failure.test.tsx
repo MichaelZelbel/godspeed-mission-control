@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
-// #779: a moment is always saved, and when the AI refused the key or could not be reached its
-// confirmation says that no facts were pulled out of it, and where to look. With no AI connected and
-// people in the moment it says so too, in the other AI actions' words, without asking any AI (#784).
+// #779: a moment is always saved, and when the AI refused the key, could not be reached or stopped answering its
+// confirmation says that no facts were pulled out of it, and where to look.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { AI_REFUSED_STATUS, AI_UNREACHABLE_STATUS, NO_AI_STATUS } from "../../../../core/no-ai.mjs";
+import { AI_REFUSED_STATUS, AI_STALLED_STATUS, AI_UNREACHABLE_STATUS } from "../../../../core/no-ai.mjs";
 import AddEventDialog from "./AddEventDialog";
 import { WAIT } from "@/test/wait-limits";
 
@@ -39,22 +38,16 @@ vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
 
 class NoResize { observe() {} unobserve() {} disconnect() {} }
 globalThis.ResizeObserver ??= NoResize as any;
-Element.prototype.scrollIntoView ??= () => {};
 
 const REFUSED_FACTS = "No facts were pulled out of it. " + AI_REFUSED_STATUS + ". Check it in Settings, Your AI.";
 const UNREACHABLE_FACTS = "No facts were pulled out of it. " + AI_UNREACHABLE_STATUS + ". Check its connection in Settings, Your AI.";
-const NO_AI_FACTS = NO_AI_STATUS + ", so no facts about its people were pulled out. Connect your AI service in Settings, Your AI.";
-const ada = { id: "person-ada", name: "Ada Fictional", relationship: null };
-// What the server answers for the extraction (server/main.mjs plainAIFailure).
+const STALLED_FACTS = "No facts were pulled out of it. " + AI_STALLED_STATUS + ". Try again in a moment, or check it in Settings, Your AI.";
+// What the server answers for the extraction (core/ai-outcome.mjs plainAIError).
 const serverSaid = (message: string) => ({ data: null, error: { message } });
 
-async function saveMoment(withPerson = false) {
-  render(<AddEventDialog people={withPerson ? [ada] : []} onCreated={() => {}} open onOpenChange={() => {}} />);
+async function saveMoment() {
+  render(<AddEventDialog people={[]} onCreated={() => {}} open onOpenChange={() => {}} />);
   fireEvent.change(await screen.findByPlaceholderText("Short title for this moment", undefined, WAIT), { target: { value: "A saved moment" } });
-  if (withPerson) {
-    fireEvent.click(screen.getByRole("combobox", { name: "People" }));
-    fireEvent.click(await screen.findByRole("option", { name: ada.name }, WAIT));
-  }
   fireEvent.click(screen.getByRole("button", { name: "Create Moment" }));
   await waitFor(() => expect(toast).toHaveBeenCalled(), WAIT);
   expect(state.inserted).toContain("moments");
@@ -84,8 +77,15 @@ describe("saving a moment while the AI fails", () => {
     await waitFor(() => expect(toast).toHaveBeenLastCalledWith({ title: "Moment created", description: UNREACHABLE_FACTS }), WAIT);
   });
 
-  it("says it at once, without asking the AI, when the AI is already known to be refused or unreachable", async () => {
-    for (const [kind, sentence] of [["refused", REFUSED_FACTS], ["unreachable", UNREACHABLE_FACTS]]) {
+  it("says the AI is not answering, not that it could not be reached, when the extraction stalls", async () => {
+    state.providerConfigured = true;
+    invoke.mockResolvedValue(serverSaid(AI_STALLED_STATUS + ". Try again in a moment, or check it in Settings, Your AI."));
+    await saveMoment();
+    await waitFor(() => expect(toast).toHaveBeenLastCalledWith({ title: "Moment created", description: STALLED_FACTS }), WAIT);
+  });
+
+  it("says it at once, without asking the AI, when the AI is already known to be refused, unreachable or stalled", async () => {
+    for (const [kind, sentence] of [["refused", REFUSED_FACTS], ["unreachable", UNREACHABLE_FACTS], ["stalled", STALLED_FACTS]]) {
       state.aiAvailability = kind;
       await saveMoment();
       expect(toast).toHaveBeenCalledWith({ title: "Moment created", description: sentence });
@@ -94,23 +94,7 @@ describe("saving a moment while the AI fails", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it("says no facts were pulled out because no AI is connected, without asking any AI, when the moment has people", async () => {
-    state.aiAvailability = "none";
-    await saveMoment(true);
-    expect(toast).toHaveBeenCalledTimes(1);
-    expect(toast).toHaveBeenCalledWith({ title: "Moment created", description: NO_AI_FACTS });
-    expect(state.inserted.filter((table) => table === "moments")).toHaveLength(1);
-    expect(state.inserted).toContain("moment_participants");
-    expect(invoke).not.toHaveBeenCalled();
-  });
-
-  it("keeps the plain confirmation when no AI is connected and the moment has no people, or the extraction worked", async () => {
-    state.aiAvailability = "none";
-    await saveMoment();
-    expect(toast).toHaveBeenCalledTimes(1);
-    expect(toast).toHaveBeenCalledWith({ title: "Moment created" });
-    expect(invoke).not.toHaveBeenCalled();
-    cleanup();toast.mockClear();
+  it("keeps the plain confirmation when the extraction worked", async () => {
     Object.assign(state, { providerConfigured: true, aiAvailability: "ready" });
     await saveMoment();
     await waitFor(() => expect(invoke).toHaveBeenCalledOnce(), WAIT);

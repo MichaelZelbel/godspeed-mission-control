@@ -100,7 +100,7 @@ describe("dashboard header drawn at a phone's width and a desktop's width", () =
     const browser = await launch();
     const dir = mkdtempSync(join(tmpdir(), "dashboard-header-"));
     try {
-      for (const width of [375, 1280]) {
+      for (const width of [320, 375, 1280]) {
         const page = await headerAt(width); 
         const css = await appCss(page);
         const file = join(dir, `header-${width}.html`);
