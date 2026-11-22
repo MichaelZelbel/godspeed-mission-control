@@ -47,6 +47,7 @@ test('a talk start whose record the assistant made for another day, or not at al
   domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};if(wrongDay)openTalk(prepared.area,'2030-03-04',{opening:prepared.opening});return {reply:prepared.opening};};
   const result=await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),talk=readTalk(prepared.area,'2030-03-05');
   assert.equal(prepared.day,'2030-03-05');assert.equal(result.reply,prepared.opening);assert.equal(talk.state,'opened');assert.equal(talk.sections['The opening'].trim(),prepared.opening);assert.ok(talk.shown);
+  assert.equal(talk.prep,`${path.relative(root,prepared.area.dir)}/prep/2030-03-05.md`.replace(/\\/g,'/'));assert.equal(talk.sections.Prepared.trim(),prepared.opening);
  }
 });
 test('a native chat accepts only an unprepared opening that its record holds',async t=>{

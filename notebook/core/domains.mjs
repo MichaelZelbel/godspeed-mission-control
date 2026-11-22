@@ -377,7 +377,7 @@ export class Domains {
       const judged=startCharmJudgement(this,input);
       const ask=message=>this.nativeAgent({...input,message,nativeFiles,page_context:input[IDENTITY_PAGE],step_context:input.step_context,coach_talk_start:start});
       let result=await ask(input.message).catch(error=>{judged.drop();throw error;});
-      const opened=start&&coachTalkOpenedFromStart(this.store,start);
+      let opened;try{opened=start&&coachTalkOpenedFromStart(this.store,start);}catch(error){judged.drop();throw error;}
       if(opened)result={...result,reply:opened};
       let problem=start&&coachTalkRecordProblem(this.store,start,result.reply,{requireShown:start.continuing});
       // A record with the wrong opening is corrected to the prepared one, and the talk opens from it
