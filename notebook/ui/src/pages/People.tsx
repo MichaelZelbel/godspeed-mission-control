@@ -212,8 +212,10 @@ export default function People() {
   const mergeSource = findPerson(mergeTreeId);
   const deleteTarget = findPerson(deleteTargetId);
 
+  // The pane fills main's content height where the floating chat button shows, defined in
+  // DashboardLayout.
   return (
-    <div className="flex h-[calc(100dvh-104px)] overflow-hidden">
+    <div className="flex h-[var(--page-h)] overflow-hidden">
       <SEOHead title="People - Godspeed Mission Control" noIndex />
 
       {/* Left panel - tree + search */}

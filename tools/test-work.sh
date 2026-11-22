@@ -40,6 +40,9 @@ missing()  { case "$2" in *"$3"*) bad "$1 (should not contain [$3])";; *) ok "$1
 
 echo "mc-work gate"
 
+# --- the script itself is runnable from a checkout (#914) ------------------------------------------
+"$HERE/mc-work" help >/dev/null 2>&1; check "mc-work runs straight from a checkout" "$?" "0"
+
 # --- filing and duplicate triggers ---------------------------------------------------------------
 OUT="$(hw file --what "Redraft the three lines" 2>&1)"; check "no done-when, no item" "$?" "1"
 contains "  and says why" "$OUT" "done-when is required"
@@ -258,6 +261,17 @@ OUT="$(hw verify $CH5 2>&1)"; check "a learn item whose answer was only reported
 mkdir -p "$TMP/research"; printf '## Answer\nAbout forty percent of readers reach chapter 5, from the reading log.\n' > "$TMP/research/chapter-5.md"
 printf '%s\n' '{"passed":true,"reason":"the answer and its evidence are in the promised file","missing":[]}' > "$TMP/ch5-review.json"
 OUT="$(hw verify $CH5 --content-review "$TMP/ch5-review.json" 2>&1)"; contains "  once the answer is written and independently reviewed, it verifies" "$OUT" "verified by its check and content review"
+
+# --- one list of result extensions for filing and finding (#914) -------------------------------------------
+# The filing gate and the file-finding side share one list, so a learn item whose DONE WHEN
+# names an .html result is filed (and its file found) instead of refused at filing.
+OUT="$(hw file --learn "Which pages do readers open twice" --done-when "the answer is in work/answer-page.html" --key html-answer --source test 2>&1)"
+contains "a learn item naming an .html result files" "$OUT" ": planned"
+HTML="$(idof html-answer)"
+mkdir -p "$TMP/work"; printf '<p>Three pages, twice each.</p>\n' > "$TMP/work/answer-page.html"
+check "  and files lists the .html result it names" "$(hw files "$HTML" 2>&1)" "work/answer-page.html"
+OUT="$(hw file --learn "Which reader owns a .docx" --done-when "the answer is in work/answer.docx" --key docx-answer --source test 2>&1)"; check "a learn item naming a non-result file is refused" "$?" "1"
+contains "  and the refusal states the shared list, .html included" "$OUT" ".html"
 
 # --- a repair mends this machine, and reaches nobody else (2026-10-27) -------------------------------------
 OUT="$(hw file --what "Install the fixed nightly upgrade over the broken copy" --done-when "the upgrade's own check passes again on this machine" --kind repair --key fix-upgrade --source test 2>&1)"

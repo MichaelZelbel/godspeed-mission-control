@@ -38,23 +38,57 @@ export function hashProblems(list,root){
 // The files a copy holds on disk, as paths relative to the copy. Where a repository answers —
 // this repository for the real copies, one a fixture builds for the git case below — git is asked
 // the query vendor-addons.py --check asks, with `-z` so paths are never C-quoted and a hand-added
-// file whose name git quotes is still enumerated. The answer is read back as strict UTF-8: a name
-// that is not valid UTF-8 can only have been written by hand, since the vendoring script never
-// carries one, and it is named as an error instead of being silently dropped. The child's locale
-// is pinned to `C` so the not-a-repository fallback is detected in git's untranslated message,
-// whatever catalog the machine has. There, files the repository ignores (node_modules,
-// __pycache__) do not count as part of a copy, a file committed here is found before it is
-// staged, and a file a re-pin dropped is not reported while its deletion is still unstaged; a
-// folder with no repository is walked instead. The walk is mapped to the separators pin.files is
-// written in.
-function copyFiles(root,name){
- const listed=spawnSync('git',['ls-files','-z','--cached','--others','--exclude-standard','--',name],{cwd:root,env:{...process.env,LC_ALL:'C'}});
+// file whose name git quotes is still enumerated. A name that is not valid UTF-8 cannot be read
+// back as text, so it is named by its escaped bytes: such a name can only have been written by
+// hand, since the vendoring script never carries one, and it is named in the report instead of
+// being silently dropped. The child's locale is pinned to `C` so the not-a-repository fallback is
+// detected in git's untranslated message, whatever catalog the machine has. There, files the
+// repository ignores (node_modules, __pycache__) do not count as part of a copy, a file committed
+// here is found before it is staged, and a file a re-pin dropped is not reported while its
+// deletion is still unstaged; a folder with no repository is walked instead. The walk is mapped
+// to the separators pin.files is written in.
+function gitListed(root,name,flags){
+ const listed=spawnSync('git',['ls-files','-z',...flags,'--',name],{cwd:root,env:{...process.env,LC_ALL:'C'}});
  if(listed.error)throw listed.error;
- let answer;
- try{answer=new TextDecoder('utf-8',{fatal:true}).decode(listed.stdout);}
- catch(error){throw new Error(`git listed a file in ${path.join(root,name)} whose name is not valid UTF-8, so the file cannot be named here: the copy holds a file the add-on does not carry, or has otherwise drifted. ${WAY}`);}
- if(listed.status!==0){if(!/not a git repository/i.test(listed.stderr.toString()))throw new Error(listed.stderr.toString());return fs.readdirSync(path.join(root,name),{recursive:true}).filter(file=>fs.statSync(path.join(root,name,file)).isFile()).map(file=>file.replaceAll('\\','/'));}
- return answer.split('\0').filter(Boolean).map(file=>file.slice(name.length+1)).filter(file=>fs.existsSync(path.join(root,name,file)));
+ if(listed.status!==0){if(!/not a git repository/i.test(listed.stderr.toString()))throw new Error(listed.stderr.toString());return null;}
+ return listed.stdout;
+}
+// The names one git answer holds, NUL-separated: read strictly where the name is valid UTF-8, and
+// named by its escaped bytes where it is not (a byte that starts no valid UTF-8 sequence is shown
+// as \xNN, the rest of the name as it is).
+function gitNames(out){
+ const names=[];
+ for(let start=0;start<out.length;){
+  let end=out.indexOf(0,start);if(end<0)end=out.length;
+  if(end>start)names.push(escapedName(out.subarray(start,end)));
+  start=end+1;
+ }
+ return names;
+}
+function escapedName(bytes){
+ try{return new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{}
+ let name='',i=0;
+ while(i<bytes.length){
+  const byte=bytes[i];
+  if(byte<0x80){name+=String.fromCharCode(byte);i++;continue;}
+  let piece=null,used=0;
+  for(let n=2;n<=4&&i+n<=bytes.length;n++){
+   try{piece=new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(i,i+n));used=n;break;}catch{}
+  }
+  if(piece){name+=piece;i+=used;}else{name+='\\x'+byte.toString(16).padStart(2,'0');i++;}
+ }
+ return name;
+}
+function copyFiles(root,name){
+ const cached=gitListed(root,name,['--cached']),others=gitListed(root,name,['--others','--exclude-standard']);
+ if(cached===null||others===null)return fs.readdirSync(path.join(root,name),{recursive:true}).filter(file=>fs.statSync(path.join(root,name,file)).isFile()).map(file=>file.replaceAll('\\','/'));
+ // A file the index still holds after a re-pin dropped it is not on disk any more, and is not
+ // counted: the copy matches, and the deletion only has to be staged. A file listed as untracked
+ // is on disk by definition. A name that is not valid UTF-8 (which a copy is never given by the
+ // vendoring script, so only a hand-added untracked one can be) cannot be checked on disk as
+ // text; it is kept, so a hand-added one is still named.
+ const relative=names=>names.map(file=>file.slice(name.length+1));
+ return [...relative(gitNames(cached)).filter(file=>fs.existsSync(path.join(root,name,file))||/\\x/.test(file)),...relative(gitNames(others))];
 }
 
 export const hashReport=(list,root)=>{const problems=hashProblems(list,root);return problems.length?problems.join('\n')+'\n\n'+WAY:'';};
@@ -137,21 +171,17 @@ test('the git answer the real gate relies on names committed and added extras an
 });
 
 // The last member of the same class: a hand-added name that is not even valid UTF-8. Git reads the
-// copy by raw bytes, so the enumeration has to turn such a name into a loud failure naming the
-// copy, not drop it. Such a name cannot be created on Windows, whose file names are always valid
-// UTF-8, so the case asks its question only where one can exist.
-test('a file added to the copy whose name is not valid UTF-8 is caught, not silently dropped',()=>{
+// copy by raw bytes, so the enumeration has to name such a file by its escaped bytes, not drop it
+// and not end in a throw that names only the copy. Such a name cannot be created on Windows, whose
+// file names are always valid UTF-8, so the case asks its question only where one can exist.
+test('a file added to the copy whose name is not valid UTF-8 is named by its escaped name',()=>{
  if(process.platform==='win32')return;
  const f=fixture();
  const git=(...args)=>{const run=spawnSync('git',args,{cwd:f.root});if(run.status!==0)throw new Error(run.stderr.toString());};
  git('init');
  fs.writeFileSync(Buffer.from(path.join(f.root,'pinned-add-on/lib/latin1-éname.md'),'latin1'),'added here by hand');
- assert.throws(()=>hashProblems(f.pins,f.root),error=>{
-  assert.match(error.message,/not valid UTF-8/);
-  assert.match(error.message,/pinned-add-on/);
-  assert.match(error.message,/own repository/);assert.match(error.message,/re-pin/);
-  return true;
- });
+ assert.deepEqual(hashProblems(f.pins,f.root),['pinned-add-on/lib/latin1-\\xe9name.md is present in the copy but is not among the files the add-on carries.']);
+ assert.match(hashReport(f.pins,f.root),/own repository/);assert.match(hashReport(f.pins,f.root),/re-pin/);
 });
 
 test('an add-on carried in this repository is not asked for hashes',()=>{
