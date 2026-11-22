@@ -93,4 +93,28 @@ describe("direct date use", () => {
   it("passes now-only code, dates built from numbers, numbers, and names in comments and strings", () => {
     expect(dateUses(allowed, "allowed.tsx")).toEqual([]);
   });
+
+  it("sees the direct use written inside a template literal, a held variable, a namespace import and the remaining date-fns formatters", () => {
+    const evasive = [
+      "<p>{`Last updated ${new Date(stored).toLocaleString()}`}</p>",
+      "const parsed = parseInstant(row.at);",
+      "parsed.toLocaleString();",
+      "const n = row.count;",
+      "n.toLocaleString();",
+      'import * as dfns from "date-fns";',
+      'dfns.format(dfns.parseISO(s), "PPP");',
+      'import { formatRFC3339, formatISO9075 } from "date-fns";',
+      "formatRFC3339(d);",
+      "formatISO9075(d);",
+    ].join("\n");
+    expect(dateUses(evasive, "evasive.tsx").map((entry) => entry.split(" ").slice(0, 2).join(" "))).toEqual([
+      "evasive.tsx:1: new",
+      "evasive.tsx:1: toLocaleString",
+      "evasive.tsx:3: toLocaleString",
+      "evasive.tsx:7: format",
+      "evasive.tsx:7: parseISO",
+      "evasive.tsx:9: formatRFC3339",
+      "evasive.tsx:10: formatISO9075",
+    ]);
+  });
 });

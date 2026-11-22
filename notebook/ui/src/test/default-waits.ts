@@ -13,7 +13,7 @@ const WAIT_CALL = /(\bvi\.(?:waitFor|waitUntil)|(?<![\w.])waitForElementToBeRemo
 // out: in TSX they come before the `/` of `</p>`, `/>` and `{x} />`.
 const BEFORE_REGEX = /(?:=>|[(,=:[!&|?{;+\-*%~^]|\breturn|\btypeof|\bcase)\s*$/;
 
-/** The source with comments and the contents of strings, templates and regex literals blanked to spaces, newlines and length kept. */
+/** The source with comments and the contents of strings, templates and regex literals blanked to spaces, newlines and length kept. A template literal's interpolations are code and stay visible. */
 export function blank(source: string): string {
   let out = "";
   let i = 0;
@@ -21,36 +21,67 @@ export function blank(source: string): string {
   const skip = (end: number) => {
     for (; i < end && i < n; i++) out += source[i] === "\n" ? "\n" : " ";
   };
-  while (i < n) {
-    const c = source[i];
-    const d = source[i + 1];
-    if (c === "/" && d === "/") {
-      const end = source.indexOf("\n", i);
-      skip(end < 0 ? n : end);
-    } else if (c === "/" && d === "*") {
-      const end = source.indexOf("*/", i + 2);
-      skip(end < 0 ? n : end + 2);
-    } else if (c === '"' || c === "'" || c === "`" || (c === "/" && BEFORE_REGEX.test(out.slice(-12)))) {
-      out += c;
-      i++;
-      let inClass = false;
-      while (i < n) {
-        const e = source[i];
-        if (e === "\\") { skip(i + 2); continue; }
-        if (e === "\n" && c !== "`") break;
-        if (c === "/") {
-          if (e === "[") inClass = true;
-          else if (e === "]") inClass = false;
-          else if (e === "/" && !inClass) break;
-        } else if (e === c) break;
+  // Scans one string, template or regex literal whose opening character is at i.
+  // A template's `${` hands the interpolation back to the code scanner until the `}`
+  // that closes it, so interpolation code is seen and its content stays blanked.
+  const scanLiteral = (quote: string) => {
+    let inClass = false;
+    out += source[i];
+    i++;
+    while (i < n) {
+      const e = source[i];
+      if (e === "\\") { skip(i + 2); continue; }
+      if (e === "\n" && quote !== "`") return;
+      if (quote === "`" && e === "$" && source[i + 1] === "{") {
+        skip(i + 2);
+        if (!scanCode(true)) return;
         skip(i + 1);
+        continue;
       }
-      if (i < n) { out += source[i]; i++; }
-    } else {
-      out += c;
-      i++;
+      if (quote === "/") {
+        if (e === "[") inClass = true;
+        else if (e === "]") inClass = false;
+        else if (e === "/" && !inClass) { out += e; i++; return; }
+      } else if (e === quote) {
+        out += e;
+        i++;
+        return;
+      }
+      skip(i + 1);
     }
-  }
+  };
+  // Scans code. Returns true when it stopped at the `}` closing an interpolation
+  // (left at i, not consumed); false only at the end of the source.
+  const scanCode = (inInterpolation: boolean): boolean => {
+    let braces = 0;
+    while (i < n) {
+      const c = source[i];
+      const d = source[i + 1];
+      if (c === "/" && d === "/") {
+        const end = source.indexOf("\n", i);
+        skip(end < 0 ? n : end);
+      } else if (c === "/" && d === "*") {
+        const end = source.indexOf("*/", i + 2);
+        skip(end < 0 ? n : end + 2);
+      } else if (c === '"' || c === "'" || c === "`" || (c === "/" && BEFORE_REGEX.test(out.slice(-12)))) {
+        scanLiteral(c);
+      } else if (c === "{") {
+        braces++;
+        out += c;
+        i++;
+      } else if (c === "}") {
+        if (inInterpolation && braces === 0) return true;
+        if (braces > 0) braces--;
+        out += c;
+        i++;
+      } else {
+        out += c;
+        i++;
+      }
+    }
+    return false;
+  };
+  scanCode(false);
   return out;
 }
 

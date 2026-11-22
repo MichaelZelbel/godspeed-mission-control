@@ -65,10 +65,12 @@ async function loadAbout(): Promise<AboutInfo> {
   if (!response.ok) throw new Error(data.error || "Request failed");
   return data;
 }
-// "Nov 21, 2026", the shared display format.
+// "Nov 21, 2026", the shared display format. The values here are full
+// instants (the table's download, the release commit date), so "date" reads
+// the viewer's local day; a plain day still reads as that day.
 function longDay(value: string | null): string {
   if (!value) return "";
-  return showDate(value, "day");
+  return showDate(value, "date");
 }
 // The Open Food Facts sentence names its address; that address becomes a link.
 function withLinks(text: string) {

@@ -34,6 +34,9 @@ const moment=(d?:string|null)=>{if(!d)return '';return showDate(d,'time');};
 // GOES OUT is written in UTC as YYYY-MM-DDTHH:MM.
 const goesOut=(at:string)=>moment(at.length===16?at+':00Z':at);
 const number=(v:number)=>v.toLocaleString();
+// Local midnights a week apart straddle a DST change, where their difference is a
+// hair under 7×86400000 ms, so the millisecond difference rounds to a day count.
+export const daysBetween=(a?:string|null,b?:string|null)=>{const ta=parseInstant(a)?.getTime()??NaN,tb=parseInstant(b)?.getTime()??NaN;return Math.round((ta-tb)/86400000);};
 const STATUS:Record<string,string>={adopted:'Active',provisional:'An idea, not worked on yet',paused:'Paused',achieved:'Reached',retired:'Stopped'};
 const VERDICT:Record<string,string>={worked:'It worked',moved:'It moved the number, but less than expected',flat:'The number did not move',unread:'No reading came in time to judge it','never-live':'It never went live'};
 
@@ -51,7 +54,7 @@ function workState(w:Work):{icon:JSX.Element;text:string}{
 }
 
 function Readings({goal}:{goal:Goal}){
-  const rs=goal.readings,lastReading=rs.at(-1),weekBefore=lastReading?[...rs].reverse().find(r=>((parseInstant(lastReading.date)?.getTime()??NaN)-(parseInstant(r.date)?.getTime()??NaN))/86400000>=7):undefined;
+  const rs=goal.readings,lastReading=rs.at(-1),weekBefore=lastReading?[...rs].reverse().find(r=>daysBetween(lastReading.date,r.date)>=7):undefined;
   if(!lastReading)return <p className="text-sm text-muted-foreground">Not read yet. The morning decision reads it, or you tell it below.</p>;
   return <div className="space-y-3">
     <p><span className="text-3xl font-semibold font-display tabular-nums">{number(lastReading.value)}</span> <span className="text-sm text-muted-foreground">on {day(lastReading.date)}{weekBefore?', '+(lastReading.value-weekBefore.value>=0?'up ':'down ')+number(Math.abs(lastReading.value-weekBefore.value))+' since '+day(weekBefore.date):''}</span></p>

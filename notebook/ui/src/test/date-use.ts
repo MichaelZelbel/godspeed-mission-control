@@ -21,7 +21,8 @@ const DATE_OPTS = /\b(?:dateStyle|timeStyle|weekday|year|month|day|hour|minute|s
 // comparison (isValid, setMonth, ...) are not flagged.
 const FNS = new Set([
   "format", "formatDistance", "formatDistanceStrict", "formatDistanceToNow",
-  "formatDistanceToNowStrict", "formatRelative", "lightFormat", "intlFormat",
+  "formatDistanceToNowStrict", "formatISO", "formatISO9075", "formatRelative",
+  "formatRFC3339", "formatRFC7231", "lightFormat", "intlFormat",
   "intlFormatDistance", "parse", "parseISO", "parseJSON", "toDate",
 ]);
 const FNS_PARSE = new Set(["parse", "parseISO", "parseJSON", "toDate"]);
@@ -62,17 +63,57 @@ function receiverIsBuiltInDate(text: string, end: number): boolean {
   return args.length === 0 || args.length >= 2 || NOW_ARG.test((args[0] || "").trim());
 }
 
-/** True when the expression before `end` ends in a call to new Date, parseDateOnly or parseInstant. */
+/** True when the expression before `end` ends in a call to new Date, parseDateOnly or parseInstant, or is a local declared from one. */
 function receiverIsDateCall(text: string, end: number): boolean {
   let j = end - 1;
   if (text[j] === "?") j--;
-  if (text[j] !== ")") return false;
-  let depth = 0;
-  for (; j >= 0; j--) {
-    if (text[j] === ")") depth++;
-    else if (text[j] === "(") { depth--; if (depth === 0) break; }
+  if (text[j] === ")") {
+    let depth = 0;
+    for (; j >= 0; j--) {
+      if (text[j] === ")") depth++;
+      else if (text[j] === "(") { depth--; if (depth === 0) break; }
+    }
+    return /(?:new\s+Date|parseDateOnly|parseInstant)\s*$/.test(text.slice(Math.max(0, j - 20), j));
   }
-  return /(?:new\s+Date|parseDateOnly|parseInstant)\s*$/.test(text.slice(Math.max(0, j - 20), j));
+  // A plain local held from a parse call: `const d = parseInstant(row.at); d.toLocaleString()`.
+  const m = /([\w$]+)$/.exec(text.slice(0, j + 1));
+  if (m && !/[.\w$]$/.test(text.slice(0, j + 1 - m[0].length))) return declaredAsDate(text, m[1]);
+  return false;
+}
+
+/** True when any declaration of the local initializes it from a date-parsing call. */
+function declaredAsDate(text: string, name: string): boolean {
+  for (const m of text.matchAll(new RegExp(`\\b(?:const|let|var)\\s+${name}\\s*=\\s*`, "g"))) {
+    if (initializerIsDateCall(initializerText(text, m.index! + m[0].length))) return true;
+  }
+  return false;
+}
+
+/** The initializer expression of the declaration whose `=` ends at `from`: to the statement's `;`, `,` or newline at depth 0. */
+function initializerText(text: string, from: number): string {
+  let depth = 0;
+  let k = from;
+  for (; k < text.length; k++) {
+    const c = text[k];
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") { if (depth === 0) break; depth--; }
+    else if (depth === 0 && (c === ";" || c === "," || c === "\n")) break;
+  }
+  return text.slice(from, k);
+}
+
+/** True when the initializer expression is a call to new Date, parseDateOnly or parseInstant. */
+function initializerIsDateCall(init: string): boolean {
+  init = init.trim().replace(/\?$/, "").trim().replace(/\s+as\s+[\w.[$\]]+$/i, "").trim();
+  if (!init.endsWith(")")) return false;
+  let depth = 0;
+  let j = init.length - 1;
+  for (; j >= 0; j--) {
+    if (init[j] === ")") depth++;
+    else if (init[j] === "(") { depth--; if (depth === 0) break; }
+  }
+  if (j < 0) return false;
+  return /(?:new\s+Date|parseDateOnly|parseInstant)\s*$/.test(init.slice(Math.max(0, j - 20), j));
 }
 
 /** One `file:line: …` entry for each direct date use in `source`. */
@@ -115,10 +156,21 @@ export function dateUses(source: string, file: string): string[] {
   // Module names are blanked in the text, so the import clauses are read from
   // the raw source at the same shape.
   const names = new Map<string, string>();
+  const namespaces: string[] = [];
   for (const m of raw.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']date-fns(?:\/[\w-]+)?["']/g)) {
     for (const part of m[1].split(",")) {
       const [orig, alias] = part.trim().split(/\s+as\s+/);
       if (FNS.has(orig)) names.set(alias || orig, orig);
+    }
+  }
+  for (const m of raw.matchAll(/import\s*\*\s*as\s*(\w+)\s*from\s*["']date-fns["']/g)) namespaces.push(m[1]);
+  for (const alias of namespaces) {
+    for (const m of text.matchAll(new RegExp(`(?<![\\w.])${alias}\\s*\\.\\s*(\\w+)\\s*\\(`, "g"))) {
+      const name = m[1];
+      if (!FNS.has(name)) continue;
+      const args = callArguments(text, m.index! + m[0].length - 1) || [""];
+      if (builtInCode(args[0])) continue;
+      add(m.index, `${name} from date-fns`, name);
     }
   }
   for (const [local, orig] of names) {
