@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import * as ts from "typescript";
 import { blank, callArguments, repoRoot } from "./default-waits";
 
 // Finds code under notebook/ui/src that formats or parses a stored date value
@@ -7,7 +8,9 @@ import { blank, callArguments, repoRoot } from "./default-waits";
 // value's type, so it works on one principle: a Date built in code from "now"
 // or from numbers is not a stored value; anything else that a Date is parsed
 // from, or formatted out of, is. There is no allowlist and no ignore comment:
-// every site the rules flag must move to the helpers.
+// every site the rules flag must move to the helpers. Receiver tracing walks
+// the file's syntax tree, so a held value is followed through any binding or
+// wrapper shape instead of depending on the declaration's formatting.
 
 // `new Date(x)` with one argument is only "now" code when x starts with
 // Date.now() or with the identifier `now`; no argument, or two or more, is
@@ -27,12 +30,11 @@ const FNS = new Set([
 ]);
 const FNS_PARSE = new Set(["parse", "parseISO", "parseJSON", "toDate"]);
 
+// The method formatters a stored date can be shown with.
+const FAMILY = new Set(["toLocaleDateString", "toLocaleTimeString", "toDateString", "toTimeString", "toUTCString"]);
+
 const PARSE_HELPER = "parseInstant (an instant) or parseDateOnly (a calendar day)";
 const DAY_HELPER = "showDate to show it, or localDateISO to compare days";
-
-// A `$` in an import alias is an assertion in a pattern, so aliases reach the
-// call patterns escaped.
-const esc = (name: string) => name.replace(/\$/g, "\\$");
 
 function helperFor(what: string, dateFnsName?: string): string {
   if (what === "new Date(value)" || what === "Date.parse") return PARSE_HELPER;
@@ -56,157 +58,175 @@ function builtInArgs(args: string[]): boolean {
   return args.length === 0 || args.length >= 2 || NOW_ARG.test((args[0] || "").trim());
 }
 
-/** The callee and arguments of an expression that ends in a call, or null when it does not. */
-function callTail(tail: string): { callee: string; args: string[] } | null {
-  tail = tail.trim().replace(/\?$/, "").trim().replace(/\s+as\s+[\w.\[$\]<>|,\s]+$/i, "").trim();
-  if (!tail.endsWith(")")) return null;
-  let depth = 0;
-  let j = tail.length - 1;
-  for (; j >= 0; j--) {
-    if (tail[j] === ")") depth++;
-    else if (tail[j] === "(") { depth--; if (depth === 0) break; }
+/** The argument texts of a call, read from the blanked source so a string argument cannot impersonate code. */
+function argTexts(text: string, args: ts.NodeArray<ts.Expression> | undefined): string[] {
+  return (args || []).map((a) => text.slice(a.getStart(), a.getEnd()));
+}
+
+/** The expression with parens, non-null `!`, `as`/`satisfies` casts and `await` removed. */
+function unwrapExpr(e: ts.Expression): ts.Expression {
+  for (;;) {
+    if (ts.isParenthesizedExpression(e) || ts.isNonNullExpression(e) || ts.isAssertionExpression(e) ||
+      ts.isAwaitExpression(e) || ts.isSatisfiesExpression(e)) {
+      e = e.expression;
+    } else return e;
   }
-  if (j < 0) return null;
-  return { callee: tail.slice(0, j).trimEnd(), args: callArguments(tail, j) || [] };
 }
 
-/** True when the expression is a call to a stored-date parser: a stored `new Date`, Date.parse, parseDateOnly, parseInstant, or a date-fns parser under its local name. */
-function isParseTail(tail: string, parseNames: Set<string>): boolean {
-  const call = callTail(tail);
-  if (!call) return false;
-  if (/new\s+Date\s*$/.test(call.callee)) return !builtInArgs(call.args);
-  const m = /([\w$]+)\s*$/.exec(call.callee);
-  return parseNames.has(call.callee) || (!!m && parseNames.has(m[1]));
-}
-
-/** True when the expression is a call to a `new Date` built from "now" or numbers. */
-function isNowDateTail(tail: string): boolean {
-  const call = callTail(tail);
-  return !!call && /new\s+Date\s*$/.test(call.callee) && builtInArgs(call.args);
-}
-
-/** The initializer expression of the declaration whose `=` ends at `from`: to the statement's `;`, `,` or newline at depth 0. */
-function initializerText(text: string, from: number): string {
-  let depth = 0;
-  let k = from;
-  for (; k < text.length; k++) {
-    const c = text[k];
-    if (c === "(" || c === "[" || c === "{") depth++;
-    else if (c === ")" || c === "]" || c === "}") { if (depth === 0) break; depth--; }
-    else if (depth === 0 && (c === ";" || c === "," || c === "\n")) break;
+/** The value arms of an initializer: a conditional's two arms and the operands of `||`, `&&` and `??`. */
+function armsOf(e: ts.Expression): ts.Expression[] {
+  e = unwrapExpr(e);
+  if (ts.isConditionalExpression(e)) return [...armsOf(e.whenTrue), ...armsOf(e.whenFalse)];
+  if (ts.isBinaryExpression(e) && (e.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+    e.operatorToken.kind === ts.SyntaxKind.BarBarToken || e.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)) {
+    return [...armsOf(e.left), ...armsOf(e.right)];
   }
-  return text.slice(from, k);
+  return [e];
 }
 
-/** The initializer of every declarator naming `name`, in every declaration of the file: through a type annotation, a conditional's arms, and a comma-separated declarator list. */
-function declaratorInitializers(text: string, name: string): string[] {
-  const inits: string[] = [];
-  for (const m of text.matchAll(/\b(?:const|let|var)\s+/g)) {
-    let k = m.index + m[0].length;
-    for (;;) {
-      while (k < text.length && /\s/.test(text[k])) k++;
-      const id = /^[\w$]+/.exec(text.slice(k));
-      if (!id) break;
-      const named = id[0] === name;
-      k += id[0].length;
-      // To the declarator's `=`; a type annotation's angle brackets are generics, not comparisons.
-      let depth = 0;
-      let eq = -1;
-      for (let h = k; h < text.length; h++) {
-        const c = text[h];
-        if (c === "(" || c === "[" || c === "{" || c === "<") depth++;
-        else if (c === ")" || c === "]" || c === "}" || c === ">") { if (depth === 0) break; depth--; }
-        else if (depth === 0 && (c === "=" || c === ";" || c === "\n")) { if (c === "=") eq = h; break; }
-      }
-      if (eq < 0) break;
-      const init = initializerText(text, eq + 1);
-      if (named) inits.push(init);
-      k = eq + 1 + init.length;
-      while (k < text.length && /\s/.test(text[k])) k++;
-      if (text[k] !== ",") break;
-      k++;
+interface DateImports {
+  // Named members under their local names, with the module's `fp` marker:
+  // the fp variants take the date last, the core variants first.
+  names: Map<string, { orig: string; fp: boolean }>;
+  // Namespace aliases, with the module's `fp` marker.
+  namespaces: Map<string, boolean>;
+}
+
+/** The date-fns imports of a file, at any subpath depth the locked package's exports map owns (`date-fns/fp/format` included). */
+function readImports(sf: ts.SourceFile): DateImports {
+  const names = new Map<string, { orig: string; fp: boolean }>();
+  const namespaces = new Map<string, boolean>();
+  for (const statement of sf.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    const module = ts.isStringLiteral(statement.moduleSpecifier) ? statement.moduleSpecifier.text : "";
+    if (module !== "date-fns" && !module.startsWith("date-fns/")) continue;
+    const fp = /^date-fns\/fp(?:$|\/)/.test(module);
+    const clause = statement.importClause;
+    if (!clause?.namedBindings) continue;
+    if (ts.isNamespaceImport(clause.namedBindings)) namespaces.set(clause.namedBindings.name.text, fp);
+    else for (const element of clause.namedBindings.elements) {
+      const orig = element.propertyName ? element.propertyName.text : element.name.text;
+      if (FNS.has(orig)) names.set(element.name.text, { orig, fp });
     }
   }
-  return inits;
+  return { names, namespaces };
 }
 
-/** The arms of a conditional expression, so a held value parsed in one arm is seen. */
-function conditionalArms(init: string): string[] {
-  const arms: string[] = [];
-  let depth = 0;
-  let start = 0;
-  for (let i = 0; i < init.length; i++) {
-    const c = init[i];
-    if (c === "(" || c === "[" || c === "{") depth++;
-    else if (c === ")" || c === "]" || c === "}") depth--;
-    else if (depth === 0 && (c === "?" || c === ":")) { arms.push(init.slice(start, i)); start = i + 1; }
-  }
-  arms.push(init.slice(start));
-  return arms;
+// One site per binding of a local: its initializer, or an assigned value. A
+// destructured or for-of binding's site carries the provenance it was read
+// from, searched for a parser instead of classified directly: the check
+// cannot see the property's type, so only a parser in the provenance makes
+// the binding a stored value (the same rule a plain `row.count` declarator
+// follows).
+
+interface Site {
+  expr?: ts.Expression;
+  binding?: boolean;
 }
 
-/** True when any declaration of the local initializes it from a stored-date parser. */
-function declaredAsDate(text: string, name: string, parseNames: Set<string>): boolean {
-  return declaratorInitializers(text, name).some((init) => conditionalArms(init).some((arm) => isParseTail(arm, parseNames)));
+/** Every binding of every local, file-wide: named declarators with their initializers, destructured and for-of bindings with their provenance, and plain assignments to a declared name. */
+function collectSites(sf: ts.SourceFile): Map<string, Site[]> {
+  const sites = new Map<string, Site[]>();
+  const push = (name: string, site: Site) => {
+    const list = sites.get(name);
+    if (list) list.push(site);
+    else sites.set(name, [site]);
+  };
+  const patternNames = (pattern: ts.BindingName, fn: (name: string) => void): void => {
+    if (ts.isIdentifier(pattern)) { fn(pattern.text); return; }
+    for (const element of pattern.elements) {
+      if (!ts.isOmittedExpression(element)) patternNames(element.name, fn);
+    }
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isForOfStatement(node)) {
+      const list = node.initializer;
+      if (ts.isVariableDeclarationList(list)) {
+        for (const decl of list.declarations) {
+          const site: Site = { expr: node.expression, binding: true };
+          if (ts.isIdentifier(decl.name)) push(decl.name.text, site);
+          else patternNames(decl.name, (name) => push(name, site));
+        }
+      }
+    } else if (ts.isVariableDeclaration(node) && !(ts.isVariableDeclarationList(node.parent) && ts.isForOfStatement(node.parent.parent))) {
+      if (ts.isIdentifier(node.name)) {
+        if (node.initializer) push(node.name.text, { expr: node.initializer });
+      } else if (node.initializer) {
+        const init = node.initializer;
+        patternNames(node.name, (name) => push(name, { expr: init, binding: true }));
+      }
+    } else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isIdentifier(node.left)) {
+      push(node.left.text, { expr: node.right });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return sites;
 }
 
-/** True when any declaration of the local initializes it from a `new Date` built from "now" or numbers. */
-function declaredAsNowDate(text: string, name: string): boolean {
-  return declaratorInitializers(text, name).some((init) => conditionalArms(init).some((arm) => isNowDateTail(arm)));
-}
+type Kind = "parse" | "now" | undefined;
 
-/** True when the receiver before `end` holds a stored date: a call to a stored-date parser, or a local declared from one. */
-function receiverIsDateCall(text: string, end: number, parseNames: Set<string>): boolean {
-  let j = end - 1;
-  if (text[j] === "?") j--;
-  if (text[j] !== ")") {
-    // A plain local held from a parse call: `const d = parseInstant(row.at); d.toLocaleString()`.
-    const m = /([\w$]+)$/.exec(text.slice(0, j + 1));
-    return !!m && !/[.\w$]$/.test(text.slice(0, j + 1 - m[0].length)) && declaredAsDate(text, m[1], parseNames);
-  }
-  const call = callTail(text.slice(0, j + 1));
-  if (!call) return false;
-  if (/new\s+Date\s*$/.test(call.callee)) return !builtInArgs(call.args);
-  const m = /([\w$]+)\s*$/.exec(call.callee);
-  return parseNames.has(call.callee) || (!!m && parseNames.has(m[1]));
-}
-
-/** True when the receiver before `end` holds a date built from "now" or numbers: inline, or a local declared from one. */
-function receiverIsNowDate(text: string, end: number): boolean {
-  let j = end - 1;
-  if (text[j] === "?") j--;
-  if (text[j] !== ")") {
-    const m = /([\w$]+)$/.exec(text.slice(0, j + 1));
-    return !!m && !/[.\w$]$/.test(text.slice(0, j + 1 - m[0].length)) && declaredAsNowDate(text, m[1]);
-  }
-  const call = callTail(text.slice(0, j + 1));
-  return !!call && /new\s+Date\s*$/.test(call.callee) && builtInArgs(call.args);
+/** Traces a value back to where it was read: "parse" when it is read from a stored value, "now" when every binding and every arm is provably built from now or numbers, undefined when the check cannot say. */
+function makeTracer(text: string, imports: DateImports, parseNames: Set<string>, sites: Map<string, Site[]>) {
+  const classify = (e: ts.Expression, seen: Set<string>): Kind => {
+    e = unwrapExpr(e);
+    if (ts.isNewExpression(e)) {
+      return ts.isIdentifier(e.expression) && e.expression.text === "Date"
+        ? (builtInArgs(argTexts(text, e.arguments)) ? "now" : "parse")
+        : undefined;
+    }
+    if (ts.isCallExpression(e)) {
+      const callee = unwrapExpr(e.expression);
+      if (ts.isIdentifier(callee)) return parseNames.has(callee.text) ? "parse" : undefined;
+      if (ts.isPropertyAccessExpression(callee)) {
+        const obj = unwrapExpr(callee.expression);
+        if (!ts.isIdentifier(obj)) return undefined;
+        if (obj.text === "Date" && callee.name.text === "parse") return "parse";
+        return imports.namespaces.has(obj.text) && FNS_PARSE.has(callee.name.text) ? "parse" : undefined;
+      }
+      return undefined;
+    }
+    if (ts.isIdentifier(e)) return classifyName(e.text, seen);
+    return undefined;
+  };
+  const classifyName = (name: string, seen: Set<string>): Kind => {
+    if (seen.has(name)) return undefined;
+    const list = sites.get(name);
+    if (!list) return undefined;
+    seen = new Set(seen).add(name);
+    let parse = false;
+    let allNow = true;
+    for (const site of list) {
+      for (const arm of armsOf(site.expr!)) {
+        const kind = site.binding ? (containsParse(arm, seen) ? "parse" : undefined) : classify(arm, seen);
+        if (kind === "parse") { parse = true; allNow = false; }
+        else if (kind !== "now") allNow = false;
+      }
+    }
+    return parse ? "parse" : allNow ? "now" : undefined;
+  };
+  // A destructured or for-of binding's provenance is searched for a parser:
+  // `const [d] = [parseInstant(row.at)]` holds a stored date; `const { at } =
+  // row` holds a property of an object the check cannot see.
+  const containsParse = (node: ts.Node, seen: Set<string>): boolean => {
+    if (classify(node as ts.Expression, seen) === "parse") return true;
+    let found = false;
+    ts.forEachChild(node, (child) => {
+      if (!found && containsParse(child, seen)) found = true;
+    });
+    return found;
+  };
+  return { classify, classifyName };
 }
 
 /** One `file:line: …` entry for each direct date use in `source`. */
 export function dateUses(source: string, file: string): string[] {
-  const raw = source;
   const text = blank(source);
   const out: string[] = [];
   const lineOf = (i: number) => text.slice(0, i).split("\n").length;
-  const add = (i: number, what: string, dateFnsName?: string) =>
-    out.push(`${file}:${lineOf(i)}: ${what} reads or shows a stored date directly; use ${helperFor(what, dateFnsName)} from notebook/ui/src/lib/local-date.ts`);
-
-  // Module names are blanked in the text, so the import clauses are read from
-  // the raw source at the same shape.
-  const names = new Map<string, string>();
-  const namespaces: string[] = [];
-  for (const m of raw.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']date-fns(?:\/[\w-]+)?["']/g)) {
-    for (const part of m[1].split(",")) {
-      const [orig, alias] = part.trim().split(/\s+as\s+/);
-      if (FNS.has(orig)) names.set(alias || orig, orig);
-    }
-  }
-  for (const m of raw.matchAll(/import\s*\*\s*as\s*([\w$]+)\s*from\s*["']date-fns(?:\/[\w-]+)?["']/g)) namespaces.push(m[1]);
-  // The parsers the check already owns, plus their date-fns names and aliases.
-  // `parse` stays out: a local parser or JSON.parse shares the name.
-  const parseNames = new Set(["Date.parse", "parseDateOnly", "parseInstant", "parseISO", "parseJSON", "toDate"]);
-  for (const [local, orig] of names) if (FNS_PARSE.has(orig)) parseNames.add(local);
+  const entry = (i: number, what: string, dateFnsName?: string) =>
+    `${file}:${lineOf(i)}: ${what} reads or shows a stored date directly; use ${helperFor(what, dateFnsName)} from notebook/ui/src/lib/local-date.ts`;
+  const add = (i: number, what: string, dateFnsName?: string) => out.push(entry(i, what, dateFnsName));
 
   for (const m of text.matchAll(/\bnew\s+Date\s*\(/g)) {
     const args = callArguments(text, m.index + m[0].length - 1);
@@ -214,15 +234,64 @@ export function dateUses(source: string, file: string): string[] {
     add(m.index, "new Date(value)");
   }
   for (const m of text.matchAll(/\bDate\.parse\s*\(/g)) add(m.index, "Date.parse");
-  for (const m of text.matchAll(/\.(toLocaleDateString|toLocaleTimeString|toDateString|toTimeString|toUTCString)\s*\(/g)) {
-    if (receiverIsNowDate(text, m.index)) continue;
-    add(m.index, m[1]);
-  }
-  for (const m of text.matchAll(/\.toLocaleString\s*\(/g)) {
-    const args = callArguments(text, m.index + m[0].length - 1) || [];
-    if (DATE_OPTS.test(args[1] || "")) { add(m.index, "toLocaleString of a date"); continue; }
-    if (receiverIsDateCall(text, m.index, parseNames)) add(m.index, "toLocaleString of a date");
-  }
+
+  // The imports, declarations and calls are read from the file's syntax tree;
+  // it parses at the same offsets the blanked text keeps.
+  const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true,
+    file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const imports = readImports(sf);
+  // The parsers the check owns, plus their date-fns names and aliases.
+  // `parse` stays out: a local parser or JSON.parse shares the name.
+  const parseNames = new Set(["Date.parse", "parseDateOnly", "parseInstant", "parseISO", "parseJSON", "toDate"]);
+  for (const [local, { orig }] of imports.names) if (FNS_PARSE.has(orig)) parseNames.add(local);
+  const tracer = makeTracer(text, imports, parseNames, collectSites(sf));
+
+  // The date-fns calls, collected on the side so they follow the Intl rule
+  // like the loops they replace.
+  const fnsEntries: string[] = [];
+  const fnsAdd = (i: number, what: string, dateFnsName?: string) => fnsEntries.push(entry(i, what, dateFnsName));
+
+  const curried = (call: ts.CallExpression): ts.CallExpression | undefined =>
+    ts.isCallExpression(call.parent) && call.parent.expression === call ? call.parent : undefined;
+  const dateArgOf = (call: ts.CallExpression, fp: boolean): string => {
+    if (!fp) return argTexts(text, call.arguments)[0];
+    const outer = curried(call) ?? call;
+    const args = outer.arguments;
+    return args.length ? text.slice(args[args.length - 1].getStart(), args[args.length - 1].getEnd()) : "";
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const target = node.expression;
+      if (ts.isPropertyAccessExpression(target) && ts.isIdentifier(target.name)) {
+        const name = target.name.text;
+        if (FAMILY.has(name)) {
+          const kind = tracer.classify(unwrapExpr(target.expression), new Set());
+          if (kind !== "now") add(target.name.getStart(), name);
+        } else if (name === "toLocaleString") {
+          const kind = tracer.classify(unwrapExpr(target.expression), new Set());
+          if (kind !== "now") {
+            const opts = node.arguments.length > 1 ? text.slice(node.arguments[1].getStart(), node.arguments[1].getEnd()) : "";
+            if (DATE_OPTS.test(opts) || kind === "parse") add(target.name.getStart(), "toLocaleString of a date");
+          }
+        } else {
+          const obj = unwrapExpr(target.expression);
+          if (ts.isIdentifier(obj) && FNS.has(name) && imports.namespaces.has(obj.text)) {
+            if (!builtInCode(dateArgOf(node, imports.namespaces.get(obj.text)!))) {
+              fnsAdd(target.getStart(), `${name} from date-fns`, name);
+            }
+          }
+        }
+      } else if (ts.isIdentifier(target)) {
+        const info = imports.names.get(target.text);
+        if (info && !builtInCode(dateArgOf(node, info.fp))) {
+          fnsAdd(target.getStart(), `${info.orig} from date-fns`, info.orig);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+
   for (const m of text.matchAll(/\bIntl\.DateTimeFormat\s*\(/g)) {
     const open = m.index + m[0].length - 1;
     const args = callArguments(text, open) || [];
@@ -236,22 +305,7 @@ export function dateUses(source: string, file: string): string[] {
     if (/\btimeZone\s*(?:[,}]|:\s*[A-Za-z_$])/.test(args[1] || "")) continue;
     add(m.index, "Intl.DateTimeFormat");
   }
-  for (const alias of namespaces) {
-    for (const m of text.matchAll(new RegExp(`(?<![\\w.])${esc(alias)}\\s*\\.\\s*(\\w+)\\s*\\(`, "g"))) {
-      const name = m[1];
-      if (!FNS.has(name)) continue;
-      const args = callArguments(text, m.index! + m[0].length - 1) || [""];
-      if (builtInCode(args[0])) continue;
-      add(m.index, `${name} from date-fns`, name);
-    }
-  }
-  for (const [local, orig] of names) {
-    for (const m of text.matchAll(new RegExp(`(?<![\\w.])${esc(local)}\\s*\\(`, "g"))) {
-      const args = callArguments(text, m.index + m[0].length - 1) || [""];
-      if (builtInCode(args[0])) continue;
-      add(m.index, `${orig} from date-fns`, orig);
-    }
-  }
+  out.push(...fnsEntries);
   return out;
 }
 
