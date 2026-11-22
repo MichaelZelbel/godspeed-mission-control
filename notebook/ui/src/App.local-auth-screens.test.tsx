@@ -42,3 +42,18 @@ it("a direct visit to a setup link on a local notebook goes to the dashboard", a
   expect(screen.queryByText("Your first visit")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Setup code")).not.toBeInTheDocument();
 });
+
+it("a setup link whose status read failed shows the reconnect screen, never the invite screen", () => {
+  mock.auth = { user: null, loading: false, local: false, authError: "Could not reach the server", refreshSession: async () => {} };
+  render(<MemoryRouter initialEntries={["/setup"]}><AppRoutes /></MemoryRouter>);
+  expect(screen.getByText("Let’s reconnect")).toBeInTheDocument();
+  expect(screen.queryByText("Your first visit")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Setup code")).not.toBeInTheDocument();
+});
+
+it("a setup link on a local notebook (known from the auth state) goes to the dashboard", async () => {
+  mock.auth = { user: null, loading: false, local: true, authError: "", refreshSession: async () => {} };
+  render(<MemoryRouter initialEntries={["/setup"]}><AppRoutes /></MemoryRouter>);
+  expect(screen.queryByLabelText("Setup code")).not.toBeInTheDocument();
+  expect(screen.queryByText("Your first visit")).not.toBeInTheDocument();
+});
