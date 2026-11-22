@@ -59,10 +59,35 @@ const statuses = ["past_fact", "future_plan", "ongoing", "unknown"];
 const momentDay = (m: Pick<TimelineMoment, "happened_at" | "moment_date">) => m.happened_at ?? m.moment_date ?? null;
 const UNDATED = "Undated";
 
+// The stored day as a YYYY-MM-DD calendar day, or null when it cannot be
+// read as one. parseDateOnly rolls an impossible date over ("2024-13-45"
+// would read as a day in 2025) and falls back on anything Date() swallows
+// ("sometime", "20xx-05-01"), so a value counts only when its first ten
+// characters name a real month and a day that month has. Grouping and
+// display share this rule, so a card never shows a date its year heading
+// does not agree with (#951).
+const CALENDAR_DAY = /^(\d{4})-(\d{2})-(\d{2})/;
+const momentDayValue = (m: Pick<TimelineMoment, "happened_at" | "moment_date">) => {
+  const value = momentDay(m);
+  if (!value) return null;
+  const match = CALENDAR_DAY.exec(value.slice(0, 10));
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  // new Date(year, month, 0) is the last day of that month.
+  if (month < 1 || month > 12 || day < 1 || day > new Date(year, month, 0).getDate()) return null;
+  return value.slice(0, 10);
+};
+
 // The formatted day of a moment, or null when it has no readable day. Used to
 // render, never to group: an unparseable day must not crash the page either.
 const formatMomentDay = (m: Pick<TimelineMoment, "happened_at" | "moment_date">) => {
-  const day = momentDay(m);
+  // showDate goes through parseDateOnly, which rolls an impossible date over
+  // ("2024-13-45" would read as a day in 2025), so the card only calls it on
+  // a value momentDayValue accepted; anything else renders as no date, the
+  // same words its Undated heading uses (#951).
+  const day = momentDayValue(m);
   return day ? showDate(day, "day") : null;
 };
 
@@ -178,8 +203,10 @@ export default function TimelinePage() {
   const groupedByYear = useMemo(() => {
     const groups: Record<string, TimelineMoment[]> = {};
     for (const m of filteredMoments) {
-      const day = momentDay(m);
-      const year = day ? day.split("-")[0] : UNDATED;
+      // A moment whose stored date cannot be read as a calendar day groups
+      // with the undated ones, in the same words as its card (#951).
+      const day = momentDayValue(m);
+      const year = day ? day.slice(0, 4) : UNDATED;
       if (!groups[year]) groups[year] = [];
       groups[year].push(m);
     }
