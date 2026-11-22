@@ -6177,5 +6177,16 @@ else
   bad "note-file-arrival.test.mjs: its cases fail"
 fi
 
+# A carried add-on copy that drifted from its recorded hash is found here, by the gate every pull
+# request runs (#862). The test recomputes the hashes in sources.json from the copies alone, with
+# no network and no add-on checkout, so any pull request can ask the question.
+section "addon-carried-hashes.test.mjs: carried add-on copies agree with their recorded hashes (#862)"
+if node "$ROOT/notebook/scripts/run-tests.mjs" "$ROOT/notebook/test/addon-carried-hashes.test.mjs" >"$TMP/addon-carried-hashes.log" 2>&1; then
+  ok "addon-carried-hashes.test.mjs: its cases pass"
+else
+  cat "$TMP/addon-carried-hashes.log"
+  bad "addon-carried-hashes.test.mjs: its cases fail"
+fi
+
 printf '\n%s of %s pass.\n' "$PASS" "$((PASS + FAIL))"
 [ "$FAIL" -eq 0 ]
