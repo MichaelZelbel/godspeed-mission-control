@@ -162,7 +162,9 @@ const fail=message=>{console.error(message);process.exit(1)};
 const normalized=value=>String(value||'').replace(/\r\n?/g,'\n').trim();
 if(!normalized(read('brief.txt')))fail('the installed morning brief saved no readable text');
 for(const file of sparseFiles){
- const state=JSON.parse(read(file)),rows=Array.isArray(state)?state:state.data||[];
+ const state=JSON.parse(read(file)),all=Array.isArray(state)?state:state.data||[];
+ // The spend guard's receipt (#974) is the one row the brief cannot read: it reads only brief-rehearsal receipts.
+ const rows=file==='sparse-job-receipts.json'&&Array.isArray(all)?all.filter(row=>row?.kind!=='spend-guard'):all;
  if(!Array.isArray(rows)||rows.length)fail('the brief was not run with the required sparse installed state');
 }
 // The finished work is the scenario's own card when the daily round took it, held to its checklist,
