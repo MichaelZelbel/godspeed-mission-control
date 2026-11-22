@@ -4,6 +4,7 @@ import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger} from '@/components/ui/alert-dialog';
 import {AlertTriangle,CheckCircle2,Loader2} from 'lucide-react';
+import {parseInstant,showDate} from '@/lib/local-date';
 import {providerService} from '../../../core/provider-service.mjs';
 import {AI_CONNECTION_UNREADABLE_STATUS} from '../../../core/no-ai.mjs';
 
@@ -49,7 +50,7 @@ export function serviceName(provider?:string|null,base?:string|null){
 // sentence from the AI's outcome (core/ai-outcome.mjs connectionTestError) and answers with it, so
 // what arrives is already what a person reads; the provider's raw words never travel here. Anything
 // that is not the AI (a refusal of the form itself) is shown as the server wrote it.
-const when=(at:string)=>{const d=new Date(at);return isNaN(d.getTime())?at:d.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});};
+const when=(at:string)=>showDate(at,'time');
 const DAY=24*3600*1000;
 
 type SpendGuard={enabled:boolean;daily_limit:number;low_balance:number;openrouter_connected:boolean;provider_message:string};
@@ -128,7 +129,7 @@ export function ConnectAI(){
   const check=async()=>{setChecking(true);setError('');try{qc.setQueryData(['routine-ai'],await call('routine-ai/check',{}));}catch(e:any){setError(e.message);}finally{setChecking(false);}};
   // An AI nobody checked for a day is checked once when Settings opens, so what it says is seen, not assumed.
   const looked=useRef(false);
-  useEffect(()=>{if(looked.current||!data?.available||data.source==='none')return;looked.current=true;if(!data.check||Date.now()-Date.parse(data.check.at)>DAY)check();},[data]);
+  useEffect(()=>{if(looked.current||!data?.available||data.source==='none')return;looked.current=true;if(!data.check||Date.now()-(parseInstant(data.check.at)?.getTime()??NaN)>DAY)check();},[data]);
   const selectedUrl=service==='other'?address.trim():SERVICES.find(s=>s.id===service)?.url||'';
   const editableAddress=(value:string)=>value.replace(/\/chat\/completions\/?$/,'').replace(/\/+$/,'');
   const canRetainKey=!!saved.data?.configured&&saved.data.key&&editableAddress(selectedUrl)===editableAddress(saved.data.url);

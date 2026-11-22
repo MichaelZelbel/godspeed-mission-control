@@ -33,7 +33,7 @@ import {
   CloudOff,
 } from "lucide-react";
 
-import { formatDistanceToNow } from "date-fns";
+import { parseInstant, showDate } from "@/lib/local-date";
 import { toast } from "sonner";
 import { useReanalyzeMedia } from "@/hooks/useMediaAnalysis";
 import { MediaDetailDialog, MediaDetailItem } from "@/components/media/MediaDetailDialog";
@@ -676,8 +676,8 @@ export default function MediaLibrary() {
     // earliest media_analysis row in the group, which is stable across retries
     // because we now upsert in place instead of inserting new rows.
     enriched.sort((a, b) => {
-      const ta = a.created_at ? Date.parse(a.created_at) : 0;
-      const tb = b.created_at ? Date.parse(b.created_at) : 0;
+      const ta = a.created_at ? parseInstant(a.created_at)?.getTime() ?? 0 : 0;
+      const tb = b.created_at ? parseInstant(b.created_at)?.getTime() ?? 0 : 0;
       return tb - ta;
     });
     return enriched;
@@ -1021,7 +1021,7 @@ export default function MediaLibrary() {
                     </div>
                     {group.created_at && (
                       <p className="text-[9px] text-muted-foreground/60">
-                        {formatDistanceToNow(new Date(group.created_at), { addSuffix: true })}
+                        {showDate(group.created_at, "ago")}
                       </p>
                     )}
                   </div>

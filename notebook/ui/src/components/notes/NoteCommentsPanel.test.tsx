@@ -63,7 +63,7 @@ describe("NoteCommentsPanel", () => {
     expect(commentAuthor("owner")).toBe("You");
     expect(commentAuthor("Godspeed")).toBe("Godspeed");
     expect(commentAuthor(undefined)).toBe("");
-    expect(commentDate("not a date")).toBe("");
+    expect(commentDate("not a date")).toBe("Not set");
     expect(commentDate("2026-10-18T12:05:00.000Z")).toMatch(/2026/);
   });
 });

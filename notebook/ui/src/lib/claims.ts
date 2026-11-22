@@ -9,6 +9,11 @@
  * Mirrors supabase/functions/_shared/claims.ts - keep the two in sync.
  */
 
+import { parseInstant } from "./local-date";
+
+// Month names for validity ranges, which show a month, not a day.
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 export type ClaimSubjectType = "self" | "contact" | "entity";
 export type ClaimConfidence = "certain" | "likely" | "unsure";
 export type ClaimSourceType = "note" | "moment" | "manual" | "ai";
@@ -157,8 +162,8 @@ export function reviewByFor(attribute: string, validFrom: string | null): string
   if (!validFrom) return null;
   const days = reviewDaysFor(attribute);
   if (days === null) return null;
-  const d = new Date(validFrom + "T00:00:00Z");
-  if (Number.isNaN(d.getTime())) return null;
+  const d = parseInstant(validFrom + "T00:00:00Z");
+  if (!d) return null;
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
@@ -178,9 +183,9 @@ function formatDate(value: string): string {
   const [y, m, d] = value.split("-");
   if (!m || !d) return value;
   if (m === "01" && d === "01") return y;
-  const dt = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(dt.getTime())) return value;
-  return dt.toLocaleDateString(undefined, { year: "numeric", month: "short" });
+  const dt = parseInstant(`${value}T00:00:00`);
+  if (!dt) return value;
+  return `${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
 }
 
 /** "since 2023", "2021 to 2024", "until 2025", "starts Oct 2026", or "" when undated. */

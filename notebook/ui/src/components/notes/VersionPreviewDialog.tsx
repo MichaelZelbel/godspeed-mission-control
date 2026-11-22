@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { format, formatDistanceToNow } from "date-fns";
+import { showDate } from "@/lib/local-date";
 import { Loader2, RotateCcw } from "lucide-react";
 import {
   Dialog,
@@ -71,9 +71,7 @@ export function VersionPreviewDialog({
   const body = normalizeNoteContent(stripLeadingH1(raw ?? "", title ?? ""));
 
   const dateLabel = commitDate
-    ? `${format(new Date(commitDate), "d MMM yyyy, HH:mm")} · ${formatDistanceToNow(new Date(commitDate), {
-        addSuffix: true,
-      })}`
+    ? `${showDate(commitDate, "time")} · ${showDate(commitDate, "ago")}`
     : null;
 
   return (
@@ -171,7 +169,7 @@ export function VersionPreviewDialog({
             <AlertDialogTitle>Restore this version?</AlertDialogTitle>
             <AlertDialogDescription>
               This replaces the current note with the version from{" "}
-              {commitDate ? format(new Date(commitDate), "d MMM yyyy, HH:mm") : "this commit"}. Your current content
+              {commitDate ? showDate(commitDate, "time") : "this commit"}. Your current content
               stays available in the version history.
             </AlertDialogDescription>
           </AlertDialogHeader>

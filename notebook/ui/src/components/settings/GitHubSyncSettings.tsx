@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Loader2, Github, CheckCircle2, XCircle, AlertTriangle, Trash2, RefreshCw } from "lucide-react";
 import { showToast } from "@/lib/toast";
-import { formatDistanceToNow } from "date-fns";
+import { showDate } from "@/lib/local-date";
 import { ImportVaultDialog } from "./ImportVaultDialog";
 import { SyncConflictsPanel } from "./SyncConflictsPanel";
 import { BRAND } from "@/lib/brand";
@@ -272,7 +272,7 @@ export function GitHubSyncSettings() {
               )}
               {connection.last_sync_at && (
                 <span className="text-xs text-muted-foreground">
-                  Last sync: {formatDistanceToNow(new Date(connection.last_sync_at), { addSuffix: true })}
+                  Last sync: {showDate(connection.last_sync_at, "ago")}
                 </span>
               )}
             </div>
