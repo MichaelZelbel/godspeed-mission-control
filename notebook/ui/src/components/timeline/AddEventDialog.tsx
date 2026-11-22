@@ -52,6 +52,17 @@ export interface EditMomentData {
   participantIds?: string[];
 }
 
+// The label each status shows in this form. The Timeline's cards and filters
+// read these too, so a status is named the same way everywhere it appears.
+export const statusLabels: Record<string, string> = {
+  past_fact: "Past Fact",
+  future_plan: "Future Plan",
+  ongoing: "Ongoing",
+  unknown: "Unknown",
+};
+// A status the form does not know shows as it is stored rather than as nothing.
+export const statusLabel = (status: string) => statusLabels[status] ?? status;
+
 interface AddEventDialogProps {
   people: TimelineContact[];
   onCreated: () => void;
@@ -384,7 +395,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
             <Select value={status} onValueChange={(v) => { setStatus(v); markFilled("status"); }}>
               <SelectTrigger id={ids.status}><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="past_fact">Past Fact</SelectItem><SelectItem value="future_plan">Future Plan</SelectItem><SelectItem value="ongoing">Ongoing</SelectItem><SelectItem value="unknown">Unknown</SelectItem>
+                {Object.entries(statusLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
