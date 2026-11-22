@@ -136,6 +136,31 @@ test('servers that do not connect Telegram from the page say so and refuse a key
   assert.equal(new TelegramConnection(options).status().available,false);
 });
 
+test("the status says when the operator switched Telegram off, and when the assistant does not run the notebook, and neither payload carries the bot key",async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-telegram-reason-')),dir=path.join(root,'telegram'),saved={...process.env};
+ fs.mkdirSync(dir,{recursive:true});
+ fs.writeFileSync(path.join(dir,'connection.json'),JSON.stringify({token:KEY,bot_id:4242,username:'fictional_godspeed_bot',name:'Fictional Godspeed',start_code:'fictionalStartCode0123456789abcd'}));
+ let service;
+ try{
+  const read=async()=>{
+   const base='http://127.0.0.1:'+service.address.port,response=await fetch(base+'/api/telegram'),status=await response.json();
+   assert.equal(JSON.stringify(status).includes(KEY),false,'the bot key never goes back to a browser');
+   return status;
+  };
+  Object.assign(process.env,{GODSPEED_TELEGRAM_DIR:dir,GODSPEED_TELEGRAM:'off',GODSPEED_ORIGINAL_RUNTIME:'on'});
+  service=await createService({root,port:0});
+  assert.deepEqual(await read(),{available:false,managed:null,connected:false,phase:'none',reason:'switched-off'},'the operator switched Telegram off, and the payload says so');
+  await service.close();
+  delete process.env.GODSPEED_ORIGINAL_RUNTIME;process.env.GODSPEED_TELEGRAM='web';
+  service=await createService({root,port:0});
+  assert.deepEqual(await read(),{available:false,managed:null,connected:false,phase:'none',reason:'no-assistant'},'no GODSPEED_ORIGINAL_RUNTIME is the no-assistant case');
+  await service.close();
+  delete process.env.GODSPEED_TELEGRAM_DIR;
+  service=await createService({root,port:0});
+  assert.deepEqual(await read(),{available:false,managed:null,connected:false,phase:'none',reason:'no-assistant'},'no GODSPEED_TELEGRAM_DIR is the no-assistant case too');
+ }finally{await service?.close();process.env=saved;}
+});
+
 test('the notebook works without Telegram, and on a public server the routes need the signed-in owner',async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-telegram-route-')),saved={...process.env};
  Object.assign(process.env,{GODSPEED_TELEGRAM_DIR:path.join(root,'telegram'),GODSPEED_TELEGRAM:'web',GODSPEED_TELEGRAM_API:'http://127.0.0.1:9'});delete process.env.GODSPEED_ORIGINAL_RUNTIME;
@@ -143,7 +168,7 @@ test('the notebook works without Telegram, and on a public server the routes nee
  const remote=await createService({root:fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-telegram-remote-')),host:'0.0.0.0',port:0,token:'f'.repeat(64)}),outside='http://127.0.0.1:'+remote.address.port;
  try{
   const status=await(await fetch(base+'/api/telegram')).json();
-  assert.deepEqual(status,{available:false,managed:null,connected:false,phase:'none'},'without Hermes there is nothing to connect, and nothing breaks');
+  assert.deepEqual(status,{available:false,managed:null,connected:false,phase:'none',reason:'no-assistant'},'without Hermes there is nothing to connect, and the payload says why (issue #919)');
   const refused=await fetch(base+'/api/telegram/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:KEY})});
   assert.equal(refused.status,409);assert.match((await refused.json()).error,/not connected from this page/);
   assert.equal((await fetch(base+'/api/status')).status,200);

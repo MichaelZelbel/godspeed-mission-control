@@ -24,11 +24,15 @@ import {
   LogOut,
   Globe,
   Target,
+  ChevronDown,
 } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { watchSidebarFit } from "@/lib/sidebar-fit";
 import { NavLink } from "@/components/NavLink";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { BRAND, GUIDE_URL } from "@/lib/brand";
 import { brandLogo } from "@/lib/brand-assets";
+import { localDateISO, localTimeHM, parseInstant } from "@/lib/local-date";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -59,10 +63,9 @@ const newTab = (url: string) => (/^https?:/.test(url) ? { target: "_blank", rel:
 // old cached build shows an older time than a fresh load does.
 const BUILD_LABEL = (() => {
   const iso = typeof __BUILD_TIME__ === "string" ? __BUILD_TIME__ : "";
-  const d = iso ? new Date(iso) : null;
-  if (!d || Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const d = parseInstant(iso);
+  if (!d) return "";
+  return `${localDateISO(d)} ${localTimeHM(d)}`;
 })();
 
 export function DashboardSidebar() {
@@ -74,6 +77,14 @@ export function DashboardSidebar() {
   const isPremium = role === "premium" || role === "premium_gift" || role === "admin";
   const { completeness } = useProfileSummary();
   const pendingCount = useReviewQueueCount();
+
+  // The list ends at an entry's edge, never in the middle of one, and says when more is below (#747).
+  const listRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (collapsed || !listRef.current || !moreRef.current) return;
+    return watchSidebarFit(listRef.current, moreRef.current);
+  }, [collapsed]);
 
   const profileDotColor =
     completeness < 30 ? "bg-destructive" : completeness < 70 ? "bg-yellow-500" : "bg-green-500";
@@ -143,7 +154,7 @@ export function DashboardSidebar() {
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent ref={listRef}>
         {navGroups.map((group, idx) => (
           <div key={idx}>
             {idx > 0 && <SidebarSeparator />}
@@ -209,6 +220,23 @@ export function DashboardSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      {!collapsed && (
+        <div
+          ref={moreRef}
+          data-sidebar-more=""
+          role="button"
+          aria-label="Show more of the menu"
+          aria-hidden="true"
+          tabIndex={-1}
+          style={{ display: "none", visibility: "hidden" }}
+          className="flex min-h-7 flex-1 cursor-pointer items-start justify-center border-t border-sidebar-border px-2 pt-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <span className="flex items-center gap-1">
+            More below <ChevronDown className="h-3.5 w-3.5" />
+          </span>
+        </div>
+      )}
 
       <SidebarFooter>
         {!collapsed && <SidebarSeparator />}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { GUIDE_URL } from "@/lib/brand";
+import { showDate } from "@/lib/local-date";
 
 // Settings, About (18 October 2026): what this installation is, where it keeps your files, whose data
 // the food tracker uses, and where the user guide is. The README and the food tracker point here
@@ -64,11 +65,12 @@ async function loadAbout(): Promise<AboutInfo> {
   if (!response.ok) throw new Error(data.error || "Request failed");
   return data;
 }
-// "18 October 2026", in the reader's own language.
+// "Nov 21, 2026", the shared display format. The values here are full
+// instants (the table's download, the release commit date), so "date" reads
+// the viewer's local day; a plain day still reads as that day.
 function longDay(value: string | null): string {
   if (!value) return "";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat(undefined, { dateStyle: "long" }).format(date);
+  return showDate(value, "date");
 }
 // The Open Food Facts sentence names its address; that address becomes a link.
 function withLinks(text: string) {

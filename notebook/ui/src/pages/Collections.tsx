@@ -395,11 +395,14 @@ export default function Collections() {
   const charm = useMemo(() => charmShelf(collections, charmListed, lastWhen, new Date()), [collections, charmListed, lastWhen]);
   const hasTrackers = shelf.trackers.length + shelf.resting.length + habits.active.length + habits.resting.length + charm.active.length + charm.resting.length > 0;
   const resting = shelf.resting.length + habits.resting.length + charm.resting.length;
+  // The header's actions show whenever the empty state, which has its own, does not: habits or
+  // trackers from tracker-list with no collection yet still need a way to create one.
+  const showHeader = hasCollections || (hasTrackers && !isLoading && !loadFailed);
 
   return (
     <div className="w-full max-w-6xl">
       <SEOHead title="Collections - Godspeed Mission Control" noIndex />
-      {hasCollections && (
+      {showHeader && (
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold font-display">Collections</h1>
           <div className="flex flex-wrap items-center gap-2">

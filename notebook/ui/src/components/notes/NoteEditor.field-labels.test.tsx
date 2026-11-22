@@ -8,7 +8,8 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import { startNotebook, type RealNotebook } from "@/test/real-notebook";
-import { expectFieldsNamed } from "@/test/field-labels";
+import { expectFieldsNamed, isTextbox } from "@/test/field-labels";
+import { WAIT } from "@/test/wait-limits";
 
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), loading: vi.fn(), dismiss: vi.fn() }) }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "owner" }, session: { user: { id: "owner" } } }) }));
@@ -50,9 +51,9 @@ describe("a new, empty note", () => {
         <MemoryRouter><NoteEditor note={note as any} /></MemoryRouter>
       </QueryClientProvider>,
     );
-    await waitFor(() => expect(document.querySelector(".ProseMirror")).not.toBeNull());
+    await waitFor(() => expect(document.querySelector(".ProseMirror")).not.toBeNull(), WAIT);
     expectFieldsNamed(container, [
-      { name: "Note title", is: (el) => el.tagName === "INPUT" },
+      { name: "Note title", is: isTextbox },
       { name: "Note text", is: (el) => el.classList.contains("ProseMirror") && el.getAttribute("contenteditable") === "true" },
     ]);
     expect(screen.getByRole("textbox", { name: "Note text" })).toHaveAttribute("aria-multiline", "true");

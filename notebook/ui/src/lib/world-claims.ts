@@ -9,6 +9,7 @@
  */
 
 import { todayISO } from "./claims";
+import { parseInstant } from "./local-date";
 
 export interface ClaimRow {
   id: string;
@@ -85,7 +86,7 @@ export function isCurrent(row: Pick<ClaimRow, "valid_to">, today = new Date()): 
 }
 
 function sortKey(row: ClaimRow): number {
-  return row.updated_at ? new Date(row.updated_at).getTime() : 0;
+  return row.updated_at ? parseInstant(row.updated_at)?.getTime() ?? 0 : 0;
 }
 
 export function groupClaims(rows: ClaimRow[], today = new Date()): ClaimGroup[] {

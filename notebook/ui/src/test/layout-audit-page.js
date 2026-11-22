@@ -39,6 +39,23 @@
     }
     return rects;
   };
+  // What a line draws: its glyphs, each run of them measured on its own, so the whitespace around them
+  // is not. Chrome counts a wrapped line's trailing space in the line's rect and may end it one layout
+  // step (1/64 px) past the box (#746); that space draws nothing, and a glyph past the box by any amount
+  // is still found.
+  const glyphRects = (el) => {
+    const rects = [];
+    for (const node of el.childNodes) {
+      if (node.nodeType !== Node.TEXT_NODE) continue;
+      for (const run of node.textContent.matchAll(/\S+/g)) {
+        const range = document.createRange();
+        range.setStart(node, run.index);
+        range.setEnd(node, run.index + run[0].length);
+        rects.push(...[...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0));
+      }
+    }
+    return rects;
+  };
 
   const main = document.querySelector("main");
   const clips = (v) => v === "hidden" || v === "clip";
@@ -99,11 +116,99 @@
       if (clipped) found.push({ rule: "clipped", element: clipped });
       continue;
     }
-    const rects = textRects(el);
+    const rects = glyphRects(el);
     if (!rects.length || !visible(el)) continue;
     const boxes = cuttingBoxes(el);
     if (rects.some((text) => boxes.some((cut) => outside(text, cut)))) found.push({ rule: "clipped", element: describe(el) });
   }
+
+  // The scroll areas a line sits in, innermost first, plus the window when it scrolls.
+  const scrollAreas = (el) => {
+    const out = [];
+    for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) {
+      const style = getComputedStyle(e);
+      if (scrolls(style.overflowX) || scrolls(style.overflowY)) out.push(e);
+      if (style.position === "fixed") break;
+    }
+    const doc = document.scrollingElement;
+    if (doc && doc.scrollHeight > doc.clientHeight) out.push(doc);
+    return out;
+  };
+  // What is painted over a line right now: the first painted element at the line's middle that is
+  // neither the line nor inside it, or null when the line is clear or not on screen at all.
+  const shownOver = (el, line) => {
+    const rects = textRects(el);
+    const text = rects[line];
+    if (!text) return null;
+    const x = text.left + text.width / 2;
+    const y = text.top + text.height / 2;
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return null;
+    for (const hit of document.elementsFromPoint(x, y)) {
+      if (hit === el || el.contains(hit) || hit.contains(el)) return null;
+      if (paints(hit)) return hit;
+    }
+    return null;
+  };
+  // Whether the line itself is drawn at its middle: a scroller clips hit-testing at its own edge, so
+  // a line it has scrolled past its top still answers elementsFromPoint with the ancestors above it
+  // while its layout rect sits inside the viewport — there the line paints nowhere, and only a hit
+  // on the line itself counts as shown.
+  const selfHit = (el, line) => {
+    const text = textRects(el)[line];
+    if (!text) return false;
+    const x = text.left + text.width / 2, y = text.top + text.height / 2;
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return false;
+    return document.elementsFromPoint(x, y).some((hit) => hit === el || el.contains(hit));
+  };
+  // Whether the coverer is one a scroll of the page can move: the Manager decision on the scroll
+  // escape (#878) narrowed it to sticky covers. A sticky header keeps its place only at one scroll
+  // position, so text under it at the centered position is read clear at another, and only such a
+  // cover may be escaped. Text under a fixed, absolute or floating element (the chat button) stays
+  // covered at every scroll position, so it is always reported: a cover that is fixed or absolute
+  // itself, or sits inside something fixed, is not escaped, and neither is one with no sticky
+  // ancestor at all.
+  const stickyCover = (over) => {
+    const own = getComputedStyle(over).position;
+    if (own === "sticky") return true;
+    if (own === "fixed" || own === "absolute") return false;
+    for (let e = over.parentElement; e && e !== document.body; e = e.parentElement) {
+      const position = getComputedStyle(e).position;
+      if (position === "sticky") return true;
+      if (position === "fixed") return false;
+    }
+    return false;
+  };
+  // Whether some scroll of some area the line sits in shows the line clear: text a scroll moves
+  // under a sticky header is not drawn under it, so a coverer found at the line's centered position
+  // is a fault only when no scroll brings the line out from under it.
+  const escapes = (el, line) => {
+    for (const area of scrollAreas(el)) {
+      const before = area.scrollTop;
+      for (const dir of [-1, 1]) {
+        area.scrollTop = before;
+        // Walk the coverers out of the way: each step moves the line fully past the coverer it is
+        // under now, until a scroll shows it clear on screen, an area runs out of scroll, or
+        // nothing moves. A scroll that only moves the line off the screen shows nothing.
+        for (let step = 0; step < 10; step++) {
+          const over = shownOver(el, line);
+          if (!over) {
+            const escaped = selfHit(el, line);
+            area.scrollTop = before;
+            if (escaped) return true;
+            break;
+          }
+          const text = textRects(el)[line], overBox = over.getBoundingClientRect();
+          const delta = dir === -1 ? overBox.bottom - text.top + 1 : text.bottom - overBox.top + 1;
+          const maxScroll = area.scrollHeight - area.clientHeight;
+          const target = Math.min(maxScroll, Math.max(0, area.scrollTop + dir * delta));
+          if (!(delta > 0) || target === area.scrollTop) break;
+          area.scrollTop = target;
+        }
+      }
+      area.scrollTop = before;
+    }
+    return false;
+  };
 
   const paints = (el) => {
     if (el.matches("img,svg,canvas,video,input,textarea,select,button")) return true;
@@ -113,19 +218,13 @@
   };
   for (const el of elements) {
     if (!textRects(el).length || !visible(el)) continue;
-    // In the middle of its scroll areas, as far as they go: text a scroll moves under a sticky header is
-    // not drawn under it, text no scroll can bring out is.
+    // In the middle of its scroll areas, as far as they go: text a scroll moves under a sticky header
+    // is not drawn under it there; under anything else, or under a sticky cover no scroll can clear,
+    // it stays a fault (#878).
     el.scrollIntoView({ block: "center", inline: "center" });
-    for (const text of textRects(el)) {
-      const x = text.left + text.width / 2;
-      const y = text.top + text.height / 2;
-      if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue;
-      let over = null;
-      for (const hit of document.elementsFromPoint(x, y)) {
-        if (hit === el || el.contains(hit) || hit.contains(el)) break;
-        if (paints(hit)) { over = hit; break; }
-      }
-      if (over) { found.push({ rule: "under another element", element: `${describe(el)} under ${describe(over)}` }); break; }
+    for (let line = 0; line < textRects(el).length; line++) {
+      const over = shownOver(el, line);
+      if (over && (!stickyCover(over) || !escapes(el, line))) { found.push({ rule: "under another element", element: `${describe(el)} under ${describe(over)}` }); break; }
     }
   }
 

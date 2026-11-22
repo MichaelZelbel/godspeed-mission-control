@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { format, parse, isValid, setMonth, setYear, lastDayOfMonth } from "date-fns";
+import { format, setMonth, setYear, lastDayOfMonth } from "date-fns";
+import { localDateISO, parseTypedDay, showDate } from "@/lib/local-date";
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -32,17 +33,7 @@ const MONTHS = Array.from({ length: 12 }, (_, i) =>
   format(new Date(2000, i, 1), "MMMM"),
 );
 
-const PARSE_FORMATS = ["yyyy-MM-dd", "dd.MM.yyyy", "MM/dd/yyyy", "yyyy/MM/dd"];
-
-function parseLooseDate(input: string): Date | null {
-  const trimmed = input.trim();
-  if (!trimmed) return null;
-  for (const fmt of PARSE_FORMATS) {
-    const d = parse(trimmed, fmt, new Date());
-    if (isValid(d)) return d;
-  }
-  return null;
-}
+const parseLooseDate = parseTypedDay;
 
 function clampDay(year: number, monthIndex: number, day: number): Date {
   const candidate = new Date(year, monthIndex, 1);
@@ -61,7 +52,7 @@ export function SmartDatePicker({
 }: SmartDatePickerProps) {
   const [open, setOpen] = useState(false);
   const [viewMonth, setViewMonth] = useState<Date>(value ?? new Date());
-  const [text, setText] = useState<string>(value ? format(value, "yyyy-MM-dd") : "");
+  const [text, setText] = useState<string>(value ? localDateISO(value) : "");
   const [textInvalid, setTextInvalid] = useState(false);
   const lastValueRef = useRef<Date | null>(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -74,7 +65,7 @@ export function SmartDatePicker({
         if (value) setViewMonth(value);
         return;
       }
-      setText(value ? format(value, "yyyy-MM-dd") : "");
+      setText(value ? localDateISO(value) : "");
       if (value) setViewMonth(value);
       setTextInvalid(false);
     }
@@ -111,7 +102,7 @@ export function SmartDatePicker({
     if (!text.trim()) return;
     const parsed = parseLooseDate(text);
     if (parsed) {
-      setText(format(parsed, "yyyy-MM-dd"));
+      setText(localDateISO(parsed));
       setTextInvalid(false);
     }
   };
@@ -123,7 +114,7 @@ export function SmartDatePicker({
     if (value) {
       const clamped = clampDay(next.getFullYear(), m, value.getDate());
       onChange(clamped);
-      setText(format(clamped, "yyyy-MM-dd"));
+      setText(localDateISO(clamped));
     }
   };
 
@@ -134,7 +125,7 @@ export function SmartDatePicker({
     if (value) {
       const clamped = clampDay(y, value.getMonth(), value.getDate());
       onChange(clamped);
-      setText(format(clamped, "yyyy-MM-dd"));
+      setText(localDateISO(clamped));
     }
   };
 
@@ -145,7 +136,7 @@ export function SmartDatePicker({
       return;
     }
     onChange(d);
-    setText(format(d, "yyyy-MM-dd"));
+    setText(localDateISO(d));
     setViewMonth(d);
     setOpen(false);
   };
@@ -165,7 +156,7 @@ export function SmartDatePicker({
           )}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
-          {value ? format(value, "MMM d, yyyy") : placeholder}
+          {value ? showDate(value, "day") : placeholder}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-0">
@@ -184,7 +175,7 @@ export function SmartDatePicker({
                   lastValueRef.current = parsed;
                   onChange(parsed);
                   setViewMonth(parsed);
-                  setText(format(parsed, "yyyy-MM-dd"));
+                  setText(localDateISO(parsed));
                   setOpen(false);
                 }
               }

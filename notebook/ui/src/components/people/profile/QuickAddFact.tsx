@@ -6,7 +6,9 @@ import { ProfileIcon } from "@/components/profile/ProfileIcon";
 import { buildClassifyBody } from "@/lib/quick-add-fact";
 import { PROFILE_TAXONOMY, taxonomyBySlug } from "@/lib/profile-taxonomy";
 import { supabase } from "@/integrations/supabase/client";
+import { useAICredits } from "@/hooks/useAICredits";
 import { showToast } from "@/lib/toast";
+import { NO_AI_CONNECT, noAiAnswer } from "../../../../../core/no-ai.mjs";
 
 /** The classify-profile-fact edge function's success shape. */
 interface FactProposal {
@@ -66,12 +68,23 @@ export function QuickAddFact({ contactId, onCommit }: QuickAddFactProps) {
   const [status, setStatus] = useState<"idle" | "classifying" | "committing">("idle");
   const [refileOpen, setRefileOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // The connection the tab has heard of (/api/status, refetched every few seconds). A status of
+  // "none" is a decision made from something the tab has seen; a request sent before the status
+  // arrived, or a connection removed seconds ago, is answered by the server and mapped below (#886).
+  const { aiAvailability } = useAICredits();
 
   const busy = status !== "idle";
 
   const classify = async () => {
     const raw = text.trim();
     if (!raw || busy) return;
+    // With no AI connected the request would only fail with 400 and the typed fact would go
+    // nowhere, so the shared line is said and nothing is sent; what was typed stays in the box
+    // for when an AI is connected (#886).
+    if (aiAvailability === "none") {
+      showToast.error(NO_AI_CONNECT);
+      return;
+    }
     setStatus("classifying");
     try {
       const { data, error } = await supabase.functions.invoke("classify-profile-fact", {
@@ -88,7 +101,10 @@ export function QuickAddFact({ contactId, onCommit }: QuickAddFactProps) {
       }
       setProposal(proposalData);
     } catch (err) {
-      showToast.error(err instanceof Error ? err.message : "Could not classify this fact");
+      const message = err instanceof Error ? err.message : "Could not classify this fact";
+      // The server's own "Connect an assistant before classifying a fact" names no place, so it is
+      // said the way the other AI actions say it (core/no-ai.mjs). What was typed stays in the box.
+      showToast.error(noAiAnswer(message) ? NO_AI_CONNECT : message);
     } finally {
       setStatus("idle");
       inputRef.current?.focus();
@@ -150,7 +166,7 @@ export function QuickAddFact({ contactId, onCommit }: QuickAddFactProps) {
           onKeyDown={handleKeyDown}
           placeholder={'Add a fact, like "loves hotpot"'}
           className="h-9 pl-8 pr-9 text-sm"
-          aria-label="Add a fact with AI"
+          aria-label="Add a fact"
           aria-busy={busy}
         />
         {busy && (

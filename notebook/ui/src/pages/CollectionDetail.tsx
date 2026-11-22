@@ -1,6 +1,6 @@
 import { type MouseEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { format, formatDistanceToNow, isValid, parseISO } from "date-fns";
+import { localDateISO, localTimeHM, parseInstant, showDate } from "@/lib/local-date";
 import {
   ArrowDown,
   ArrowUp,
@@ -456,19 +456,17 @@ function isLinkValue(value: unknown): value is LinkValue {
 
 function parseDate(value: unknown) {
   if (!value) return null;
-  const date =
-    typeof value === "string" ? parseISO(value) : new Date(String(value));
-  return isValid(date) ? date : null;
+  return parseInstant(value as string | number | Date);
 }
 
 function toDateInput(value: unknown) {
   const date = parseDate(value);
-  return date ? format(date, "yyyy-MM-dd") : "";
+  return date ? localDateISO(date) : "";
 }
 
 function toTimeInput(value: unknown) {
   const date = parseDate(value);
-  return date ? format(date, "HH:mm") : "";
+  return date ? localTimeHM(date) : "";
 }
 
 function renderDate(value: unknown) {
@@ -476,8 +474,8 @@ function renderDate(value: unknown) {
   if (!date) return "—";
   const age = Math.abs(Date.now() - date.getTime());
   return age <= 7 * 24 * 60 * 60 * 1000
-    ? formatDistanceToNow(date, { addSuffix: true })
-    : format(date, "MMM d, yyyy");
+    ? showDate(value as string | number | Date, "ago")
+    : showDate(value as string | number | Date, "date");
 }
 
 function optionClass(value: string) {
@@ -1160,7 +1158,7 @@ function LinkPicker({
   );
 }
 
-function FieldInput({
+export function FieldInput({
   field,
   value,
   error,
@@ -1176,9 +1174,9 @@ function FieldInput({
   currentCollection: Collection | null;
 }) {
   const selectedDate = parseDate(value);
-  // The visible label names the field's control (#742). A click focuses it and
-  // opens no picker, the way a native select's label behaves.
+  // A picker label focuses its control without opening it, like a native select's label.
   const id = useId();
+  const switchRef = useRef<HTMLButtonElement>(null);
   const focusOnly = (event: MouseEvent) => {
     event.preventDefault();
     document.getElementById(id)?.focus();
@@ -1202,14 +1200,25 @@ function FieldInput({
       <div className="rounded-md border p-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <Label htmlFor={id} onClick={focusOnly}>{field.label}</Label>
+            {/* Like a checkbox's label: a click toggles the switch and focuses it. */}
+            <Label
+              htmlFor={id}
+              className="cursor-pointer"
+              onClick={(event) => {
+                event.preventDefault();
+                switchRef.current?.focus();
+                onChange(!value);
+              }}
+            >
+              {field.label}
+            </Label>
             {field.primary && (
               <Badge variant="secondary" className="text-[10px]">
                 primary
               </Badge>
             )}
           </div>
-          <Switch id={id} checked={Boolean(value)} onCheckedChange={onChange} />
+          <Switch id={id} ref={switchRef} checked={Boolean(value)} onCheckedChange={onChange} />
         </div>
         {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
       </div>
@@ -1286,7 +1295,7 @@ function FieldInput({
         <SmartDatePicker
           id={id}
           value={selectedDate ?? null}
-          onChange={(date) => onChange(date ? format(date, "yyyy-MM-dd") : "")}
+          onChange={(date) => onChange(date ? localDateISO(date) : "")}
           className={inputClass}
         />
       ) : field.type === "datetime" ? (
@@ -1297,7 +1306,7 @@ function FieldInput({
             onChange={(date) => {
               const currentTime = toTimeInput(value) || "09:00";
               onChange(
-                date ? `${format(date, "yyyy-MM-dd")}T${currentTime}` : "",
+                date ? `${localDateISO(date)}T${currentTime}` : "",
               );
             }}
             className={inputClass}
@@ -1311,7 +1320,7 @@ function FieldInput({
               className="pl-9"
               onChange={(event) => {
                 const datePart =
-                  toDateInput(value) || format(new Date(), "yyyy-MM-dd");
+                  toDateInput(value) || localDateISO(new Date());
                 onChange(`${datePart}T${event.target.value}`);
               }}
             />
@@ -1709,7 +1718,7 @@ function ItemNotesPanel({
                         {note.title || "Untitled"}
                       </div>
                       <div className="truncate text-xs text-muted-foreground">
-                        {formatDistanceToNow(parseISO(note.updated_at), { addSuffix: true })}
+                        {showDate(note.updated_at, "ago")}
                       </div>
                     </button>
                   ))
@@ -1754,7 +1763,7 @@ function ItemNotesPanel({
                     {note.content
                       ? note.content.replace(/[#*_`>-]+/g, "").slice(0, 80)
                       : "Empty note"}{" "}
-                    · {formatDistanceToNow(parseISO(note.updated_at), { addSuffix: true })}
+                    · {showDate(note.updated_at, "ago")}
                   </div>
                 </button>
                 <DropdownMenu>
@@ -3370,8 +3379,10 @@ function CollectionDetailPage() {
       </div>
     );
 
+  // The pane fills main's content height where the floating chat button shows, defined in
+  // DashboardLayout.
   return (
-    <div className="flex h-[calc(100dvh-104px)] w-full flex-col overflow-hidden rounded-md border bg-background lg:flex-row">
+    <div className="flex h-[var(--page-h)] w-full flex-col overflow-hidden rounded-md border bg-background lg:flex-row">
       <SEOHead
         title={`${collection?.name ?? "Collection"} - Godspeed Mission Control`}
         noIndex
@@ -3793,9 +3804,7 @@ function CollectionDetailPage() {
                           </TableCell>
                         ))}
                         <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                          {formatDistanceToNow(new Date(item.updated_at), {
-                            addSuffix: true,
-                          })}
+                          {showDate(item.updated_at, "ago")}
                         </TableCell>
                         <TableCell onClick={(event) => event.stopPropagation()}>
                           <DropdownMenu>

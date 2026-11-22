@@ -149,7 +149,12 @@ export async function retrievedContext(query,input,provider,{index}={}){
   const raw=await provider({kind:'retrieval-expansion',query:question,signal:input.signal,contract:'Return JSON {terms:[string]} with at most 12 useful synonyms and related concepts for retrieving the user question. Include both languages where useful. Do not answer the question, invent facts or request changes. No personal records are supplied.'});
   const parsed=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw;
   if(Array.isArray(parsed.terms)&&parsed.terms.length){const terms=parsed.terms.filter(t=>typeof t==='string'&&t.length<=60).slice(0,12);context=chatContext(query,{...input,message:question+' '+terms.join(' ')});context.retrieval.method='keyword and meaning-expanded selection';context.retrieval.expanded_terms=terms;}
- }catch{context.retrieval.meaning_expansion='unavailable; keyword results retained';}
+ }catch(error){
+  // A provider that stopped answering here would stall the chat call too, and the two waits
+  // together passed the minute in which a stalled send is said (#770).
+  if(error?.code==='AI_STALLED')throw error;
+  context.retrieval.meaning_expansion='unavailable; keyword results retained';
+ }
  return finishPeople(query,input,question,context);
 }
 function finishPeople(query,input,question,context){

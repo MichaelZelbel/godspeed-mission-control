@@ -399,14 +399,14 @@ function Instructions() {
     </div>
   );
 }
-function InstructionForm({ value, onSave, onCancel }: { value: Partial<Instruction>; onSave: (v: { instruction: string; applies_to: string }) => void; onCancel: () => void }) {
+export function InstructionForm({ value, onSave, onCancel }: { value: Partial<Instruction>; onSave: (v: { instruction: string; applies_to: string }) => void; onCancel: () => void }) {
   const [text, setText] = useState(value.instruction ?? ""), [scope, setScope] = useState(value.applies_to ?? "all");
   return (
     <form className="space-y-3 rounded-md border border-border bg-muted/30 p-3" onSubmit={(e) => { e.preventDefault(); if (text.trim()) onSave({ instruction: text.trim(), applies_to: scope }); }}>
       <Label htmlFor={"instruction-" + (value.id ?? "new")}>Instruction</Label>
       <Textarea id={"instruction-" + (value.id ?? "new")} rows={2} value={text} onChange={(e) => setText(e.target.value)} autoFocus className="text-base sm:text-sm" />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <label className="sr-only" htmlFor={"scope-" + (value.id ?? "new")}>Which apps</label>
+        <label className="text-sm font-medium" htmlFor={"scope-" + (value.id ?? "new")}>Which apps</label>
         <select id={"scope-" + (value.id ?? "new")} className={cn(selectClass, "sm:w-56")} value={scope} onChange={(e) => setScope(e.target.value)}>{SCOPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
         <div className="flex-1" />
         <Button type="button" variant="ghost" className="min-h-11 sm:min-h-9" onClick={onCancel}>Cancel</Button>

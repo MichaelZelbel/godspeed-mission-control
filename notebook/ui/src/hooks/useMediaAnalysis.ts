@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { parseInstant } from "@/lib/local-date";
 
 export interface MediaAnalysisEntry {
   id: string;
@@ -85,8 +86,8 @@ function isJobFinished(entries: AnalysisStatusLike[] | undefined, path: string, 
 
   const hasFresh = rows.some((e) => {
     // Use updated_at only - created_at stays old when rows are updated in place.
-    const ts = Date.parse(e.updated_at || "");
-    return Number.isFinite(ts) && ts >= startedAt - 1500;
+    const ts = parseInstant(e.updated_at || "")?.getTime() ?? NaN;
+    return ts >= startedAt - 1500;
   });
   if (!hasFresh) return false;
 
@@ -168,7 +169,7 @@ export function useReanalyzeMedia() {
       // Optimistic update: flip every row for this storage_path to "processing".
       const flip = <T extends AnalysisStatusLike>(entry: T): T =>
         entry.storage_path === vars.storagePath
-          ? { ...entry, analysis_status: "processing", error_message: null, updated_at: new Date(startedAt).toISOString() }
+          ? { ...entry, analysis_status: "processing", error_message: null, updated_at: parseInstant(startedAt)!.toISOString() }
           : entry;
 
       queryClient.setQueriesData<MediaAnalysisEntry[]>({ queryKey: ["media-analysis", vars.noteId] }, (old) =>

@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
+import { WAIT } from "@/test/wait-limits";
 
 const { createSignedUrl } = vi.hoisted(() => ({ createSignedUrl: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { storage: { from: () => ({ createSignedUrl }) } } }));
@@ -34,7 +35,7 @@ describe("local-only preview surfaces", () => {
     const { WebClipPreview } = await import("@/components/notes/WebClipPreview");
     wrap(<WebClipPreview defaultOpen webClip={{ snapshot_storage_path: "notes/large.html" }} />);
 
-    expect(await screen.findByText(/Open it on the computer where it was added/)).toBeInTheDocument();
+    expect(await screen.findByText(/Open it on the computer where it was added/, undefined, WAIT)).toBeInTheDocument();
     expect(createSignedUrl).not.toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledTimes(1);
   });

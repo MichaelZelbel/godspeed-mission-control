@@ -6,6 +6,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
 import { expectFieldsNamed, isButton, isInputOfType, isListButton, isSwitch, isTextbox } from "@/test/field-labels";
+import { WAIT } from "@/test/wait-limits";
 import CollectionDetail from "./CollectionDetail";
 
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
@@ -64,8 +65,8 @@ describe("a collection's forms", () => {
 
   it("the new item form, opened with its New Item button, names every field by its label", async () => {
     renderAt("/collections/books");
-    fireEvent.click((await screen.findAllByRole("button", { name: "New Item" }))[0]);
-    const title = await screen.findByLabelText("Title", { exact: true });
+    fireEvent.click((await screen.findAllByRole("button", { name: "New Item" }, WAIT))[0]);
+    const title = await screen.findByLabelText("Title", { exact: true }, WAIT);
     const form = title.closest("form") ?? document.body;
     expectFieldsNamed(form as HTMLElement, [
       { name: "Title", is: isTextbox },
@@ -89,8 +90,8 @@ describe("a collection's forms", () => {
 
   it("the Edit Collection dialog names every field by its label", async () => {
     renderAt("/collections/books");
-    fireEvent.click(await screen.findByRole("button", { name: "Edit Collection" }));
-    const dialog = await screen.findByRole("dialog", { name: "Edit Collection" });
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Collection" }, WAIT));
+    const dialog = await screen.findByRole("dialog", { name: "Edit Collection" }, WAIT);
     expectFieldsNamed(dialog, [
       { name: "Name", is: isTextbox },
       { name: "Icon", is: isTextbox },

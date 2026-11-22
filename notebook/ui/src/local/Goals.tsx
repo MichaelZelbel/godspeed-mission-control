@@ -1,9 +1,10 @@
-import {useState} from 'react';
+import {useId,useState} from 'react';
 import {Link} from 'react-router-dom';
 import {useQuery,useQueryClient} from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import {CartesianGrid,Line,LineChart,ResponsiveContainer,Tooltip,XAxis,YAxis} from 'recharts';
 import {AlertTriangle,CheckCircle2,CircleDashed,Clock,Send,XCircle} from 'lucide-react';
+import {parseInstant,showDate} from '@/lib/local-date';
 import {SEOHead} from '@/components/SEOHead';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
@@ -27,12 +28,15 @@ type Routine={next_run:string|null;last_run:string|null;last_status:string|null;
 type Overview={today:string;decision:{day:string;today:boolean;finished:boolean;for_you:string}|null;routines:Record<string,Routine>;going_out:{n:number;id:string;what:string;goal:string;at:string;shown:boolean}[];goals:Goal[];ai:{available:boolean;source?:string;key?:boolean|null;check?:{ok:boolean;error?:string}|null}};
 async function request(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 
-const day=(d?:string|null)=>{if(!d)return '';const t=new Date(d.length===10?d+'T12:00:00':d);return isNaN(t.getTime())?d:t.toLocaleDateString(undefined,{day:'numeric',month:'long'});};
-const shortDay=(d:string)=>{const t=new Date(d+'T12:00:00');return isNaN(t.getTime())?d:t.toLocaleDateString(undefined,{day:'numeric',month:'short'});};
-const moment=(d?:string|null)=>{if(!d)return '';const t=new Date(d);return isNaN(t.getTime())?d:t.toLocaleString(undefined,{weekday:'long',hour:'2-digit',minute:'2-digit'});};
+const day=(d?:string|null)=>{if(!d)return '';return showDate(d,'day');};
+const shortDay=(d:string)=>showDate(d,'day');
+const moment=(d?:string|null)=>{if(!d)return '';return showDate(d,'time');};
 // GOES OUT is written in UTC as YYYY-MM-DDTHH:MM.
 const goesOut=(at:string)=>moment(at.length===16?at+':00Z':at);
 const number=(v:number)=>v.toLocaleString();
+// Local midnights a week apart straddle a DST change, where their difference is a
+// hair under 7×86400000 ms, so the millisecond difference rounds to a day count.
+export const daysBetween=(a?:string|null,b?:string|null)=>{const ta=parseInstant(a)?.getTime()??NaN,tb=parseInstant(b)?.getTime()??NaN;return Math.round((ta-tb)/86400000);};
 const STATUS:Record<string,string>={adopted:'Active',provisional:'An idea, not worked on yet',paused:'Paused',achieved:'Reached',retired:'Stopped'};
 const VERDICT:Record<string,string>={worked:'It worked',moved:'It moved the number, but less than expected',flat:'The number did not move',unread:'No reading came in time to judge it','never-live':'It never went live'};
 
@@ -49,8 +53,8 @@ function workState(w:Work):{icon:JSX.Element;text:string}{
   return {icon:wait,text:w.status};
 }
 
-function Readings({goal}:{goal:Goal}){
-  const rs=goal.readings,lastReading=rs.at(-1),weekBefore=lastReading?[...rs].reverse().find(r=>(Date.parse(lastReading.date)-Date.parse(r.date))/86400000>=7):undefined;
+export function Readings({goal}:{goal:Goal}){
+  const rs=goal.readings,lastReading=rs.at(-1),weekBefore=lastReading?[...rs].reverse().find(r=>daysBetween(lastReading.date,r.date)>=7):undefined;
   if(!lastReading)return <p className="text-sm text-muted-foreground">Not read yet. The morning decision reads it, or you tell it below.</p>;
   return <div className="space-y-3">
     <p><span className="text-3xl font-semibold font-display tabular-nums">{number(lastReading.value)}</span> <span className="text-sm text-muted-foreground">on {day(lastReading.date)}{weekBefore?', '+(lastReading.value-weekBefore.value>=0?'up ':'down ')+number(Math.abs(lastReading.value-weekBefore.value))+' since '+day(weekBefore.date):''}</span></p>
@@ -162,13 +166,14 @@ function GoalCard({goal,data,operation,busy}:{goal:Goal;data:Overview;operation:
   </Card>;
 }
 
-function NameTheNumber({goal,operation,busy}:{goal:Goal;operation:(input:any)=>Promise<boolean>;busy:boolean}){
+export function NameTheNumber({goal,operation,busy}:{goal:Goal;operation:(input:any)=>Promise<boolean>;busy:boolean}){
   const [what,setWhat]=useState(''),[kind,setKind]=useState('total'),[where,setWhere]=useState('');
+  const howId=useId();
   return <div className="space-y-3">
     <p className="text-sm">No weekly number yet: the one number, counted every week, that shows whether the work moves this goal. The morning decision names one from the research, or you name it here.</p>
     <form className="grid gap-3 sm:grid-cols-3" onSubmit={e=>{e.preventDefault();operation({type:'goal-change',id:goal.id,lead:[what,kind,where].map(s=>s.trim().replace(/\|/g,'/')).join(' | '),reason:'Named on the Goals page'});}}>
       <label className="space-y-1 text-sm font-medium">What is counted<Input className="text-base" required value={what} onChange={e=>setWhat(e.target.value)} placeholder="for example: training sessions"/></label>
-      <label className="space-y-1 text-sm font-medium">How<select className="block w-full min-h-11 rounded-md border bg-background px-3 text-base" value={kind} onChange={e=>setKind(e.target.value)}><option value="total">In total</option><option value="per week">Each week</option></select></label>
+      <div className="space-y-1 text-sm font-medium"><label htmlFor={howId}>How</label><select id={howId} className="block w-full min-h-11 rounded-md border bg-background px-3 text-base" value={kind} onChange={e=>setKind(e.target.value)}><option value="total">In total</option><option value="per week">Each week</option></select></div>
       <label className="space-y-1 text-sm font-medium">Where it is read<Input className="text-base" required value={where} onChange={e=>setWhere(e.target.value)} placeholder="for example: I count them"/></label>
       <Button className="min-h-11 sm:col-span-3 sm:justify-self-start" disabled={busy}>Name the weekly number</Button>
     </form>

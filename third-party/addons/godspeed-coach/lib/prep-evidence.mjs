@@ -38,6 +38,14 @@ export function researchDomains(area) {
   return (area?.lists?.["RESEARCH DOMAIN"] || []).map((line) => line.split("|")[0].trim());
 }
 
+// Whether a preparation in this area is reviewed at all: with no research domains there is no
+// research to check, so no evidence or review is asked for anywhere. Every site that needs the
+// same answer (the gate, the seal, the talk's quoted preparation) takes it from here, so the
+// rule is owned once — the gate's refusal below and the seal's no-review path cannot drift apart.
+export function needsReview(area) {
+  return researchDomains(area).length > 0;
+}
+
 // Why this preparation's research cannot open the talk, or null. `files` names other sidecars to
 // check (the candidates in the run folder, before the host moves them beside the preparation).
 // { anyScope: true } leaves out only the area.md hash: an earlier preparation quoted with its date
@@ -45,7 +53,7 @@ export function researchDomains(area) {
 // longer open a talk.
 export function researchEvidenceProblem(prep, area, now = new Date(), files = null, { anyScope = false } = {}) {
   const domains = researchDomains(area);
-  if (!domains.length) return null;
+  if (!needsReview(area)) return null;
   if (domains.some((id) => !/^[a-z0-9][a-z0-9-]*$/.test(id)) || new Set(domains).size !== domains.length) return "its research domains are invalid or duplicated";
   for (const names of REQUIRED) {
     const filled = names.some((name) => {

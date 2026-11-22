@@ -1,4 +1,5 @@
 import type { Json } from "@/integrations/supabase/types";
+import { parseInstant } from "./local-date";
 
 export function parseArray<T>(value: Json | null | undefined): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
@@ -9,7 +10,7 @@ export function initials(name?: string | null) {
 }
 
 export function relativeDate(value: string) {
-  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86400000);
+  const days = Math.floor((Date.now() - (parseInstant(value)?.getTime() ?? NaN)) / 86400000);
   if (days <= 0) return "today";
   if (days === 1) return "1 day ago";
   return `${days} days ago`;

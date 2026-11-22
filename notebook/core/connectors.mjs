@@ -23,7 +23,7 @@ export class Connectors {
   async request(config,route){const url=new URL(route,config.origin);if(url.origin!==new URL(config.origin).origin)throw new Error('Connector request left its configured service');const r=await configured(url,{headers:{Authorization:'Bearer '+config.token}},{timeoutMs:30000,allowHosts:[new URL(config.origin).hostname]});if(!r.ok)throw new Error('Connector failed with HTTP '+r.status);return r;}
   async invoke(name,input){
     if(name==='configure-connector'){
-      if(!['spend-guard','board-export','browser-post'].includes(input.name))throw new Error('Choose a supported optional connector');
+      if(!['board-export','browser-post'].includes(input.name))throw new Error('Choose a supported optional connector');
       const url=new URL(input.url);if(url.protocol!=='https:'&&!['127.0.0.1','localhost'].includes(url.hostname))throw new Error('Connector transport requires HTTPS');if(url.username||url.password)throw new Error('Keep credentials in the separate token field');
       if(!Number.isFinite(input.threshold??0))throw new Error('Choose a numeric balance threshold');
       return this.save(input.name,{origin:url.origin,route:url.pathname+url.search,token:input.token||null,threshold:input.threshold||0,value_path:input.value_path||'balance'});

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ export function SelfRecognitionSection() {
   const qc = useQueryClient();
   const [userId, setUserId] = useState<string | null>(null);
   const [newAlias, setNewAlias] = useState("");
+  const newAliasId = useId();
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
@@ -130,7 +131,11 @@ export function SelfRecognitionSection() {
             ))}
           </div>
           <div className="flex gap-2">
+            <label htmlFor={newAliasId} className="sr-only">
+              Add a nickname
+            </label>
             <Input
+              id={newAliasId}
               placeholder="Add a nickname"
               value={newAlias}
               onChange={(e) => setNewAlias(e.target.value)}
@@ -139,8 +144,14 @@ export function SelfRecognitionSection() {
               }}
               className="text-sm"
             />
-            <Button size="sm" variant="outline" onClick={() => addAlias.mutate(newAlias)} disabled={!newAlias.trim()}>
-              <Plus className="h-4 w-4" />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => addAlias.mutate(newAlias)}
+              disabled={!newAlias.trim()}
+              aria-label="Add nickname"
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
