@@ -21,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { useArchiveMembership, useRemoveMembership, useUpdateMembership, type GroupMembershipWithPerson } from "@/hooks/useGroupMemberships";
 import { showToast } from "@/lib/toast";
-import { initials, parseArray } from "@/lib/group-utils";
+import { initials, parseArray, relativeDate } from "@/lib/group-utils";
 import { NextStepsSection } from "./NextStepsSection";
 
 const PRIORITIES = ["low", "normal", "high", "urgent"] as const;
@@ -111,6 +111,10 @@ export function MembershipSheet({ group, membership, notes, open, onOpenChange }
             <div className="space-y-2"><Label>Status</Label><Select value={membership.status || ""} onValueChange={(value) => updateField("status", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{stages.map((stage) => <SelectItem key={stage.id} value={stage.id}>{stage.label}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Priority</Label><Select value={membership.priority} onValueChange={(value) => updateField("priority", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PRIORITIES.map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}</SelectContent></Select></div>
           </div>
+          {/* The List tab hides Last Movement below sm, and the pipeline card that shows the date
+              otherwise only renders for a member with a stage, so the sheet is the one place a
+              phone always reads it (#878). */}
+          <p className="text-sm text-muted-foreground">Last moved {relativeDate(membership.last_movement_at)}</p>
           <div className="space-y-2"><Label htmlFor="membership-reason">Reason</Label><Textarea id="membership-reason" value={draft.reason} onChange={(e) => setDraft((current) => ({ ...current, reason: e.target.value }))} onBlur={() => saveDraft()} /></div>
           <div className="space-y-2"><Label htmlFor="membership-notes">Notes</Label><Textarea id="membership-notes" value={draft.notes} onChange={(e) => setDraft((current) => ({ ...current, notes: e.target.value }))} onBlur={() => saveDraft()} className="min-h-24" /></div>
           <div className="space-y-3">
