@@ -11,6 +11,11 @@ export const NOT_WHATSAPP = "This is not a WhatsApp chat export. Export the chat
 const HEADER = /^[‎‏﻿]*\[?(\d{1,2})[./](\d{1,2})[./](\d{2,4}),?\s+(\d{1,2})[:.](\d{2})(?:[:.]\d{2})?(?:\s*[AaPp]\.?\s?[Mm]\.?)?\]?\s*(?:-\s*)?(.*)$/;
 const MEDIA_LINE = /^<.*(omitted|ausgeschlossen).*>$|^[‎‏]*(image|video|audio|sticker|gif|document|bild|dokument)\s(omitted|ausgeschlossen)$/i;
 const pad = (n: number) => String(n).padStart(2, "0");
+// A calendar day that exists (no 31 February), checked on plain numbers.
+const isRealDay = (y: number, m: number, d: number) => {
+  const t = new Date(y, m - 1, d);
+  return t.getFullYear() === y && t.getMonth() === m - 1 && t.getDate() === d;
+};
 
 export function parseWhatsAppChat(text: string): ChatMessage[] {
   const raw: { a: number; b: number; year: number; name: string; text: string }[] = [];
@@ -32,7 +37,7 @@ export function parseWhatsAppChat(text: string): ChatMessage[] {
     const [day, month] = monthFirst ? [r.b, r.a] : [r.a, r.b];
     const stamp = `${r.year}-${pad(month)}-${pad(day)}`;
     const text = r.text.trim();
-    if (!text || MEDIA_LINE.test(text) || Number.isNaN(Date.parse(stamp))) continue;
+    if (!text || MEDIA_LINE.test(text) || !isRealDay(r.year, month, day)) continue;
     out.push({ day: stamp, name: r.name, text });
   }
   return out;
@@ -104,7 +109,10 @@ export function monthRequests(month: ChatMonth, limit = 30000): string[][] {
 
 export interface KnownMoment { title: string; day: string; people: string[] }
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-const dayNumber = (day: string) => Date.parse(day + "T00:00:00Z") / 86400000;
+const dayNumber = (day: string) => {
+  const [y, m, d] = day.split("-").map(Number);
+  return Date.UTC(y, m - 1, d) / 86400000;
+};
 
 // A suggestion already on the timeline: the same day and the same people, or the same title within three days.
 export function alreadyKnown(suggestion: KnownMoment, known: KnownMoment[]): boolean {

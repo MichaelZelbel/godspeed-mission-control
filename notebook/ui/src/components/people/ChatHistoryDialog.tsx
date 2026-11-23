@@ -15,7 +15,11 @@ interface Suggestion { id: number; title: string; day: string; quote: string; st
 interface Person { id: string; name: string }
 interface Props { open: boolean; onOpenChange: (open: boolean) => void; personId: string; personName: string; people: Person[]; onSaved: () => void }
 
-const MONTH_NAME = (month: string) => new Date(month + "-15T12:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" });
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MONTH_NAME = (month: string) => {
+  const [year, number] = month.split("-");
+  return `${MONTH_NAMES[Number(number) - 1] ?? number} ${year}`;
+};
 
 // The moments the timeline already holds, with the names of the people in each.
 async function knownMoments(): Promise<KnownMoment[]> {
