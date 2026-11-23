@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadErrorState } from "@/components/collections/LoadErrorState";
 import { HabitProgress } from "@/components/collections/HabitProgress";
-import { habitDateLabel, type HabitProgress as Progress } from "@/lib/habit-progress";
+import { type HabitProgress as Progress } from "@/lib/habit-progress";
+import { showDate } from "@/lib/local-date";
 import { habitDays } from "@/lib/tracker-shelf";
 
 // One habit on the Trackers shelf (D-321, step 3). Its days are the coach's own record, the habit
@@ -121,9 +122,9 @@ export default function HabitTracker() {
         <p className="mt-1 text-sm">Your all-time total also includes earlier completed days.</p>
         {!days.length ? <p className="py-4 text-sm">No days recorded in the last year. Start with your next small step.</p> : <>
           <ul className="divide-y">{days.slice(0, visibleHistory).map(d => <li key={d.day} className="grid gap-2 py-4 sm:grid-cols-[1fr_10rem]">
-            <div><time dateTime={d.day} className="font-medium">{habitDateLabel(d.day, true)}</time>{d.note && <p className="mt-1 text-sm leading-6">{d.note}</p>}</div>
+            <div><time dateTime={d.day} className="font-medium">{showDate(d.day, "day")}</time>{d.note && <p className="mt-1 text-sm leading-6">{d.note}</p>}</div>
             <label className="text-sm">Answer<select aria-label={`Answer on ${d.day}`} className={selectClass} value={d.answer} disabled={busy} onChange={e => run({ type: "tracker-correct", entry_id: d.day, answer: e.target.value })}>{ANSWERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-            <Button className="justify-self-start sm:col-span-2" variant="ghost" disabled={busy} onClick={() => { if (window.confirm(`Undo the latest entry for ${habitDateLabel(d.day)}? An earlier answer may return.`)) run({ type: "tracker-correct", entry_id: d.day, remove: true }); }}>Undo latest entry</Button>
+            <Button className="justify-self-start sm:col-span-2" variant="ghost" disabled={busy} onClick={() => { if (window.confirm(`Undo the latest entry for ${showDate(d.day, "day")}? An earlier answer may return.`)) run({ type: "tracker-correct", entry_id: d.day, remove: true }); }}>Undo latest entry</Button>
           </li>)}</ul>
           {visibleHistory < days.length && <Button className="my-3" variant="outline" onClick={() => setVisibleHistory(n => n + 30)}>Show earlier days</Button>}
         </>}

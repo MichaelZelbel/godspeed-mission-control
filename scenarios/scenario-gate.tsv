@@ -1,0 +1,39 @@
+# job	group
+# The release gate: which jobs of .github/workflows/scenarios.yml can hold up a release.
+# release = what people do first and most (install, update, first day, chat and Telegram, morning brief, reminders):
+#           the night and a candidate run these, and a failure of one is urgent.
+# weekly  = everything else: run once a week (scenarios-weekly.yml); a failure is an ordinary bug and never holds up a release.
+# Every job of scenarios.yml is on exactly one row (test-report-night.mjs checks it). Candidate-only jobs (Mac, Windows)
+# are release jobs that run only when the run is a candidate's (scenarios/pick-run.sh).
+linux-install	release
+mac-install	release
+docker-server	release
+linux-update	release
+settings-on-install	release
+voice	weekly
+local-voice	weekly
+update-keeps-everything	release
+two-machines-move-at-once	weekly
+media-travels	weekly
+closed-offline-on-both	weekly
+reminder-from-settings	release
+reminder-closed-elsewhere	release
+reminders-move-keeps-everything	weekly
+late-reminder-file	weekly
+charm-challenge	weekly
+no-video-skills-by-default	weekly
+update-removes-only-unchanged-skills	weekly
+briefing-breaks-a-rule	release
+windows-old-names-move	release
+telegram-language	release
+brief-asked-in-chat	release
+talk-prep-honest	release
+no-question-he-cannot-judge	weekly
+plain-yes	release
+what-was-that	release
+connection-check	weekly
+workouts-from-hevy	weekly
+day-becomes-facts	weekly
+hermes-update-rollback	weekly
+first-day	release
+server-update-keeps-everything	release

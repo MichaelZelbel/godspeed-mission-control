@@ -214,7 +214,7 @@ function ConfirmCreateDialog({ template, open, onOpenChange }: { template: Templ
             placeholder="My Books"
           />
           {nameError && <p id="template-collection-name-error" className="text-xs text-destructive">{nameError}</p>}
-          <p className="text-xs text-muted-foreground">URL: {BRAND.domain}/collections/{slugify(name)}</p>
+          <p className="text-xs text-muted-foreground">URL: {BRAND.url}/collections/{slugify(name)}</p>
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" disabled={isCreating} onClick={() => onOpenChange(false)}>Cancel</Button>

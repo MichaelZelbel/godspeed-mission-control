@@ -52,6 +52,17 @@ export interface EditMomentData {
   participantIds?: string[];
 }
 
+// The label each status shows in this form. The Timeline's cards and filters
+// read these too, so a status is named the same way everywhere it appears.
+export const statusLabels: Record<string, string> = {
+  past_fact: "Past Fact",
+  future_plan: "Future Plan",
+  ongoing: "Ongoing",
+  unknown: "Unknown",
+};
+// A status the form does not know shows as it is stored rather than as nothing.
+export const statusLabel = (status: string) => statusLabels[status] ?? status;
+
 interface AddEventDialogProps {
   people: TimelineContact[];
   onCreated: () => void;
@@ -175,13 +186,13 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
   const friendlyAiError = (code?: string | null): { title: string; description: string } | null => {
     switch (code) {
       case "AI_NO_DRAFT":
-        return { title: "Kein Vorschlag möglich", description: "Die AI konnte aus dieser Beschreibung keinen Vorschlag bilden. Bitte etwas konkreter formulieren oder kürzen." };
+        return { title: "No suggestion possible", description: "The AI could not make a suggestion from this description. Try wording it more concretely, or shorten it." };
       case "AI_REFUSED":
-        return { title: "Text abgelehnt", description: "Die AI hat den Text abgelehnt (vermutlich Safety-Filter). Bitte umformulieren." };
+        return { title: "Text declined", description: "The AI declined this text, probably because of its safety filter. Try rewording it." };
       case "AI_TRUNCATED":
-        return { title: "Beschreibung zu lang", description: "Die Beschreibung ist zu lang für einen Vorschlag. Bitte kürzen." };
+        return { title: "Description too long", description: "The description is too long for a suggestion. Please shorten it." };
       case "PROVIDER_ERROR":
-        return { title: "AI-Provider-Fehler", description: "Der AI-Provider hat einen Fehler zurückgegeben." };
+        return { title: "AI provider error", description: "The AI provider returned an error." };
       case "INSUFFICIENT_CREDITS":
         return { title: "No AI credits left", description: OUT_OF_CREDITS_MESSAGE };
       default:
@@ -384,7 +395,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
             <Select value={status} onValueChange={(v) => { setStatus(v); markFilled("status"); }}>
               <SelectTrigger id={ids.status}><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="past_fact">Past Fact</SelectItem><SelectItem value="future_plan">Future Plan</SelectItem><SelectItem value="ongoing">Ongoing</SelectItem><SelectItem value="unknown">Unknown</SelectItem>
+                {Object.entries(statusLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
