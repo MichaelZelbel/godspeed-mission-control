@@ -54,6 +54,10 @@ test('a metadata-only note edit is the person\'s update, and a purged record rea
   const r=rows([versions('notes','u1','n1',[[0,{title:'Plan',content:'a'}],[600,{metadata:{topic:'x'}}]]),versions('collections','u2','c1',[[0,{name:'Tracker',removed_at:at(0)}]])]);
   assert.deepEqual(r.map(x=>x.action).sort(),['create','delete','update']);
 });
+test('purging a collection with items is one delete',()=>{
+  const r=rows([versions('collections','u1','c1',[[0,{removed_at:at(0)}]]),versions('collection_items','u2','i1',[[0,{removed_at:at(0)}]]),versions('collection_items','u3','i2',[[1,{removed_at:at(1)}]])]);
+  assert.deepEqual(r.map(x=>x.item_type+' '+x.action),['collection delete']);
+});
 
 test('a moment edit is named by its new title',()=>{
   const r=rows([versions('moments','u3','m1',[[0,{title:'Dinner'}]])],{corrections:[{uid:'k1',moment_id:'m1',sequence:1,patch:{title:'Lunch'},created_at:at(700)}]});

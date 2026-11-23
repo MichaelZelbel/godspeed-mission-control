@@ -45,8 +45,8 @@ function entriesOf(type,steps){
   const entries=[];let open=null,prev=null;
   for(const step of steps){
     const {state:c}=step,p=prev;prev=c;
-    let kind,change,keys=[];
-    if(!p)kind=c.removed_at?'delete':'create';
+    let kind,change,keys=[],purged=false;
+    if(!p){kind=c.removed_at?'delete':'create';purged=kind==='delete';}
     else if(c.removed_at&&!p.removed_at)kind='delete';
     else if(c.is_trashed===true&&p.is_trashed!==true){kind='update';change='trash';}
     else if(p.is_trashed===true&&c.is_trashed!==true){kind='update';change='restore';}
@@ -58,7 +58,7 @@ function entriesOf(type,steps){
     }
     const gap=open?ms(step.time)-ms(open.last):Infinity;
     if(kind==='update'&&!change&&open&&!open.change&&open.action!=='delete'&&(gap<=SAVE_GAP_MS||(autosaved(type,keys)&&gap<=FOLD_MS))){open.state=c;open.last=step.time;continue;}
-    open={id:step.id,time:step.time,last:step.time,state:c,before:p,action:kind,change,hidden:kind==='create'&&ownNote(c),correction:Boolean(step.patch),from:p||c};
+    open={id:step.id,time:step.time,last:step.time,state:c,before:p,action:kind,change,hidden:kind==='create'&&ownNote(c),purged,correction:Boolean(step.patch),from:p||c};
     entries.push(open);
   }
   return entries;
@@ -88,7 +88,11 @@ export function activityRows({records,history,corrections,find}){
     if(type==='notes'||type==='moments'||type==='collection_items')return first(r,['title'])||first(fallback,['title'])||'Untitled';
     return first(r,['name','title','label'])||first(fallback,['name','title','label']);
   };
-  return found.filter(e=>!e.hidden&&!goneWith(e)).map(e=>{
+  // Purging a tracker commits its rows and the collection as bare tombstones: one action, so
+  // the rows' deletes fold into the collection's.
+  const purgedCollections=found.filter(e=>e.purged&&e.type==='collections').map(e=>ms(e.time));
+  const purgedWith=e=>e.purged&&e.type==='collection_items'&&purgedCollections.some(t=>Math.abs(t-ms(e.time))<=CASCADE_MS);
+  return found.filter(e=>!e.hidden&&!goneWith(e)&&!purgedWith(e)).map(e=>{
     const itemName=nameOf(e.type,e.state,e.from),metadata={source_uid:e.uid,revision:e.state.revision};
     if(e.correction)metadata.correction=true;
     if(e.change)metadata.change=e.change;
