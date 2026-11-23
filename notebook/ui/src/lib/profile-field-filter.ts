@@ -52,6 +52,12 @@ export function filterEntries(
   return result;
 }
 
+/** True when `name` (a category name) contains the non-empty `query`, case-insensitively. */
+export function nameMatchesQuery(name: string, query: string): boolean {
+  const trimmed = query.trim().toLowerCase();
+  return trimmed.length > 0 && name.toLowerCase().includes(trimmed);
+}
+
 export interface TextSegment {
   text: string;
   matched: boolean;
