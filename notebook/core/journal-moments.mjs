@@ -8,6 +8,7 @@
 // which keeps a tombstone; closing it again ends at a new time and so writes a new moment. A moment
 // is never removed because the journal cannot read its task, since entry files can be missing on
 // one computer for a while.
+import {endsBeforeStart} from './timestamps.mjs';
 import {hash} from './records/store.mjs';
 import {readEntries} from '../../third-party/addons/godspeed-journal/lib/store.mjs';
 import {loadSettings} from '../../third-party/addons/godspeed-journal/lib/settings.mjs';
@@ -32,7 +33,7 @@ export async function reconcileJournalMoments({store,query,now=new Date()}){
   if(t.state!=='done'||!(t.moment??settings.save_as_moments!==false))continue;
   const id=journalMomentId(t);
   if(!store.get('moments',id)){
-   await query.executeAsync({table:'moments',operation:'insert',values:{id,uid:hash(id).slice(0,32),title:t.title,description:t.done_means.length?'Done meant: '+t.done_means.join('; '):null,happened_at:t.started,happened_end:t.ended,status:'past_fact',impact_level:t.impact||1,source_type:'journal',source_id:t.id,origin:'journal',metadata:{journal_ended:t.ended,...(t.impactAt?{journal_impact_at:t.impactAt}:{})}}});
+   await query.executeAsync({table:'moments',operation:'insert',values:{id,uid:hash(id).slice(0,32),title:t.title,description:t.done_means.length?'Done meant: '+t.done_means.join('; '):null,happened_at:t.started,happened_end:endsBeforeStart(t.started,t.ended)?null:t.ended,status:'past_fact',impact_level:t.impact||1,source_type:'journal',source_id:t.id,origin:'journal',metadata:{journal_ended:t.ended,...(t.impactAt?{journal_impact_at:t.impactAt}:{})}}});
    result.written.push(id);continue;
   }
   // Only an answer given in the journal after the moment was written changes its impact, so a

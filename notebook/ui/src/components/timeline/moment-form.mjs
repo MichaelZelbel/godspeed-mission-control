@@ -163,3 +163,5 @@ export const NO_AI_FACTS = NO_AI_STATUS + ', so no facts about its people were p
 export function noAiFacts(message) {
   return String(message ?? '').startsWith(NO_AI_STATUS) ? NO_AI_FACTS : null;
 }
+
+export { END_BEFORE_START, endsBeforeStart } from '../../../../core/timestamps.mjs';
