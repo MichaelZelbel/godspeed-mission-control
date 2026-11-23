@@ -13,7 +13,7 @@ import {WAIT} from '@/test/wait-limits';
 import {GlobalAIChatFAB} from './GlobalAIChatFAB';
 import {clearFileChat,hydrateFileChats} from '@/local/file-chat';
 import {saveConversationState} from '../../../../core/conversation-state.mjs';
-import {NO_AI_CHAT} from '../../../../core/no-ai.mjs';
+import {AI_UNREADABLE as UNREADABLE,NO_AI_CHAT} from '../../../../core/no-ai.mjs';
 
 vi.mock('sonner',()=>({toast:{error:vi.fn(),warning:vi.fn()}}));
 vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:{id:'owner'},session:{user:{id:'owner'}}})}));
@@ -277,4 +277,46 @@ it('does not write a conversation cleared in another window back when its send f
  expect(screen.getByText(REFUSED)).toBeInTheDocument();
  expect(screen.queryByText('No answer.')).toBeNull();
  expect(saved('general')).toEqual([]);
+});
+
+// The AI answered, but with something the notebook cannot read: it still reads as working.
+it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, a send whose answer could not be used says so after a reload, shows once and can be sent again',async(surface)=>{
+ surfaces[surface].show();
+ invoke.mockImplementationOnce(async()=>({data:null,error:{message:UNREADABLE,context:new Response(JSON.stringify({error:UNREADABLE}),{status:400})}}));
+ fireEvent.change(await screen.findByLabelText('Message',{},WAIT),{target:{value:QUESTION}});
+ fireEvent.click(screen.getByRole('button',{name:'Send'}));
+ const check=()=>{
+  expect(screen.getByText(UNREADABLE)).toBeInTheDocument();
+  expect(screen.getByText('No answer.')).toBeInTheDocument();
+  expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(1);
+  expect(screen.getAllByText(QUESTION)).toHaveLength(1);
+  expect(screen.getByLabelText('Message')).toHaveValue('');
+ };
+ expect(await screen.findByText(UNREADABLE,{},{timeout:3000})).toBeInTheDocument();
+ check();
+ await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION]),WAIT);
+ // The AI reads as working, which must not clear the note.
+ await waitFor(()=>expect(localStorage.getItem('ai-worked-at')).not.toBeNull(),{timeout:3000});
+ check();
+
+ await reload(surface);
+ expect(await screen.findByText(UNREADABLE,{},WAIT)).toBeInTheDocument();
+ check();
+
+ invoke.mockImplementationOnce(async()=>({data:{reply:ANSWER},error:null}));
+ fireEvent.click(screen.getByRole('button',{name:'Send again'}));
+ const answer=await screen.findByText(ANSWER,{},{timeout:1500});
+ const sent=(invoke.mock.calls.at(-1) as any)[1].body;
+ expect(sent.message).toBe(QUESTION);
+ expect(sent.messages.filter((m:any)=>m.role==='user').map((m:any)=>m.content)).toEqual([QUESTION]);
+ expect(follows(screen.getByText(QUESTION),answer)).toBe(true);
+ expect(screen.queryByText('No answer.')).toBeNull();
+ await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,ANSWER]),WAIT);
+
+ await reload(surface);
+ await screen.findByText(ANSWER,{},WAIT);
+ expect(screen.getAllByText(QUESTION)).toHaveLength(1);
+ expect(screen.queryByText('No answer.')).toBeNull();
+ expect(screen.queryByText(UNREADABLE)).toBeNull();
+ expect(conflicts).toEqual([]);
 });

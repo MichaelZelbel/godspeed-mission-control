@@ -19,6 +19,7 @@ import {
   buildApiMessages,
   withSummary,
   unansweredReason,
+  unusableAnswer,
   recordAIWorked,
   NOTE_MODIFYING_TOOLS,
   NOTE_CREATING_TOOLS,
@@ -466,20 +467,22 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
       // The error belongs to the conversation that asked; do not show it in another.
       const shown = chatKeyRef.current === sentKey;
       const reason: string = stoppedRef.current ? "Reply stopped." : err.message || "Something went wrong";
-      // A send the AI refused or could not be reached for stays marked on its message, with when, so
+      // A send the AI refused, could not be reached for, or answered unusably stays marked on its message, with when, so
       // the reason survives a reload while that failure applies; a conversation cleared meanwhile
       // has no such message left to mark. Any other failure (no AI connected, no credits) is said
       // as before: on the line under the conversation, with the words back in the composer.
       const said = stoppedRef.current ? null : stateSaid(reason);
       const cleared = (loadChatState(sentUserId, sentContext).session_id || "") !== (nextState.session_id || "");
-      if ((said === "refused" || said === "unreachable") && !cleared) {
+      const down = said === "refused" || said === "unreachable";
+      if ((down || (!stoppedRef.current && unusableAnswer(reason))) && !cleared) {
         deliver(sentKey, sentUserId, sentContext, {
           ...nextState,
           messages: nextState.messages.map((m, i) => (i === nextState.messages.length - 1 ? { ...m, lastFailure: reason, failedAt: Date.now() } : m)),
         });
         // The notebook now reads the AI as this send found it (the newest request wins, ai-health.mjs):
-        // every surface in this window says so at once, not at the next read.
-        queryClient.setQueryData(['chat-options'], (previous: any) => ({connected: true, ...previous, usable: false, availability: said}));
+        // every surface in this window says so at once, not at the next read. An unusable answer says
+        // nothing about whether the AI answers, so it leaves the shared state alone.
+        if (down) queryClient.setQueryData(['chat-options'], (previous: any) => ({connected: true, ...previous, usable: false, availability: said}));
       } else if (shown) {
         setError(reason);
         if (!stoppedRef.current && !resend) {
