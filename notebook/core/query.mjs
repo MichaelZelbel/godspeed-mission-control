@@ -12,6 +12,7 @@ import {isTalkGate,talkArea,talkCalendar} from './routine-times.mjs';
 const talkRow=(job,root)=>{if(!isTalkGate(job))return {};const calendar=talkCalendar(talkArea(root));return calendar?{calendar,talk:true}:{};};
 import {nativeCardRows} from './card-commands.mjs';
 import {momentDates} from './timestamps.mjs';
+import {activityRows,tracked} from './activity.mjs';
 // A record with no name and no nickname (only written before 2.0.0-beta.14, issue 266) is not listed
 // among the people, though it stays on disk with whatever links to it.
 import {personNames} from './person-names.mjs';
@@ -259,11 +260,7 @@ export class QueryService {
     });
     if(table==='conversation_messages')return list(table).map(r=>({...r,person_id:r.person_id||r.contact_id||null}));
     if(table==='activity_events'){
-      const tracked=new Set(['notes','contacts','claims','entities','collections','collection_items','moments','contact_groups','contact_group_memberships','action_items','contact_topics','profile_categories','fact_slots']);
-      const label={notes:'note',contacts:'person',claims:'fact',entities:'world entity',collections:'collection',collection_items:'collection item',moments:'event',contact_groups:'group',contact_group_memberships:'group membership',action_items:'action',contact_topics:'discussion topic',profile_categories:'profile category',fact_slots:'fact setting'};
-      const current=all().filter(r=>tracked.has(r.type)),prior=list('record_history').filter(r=>tracked.has(r.source_type)).map(r=>r.snapshot),versions=[...prior,...current];
-      const derived=versions.map(r=>({id:'activity-'+hash([r.uid,r.revision,r.updated_at]).slice(0,32),actor_id:'owner',user_id:'owner',item_id:r.id,item_type:label[r.type],action:r.removed_at?'delete':r.revision===1?'create':'update',created_at:r.updated_at,metadata:{source_uid:r.uid,revision:r.revision}}));
-      for(const r of list('event_corrections'))derived.push({id:'activity-'+r.uid,actor_id:'owner',user_id:'owner',item_id:r.moment_id,item_type:'event',action:r.patch.removed_at?'delete':'update',created_at:r.created_at,metadata:{correction:true}});
+      const derived=activityRows({records:all().filter(r=>tracked.has(r.type)),history:list('record_history'),corrections:list('event_corrections'),find:(type,id)=>this.store.records.get(type+'/'+id)});
       return [...new Map([...list(table),...derived].map(r=>[r.id,r])).values()];
     }
     if(table==='weekly_reviews')return list(table).map(r=>({...r,review_data:{...r.review_data,gaps:typeof r.review_data?.gaps==='string'?[r.review_data.gaps]:r.review_data?.gaps||[]}}));

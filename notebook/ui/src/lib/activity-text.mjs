@@ -1,7 +1,7 @@
 // The sentence an activity row shows: "Created an action", "Updated a note".
 // Both activity lists said "Created a action" and "Created a event".
 const article = word => /^[aeiou]/i.test(String(word || '')) ? 'an' : 'a';
-export function formatAction(action, itemType, metadata) {
+export function formatAction(action, itemType, metadata, itemName) {
   const labels = {
     create: `Created ${article(itemType)} ${itemType}`,
     update: `Updated ${article(itemType)} ${itemType}`,
@@ -10,5 +10,10 @@ export function formatAction(action, itemType, metadata) {
     profile_update: 'Updated profile',
     role_change: metadata?.new_role ? `Role changed to ${metadata.new_role}` : 'Role changed',
   };
-  return labels[action] || `${action} ${itemType}`;
+  if (action === 'update' && metadata?.change === 'trash') labels.update = `Moved ${article(itemType)} ${itemType} to the trash`;
+  if (action === 'update' && metadata?.change === 'restore') labels.update = `Restored ${article(itemType)} ${itemType}`;
+  const text = labels[action] || `${action} ${itemType}`;
+  const name = typeof itemName === 'string' ? itemName.trim() : '';
+  if (!name || !['create', 'update', 'delete'].includes(action)) return text;
+  return `${text}: ${name}${action === 'update' && metadata?.previous_name ? ` (was ${metadata.previous_name})` : ''}`;
 }
