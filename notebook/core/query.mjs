@@ -11,7 +11,7 @@ import {isTalkGate,talkArea,talkCalendar} from './routine-times.mjs';
 // The weekly check-in's own day and time, for Settings > Routine times (routine-times.mjs).
 const talkRow=(job,root)=>{if(!isTalkGate(job))return {};const calendar=talkCalendar(talkArea(root));return calendar?{calendar,talk:true}:{};};
 import {nativeCardRows} from './card-commands.mjs';
-import {momentDates} from './timestamps.mjs';
+import {momentDates,endsBeforeStart,END_BEFORE_START} from './timestamps.mjs';
 // A record with no name and no nickname (only written before 2.0.0-beta.14, issue 266) is not listed
 // among the people, though it stays on disk with whatever links to it.
 import {personNames} from './person-names.mjs';
@@ -425,6 +425,12 @@ export class QueryService {
           const given = operation === 'delete' ? { removed_at: new Date().toISOString() } : operation === 'update' ? values : value;
           // A moment's dates are kept as ISO 8601 whoever writes them (timestamps.mjs).
           const payload = table === 'moments' ? momentDates(given) : given;
+          if(table==='moments'&&operation!=='delete'&&('happened_at' in payload||'happened_end' in payload)){
+            // #1032: a moment never ends before it starts; a change of one date is judged against the other as stored.
+            const current=operation==='upsert'&&old?(this.rows('moments').find(r=>r.id===old.id)||old):old;
+            const merged={...(current||defaults.moments),...payload};
+            if(endsBeforeStart(merged.happened_at,merged.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
+          }
           if(table==='moments'&&old){
             const correction=this.store.prepare('event_corrections',{moment_id:old.id,patch:payload,sequence:this.store.list('event_corrections').filter(c=>c.moment_id===old.id).length+1,references:[{type:'moments',id:old.id,uid:old.uid}]});
             return correction;

@@ -19,7 +19,7 @@ import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import ImportanceSlider from "./ImportanceSlider";
 import { UNNAMED_PERSON } from "./people";
-import { NO_AI_FACTS, aiFailureKind, factsNotPulledOut, filledOnOpen, mergeSuggestion, newPeopleToCreate, noAiFacts } from "./moment-form.mjs";
+import { END_BEFORE_START, NO_AI_FACTS, aiFailureKind, factsNotPulledOut, filledOnOpen, endsBeforeStart, mergeSuggestion, newPeopleToCreate, noAiFacts } from "./moment-form.mjs";
 
 export interface TimelineContact {
   id: string;
@@ -113,7 +113,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
   const fieldId = useId();
   const peopleFieldId = `${fieldId}-people`;
   const ids = {
-    title: `${fieldId}-title`, dateStart: `${fieldId}-date-start`, dateEnd: `${fieldId}-date-end`, status: `${fieldId}-status`,
+    title: `${fieldId}-title`, dateStart: `${fieldId}-date-start`, dateEnd: `${fieldId}-date-end`, dateEndError: `${fieldId}-date-end-error`, status: `${fieldId}-status`,
     confDate: `${fieldId}-conf-date`, confDateLabel: `${fieldId}-conf-date-label`,
     confTruth: `${fieldId}-conf-truth`, confTruthLabel: `${fieldId}-conf-truth-label`,
     newPeopleLabel: `${fieldId}-new-people-label`,
@@ -236,8 +236,9 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
     }
   };
 
+  const endBeforeStart = endsBeforeStart(dateStart, dateEnd);
   const handleSave = async () => {
-    if (!user || !title.trim() || (!dateStart && !dateOptional)) return;
+    if (!user || !title.trim() || (!dateStart && !dateOptional) || endBeforeStart) return;
     setSaving(true);
     try {
       // A date or score the moment is missing and the person has not set
@@ -387,7 +388,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
         <div className="space-y-2"><Label htmlFor={ids.title} onClick={focusOnly(ids.title)}>Title *</Label><Input id={ids.title} value={title} onChange={(e) => { setTitle(e.target.value); markFilled("title"); }} placeholder="Short title for this moment" /></div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2"><Label htmlFor={ids.dateStart} onClick={focusOnly(ids.dateStart)}>Start Date *</Label><Input id={ids.dateStart} type="date" value={dateStart} onChange={(e) => { setDateStart(e.target.value); markFilled("dateStart"); }} /></div>
-          <div className="space-y-2"><Label htmlFor={ids.dateEnd} onClick={focusOnly(ids.dateEnd)}>End Date</Label><Input id={ids.dateEnd} type="date" value={dateEnd} onChange={(e) => { setDateEnd(e.target.value); markFilled("dateEnd"); }} /></div>
+          <div className="space-y-2"><Label htmlFor={ids.dateEnd} onClick={focusOnly(ids.dateEnd)}>End Date</Label><Input id={ids.dateEnd} type="date" value={dateEnd} aria-invalid={endBeforeStart || undefined} aria-describedby={endBeforeStart ? ids.dateEndError : undefined} onChange={(e) => { setDateEnd(e.target.value); markFilled("dateEnd"); }} />{endBeforeStart && <p id={ids.dateEndError} className="text-xs text-destructive">{END_BEFORE_START}</p>}</div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
@@ -406,7 +407,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
         <div className="space-y-2"><Label htmlFor={peopleFieldId} onClick={focusOnly(peopleFieldId)} className="text-xs">People</Label><PeopleMultiSelect id={peopleFieldId} people={people} value={matchedPeople} onChange={setMatchedPeople} newNames={typedNewPeople} onNewNamesChange={setTypedNewPeople} /></div>
         {suggestedNewPeople.length > 0 && <div className="space-y-2"><p id={ids.newPeopleLabel} className="text-xs font-medium leading-none text-muted-foreground">Add new people (not yet in your list)</p><div role="group" aria-labelledby={ids.newPeopleLabel} className="space-y-1.5">{suggestedNewPeople.map((name) => <label key={name} className="flex items-center gap-2 cursor-pointer"><Checkbox checked={selectedNewPeople.includes(name)} onCheckedChange={(checked) => setSelectedNewPeople((prev) => checked ? [...prev, name] : prev.filter((n) => n !== name))} /><span className="text-sm">{name}</span></label>)}</div></div>}
       </div>
-      <DialogFooter><Button onClick={handleSave} disabled={saving || !title.trim() || (!dateStart && !dateOptional)}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{isEditMode ? "Save Changes" : "Create Moment"}</Button></DialogFooter>
+      <DialogFooter><Button onClick={handleSave} disabled={saving || !title.trim() || (!dateStart && !dateOptional) || endBeforeStart}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{isEditMode ? "Save Changes" : "Create Moment"}</Button></DialogFooter>
     </DialogContent>
   );
 

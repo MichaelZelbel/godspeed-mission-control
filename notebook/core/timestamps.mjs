@@ -55,3 +55,16 @@ export function isoTimestamps(row) {
   }
   return next;
 }
+
+export const END_BEFORE_START = 'The end date is before the start date';
+
+/**
+ * True when both values name a day and the end's day is earlier than the
+ * start's. Days are compared as written, the way the screens show them: the
+ * clock time and offset are kept as written, not converted (see above).
+ */
+export function endsBeforeStart(start, end) {
+  const day = value => /^(\d{4}-\d{2}-\d{2})/.exec(String(value ?? '').trim())?.[1];
+  const from = day(start), to = day(end);
+  return Boolean(from && to && to < from);
+}
