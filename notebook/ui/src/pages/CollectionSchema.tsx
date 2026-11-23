@@ -392,7 +392,14 @@ export default function CollectionSchema() {
       setCollection(current);
       setCollections(allCollections ?? []);
       setFields(parsed);
-      setInitialSchema(JSON.stringify(toJsonSchema(parsed)));
+      // A collection saved with no fields shows a starting "Name" field that
+      // it does not have yet: the saved side stays empty, so the page says
+      // "Unsaved changes" and leaving asks first.
+      setInitialSchema(
+        Array.isArray(current.field_schema) && current.field_schema.length === 0
+          ? "[]"
+          : JSON.stringify(toJsonSchema(parsed)),
+      );
       setIsLoading(false);
     };
     load();
@@ -530,7 +537,11 @@ export default function CollectionSchema() {
             reorder fields anytime.
           </p>
           {isDirty && (
-            <p className="mt-2 text-xs text-primary">Unsaved changes</p>
+            <p className="mt-2 text-xs text-primary">
+              Unsaved changes
+              {initialSchema === "[]" &&
+                ": this collection has no fields until you press Save"}
+            </p>
           )}
           {errors.__form?.map((error) => (
             <p key={error} className="mt-2 text-xs text-destructive">
