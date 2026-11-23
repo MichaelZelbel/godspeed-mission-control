@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import Identity from "./Identity";
+import { expectFieldsNamed, isNativeSelect, isSwitch, isTextbox } from "@/test/field-labels";
 import { InstructionsMoved } from "@/components/profile/InstructionsMoved";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { places, plainInline, reflow, sizeLine, sizeState, versionLine, versionWords, type RuleTile } from "@/lib/identity";
@@ -346,6 +347,26 @@ describe("Godspeed's brain", { timeout: 20_000 }, () => {
     // The switch at the top left closes it again.
     fireEvent.click(screen.getByRole("button", { name: "Close the chat" }));
     await waitFor(() => expect(screen.queryByText("Godspeed / Godspeed's brain")).toBeNull(), WAIT);
+  });
+
+  it("names every field of a rule by its label, when changed and when added (#742)", async () => {
+    open();
+    const ruleFields = [
+      { name: "Its name", is: isTextbox },
+      { name: "The rule in one sentence", is: (el: HTMLElement) => el.tagName === "TEXTAREA" },
+      { name: "Kind of rule", is: isNativeSelect },
+      { name: "Read before every job", is: isSwitch },
+      { name: "The whole story: why you gave it, and its exceptions", is: (el: HTMLElement) => el.tagName === "TEXTAREA" },
+    ];
+    fireEvent.click(await screen.findByRole("button", { name: /Never spend my money/ }, WAIT));
+    await screen.findByLabelText("Its name", undefined, WAIT);
+    expectFieldsNamed(screen.getByRole("dialog"), ruleFields);
+    expect(screen.getByRole("switch", { name: "Read before every job" })).toHaveAccessibleDescription("Off: read only when its subject comes up.");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull(), WAIT);
+    fireEvent.click(screen.getByRole("button", { name: "Add a rule" }));
+    await screen.findByLabelText("Its name", undefined, WAIT);
+    expectFieldsNamed(screen.getByRole("dialog"), ruleFields);
   });
 });
 

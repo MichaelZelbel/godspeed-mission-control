@@ -25,6 +25,8 @@ export type SmartDatePickerProps = {
   placeholder?: string;
   className?: string;
   ariaLabel?: string;
+  /** The button's id, so a visible <label htmlFor> can name it. */
+  id?: string;
 };
 
 const MONTHS = Array.from({ length: 12 }, (_, i) =>
@@ -46,6 +48,7 @@ export function SmartDatePicker({
   placeholder = "Select date",
   className,
   ariaLabel,
+  id,
 }: SmartDatePickerProps) {
   const [open, setOpen] = useState(false);
   const [viewMonth, setViewMonth] = useState<Date>(value ?? new Date());
@@ -144,6 +147,7 @@ export function SmartDatePicker({
         <Button
           type="button"
           variant="outline"
+          id={id}
           aria-label={ariaLabel}
           className={cn(
             "w-full justify-start",
