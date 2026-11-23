@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
 import { AppRoutes } from "./App";
 import { AuthScreen } from "@/components/auth/AuthScreen";
+import { WAIT } from "@/test/wait-limits";
 
 // The two guards that keep a local notebook off the server's sign-in, invite and setup screens:
 // the route into the signed-out screens (Layout) and the setup link's own redirect. A local
@@ -38,7 +39,7 @@ it("a direct visit to a setup link on a local notebook goes to the dashboard", a
       </Routes>
     </MemoryRouter>,
   );
-  await waitFor(() => expect(screen.getByText("Dashboard")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByText("Dashboard")).toBeInTheDocument(), WAIT);
   expect(screen.queryByText("Your first visit")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Setup code")).not.toBeInTheDocument();
 });

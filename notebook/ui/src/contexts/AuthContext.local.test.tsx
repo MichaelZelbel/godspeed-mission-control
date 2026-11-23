@@ -5,6 +5,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
 import { AuthProvider, useAuth } from "./AuthContext";
 import { AppRoutes } from "@/App";
+import { WAIT } from "@/test/wait-limits";
 
 // The pages behind the dashboard load lazily; the probe only reads where the routes land.
 vi.mock("@/hooks/useUnsavedNotes", () => ({ KeepUnsavedNotes: () => null }));
@@ -46,7 +47,7 @@ it("carries the server's local flag into the auth state", async () => {
   }));
   let latest: ReturnType<typeof useAuth> | undefined;
   render(<AuthProvider><Probe seen={(value) => { latest = value; }} /></AuthProvider>);
-  await waitFor(() => expect(latest?.local).toBe(true));
+  await waitFor(() => expect(latest?.local).toBe(true), WAIT);
   expect(latest?.user?.id).toBe("owner");
   expect(latest?.loading).toBe(false);
 });
@@ -65,7 +66,7 @@ it("a stale setup link on a local notebook goes back to the dashboard, not to th
     return answer({});
   }));
   render(<AuthProvider><MemoryRouter initialEntries={["/setup"]}><AppRoutes /></MemoryRouter></AuthProvider>);
-  await waitFor(() => expect(screen.getByTestId("address")).toHaveTextContent("/dashboard"));
+  await waitFor(() => expect(screen.getByTestId("address")).toHaveTextContent("/dashboard"), WAIT);
   expect(screen.queryByText("Your first visit")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Setup code")).not.toBeInTheDocument();
 });
@@ -75,7 +76,7 @@ it("a failed status read on /setup reconnects instead of showing the server's sc
   // unreachable; the server's invite screen would ask for a setup code the person never had.
   vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch"); }));
   render(<AuthProvider><MemoryRouter initialEntries={["/setup"]}><AppRoutes /></MemoryRouter></AuthProvider>);
-  await waitFor(() => expect(screen.getByText("Let’s reconnect")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByText("Let’s reconnect")).toBeInTheDocument(), WAIT);
   expect(screen.queryByText("Your first visit")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Setup code")).not.toBeInTheDocument();
 });
