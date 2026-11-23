@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
@@ -129,5 +129,30 @@ describe("The Routines line", () => {
     const problem = 'The assistant program set in /state/assistant.json is "/usr/bin/python3", which is not Hermes. Set "executable" in that file to your Hermes program (its name is hermes), or run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.';
     const { findByText } = settings("/dashboard/settings", { runtimeConfigured: false, assistantProblem: problem });
     expect((await findByText(/which is not Hermes/, undefined, WAIT)).textContent).toContain("not configured. " + problem + " Account access");
+  });
+});
+
+describe("Run now in Routines", () => {
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+  it("lists Remember what you said and starts it with Run now", async () => {
+    const memory = { id: "memory-daily", kind: "memory-daily", title: "Remember what you said", owner: "local", paused: false, state: "pending", interval_ms: 86400000, calendar: { time: "03:40" }, next_run: "2030-01-02T02:40:00.000Z" };
+    const { findByText, findByRole } = settings("/dashboard/settings", { schedules: [memory] });
+    await findByText("Remember what you said", undefined, WAIT);
+    fireEvent.click(await findByRole("button", { name: "Run Remember what you said now" }, WAIT));
+    await waitFor(() => {
+      const call = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(([url]) => String(url).endsWith("/api/jobs/run"));
+      expect(call).toBeTruthy();
+      expect(call![1].method).toBe("POST");
+      expect(JSON.parse(call![1].body)).toEqual({ id: "memory-daily" });
+    }, WAIT);
+  });
+
+  it("offers Run now on Hermes only for rows Hermes can start", async () => {
+    const row = (id: string, native?: boolean) => ({ id, kind: id, title: id, owner: "local", paused: false, state: "pending", next_run: "2030-01-02T02:40:00.000Z", ...(native ? { native } : {}) });
+    const { findByText, queryByRole } = settings("/dashboard/settings", { routineSwitches: { note: "n", routines: [] }, schedules: [row("hermes-task", true), row("spend-guard")] });
+    await findByText("hermes-task", undefined, WAIT);
+    expect(queryByRole("button", { name: "Run hermes-task now" })).toBeTruthy();
+    expect(queryByRole("button", { name: "Run spend-guard now" })).toBeNull();
   });
 });
