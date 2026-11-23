@@ -376,3 +376,17 @@ it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, a send whose
  expect(screen.queryByText(UNREADABLE)).toBeNull();
  expect(conflicts).toEqual([]);
 });
+
+it('sends a summarized chat the summary and exactly the messages it does not cover when an earlier message is sent again',async()=>{
+ const messages=Array.from({length:18},(_,i)=>({role:i%2?'assistant':'user',content:`Fictional message ${i}`}));
+ messages[2]={role:'user',content:QUESTION,lastFailure:UNREACHABLE} as any;
+ messages[3]={role:'user',content:'Fictional message 3'};
+ rows.set('seeded',{id:'seeded',context_key:'general',state:{messages,summary:'Fictional summary',summarizedUpTo:6}});
+ await reload('the chat page');
+ invoke.mockImplementationOnce(async()=>({data:{reply:ANSWER},error:null}));
+ fireEvent.click(await screen.findByRole('button',{name:'Send again'},WAIT));
+ await screen.findByText(ANSWER,{},{timeout:1500});
+ const sent=(invoke.mock.calls.at(-1) as any)[1].body.messages;
+ const uncovered=messages.filter((_,i)=>i!==2).slice(5).map(({role,content})=>({role,content}));
+ expect(sent).toEqual([{role:'system',content:'Conversation summary so far:\nFictional summary'},...uncovered,{role:'user',content:QUESTION}]);
+});
