@@ -7,7 +7,7 @@ import { pipeline } from 'node:stream';
 import os from 'node:os';
 import { Store, atomic, hash } from '../core/records/store.mjs';
 import { seed } from '../core/seeds.mjs';
-import { SearchIndex } from '../core/index/search.mjs';
+import { SearchIndex, isUnreadable } from '../core/index/search.mjs';
 import { MeaningIndex, embeddingConfig, saveEmbeddingConfig, embedder } from '../core/index/meaning.mjs';
 import { QueryService } from '../core/query.mjs';
 import { Domains } from '../core/domains.mjs';
@@ -36,6 +36,7 @@ import { spawn } from 'node:child_process';
 import {ApiKeys,toolScope} from '../core/api-keys.mjs';
 import {Telegram} from '../core/telegram.mjs';
 import {NOTEBOOK_CHAT_FUNCTIONS} from '../core/notebook-chat.mjs';
+import {savedBriefAnswer} from '../core/briefing.mjs';
 import {browserChat} from './browser-chat.mjs';
 import {KEPT_FILE} from '../core/ai-failures.mjs';
 import {transcribeRecording} from '../core/dictation.mjs';
@@ -143,6 +144,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // The store keeps every record in memory and re-reads only the files its
   // watcher names; the index follows the store's changes row by row.
   const store = new Store(root,{device,watch:true}), index = new SearchIndex(store,{background:true}), query = new QueryService(store), sync = new FileSync(store);
+  index.onUnreadable=(entered,cleared)=>{
+    for(const name of entered)console.error('Godspeed Mission Control: search cannot read '+name+'; the other folders are still indexed');
+    for(const name of cleared)console.error('Godspeed Mission Control: search can read '+name+' again');
+  };
   const readiness=startupReadiness(index.initialPublication);
   index.initialPublication.then(
     ()=>console.error(startupTrace('index-published')),
@@ -296,6 +301,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const factClosing=domains.factClosing=new FactClosing({store,query,device});
   const menerioImport=new MenerioImport(store,mediaRoot,()=>{index.rebuild();factClosing.request();},{beat});
   const telegramConnection=new TelegramConnection();
+  // A send the person stopped is not a failure: it ends as the plain outcome the chat already shows, never the engine's abort error.
+  const stoppedReply=(controller,error)=>controller.signal.aborted?Object.assign(new Error('Reply stopped.'),{status:409}):error;
   const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store),backupRunner=new BackupRunner(store,mediaRoot);let dictationBusy=false;
   // The page that shows who the assistant is (core/identity-shelf.mjs): who it is, its rules, what
   // it knows about its owner and its skills, with every earlier version. Its assistant's own identity file follows
@@ -467,7 +474,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
             const sourceId=input.request_id?'browser-message-'+hash([conversation,input.request_id]):undefined;if(!sourceId||!store.get('conversation_messages',sourceId))await store.saveAsync('conversation_messages',{id:sourceId,role:'user',content:input.message,conversation_id:conversation,source_app:'browser-chat'},undefined,{signal:controller.signal});
             const result=await domains.invoke('conversation-chat',{message:input.message,conversation_id:conversation,request_id:input.request_id,talk_id:talk?.id,signal:controller.signal}),saved={reply:result.reply};
             if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'verified',result:saved},undefined,{signal:controller.signal});return send(res,200,saved);
-          }catch(error){if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message});throw error;}finally{if(receiptId)chatRequests.delete(receiptId);}
+          }catch(raw){const error=stoppedReply(controller,raw);if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message});throw error;}finally{if(receiptId)chatRequests.delete(receiptId);}
         }
         return send(res,405,{error:'Use GET or POST'});
       }
@@ -856,7 +863,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         // included, says what Settings says and asks the provider loaded before the damage nothing.
         // Read before the settings-only check: with the file damaged, its advice cannot be followed.
         if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&domains.provider&&!assistantMissing&&chatAIAvailability()==='unreadable')throw new Error(AI_CONNECTION_UNREADABLE_STATUS);
-        if(isChat&&domains.provider&&!assistantMissing&&settingsOnlyAI())throw new Error(SETTINGS_ONLY_AI_STATUS+'. '+SETTINGS_ONLY_AI_HELP);
+        if(isChat&&domains.provider&&!assistantMissing&&settingsOnlyAI()&&!savedBriefAnswer(store,input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||''))throw new Error(SETTINGS_ONLY_AI_STATUS+'. '+SETTINGS_ONLY_AI_HELP);
         if(isChat&&id&&(!/^[a-f0-9-]{36}$/.test(id)||chatRequests.has(id)))throw new Error('Invalid chat request');
         const receiptId=isChat&&id?'chat-request-'+id:null,requestHash=hash({name,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
         if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,{data:previous.result,error:null});throw Error('This interrupted chat request needs review before replay');}
@@ -880,7 +887,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           if(isChat)await retainCompletedConversation(store,input,data,{asyncWriter:true,signal:controller.signal});
           if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'verified',result:data},undefined,{signal:controller.signal});
           return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});
-        }catch(error){
+        }catch(raw){
+          const error=isChat?stoppedReply(controller,raw):raw;
           if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});
           // Every AI failure is already the one plain sentence a person reads: Domains.invoke
           // translated it (core/ai-outcome.mjs), for this route and for every other one, so no
@@ -1041,13 +1049,55 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     watchers.set(name,watcher);
     watcher.on('error',()=>{try{watcher.close();}catch{}if(watchers.get(name)===watcher){watchers.delete(name);changed(name)('rename',null);rearm(name);}});
   };
-  for(const name of durableRoots)watchRoot(name);
+  // A root that cannot be watched yet is tried again by `reconcile`; only a
+  // permission failure is let through, anything else still fails the start.
+  const watchRootOrWait=name=>{try{watchRoot(name);}catch(error){if(!isUnreadable(error))throw error;}};
+  for(const name of durableRoots)watchRootOrWait(name);
   // A manual or extra instructions changed by anything (a sync from another machine, a session, an
   // editor) bring the assistant's own identity file in step with them (assistant-soul.mjs).
   let soulDebounce;const followPersona=()=>{clearTimeout(soulDebounce);soulDebounce=setTimeout(()=>{try{shelf.followPersona();}catch{}},2000);soulDebounce.unref?.();};
-  const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){try{watchRoot(name);}catch{rearm(name);}changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
+  const onRootEvent=(event,name)=>{
+    const first=name==null?null:String(name).split(/[\\/]/)[0];
+    if(durableRoots.includes(first)){try{watchRoot(first);}catch{rearm(first);}changed(first)(event,null);}
+    else if(durableFiles.includes(first)){changed('')(event,first);if(first==='AGENTS.md')followPersona();}
+  };
+  const inodeOf=()=>{try{return fs.statSync(store.root).ino;}catch{return null;}};
+  let rootWatcher=null,rootInode=inodeOf();
+  const openRootWatcher=()=>{const watcher=fs.watch(store.root,onRootEvent);watcher.on('error',()=>{});return watcher;};
+  try{rootWatcher=openRootWatcher();}catch(error){if(rootInode!==null&&error?.code!=='ENOENT')throw error;}
+  // Once a second: a folder that appeared (a durable root created after start,
+  // including one under a parent such as routines/) or could not be watched yet
+  // is watched now; and the workspace folder itself, replaced under the running
+  // notebook, leaves every watcher on a folder that no longer exists, so all of
+  // them are armed again against the new one and the index is read in full.
+  const reconcile=setInterval(()=>{
+    if(menerioImport.mutating)return;
+    const inode=inodeOf();
+    if(inode===null)return;
+    if(inode!==rootInode){
+      // The new folder's watcher and the notes store are armed before anything
+      // else is torn down and before the inode is remembered: a failure here (a
+      // folder or its notes folder not yet readable or writable, no handles
+      // left) is retried on the next tick, never thrown out of the timer.
+      let next;try{next=openRootWatcher();}catch{return;}
+      try{store.unwatch();store.watch();}catch{store.unwatch();try{next.close();}catch{}return;}
+      rootInode=inode;
+      try{rootWatcher?.close();}catch{}
+      rootWatcher=next;
+      for(const watcher of watchers.values()){try{watcher.close();}catch{}}
+      watchers.clear();
+      for(const timer of rewatches.values())clearTimeout(timer);
+      rewatches.clear();
+      changed('')('rename',null);
+    }
+    for(const name of durableRoots){
+      if(watchers.has(name))continue;
+      try{watchRoot(name);}catch{continue;}
+      if(watchers.has(name))changed(name)('rename',null);
+    }
+  },1000);reconcile.unref?.();
   let localServer = null;
-  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(automaticTimer);clearInterval(factTimer);clearInterval(journalMomentsTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();watchers.clear();for(const timer of rewatches.values())clearTimeout(timer);rewatches.clear();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
+  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(automaticTimer);clearInterval(factTimer);clearInterval(journalMomentsTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();clearInterval(reconcile);rootWatcher?.close();for(const watcher of watchers.values())watcher.close();watchers.clear();for(const timer of rewatches.values())clearTimeout(timer);rewatches.clear();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
   // A container's main door listens on its network interface and always needs sign-in.
   // Add-ons and tools in that same container may use this opt-in, loopback-only door,
   // with the exact Host/Origin guards and API contract of a native local installation.

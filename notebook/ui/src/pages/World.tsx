@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Search, X } from "lucide-react";
@@ -40,6 +41,7 @@ export default function World() {
 
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState<string | null>(null);
+  const addFieldId = useId();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState("place");
@@ -147,24 +149,28 @@ export default function World() {
         </div>
 
         {adding && (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border p-2">
-            <Input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && create()}
-              aria-label="Name"
-              placeholder="Name"
-              className="h-8 w-48 text-sm"
-              autoFocus
-            />
-            <Input
-              value={newType}
-              onChange={(e) => setNewType(e.target.value)}
-              list="entity-type-suggestions"
-              aria-label="Type"
-              placeholder="Type"
-              className="h-8 w-36 text-sm"
-            />
+          <div className="flex flex-wrap items-end gap-2 rounded-md border border-dashed border-border p-2">
+            <div className="space-y-1">
+              <Label htmlFor={`${addFieldId}-name`} className="block text-xs font-medium text-muted-foreground">Name</Label>
+              <Input
+                id={`${addFieldId}-name`}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && create()}
+                className="h-8 w-48 text-sm"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`${addFieldId}-type`} className="block text-xs font-medium text-muted-foreground">Type</Label>
+              <Input
+                id={`${addFieldId}-type`}
+                value={newType}
+                onChange={(e) => setNewType(e.target.value)}
+                list="entity-type-suggestions"
+                className="h-8 w-36 text-sm"
+              />
+            </div>
             <datalist id="entity-type-suggestions">
               {ENTITY_TYPE_SUGGESTIONS.map((t) => (
                 <option key={t} value={t} />
