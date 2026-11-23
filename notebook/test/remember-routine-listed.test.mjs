@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {createService} from '../server/main.mjs';
 import {runRememberWhatYouSaid} from '../core/jobs/remember-job.mjs';
+import {NO_AI_CONNECT} from '../core/no-ai.mjs';
+import {lastRunWords} from '../ui/src/local/routine-row.mjs';
 
 // #903: a notebook with no assistant program lists "Remember what you said" in Settings > Routines
 // and can run it from there.
@@ -17,7 +19,7 @@ async function withService(t,fn){
 }
 const setup=post=>post('/api/setup',{goal:'Run a 10k by spring',timezone:'Europe/Berlin'});
 
-test('setup lists Remember what you said and Run now runs it, saying nothing without an AI',t=>withService(t,async({service,post,url})=>{
+test('setup lists Remember what you said and Run now shows the shared no-AI status without sending',t=>withService(t,async({service,post,url})=>{
  assert.equal((await setup(post)).status,200);
  const {schedules}=await (await fetch(url+'/api/status')).json();
  const row=schedules.find(j=>j.id==='memory-daily');
@@ -26,7 +28,8 @@ test('setup lists Remember what you said and Run now runs it, saying nothing wit
  assert.equal(reply.status,202);assert.deepEqual(await reply.json(),{started:true,id:'memory-daily'});
  await service.scheduler.started;
  const job=service.store.get('jobs','memory-daily');
- assert.equal(job.last_outcome,'verified');assert.ok(job.last_run);assert.ok(Date.parse(job.next_run)>Date.now());
+ assert.equal(job.last_outcome,NO_AI_CONNECT);assert.equal(lastRunWords(job),'Last run: '+NO_AI_CONNECT);assert.ok(job.last_run);
+ assert.equal(service.store.list('job_receipts').at(-1).state,'failed');
 }));
 
 test('Run now on another routine row runs that routine and answers its result',t=>withService(t,async({service,post})=>{
@@ -74,8 +77,11 @@ test('Run now refuses a routine owned elsewhere, awaiting review, or while anoth
 
 test('the program\'s failure never carries its output',async()=>{
  const store={root:'/tmp/ws'};
- await assert.rejects(runRememberWhatYouSaid({store,run:async()=>({code:1,stderr:'sk-secret',stdout:''})}),e=>e.message==='Remember what you said could not finish.');
+ await assert.rejects(runRememberWhatYouSaid({store,run:async()=>({code:1,stderr:'sk-secret',stdout:''}),connected:true}),e=>e.message==='Remember what you said could not finish.');
  let env;
- assert.deepEqual(await runRememberWhatYouSaid({store,run:async(_e,_a,o)=>{env=o.env;return {code:0};}}),{verified:true,silent:true});
+ let calls=0;
+ await assert.rejects(runRememberWhatYouSaid({store,run:async()=>{calls++;return {code:0};},connected:false}),e=>e.message===NO_AI_CONNECT);
+ assert.equal(calls,0,'no memory program, and therefore no AI request, starts without an AI');
+ assert.deepEqual(await runRememberWhatYouSaid({store,run:async(_e,_a,o)=>{env=o.env;return {code:0};},connected:true}),{verified:true,silent:true});
  assert.equal(env.GODSPEED_WORKSPACE,'/tmp/ws');
 });
