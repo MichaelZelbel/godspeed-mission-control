@@ -895,6 +895,53 @@ test('a weekly failure again adds a comment; a weekly pass closes the weekly iss
   assert.deepEqual(nightPass.patches.map((x) => x.path), ['/issues/3'], 'the night closes only its own');
 });
 
+test("a weekly pass of a release-gate job leaves the night's issue open: the night still runs it and closes its own", async () => {
+  const gatePass = await night('plain-yes=success voice=success', { openIssues: [{ number: 4, title: T('plain-yes') }, { number: 3, title: T('voice') }] }, { WEEKLY: 'true' });
+  assert.equal(gatePass.code, 0, gatePass.stderr);
+  assert.deepEqual(gatePass.patches.map((x) => x.path), ['/issues/3'], 'only the weekly job voice has its night issue closed; plain-yes is in the release gate');
+  assert.ok(!gatePass.comments.some((c) => c.path === '/issues/4/comments'), 'the night issue of a gate job gets no weekly comment either');
+  const withOwn = await night('plain-yes=success', { openIssues: [{ number: 8, title: W('plain-yes') }, { number: 4, title: T('plain-yes') }] }, { WEEKLY: 'true' });
+  assert.deepEqual(withOwn.patches.map((x) => x.path), ['/issues/8'], "a gate job's own weekly issue is still closed by the week");
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const noGate = await night('voice=success', { openIssues: [{ number: 3, title: T('voice') }] }, { WEEKLY: 'true', GATE_FILE: `${mkdtempSync(`${tmpdir()}/nogate-`)}/none.tsv` });
+  assert.equal(noGate.code, 0, noGate.stderr);
+  assert.deepEqual(noGate.patches, [], 'a gate file that cannot be read closes no night issue');
+});
+
+test('weeklyJobs reads exactly the weekly rows of the gate file', async () => {
+  const { weeklyJobs } = await import('./report-night.mjs');
+  assert.deepEqual([...weeklyJobs('# job\tgroup\na\trelease\nb\tweekly\r\nc\n\nd\tweekly\n')], ['b', 'd']);
+  const { readFileSync } = await import('node:fs');
+  const rows = gateRows(readFileSync(GATE_FILE, 'utf8'));
+  assert.deepEqual([...weeklyJobs(readFileSync(GATE_FILE, 'utf8'))].sort(), rows.filter((r) => r.gate === 'weekly').map((r) => r.id).sort());
+});
+
+test('a gate file that leaves the run no release job fails the pick loudly, and never picks nothing', async () => {
+  const { mkdtempSync, writeFileSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const dir = mkdtempSync(`${tmpdir()}/emptygate-`).replaceAll(String.fromCharCode(92), '/');
+  const weeklyOnly = `${dir}/weekly-only.tsv`;
+  writeFileSync(weeklyOnly, '# job\tgroup\nvoice\tweekly\nfirst-day\tweekly\n');
+  for (const env of [{ EVENT: 'schedule' }, { EVENT: 'workflow_dispatch', STAGE_INPUT: 'candidate/2.0.0-beta.30', MAC: 'true' }]) {
+    const r = await pickRun(env, weeklyOnly);
+    assert.notEqual(r.status, 0, `${JSON.stringify(env)}: a gate with no release row must fail, not pick nothing`);
+    assert.equal(r.out, '', 'and print no pick');
+    assert.match(r.err, /names no release job/);
+  }
+  // Only candidate-only release rows: the night has nothing to run and fails; a candidate with Mac runs them.
+  const candidateOnly = `${dir}/candidate-only.tsv`;
+  writeFileSync(candidateOnly, 'mac-install\trelease\nwindows-old-names-move\trelease\nvoice\tweekly\n');
+  assert.notEqual((await pickRun({ EVENT: 'schedule' }, candidateOnly)).status, 0);
+  assert.equal((await pickRun({ EVENT: 'workflow_dispatch', STAGE_INPUT: 'candidate/x', MAC: 'true' }, candidateOnly)).out, 'picked=,mac-install,windows-old-names-move,');
+  // And the workflow's stage step fails with it, writing no pick, so the verdict fails on the stage.
+  writeFileSync(`${dir}/out`, '');
+  const step = spawnSync('bash', ['-c', pickStep(readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n'))], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', env: { ...process.env, GITHUB_EVENT_NAME: 'schedule', EVENT: 'schedule', GATE: weeklyOnly, GITHUB_OUTPUT: `${dir}/out`, RUNNER_TEMP: dir, GITHUB_STEP_SUMMARY: `${dir}/sum` } });
+  assert.notEqual(step.status, 0, 'the stage step must fail when the pick fails');
+  assert.equal(readFileSync(`${dir}/out`, 'utf8'), '', 'and write no picked output');
+});
+
 test('the verdict job reports the night and the week, and tells the report which it is', async () => {
   const { readFileSync } = await import('node:fs');
   const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
@@ -902,7 +949,14 @@ test('the verdict job reports the night and the week, and tells the report which
   assert.ok(at > 0, 'the report step is missing');
   const step = text.slice(at);
   assert.ok(step.includes("WEEKLY: ${{ github.event_name != 'schedule' }}"), 'the report is not told when it is the week');
-  assert.ok(step.includes("if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.all && inputs.stage == '' && inputs.pr == '' && inputs.only == '')) }}"), 'it reports the night and the weekly run only');
+  const reportsOn = "(github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.all && inputs.stage == '' && inputs.pr == '' && inputs.only == ''))";
+  assert.ok(step.includes(`if: \${{ always() && ${reportsOn} }}`), 'it reports the night and the weekly run on main only');
+  // The checkout and Node the report needs come on the same runs, and a full run on another branch gets neither.
+  const verdictSteps = text.slice(text.indexOf('\n  verdict:\n'), at);
+  assert.equal(verdictSteps.split(`if: \${{ ${reportsOn} }}`).length - 1, 2, 'the checkout and setup-node of the verdict job run exactly when the report does');
+  const verdictAll = text.slice(text.indexOf('\n  verdict:\n'));
+  const count = (re) => (verdictAll.match(re) || []).length;
+  assert.equal(count(/inputs\.all && inputs\.stage == ''/g), count(/github\.ref == 'refs\/heads\/main' && inputs\.all && inputs\.stage == ''/g), 'no step of the verdict job acts on a full run without checking it is on main');
   assert.ok(text.includes('      PICKED: ${{ needs.stage.outputs.picked }}'), 'the verdict job passes the pick on to the report');
 });
 

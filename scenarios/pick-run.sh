@@ -15,7 +15,8 @@
 #                                            out the candidate-only ones, which come back when the run
 #                                            is theirs (Mac with MAC=true, Windows on a candidate/ stage)
 #   any other hand-started run               every job, as before
-# A stage with no scenario-gate.tsv (an old one) picks every job rather than none.
+# A stage with no scenario-gate.tsv (an old one) picks every job rather than none; a gate file that
+# leaves this run no release job fails the pick (exit 1, no "picked=" line) rather than run nothing.
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -56,6 +57,12 @@ if [ "$event" = schedule ] || { [ "$event" = workflow_dispatch ] && [ -n "$stage
     $1 == "windows-old-names-move" && stage !~ /^candidate\// { next }
     { printf ",%s", $1 }
     END { print "," }' "$gate")
+  # A gate with no `release` row this run can run would pick nothing, and a run that ran nothing
+  # passes its verdict: that is a broken gate file, and the pick fails instead.
+  if [ "$picked" = , ]; then
+    say "FAIL stage: $gate names no release job for this run, so nothing would be proved; the pick fails rather than pass with nothing run."
+    exit 1
+  fi
   say "The release gate runs (the everyday tests that can hold up a release):$picked"
   echo "picked=$picked"
   exit 0

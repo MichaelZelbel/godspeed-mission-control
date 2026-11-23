@@ -11,8 +11,9 @@
 // the workflow's token.
 //
 // The week (WEEKLY=true, the full run dispatched once a week) files "Weekly test failed: <name>" with
-// the labels bug, scenario-failure and weekly-test, and closes it, and the night's older issue of the same
-// scenario, the first week it passes. PICKED (the jobs the run picked; "all" or empty means every job) leaves
+// the labels bug, scenario-failure and weekly-test, and closes it the first week it passes. For a job that
+// scenario-gate.tsv marks weekly (it no longer runs at night) a weekly pass also closes the night's older
+// issue; a release-gate job's night issue is the night's to close. PICKED (the jobs the run picked; "all" or empty means every job) leaves
 // out the jobs the run did not pick, which end skipped and are no failure.
 //
 // Environment: RESULTS ("name=result name=result ..."), STAGE (the stage job's result, optional),
@@ -22,9 +23,10 @@
 // the scheduled workflow's exact invocation discovers conclusions from the run's jobs. Also needs
 // GITHUB_TOKEN, GITHUB_REPOSITORY,
 // GITHUB_RUN_ID, GITHUB_SERVER_URL, GITHUB_API_URL, NIGHT (default: today, UTC),
-// WORKFLOW_FILE (default .github/workflows/scenarios.yml, where the jobs' display names are read).
+// WORKFLOW_FILE (default .github/workflows/scenarios.yml, where the jobs' display names are read),
+// GATE_FILE (default scenario-gate.tsv beside this script, where the weekly jobs are read).
 import { readFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const LABEL = 'scenario-failure';
 const LAST_LINES = 25;
@@ -35,6 +37,18 @@ const STAGE_TITLE = 'Nightly shared stage failed: stage';
 // `archon-triage`, which is what puts the night's failures at the front of the factory's order.
 const weeklyTitleOf = (name) => `Weekly test failed: ${name}`;
 const WEEKLY_STAGE_TITLE = 'Weekly shared stage failed: stage';
+const GATE_FILE = fileURLToPath(new URL('./scenario-gate.tsv', import.meta.url));
+
+// The jobs scenario-gate.tsv marks weekly ("<job> TAB <release|weekly>" rows; # starts a comment).
+export function weeklyJobs(text) {
+  const weekly = new Set();
+  for (const line of String(text || '').split(/\r?\n/)) {
+    if (!line.trim() || line.startsWith('#')) continue;
+    const [id, group] = line.split('\t').map((x) => (x || '').trim());
+    if (id && group === 'weekly') weekly.add(id);
+  }
+  return weekly;
+}
 
 // job id -> display name, from the workflow file's own text.
 export function jobNames(text) {
@@ -97,6 +111,13 @@ export async function reportNight(env = process.env, log = console.log) {
   const issueLabels = weekly ? ['bug', LABEL, WEEKLY_LABEL] : ['bug', LABEL, 'archon-triage'];
   const picked = String(env.PICKED || '').trim();
   const pickedNames = picked && picked !== 'all' ? new Set(picked.split(',').filter(Boolean)) : null;
+  // Only a job that now runs weekly alone has its night issue closed by the week. A gate file that
+  // cannot be read closes no night issue at all.
+  let weeklyOnly = new Set();
+  if (weekly) {
+    try { weeklyOnly = weeklyJobs(readFileSync(env.GATE_FILE || GATE_FILE, 'utf8')); }
+    catch (e) { log(`the gate file could not be read (${e.message}): the week closes no night issue`); }
+  }
   const runLink = `${env.GITHUB_SERVER_URL || 'https://github.com'}/${repo}/actions/runs/${runId}`;
   const verdicts = verdictLines(env.SCENARIO_VERDICTS);
   if (env.SCENARIO_VERDICTS !== undefined && !verdicts.size) throw new Error('SCENARIO_VERDICTS holds no scenario verdict');
@@ -199,8 +220,9 @@ export async function reportNight(env = process.env, log = console.log) {
     const title = titleFor(name);
     const number = open.get(title);
     if (result === 'success') {
-      // The week also closes the night's older issue of a scenario that now only runs weekly.
-      const closing = [number, weekly ? open.get(titleOf(name)) : undefined].filter(Boolean);
+      // The week also closes the night's older issue of a scenario that now only runs weekly; a release
+      // gate job still runs every night, and its night issue is closed by the night.
+      const closing = [number, weekly && weeklyOnly.has(name) ? open.get(titleOf(name)) : undefined].filter(Boolean);
       if (!closing.length) { log(`ok     ${name}: passed, no issue open`); continue; }
       for (const n of closing) {
         await call('POST', `/issues/${n}/comments`, { body: `Passed on the ${weekly ? 'week' : 'night'} of ${night}: ${runLink}\n\nClosing.` });
