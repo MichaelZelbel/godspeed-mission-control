@@ -19,8 +19,8 @@ vi.mock("./PersonalControl", () => ({ PersonalControl: () => null }));
 vi.mock("./MeaningSearch", () => ({ MeaningSearch: () => null }));
 // The Telegram status the mocked ConnectTelegram module answers with; tests that need a reason
 // in it (issue #919) set telegramStatusData.value before rendering.
-const telegramStatusData = vi.hoisted(() => ({ value: { available: false } as Record<string, unknown> }));
-vi.mock("./ConnectTelegram", () => ({ TelegramConnect: () => null, telegramStatus: async () => telegramStatusData.value, telegramUnavailable: "Telegram cannot be connected on this notebook.", telegramSwitchedOff: "The person who runs this server has switched Telegram off; asking them to switch it on is the way to get it here." }));
+const telegramStatusData = vi.hoisted(() => ({ value: { available: false } as Record<string, unknown>, delayMs: 0 }));
+vi.mock("./ConnectTelegram", () => ({ TelegramConnect: () => null, telegramStatus: async () => { await new Promise(resolve => setTimeout(resolve, telegramStatusData.delayMs)); return telegramStatusData.value; }, telegramUnavailable: "Telegram cannot be connected on this notebook.", telegramSwitchedOff: "The person who runs this server has switched Telegram off; asking them to switch it on is the way to get it here." }));
 vi.mock("./RecordSync", () => ({ RecordSyncForm: () => null }));
 const scrolled: string[] = [];
 Element.prototype.scrollIntoView = function () { scrolled.push((this as Element).id); };
@@ -51,6 +51,18 @@ describe("Settings opened at one of its sections", () => {
   it("opens Connect other assistants for a link to it", async () => {
     const { container } = settings("/dashboard/settings#connect-other-assistants");
     await waitFor(() => expect((container.querySelector("#connect-other-assistants") as HTMLDetailsElement).open).toBe(true), WAIT);
+  });
+
+  // The Telegram section renders only once its status answers, after the first lookup has run.
+  it("scrolls to Telegram when its section appears after the page opened", async () => {
+    telegramStatusData.delayMs = 80;
+    try {
+      const { container } = settings("/dashboard/settings#telegram");
+      expect(container.querySelector("#telegram")).toBeNull();
+      await waitFor(() => expect(scrolled).toContain("telegram"), WAIT);
+    } finally {
+      telegramStatusData.delayMs = 0;
+    }
   });
 
   it("stays at the top without a section named", async () => {
