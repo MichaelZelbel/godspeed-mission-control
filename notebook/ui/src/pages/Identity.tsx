@@ -208,7 +208,7 @@ function Editor({ target, overview, onClose }: { target: string; overview?: Over
         </div>
         {item.isLoading && <Skeleton className="h-40 w-full" />}
         {item.error && <p role="alert" className="text-sm text-destructive">{(item.error as Error).message}</p>}
-        {d?.review_waiting && <p role="alert" className="rounded-md border border-warning/40 p-3 text-sm">Two versions of this wait for you in <Link className="underline" to="/dashboard/settings">Settings, under Review conflicting edits</Link>. Settle that first, then change it here.</p>}
+        {d?.review_waiting && <p role="alert" className="rounded-md border border-warning/40 p-3 text-sm">Two versions of this wait for you in <Link className="underline" to="/dashboard/settings#review-conflicts">Settings, under Review conflicting edits</Link>. Settle that first, then change it here.</p>}
         {d && draft && view === "edit" && (
           <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void save(); }}>
             {d.kind === "who" && <div className="space-y-1.5">

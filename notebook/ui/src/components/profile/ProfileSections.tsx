@@ -35,6 +35,8 @@ interface ProfileSectionsProps {
   children?: ReactNode;
   /** Sections this page renders elsewhere, so a line is never moved into them. */
   excludeSlugs?: string[];
+  /** List every category, empty or not, so a first fact can be added in any of them. */
+  showEmptyCategories?: boolean;
 }
 
 /**
@@ -95,6 +97,7 @@ export function ProfileSections({
   showPinned = true,
   children,
   excludeSlugs = NO_EXCLUDED_SECTIONS,
+  showEmptyCategories = false,
 }: ProfileSectionsProps) {
   const [filterQuery, setFilterQuery] = useState("");
   const [addingCategory, setAddingCategory] = useState(false);
@@ -102,7 +105,10 @@ export function ProfileSections({
   const [newCatIcon, setNewCatIcon] = useState("folder");
   const [newCatScope, setNewCatScope] = useState("all");
 
-  const sections = useMemo(() => groupFacts(facts, categories), [facts, categories]);
+  const sections = useMemo(
+    () => groupFacts(facts, categories, { emptyCategories: showEmptyCategories }),
+    [facts, categories, showEmptyCategories],
+  );
   const slots = useMemo(() => groupSlots(facts), [facts]);
 
   const matches = useMemo(

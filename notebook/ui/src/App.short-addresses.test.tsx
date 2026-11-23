@@ -65,7 +65,7 @@ describe("short addresses", () => {
     expect(open("/")).toBe("/dashboard");
   });
 
-  for (const address of ["/no-such-page", "/timelines", "/dashboard/no-such-page"]) {
+  for (const address of ["/no-such-page", "/timelines", "/dashboard/no-such-page", "/auth", "/login", "/recover", "/reset-password"]) {
     it(`${address} says the page is unavailable, with a link to the Dashboard`, async () => {
       expect(open(address)).toBe(address);
       expect(screen.getByText("This page is unavailable.")).toBeInTheDocument();

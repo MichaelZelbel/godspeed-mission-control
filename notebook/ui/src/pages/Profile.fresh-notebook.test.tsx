@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
@@ -56,5 +56,18 @@ describe("My Profile on a fresh notebook", () => {
     expect(profiles?.status).toBe(200);
     expect(profiles?.body).toMatchObject({ table: "profiles", maybeSingle: true });
     expect(answered.filter((r) => r.status >= 400)).toEqual([]);
+  }, 30_000);
+
+  // Issue #1019: the defaults were seeded but none was listed, so there was nowhere to add a first fact.
+  it("lists the default categories, each with a way to add a first fact", async () => {
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter><Profile /></MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const empty = await screen.findAllByText("No facts yet. Add one.", undefined, WAIT);
+    expect(empty.length).toBeGreaterThanOrEqual(10);
+    fireEvent.click(within(empty[0].parentElement as HTMLElement).getByRole("button", { name: /Add/ }));
+    expect(await screen.findByRole("textbox", { name: "Value" }, WAIT)).toBeInTheDocument();
   }, 30_000);
 });
