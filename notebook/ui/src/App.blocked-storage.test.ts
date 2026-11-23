@@ -79,6 +79,15 @@ describe("the notebook with the browser's site data blocked", () => {
       await page.getByText(/allow site data \(cookies and site data\) for this address/).waitFor({ timeout: 5000 });
       expect(await body()).toContain("kept only until you close or reload this tab");
       expect(await body()).not.toContain("so text not saved yet");
+      // The notice must not take clicks meant for the controls under it (chat input, form buttons).
+      const takesClicks = await page.evaluate(() => {
+        const t = document.querySelector("[data-sonner-toast]") as HTMLElement | null;
+        if (!t) return "no toast";
+        const r = t.getBoundingClientRect();
+        const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return !!el && !!el.closest("[data-sonner-toast]");
+      });
+      expect(takesClicks).toBe(false);
       await page.getByRole("button", { name: /close toast/i }).click();
       await page.getByText(/allow site data/).waitFor({ state: "detached", timeout: 3000 });
       const text = await body();

@@ -50,7 +50,7 @@ let noticeShown=false;
 function TabOnlyStorageNotice(){
   useEffect(()=>{
     if(!tabOnlyStorage)return;
-    if(!noticeShown){noticeShown=true;toast.info(TAB_ONLY_NOTICE,{id:'tab-only-storage',duration:12000,closeButton:true,position:'bottom-center'});}
+    if(!noticeShown){noticeShown=true;toast.info(TAB_ONLY_NOTICE,{id:'tab-only-storage',duration:12000,closeButton:true,position:'bottom-center',style:{pointerEvents:'none'},classNames:{closeButton:'!pointer-events-auto'}});}
     const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape')toast.dismiss('tab-only-storage');};
     window.addEventListener('keydown',onKey);
     return()=>window.removeEventListener('keydown',onKey);
