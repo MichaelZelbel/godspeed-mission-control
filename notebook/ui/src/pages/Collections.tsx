@@ -25,6 +25,7 @@ import { LoadErrorState } from "@/components/collections/LoadErrorState";
 import { charmShelf, habitShelf, lastEntryDays, shelve, talksLabel, type CharmListed } from "@/lib/tracker-shelf";
 import type { HabitProgress } from "@/lib/habit-progress";
 import { CharmCard } from "@/components/collections/CharmCard";
+import { defaultField, toJsonSchema } from "@/components/collections/schemaFields";
 import { collectionNameSchema } from "@/lib/collection-name";
 
 type Collection = Database["public"]["Tables"]["collections"]["Row"];
@@ -223,7 +224,7 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
         icon: parsed.icon || null,
         description: parsed.description || null,
         visibility: parsed.visibility,
-        field_schema: [],
+        field_schema: toJsonSchema([defaultField()]),
         agent_instructions: null,
       })
       .select("slug")
