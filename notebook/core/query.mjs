@@ -16,6 +16,9 @@ import {momentDates,endsBeforeStart,END_BEFORE_START} from './timestamps.mjs';
 // among the people, though it stays on disk with whatever links to it.
 import {personNames} from './person-names.mjs';
 
+// A moment as read: the stored original with every correction laid over it by sequence, then id.
+// A correction's patch replaces the one before it key by key; the write check judges the same merge.
+const applyCorrections=(original,corrections)=>corrections.slice().sort((a,b)=>a.sequence-b.sequence||String(a.id).localeCompare(String(b.id))).reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original);
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
 // Tables of the unreachable pages Menerio shipped, whose files are gone from the tree but whose records stay.
 const deleted = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../data/deleted-source-inventory.json', import.meta.url)), 'utf8'));
@@ -233,7 +236,7 @@ export class QueryService {
       if(type!=='moments'){memo.set(type,values);return values;}
       const byMoment=new Map();for(const c of ofType('event_corrections')){let l=byMoment.get(c.moment_id);if(!l)byMoment.set(c.moment_id,l=[]);l.push(c);}
       // Dates as ISO 8601, the shape the Menerio screens read (timestamps.mjs).
-      const corrected=values.map(original=>{const corrections=(byMoment.get(original.id)||[]).slice().sort((a,b)=>a.sequence-b.sequence||a.id.localeCompare(b.id));return momentDates(corrections.reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original));}).filter(r=>!r.removed_at);
+      const corrected=values.map(original=>momentDates(applyCorrections(original,byMoment.get(original.id)||[]))).filter(r=>!r.removed_at);
       memo.set(type,corrected);return corrected;
     };
     const get=(type,id)=>this.store.records.get(type+'/'+id)||ofType(type).find(r=>(r.former_ids||[]).includes(id))||ofType(type).find(r=>(r.aliases||[]).includes(id));
@@ -432,10 +435,15 @@ export class QueryService {
             if(endsBeforeStart(merged.happened_at,merged.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
           }
           if(table==='event_corrections'&&operation!=='delete'){
-            // The same rule for a date patch written as a correction, which is merged over the moment on read.
-            const patch=payload.patch||{};
-            const moment=('happened_at' in patch||'happened_end' in patch)&&this.rows('moments').find(r=>r.id===(payload.moment_id||old?.moment_id));
-            if(moment&&endsBeforeStart(patch.happened_at??moment.happened_at,patch.happened_end??moment.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
+            // The same rule for a correction, judged on the moment as the reader will merge it (applyCorrections).
+            const candidate={...old,...payload},dated=p=>p&&('happened_at' in p||'happened_end' in p);
+            const touches=dated(candidate.patch)||dated(old?.patch)||(old&&(old.moment_id!==candidate.moment_id||old.sequence!==candidate.sequence));
+            const original=touches&&this.store.get('moments',candidate.moment_id);
+            if(original&&!original.removed_at){
+              const others=this.store.list('event_corrections').filter(c=>c.moment_id===original.id&&c.id!==old?.id);
+              const merged=momentDates(applyCorrections(original,[...others,{...candidate,id:candidate.id??''}]));
+              if(endsBeforeStart(merged.happened_at,merged.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
+            }
           }
           if(table==='moments'&&old){
             const correction=this.store.prepare('event_corrections',{moment_id:old.id,patch:payload,sequence:this.store.list('event_corrections').filter(c=>c.moment_id===old.id).length+1,references:[{type:'moments',id:old.id,uid:old.uid}]});

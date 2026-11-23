@@ -61,3 +61,28 @@ test('a correction that would make a moment end before it starts is refused with
   assert.equal(ok.status,200);
   const [m]=await moments(base);assert.equal(m.happened_end.slice(0,10),'2025-03-08');
 }));
+
+test('corrections are judged as the reader merges them: sequence order, replaced patches, moment moves, null end',()=>withService(async base=>{
+  await stored(base);
+  await stored(base,'m2');
+  const corr=values=>post(base,{table:'event_corrections',...values});
+  const ins=values=>corr({operation:'insert',values});
+  // a later correction clears the end; a correction sorting before it cannot bring one back unnoticed
+  assert.equal((await ins({id:'c1',moment_id:'m1',patch:{happened_at:'2025-03-10',happened_end:null},sequence:5})).status,200);
+  assert.equal((await ins({id:'c0',moment_id:'m1',patch:{happened_end:'2025-03-01'},sequence:1})).status,200);
+  // a correction before a later one that sets a later start is refused
+  const low=await ins({id:'c2',moment_id:'m2',patch:{happened_at:'2025-03-10'},sequence:9});
+  assert.equal(low.status,400);
+  assert.equal((await ins({id:'c3',moment_id:'m2',patch:{happened_end:'2025-03-20'},sequence:9})).status,200);
+  const lower=await ins({id:'c4',moment_id:'m2',patch:{happened_at:'2025-04-01'},sequence:2});
+  assert.equal(lower.status,400);
+  // an update that replaces the patch and drops the end keeps the earlier one
+  const replace=await corr({operation:'update',values:{patch:{happened_at:'2025-05-01'}},filters:[['eq','id','c3']]});
+  assert.equal(replace.status,400);
+  // moving a correction onto another moment is judged there
+  const move=await corr({operation:'update',values:{moment_id:'m2',sequence:10},filters:[['eq','id','c0']]});
+  assert.equal(move.status,400);
+  const byId=Object.fromEntries((await moments(base)).map(m=>[m.id,m]));
+  assert.equal(byId.m1.happened_end,null);
+  assert.equal(byId.m2.happened_end.slice(0,10),'2025-03-20');
+}));
