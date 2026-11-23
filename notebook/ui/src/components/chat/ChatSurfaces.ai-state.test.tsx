@@ -77,6 +77,25 @@ for(const [name,show] of surfaces){
   });
 }
 
+// #783: a chat open through an outage or a refusal takes the connected state when a working AI is saved
+// (here: the server's answer changes, as it does for a save in another tab), without a reload.
+for(const [name,show] of surfaces){
+  for(const failed of ['unreachable','refused']){
+    it(`${name} left open while the AI is ${failed} is ready again once a working AI is connected`,async()=>{
+      let options:any={connected:true,usable:false,availability:failed,current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]};
+      vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response(options):response({data:[]})));
+      show();
+      expect(await screen.findByText(failed==='refused'?'Your AI key or sign-in was refused':'Your AI could not be reached', undefined, WAIT)).toBeInTheDocument();
+      options={...options,usable:true,availability:'ready'};
+      await vi.waitFor(()=>{
+        expect(screen.queryByText('Your AI key or sign-in was refused')).not.toBeInTheDocument();
+        expect(screen.queryByText('Your AI could not be reached')).not.toBeInTheDocument();
+        expect(screen.getByTestId('composer')).toBeInTheDocument();
+      }, WAIT);
+    });
+  }
+}
+
 it('an open note chat with an earlier reply shows a later refused-key state',async()=>{
   let options={connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]};
   vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/chat/options'?response(options):response({data:[]})));

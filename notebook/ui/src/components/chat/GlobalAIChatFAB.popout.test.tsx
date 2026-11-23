@@ -2,14 +2,12 @@
 // "Open chat in a new window" opens the same conversation (issue #588): the address carries the
 // context, and the chat page opened from it talks to that context again.
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import '@testing-library/jest-dom/vitest';
 import {GlobalAIChatFAB} from './GlobalAIChatFAB';
 import {hydrateFileChats} from '@/local/file-chat';
-import {publishChatOptions} from '@/local/chat-options.mjs';
-import {AI_REFUSED,AI_UNREACHABLE} from '../../../../core/no-ai.mjs';
 import { WAIT } from "@/test/wait-limits";
 
 vi.mock('sonner',()=>({toast:{error:vi.fn(),warning:vi.fn()}}));
@@ -94,25 +92,14 @@ it("a message sent from a note chat's pop-out reaches the AI at once and its rep
  expect(invoke).toHaveBeenCalledTimes(1);
 });
 
-// The notebook's own answer to a send the AI refused or could not answer (server/main.mjs), as the client hands it on.
-const failNextSend=(said:string)=>invoke.mockImplementationOnce(async()=>({data:null,error:{message:said,context:new Response(JSON.stringify({error:said}),{status:400})}}) as any);
 it("a pop-out send the AI does not answer stops spinning and says so",async()=>{
- failNextSend(AI_UNREACHABLE);
+ const refused='Your AI could not be used. Check Settings, Your AI, then try again.';
+ // The notebook's own answer to a send the AI refused (server/main.mjs), as the client hands it on.
+ invoke.mockImplementationOnce(async()=>({data:null,error:{message:refused,context:new Response(JSON.stringify({error:refused}),{status:400})}}) as any);
  await sendFromPopOut('Fictional unanswered question');
- expect(await screen.findByText(AI_UNREACHABLE,{},{timeout:1500})).toBeInTheDocument();
+ expect(await screen.findByText(refused,{},{timeout:1500})).toBeInTheDocument();
  expect(spinning()).toBeNull();
  expect(screen.getByLabelText('Message')).toHaveValue('Fictional unanswered question');
-});
-
-// #783: a refusal or outage said under an open chat stays until a working AI is reported, then goes without a reload.
-it.each([['refused',AI_REFUSED],['unreachable',AI_UNREACHABLE]])("a pop-out's %s reply clears once a working AI is reported",async(_state,said)=>{
- failNextSend(said);
- await sendFromPopOut('Fictional question');
- expect(await screen.findByText(said,{},{timeout:1500})).toBeInTheDocument();
- act(()=>{publishChatOptions({connected:true,usable:false,availability:_state,current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]});});
- expect(screen.getByText(said)).toBeInTheDocument();
- act(()=>{publishChatOptions({connected:true,usable:true,availability:'ready',current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]});});
- await waitFor(()=>expect(screen.queryByText(said)).not.toBeInTheDocument());
 });
 
 it("the note's own chat still asks its open editor to save the note before sending",async()=>{

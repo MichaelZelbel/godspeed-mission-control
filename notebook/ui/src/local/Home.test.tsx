@@ -184,6 +184,21 @@ describe("the Godspeed card", () => {
     expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
     expect(screen.queryByText("Ready to chat")).toBeNull();
   });
+  // #783: nothing on the card depends on width, so a connected, working AI reads the same at a phone's width as on a desktop.
+  it.each([390, 1280])("shows a working AI as ready at %i px wide", async (width) => {
+    const before = window.innerWidth, media = window.matchMedia;
+    Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: width });
+    Object.defineProperty(window, "matchMedia", { writable: true, value: (query: string) => ({ matches: /max-width:\s*(\d+)px/.test(query) ? width <= Number(/max-width:\s*(\d+)px/.exec(query)![1]) : /min-width:\s*(\d+)px/.test(query) ? width >= Number(/min-width:\s*(\d+)px/.exec(query)![1]) : false, media: query, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, onchange: null, dispatchEvent: () => false }) });
+    try {
+      vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url).startsWith("/api/chat/options") ? { connected: true, usable: true, availability: "ready", current: "fictional-model", models: [{ id: "fictional-model", efforts: [] }] } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+      render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
+      expect(await screen.findByText("Ready to chat", undefined, WAIT)).toBeInTheDocument();
+      expect(screen.queryByText("Your AI could not be reached")).toBeNull();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: before });
+      Object.defineProperty(window, "matchMedia", { writable: true, value: media });
+    }
+  });
   it("uses a live chat options update instead of keeping a separate ready snapshot", async () => {
     let options = { connected: true, usable: true, availability: "ready" };
     vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url).startsWith("/api/chat/options") ? options : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
