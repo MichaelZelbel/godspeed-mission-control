@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-21T15:32:19.098Z",
+  "checked_at": "2026-11-22T22:39:49.433Z",
   "complete": false,
   "items": [
     {
@@ -302,7 +302,7 @@
       "name": "Dashboard",
       "trigger": "Open notebook Dashboard",
       "durable_state": "records and media",
-      "execution": "notebook/ui/src/pages/Dashboard.tsx",
+      "execution": "notebook/ui/src/local/Home.tsx",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
@@ -320,7 +320,7 @@
       "name": "Settings",
       "trigger": "Open notebook Settings",
       "durable_state": "records and media",
-      "execution": "notebook/ui/src/pages/Settings.tsx",
+      "execution": "notebook/ui/src/local/Control.tsx",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],

@@ -439,6 +439,21 @@ class Reply(unittest.TestCase):
     # -- the owner decision on #453 of 12 November: reject, retry once stricter, then the notice
     ECHO = (DRAFT + "\n\nWait, I need to correct that: the translation is below.\n\n"
             "Got it, that's saved. How do you notice that it's finished?")  # run 43115758752, chat-en-1
+    def test_the_draft_wrapped_in_quotation_marks_above_its_translation_is_rejected(self):
+        # run 45010372851, chat-en-1: quoted text is not judged, so the quoted copy hid the repeat (#970)
+        translation = "Got it, that's saved. How do you know when it's finished?"
+        for opening, closing in (('"', '"'), ("\u201e", "\u201c"), ("\u201c", "\u201d"), ("\u00ab", "\u00bb")):
+            answer = "%s%s%s\n\nTranslation:\n\n%s" % (opening, DRAFT, closing, translation)
+            self.assertEqual(self.mod.rejection(answer, DRAFT, "en"), "repeats-the-draft: part of it")
+        english = "I saved that. What does done look like for you?"
+        quoted = '"%s"\n\nÜbersetzung:\n\nIch habe das gespeichert. Woran erkennst du, dass es fertig ist?' % english
+        self.assertEqual(self.mod.rejection(quoted, english, "de"), "repeats-the-draft: part of it")
+
+    def test_a_quote_the_draft_held_is_not_counted_as_a_repeat(self):
+        draft = 'Alles klar, ich habe "Projekt Nordlicht Phase zwei Start" gespeichert.'
+        answer = 'Got it, I saved "Projekt Nordlicht Phase zwei Start" for you.'
+        self.assertEqual(self.mod.rejection(answer, draft, "en"), "")
+
     MIXED = "Alles klar, I've saved the entry. How can you tell it's finished?"  # the same run, j1
 
     def test_the_draft_repeated_with_a_translation_is_rejected_and_the_stricter_try_goes_out(self):

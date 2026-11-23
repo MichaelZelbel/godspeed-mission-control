@@ -27,7 +27,9 @@ const schemaColumns = new Map();
   for (const kind of text.slice(0, text.indexOf('\n    Functions: {')).matchAll(/\n      ([a-z_0-9]+): \{\n        Row: \{\n([\s\S]*?)\n        \}/g))
     schemaColumns.set(kind[1], new Set([...kind[2].matchAll(/^          ([a-z_0-9]+)\??:/gm)].map(column => column[1])));
 }
-export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
+// Tables of the unreachable pages Menerio shipped, whose files are gone from the tree but whose records stay.
+const deleted = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../data/deleted-source-inventory.json', import.meta.url)), 'utf8'));
+export const tables = new Set([...inventory.dependencies.flatMap(d => d.tables), ...deleted.tables].filter(t => t !== 'note-attachments'));
 for (const table of ['goals', 'jobs', 'job_receipts', 'settings', 'permissions', 'decisions', 'habits', 'journal', 'deadlines', 'comments', 'notifications', 'note_conversations', 'import_mappings','record_history','event_corrections','embeddings']) tables.add(table);
 for(const table of ['health_episodes','medications','health_observations','watch_topics','watch_observations','domain_watches','domain_watch_observations','outside_numbers','subscriptions','forecasts','work_items','coach_talks','connector_status','work_tool_receipts','approvals','command_receipts'])tables.add(table);
 // The Lexicon's records (Menerio's wiki pages, their sources and revisions)
@@ -145,11 +147,22 @@ export function checkFilters(filters){
 // still answers 200, and reads keep every filter they accept.
 const head=key=>key.replaceAll('->>','.').replaceAll('->','.').split('.')[0];
 const short=f=>String(JSON.stringify(f)).slice(0,120);
+// Kinds outside the old UI schema still have fields of their own. Keep these
+// beside the write check and derive them from the code that creates each kind,
+// so an empty kind is judged the same way as one that already has records.
+// Notes also expose two computed list fields and document skip_processing for
+// add-ons, although none of the three has to be stored on a fresh notebook.
+const declaredFields=new Map(Object.entries({
+  comments:['note_id','content','author'],
+  goals:['title','own_words','status','areas','progress','measure','lead','changes','kind','area','deadline','serves','depends_on','protected','importance','legacy_fields','legacy_log','legacy_source','legacy_content'],
+  note_conversations:['context_key','state','completed_request_ids'],
+  notes:['skip_processing','content_preview','content_length'],
+}).map(([kind,fields])=>[kind,new Set(fields)]));
 export function checkWriteFilters(table,filters,rows){
-  const columns=schemaColumns.get(table),judged=!!columns||rows.length>0;
+  const columns=schemaColumns.get(table),declared=declaredFields.get(table),judged=!!columns||!!declared||rows.length>0;
   // hasOwn, not `in`: the fallback would make every Object.prototype name
   // (toString, constructor, ...) a "known" field on every kind.
-  const known=field=>envelopeFields.has(field)||Object.hasOwn(defaults[table]||{},field)||columns?.has(field)||rows.some(r=>r&&Object.hasOwn(r,field));
+  const known=field=>envelopeFields.has(field)||Object.hasOwn(defaults[table]||{},field)||columns?.has(field)||declared?.has(field)||rows.some(r=>r&&Object.hasOwn(r,field));
   // The fields an or() or and() text names, nested parts included. A part the
   // PostgREST grammar does not read is refused here, and so is an empty and()
   // or not.or(), which is true for every row: both are otherwise left to

@@ -280,7 +280,7 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
             </RadioGroup>
           </div>
 
-          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">URL: {BRAND.domain}/collections/{slugPreview}</p>
+          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">URL: {BRAND.url}/collections/{slugPreview}</p>
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>

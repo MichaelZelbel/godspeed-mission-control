@@ -180,6 +180,30 @@ test('a kind the schema does not know is judged by its rows once it holds one',a
   }finally{await service.close();}
 });
 
+test('empty kinds with fields declared by their writers refuse an unknown field',async()=>{
+  const service=await createService({root:root(),port:0}),base='http://127.0.0.1:'+service.address.port;
+  try{
+    for(const table of ['comments','goals','note_conversations'])for(const operation of ['update','delete']){
+      const body={table,operation,filters:[['eq','titel','x']]};
+      if(operation==='update')body.values={title:'Not written'};
+      const response=await post(base,body);
+      assert.equal(response.status,400,table+' '+operation);
+      assert.match((await response.json()).error,new RegExp(table+' has no field "titel"'));
+    }
+  }finally{await service.close();}
+});
+
+test('documented and computed note fields remain well-formed no-match filters when unset',async()=>{
+  const service=await createService({root:root(),port:0}),base='http://127.0.0.1:'+service.address.port;
+  try{
+    for(const field of ['skip_processing','content_preview']){
+      const response=await post(base,{table:'notes',operation:'update',values:{title:'Not written'},filters:[['eq',field,'not-set']]});
+      assert.equal(response.status,200,field);
+      assert.deepEqual((await response.json()).data,[]);
+    }
+  }finally{await service.close();}
+});
+
 test('a nested expression that is true for every record is refused with 400 and changes nothing',async()=>{
   const service=await createService({root:root(),port:0}),base='http://127.0.0.1:'+service.address.port;
   try{
