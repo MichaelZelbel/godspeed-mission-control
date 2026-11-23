@@ -33,7 +33,7 @@ import { useGitHubConnection, useGitHubSyncExport, useSyncLogForNote } from "@/h
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import { ExternalNotePanel } from "./ExternalNotePanel";
 import { WebClipPreview } from "./WebClipPreview";
-import { ForwardToAppDialog } from "./ForwardToAppDialog";
+import { ForwardToAppDialog, useActiveConnectedApps } from "./ForwardToAppDialog";
 import { WikilinkAutocomplete } from "./WikilinkAutocomplete";
 import { EditorBubbleMenu } from "./EditorBubbleMenu";
 import { Separator } from "@/components/ui/separator";
@@ -431,6 +431,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: connectedApps = [] } = useActiveConnectedApps();
   const { data: ghConn } = useGitHubConnection();
   const ghSync = useGitHubSyncExport();
   const { data: syncLog } = useSyncLogForNote(note.id);
@@ -1760,9 +1761,11 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                     <Share2 className="mr-2 h-4 w-4" /> Share publicly
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => setShowForwardDialog(true)}>
-                  <Send className="mr-2 h-4 w-4" /> Send to app
-                </DropdownMenuItem>
+                {connectedApps.length > 0 && (
+                  <DropdownMenuItem onClick={() => setShowForwardDialog(true)}>
+                    <Send className="mr-2 h-4 w-4" /> Send to app
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           }
