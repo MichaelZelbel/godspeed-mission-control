@@ -12,7 +12,7 @@ import { useProcessingSweep } from "@/hooks/useProcessingSweep";
 import { RouteErrorBoundary } from "@/components/ErrorBoundary";
 import { PageLoader } from "@/components/LoadingStates";
 import { BRAIN_PAGE } from "@/lib/brain-page";
-
+import { isCollectionPage } from "./collection-route";
 
 
 export function DashboardLayout() {
@@ -22,7 +22,7 @@ export function DashboardLayout() {
   const isChat=pathname==="/dashboard/chat",isNotes=pathname.startsWith("/dashboard/notes"),isImport=pathname==="/dashboard/settings/import",isHabit=pathname.startsWith("/trackers/habits/"),isBrain=pathname===BRAIN_PAGE.path;
   // A collection page (not templates or schema) reaches the window's bottom at phone widths: the
   // button floats over it, and its own card leaves room (#1045). Other pages keep the reserve.
-  const isCollection=/^\/collections\/(?!templates(\/|$))[^/]+(\/(?!schema$)[^/]+)?\/?$/.test(pathname);
+  const isCollection=isCollectionPage(pathname);
   const floatingChat=!isChat&&!isNotes&&!isImport&&!isHabit&&!isBrain;
 
   return (
