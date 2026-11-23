@@ -30,11 +30,14 @@ describe("wording", () => {
     }
     expect(hits).toEqual([]);
   });
-  it("Send to app speaks English and names a place that exists", () => {
+  it("Send to app is offered only when an app is connected, and points nowhere else", () => {
     const s = read("components/notes/ForwardToAppDialog.tsx");
     expect(s).toContain("Send to app");
     expect(s).not.toMatch(/Settings → Apps/);
-    expect(s).toContain("Connect AI");
+    expect(s).not.toContain("Connect AI");
+    expect(s).not.toContain("No apps are connected");
+    const e = read("components/notes/NoteEditor.tsx");
+    expect(e).toMatch(/connectedApps\.length > 0 && \(\s*<DropdownMenuItem onClick=\{\(\) => setShowForwardDialog\(true\)\}>/);
   });
   it("collection dialogs preview the address in use", () => {
     for (const f of ["pages/Collections.tsx", "pages/CollectionTemplates.tsx"]) {

@@ -38,14 +38,11 @@ interface ForwardToAppDialogProps {
   note: Note;
 }
 
-export function ForwardToAppDialog({ open, onOpenChange, note }: ForwardToAppDialogProps) {
+export function useActiveConnectedApps(enabled = true) {
   const { user } = useAuth();
-  const [selectedApp, setSelectedApp] = useState<string>("");
-  const [entityType, setEntityType] = useState<string>(note.entity_type || "note");
-
-  const { data: apps = [] } = useQuery<ConnectedApp[]>({
+  return useQuery<ConnectedApp[]>({
     queryKey: ["connected_apps_active", user?.id],
-    enabled: !!user && open,
+    enabled: !!user && enabled,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("connected_apps" as any)
@@ -57,6 +54,14 @@ export function ForwardToAppDialog({ open, onOpenChange, note }: ForwardToAppDia
       return (data as unknown as ConnectedApp[]) || [];
     },
   });
+}
+
+export function ForwardToAppDialog({ open, onOpenChange, note }: ForwardToAppDialogProps) {
+  const { user } = useAuth();
+  const [selectedApp, setSelectedApp] = useState<string>("");
+  const [entityType, setEntityType] = useState<string>(note.entity_type || "note");
+
+  const { data: apps = [] } = useActiveConnectedApps(open);
 
   const chosen = apps.find((a) => a.id === selectedApp);
 
@@ -105,11 +110,6 @@ export function ForwardToAppDialog({ open, onOpenChange, note }: ForwardToAppDia
                     {!app.webhook_url && " (no web address set)"}
                   </SelectItem>
                 ))}
-                {apps.length === 0 && (
-                  <div className="px-2 py-3 text-sm text-muted-foreground text-center">
-                    No apps are connected. Connect one in Settings, under Connect AI.
-                  </div>
-                )}
               </SelectContent>
             </Select>
           </div>
