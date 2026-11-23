@@ -33,7 +33,7 @@ export interface PersistedChatMessage {
   /**
    * On a user message whose latest send got no answer because no AI was connected, the AI refused
    * it, could not be reached, or answered with something that could not be used: the reason the person
-   * was shown. The server keeps it after a later reply, so read it through unansweredReason.
+   * was shown. It is removed when that message receives an answer.
    */
   lastFailure?: string;
 }

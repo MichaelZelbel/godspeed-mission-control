@@ -113,6 +113,7 @@ it.each([
 
  await reload(surface);
  expect(await screen.findByText(reason,{},WAIT)).toBeInTheDocument();
+ expect(savedMessages(surfaces[surface].key)[0].lastFailure).toBe(reason);
  expect(screen.getAllByText(QUESTION)).toHaveLength(1);
  expect(screen.getByText('No answer.')).toBeInTheDocument();
  expect(screen.getByLabelText('Message')).toHaveValue('');
@@ -126,6 +127,7 @@ it.each([
  expect(follows(screen.getByText(QUESTION),answer)).toBe(true);
  expect(screen.queryByText('No answer.')).toBeNull();
  await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,ANSWER]),WAIT);
+ expect(savedMessages(surfaces[surface].key)[0].lastFailure).toBeUndefined();
 
  await reload(surface);
  const reloaded=await screen.findByText(ANSWER,{},WAIT);

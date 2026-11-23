@@ -12,6 +12,10 @@ export function bindConversationSession(store,input){
 
 const sameMessage=(a,b)=>a.role===b.role&&a.content===b.content;
 const prefix=(short,long)=>short.length<=long.length&&short.every((message,i)=>sameMessage(message,long[i]));
+const withoutAnsweredFailures=messages=>messages.map((message,i)=>{
+ if(message.role!=='user'||messages[i+1]?.role!=='assistant'||!message.lastFailure)return message;
+ const answered={...message};delete answered.lastFailure;return answered;
+});
 // Another window on the same conversation saved turns this one never saw. The
 // stored turns keep their place and this window's turns that the store lacks
 // follow them, so neither window's messages are lost or repeated. A turn both
@@ -38,11 +42,11 @@ export function saveConversationState(store,input,{asyncWriter=false,signal}={})
    if((state.session_id||'')!==(current.session_id||''))return {ok:true,state:current,revision,ignored_stale:true};
    if(hash(current)===hash(state))return {ok:true,state:current,revision,unchanged:true};
    if(!prefix(current.messages,state.messages)){
-    state={...current,messages:joined(current.messages,state.messages)};
+    state={...current,messages:withoutAnsweredFailures(joined(current.messages,state.messages))};
     if(hash(state)===hash(current))return {ok:true,state:current,revision,ignored_stale:true};
    }else{
     if(state.messages.length===current.messages.length&&(state.summarizedUpTo||0)<(current.summarizedUpTo||0))return {ok:true,state:current,revision,ignored_stale:true};
-    state={...state,messages:state.messages.map((message,i)=>({...current.messages[i],...message}))};
+    state={...state,messages:withoutAnsweredFailures(state.messages.map((message,i)=>({...current.messages[i],...message})))};
    }
   }
   store.commit([store.prepare('note_conversations',{id,context_key:key,state},old),store.prepare('conversation_messages',{context_key:key,state_snapshot:state})]);
@@ -64,6 +68,8 @@ export function retainCompletedConversation(store,input,result,{asyncWriter=fals
   // adding it again would show it twice.
   let at=messages.findLastIndex((m,i)=>m.role==='user'&&m.content===input.message&&messages[i+1]?.role!=='assistant')+1;
   if(!at){messages.push({role:'user',content:input.message,...(input.files?.length?{attachments:input.files}:{})});at=messages.length;}
+  messages[at-1]={...messages[at-1]};
+  delete messages[at-1].lastFailure;
   messages.splice(at,0,{role:'assistant',content:result.reply,...(result.tool_results?{toolResults:result.tool_results}:{}),...(result.notes_created?.length?{notesCreated:result.notes_created}:{})});
   store.commit([store.prepare('note_conversations',{id,context_key:key,state:{...state,messages},completed_request_ids:[...(old?.completed_request_ids||[]),...(input.request_id?[input.request_id]:[])]},old)]);
  },{signal});

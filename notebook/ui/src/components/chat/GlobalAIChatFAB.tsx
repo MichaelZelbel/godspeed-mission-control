@@ -403,9 +403,11 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
         toolResults: data.tool_results,
         ...(notesCreated?.length ? { notesCreated } : {}),
       };
+      const answeredUser = { ...nextState.messages[at] };
+      delete answeredUser.lastFailure;
       const updated: PersistedChatState = {
         ...nextState,
-        messages: [...nextState.messages.slice(0, at + 1), assistantMsg, ...nextState.messages.slice(at + 1)],
+        messages: [...nextState.messages.slice(0, at), answeredUser, assistantMsg, ...nextState.messages.slice(at + 1)],
       };
 
       // If a note-modifying tool ran, refresh the editor live + invalidate queries.
