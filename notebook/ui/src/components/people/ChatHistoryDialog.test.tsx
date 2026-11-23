@@ -7,7 +7,7 @@ import "@testing-library/jest-dom/vitest";
 import { ChatHistoryDialog } from "./ChatHistoryDialog";
 import { NO_AI_CONNECT } from "../../../../core/no-ai.mjs";
 
-const state = vi.hoisted(() => ({ connected: true, inserted: [] as any[], participants: [] as any[] }));
+const state = vi.hoisted(() => ({ connected: true, inserted: [] as any[], participants: [] as any[], deleted: [] as any[], failMomentsRead: false, failParticipantsAt: 0 }));
 const invoke = vi.hoisted(() => vi.fn(async (_name: string, options: any): Promise<{ data: unknown; error: unknown }> => ({
   data: { moments: [
     { title: `Moving to Lisbon (${options.body.month})`, happened_at: options.body.month + "-03", quote: "We are moving", status: "past_fact", impact_level: 3, participants: ["Ben Beispiel"] },
@@ -21,14 +21,19 @@ vi.mock("@/integrations/supabase/client", () => {
     moment_participants: [], contacts: [{ id: "mia", name: "Mia Muster" }, { id: "ben", name: "Ben Beispiel" }],
   };
   const from = (table: string) => {
-    let result: any = { data: rows[table] || [], error: null };
+    let result: any = table === "moments" && state.failMomentsRead ? { data: null, error: new Error("read failed") } : { data: rows[table] || [], error: null };
     const chain: any = new Proxy({}, {
       get: (_t, property) => {
         if (property === "then") return (resolve: any, reject: any) => Promise.resolve(result).then(resolve, reject);
         if (property === "insert") return (value: any) => {
           (table === "moments" ? state.inserted : state.participants).push(value);
-          result = { data: table === "moments" ? { id: "new-" + state.inserted.length } : null, error: null };
+          const refused = table === "moment_participants" && state.participants.length === state.failParticipantsAt;
+          result = { data: table === "moments" ? { id: "new-" + state.inserted.length } : null, error: refused ? new Error("link failed") : null };
           return chain;
+        };
+        if (property === "delete") return () => {
+          const remove: any = { eq: (_column: string, id: string) => { state.deleted.push(id); return Promise.resolve({ error: null }); } };
+          return remove;
         };
         return () => chain;
       },
@@ -44,7 +49,7 @@ const chat = "[03.02.25, 18:04:11] Mia Muster: Wir ziehen nach Lissabon\n[03.03.
 const choose = (text: string, name = "_chat.txt") => fireEvent.change(screen.getByLabelText(/WhatsApp export file/), { target: { files: [new File([text], name)] } });
 const open = () => render(<ChatHistoryDialog open onOpenChange={() => {}} personId="mia" personName="Mia Muster" people={[{ id: "mia", name: "Mia Muster" }, { id: "ben", name: "Ben Beispiel" }]} onSaved={() => {}} />);
 
-afterEach(() => { cleanup(); invoke.mockClear(); state.inserted.length = 0; state.participants.length = 0; state.connected = true; });
+afterEach(() => { cleanup(); invoke.mockClear(); state.inserted.length = 0; state.participants.length = 0; state.deleted.length = 0; state.failMomentsRead = false; state.failParticipantsAt = 0; state.connected = true; });
 
 describe("Add a chat history", () => {
   it("says what goes to the AI, sends nothing before Start, skips known moments and saves only kept ones", async () => {
@@ -82,6 +87,24 @@ describe("Add a chat history", () => {
     fireEvent.click(all); fireEvent.click(all);
     await waitFor(() => expect(screen.queryByRole("button", { name: "Keep all" })).toBeNull());
     expect(state.inserted).toHaveLength(3);
+  });
+  it("sends nothing to the AI when the timeline cannot be read", async () => {
+    state.failMomentsRead = true;
+    open(); choose(chat);
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your timeline could not be read");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+  it("removes a moment whose people could not be linked and keeps its suggestion listed", async () => {
+    state.failParticipantsAt = 2;
+    open(); choose(chat);
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    await screen.findByText(/Done: all 2 months read/);
+    fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The ones already kept are on the timeline; this one is still listed");
+    expect(state.inserted).toHaveLength(2);
+    expect(state.deleted).toEqual(["new-2"]);
+    expect(screen.getAllByRole("button", { name: /^Keep (?!all)/ })).toHaveLength(2);
   });
   it("refuses a file that is not a WhatsApp export in one sentence", async () => {
     open(); choose("milk\neggs", "list.txt");
