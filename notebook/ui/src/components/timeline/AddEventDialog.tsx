@@ -339,7 +339,10 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
       // The status read asks the AI nothing, so a save with no AI connected still sends it nothing.
       let statusConfigured = providerConfigured;
       let statusAvailability = aiAvailability;
-      if (!statusConfigured && statusAvailability === "none" && refetchAIStatus) {
+      // The same goes for a remembered failure (#1057): the AI may since have answered differently
+      // (500, then a refused key), so the reason shown is read from the status check made now.
+      const failureKnown = statusAvailability === "refused" || statusAvailability === "unreachable" || statusAvailability === "stalled";
+      if (!statusConfigured && (statusAvailability === "none" || failureKnown) && refetchAIStatus) {
         const fresh = await refetchAIStatus();
         if (fresh.data) {
           statusConfigured = !!fresh.data.runtimeConfigured;
