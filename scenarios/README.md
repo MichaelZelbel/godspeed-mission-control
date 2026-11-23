@@ -227,7 +227,17 @@ it (`assistant_keeps_a_conversation`).
 - `voice-through-hermes.py` — a voice note through the installed assistant's own transcription, run
   with the assistant's own Python.
 - `test-scenarios.sh` — their gate: `bash scenarios/test-scenarios.sh` from the root of a checkout.
-- `report-night.mjs` — the report after the nightly run of main (02:30 UTC; Linux and Docker jobs only):
+- `scenario-gate.tsv` and `pick-run.sh` — which jobs can hold up a release. The file names every job of
+  `.github/workflows/scenarios.yml` as `release` (install, update, first day, chat and Telegram, morning
+  brief, reminders: 17 jobs) or `weekly` (the other 15). The night and a candidate run (a hand-started run with a
+  stage) pick only the `release` jobs (a candidate can add everything with `-f all=true`); the Mac and Windows
+  members of the gate still run only on a candidate. Every job runs once a week:
+  `.github/workflows/scenarios-weekly.yml` dispatches `scenarios.yml` on main with `all=true` (titled
+  "scenarios main, the week", and not a `schedule` run, so the factory's planner does not plan its failures
+  into a release). A weekly failure is filed by `report-night.mjs` as `Weekly test failed: <name>` with the
+  labels `bug`, `scenario-failure` and `weekly-test`, never `priority`. `test-report-night.mjs` fails
+  when a job is in neither group or in both.
+- `report-night.mjs` — the report after the nightly run of main (02:30 UTC; the release gate's Linux and Docker jobs only):
   when the shared stage fails it opens or updates one `Nightly shared stage failed: stage` issue and
   opens no issues for the scenario jobs that were skipped because of it;
   for each scenario that ran and failed it opens one issue `Nightly scenario failed: <name>`

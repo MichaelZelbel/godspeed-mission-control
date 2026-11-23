@@ -13,13 +13,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import PeopleMultiSelect from "./PeopleMultiSelect";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Label, LabelAside, RequiredMark } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import ImportanceSlider from "./ImportanceSlider";
 import { UNNAMED_PERSON } from "./people";
-import { NO_AI_FACTS, aiFailureKind, factsNotPulledOut, filledOnOpen, mergeSuggestion, newPeopleToCreate, noAiFacts } from "./moment-form.mjs";
+import { END_BEFORE_START, aiFailureKind, factsNotPulledOut, filledOnOpen, endsBeforeStart, mergeSuggestion, newPeopleToCreate, noAiFacts } from "./moment-form.mjs";
 
 export interface TimelineContact {
   id: string;
@@ -113,7 +113,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
   const fieldId = useId();
   const peopleFieldId = `${fieldId}-people`;
   const ids = {
-    title: `${fieldId}-title`, dateStart: `${fieldId}-date-start`, dateEnd: `${fieldId}-date-end`, status: `${fieldId}-status`,
+    title: `${fieldId}-title`, dateStart: `${fieldId}-date-start`, dateEnd: `${fieldId}-date-end`, dateEndError: `${fieldId}-date-end-error`, status: `${fieldId}-status`,
     confDate: `${fieldId}-conf-date`, confDateLabel: `${fieldId}-conf-date-label`,
     confTruth: `${fieldId}-conf-truth`, confTruthLabel: `${fieldId}-conf-truth-label`,
     newPeopleLabel: `${fieldId}-new-people-label`,
@@ -123,6 +123,8 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
   // opens empty and saving without touching it writes no date. A dated moment
   // still needs one, as its * says.
   const dateOptional = isEditMode && !editEvent?.happened_at;
+  const confDateText = confDate?.toString() ?? "Not set";
+  const confTruthText = confTruth?.toString() ?? "Not set";
 
   useEffect(() => {
     if (!open) return;
@@ -186,13 +188,13 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
   const friendlyAiError = (code?: string | null): { title: string; description: string } | null => {
     switch (code) {
       case "AI_NO_DRAFT":
-        return { title: "Kein Vorschlag möglich", description: "Die AI konnte aus dieser Beschreibung keinen Vorschlag bilden. Bitte etwas konkreter formulieren oder kürzen." };
+        return { title: "No suggestion possible", description: "The AI could not make a suggestion from this description. Try wording it more concretely, or shorten it." };
       case "AI_REFUSED":
-        return { title: "Text abgelehnt", description: "Die AI hat den Text abgelehnt (vermutlich Safety-Filter). Bitte umformulieren." };
+        return { title: "Text declined", description: "The AI declined this text, probably because of its safety filter. Try rewording it." };
       case "AI_TRUNCATED":
-        return { title: "Beschreibung zu lang", description: "Die Beschreibung ist zu lang für einen Vorschlag. Bitte kürzen." };
+        return { title: "Description too long", description: "The description is too long for a suggestion. Please shorten it." };
       case "PROVIDER_ERROR":
-        return { title: "AI-Provider-Fehler", description: "Der AI-Provider hat einen Fehler zurückgegeben." };
+        return { title: "AI provider error", description: "The AI provider returned an error." };
       case "INSUFFICIENT_CREDITS":
         return { title: "No AI credits left", description: OUT_OF_CREDITS_MESSAGE };
       default:
@@ -236,8 +238,9 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
     }
   };
 
+  const endBeforeStart = endsBeforeStart(dateStart, dateEnd);
   const handleSave = async () => {
-    if (!user || !title.trim() || (!dateStart && !dateOptional)) return;
+    if (!user || !title.trim() || (!dateStart && !dateOptional) || endBeforeStart) return;
     setSaving(true);
     try {
       // A date or score the moment is missing and the person has not set
@@ -326,38 +329,40 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
       const saved = isEditMode ? "Moment updated" : "Moment created";
       // A refused, unreachable or stalled AI the tab already knows about keeps its at-once answer
       // (#796). With no AI connected at all (the tab's own status, refreshed every few seconds) no
-      // extraction is asked for (#881): the person still sees the #812 line, without a request that
-      // can only fail. When the tab's picture still says an AI is connected, the extraction decides
-      // when the moment is saved (#812): the connection may have been removed or connected while the
-      // tab was open, so a tab whose picture is out of date gets the answer from the extraction's
-      // own reply, which names Settings, Your AI.
+      // extraction is asked for (#881): a moment with people still gets the no-AI explanation
+      // (#784). When the tab still says an AI is connected, the extraction decides when the moment
+      // is saved (#812). If the connection was removed while the tab was open, the extraction's
+      // own reply supplies the answer.
       // A cached answer that says no AI is connected is read afresh before the save skips anything
       // (#907): connecting the AI again in Settings, Your AI leaves the tab's last poll answer
       // standing until the next one, so a save made in between must not skip on the older picture.
       // The status read asks the AI nothing, so a save with no AI connected still sends it nothing.
       let statusConfigured = providerConfigured;
       let statusAvailability = aiAvailability;
-      if (!statusConfigured && statusAvailability === "none" && refetchAIStatus) {
+      // The same goes for a remembered failure (#1057): the AI may since have answered differently
+      // (500, then a refused key), so the reason shown is read from the status check made now.
+      const failureKnown = statusAvailability === "refused" || statusAvailability === "unreachable" || statusAvailability === "stalled";
+      if (!statusConfigured && (statusAvailability === "none" || failureKnown) && refetchAIStatus) {
         const fresh = await refetchAIStatus();
         if (fresh.data) {
           statusConfigured = !!fresh.data.runtimeConfigured;
           statusAvailability = fresh.data.aiAvailability as AIAvailability | undefined;
         }
       }
-      const known = statusConfigured ? null : factsNotPulledOut(statusAvailability);
+      const hasPeople = desiredIds.length > 0;
       const noneConnected = !statusConfigured && statusAvailability === "none";
+      const known = statusConfigured || (noneConnected && !hasPeople) ? null : factsNotPulledOut(statusAvailability);
       if (momentId && !known && !noneConnected) {
         supabase.functions
           .invoke("extract-moment-profile", { body: { moment_id: momentId } })
           .then(({ error }) => {
             const message = String(error?.message || "");
-            const skipped = noAiFacts(message) || factsNotPulledOut(aiFailureKind(message));
+            const skipped = (hasPeople ? noAiFacts(message) : null) || factsNotPulledOut(aiFailureKind(message));
             if (skipped) toast({ title: saved, description: skipped });
           })
           .catch(() => {});
       }
-      const savedDescription = known || (noneConnected ? NO_AI_FACTS : null);
-      toast(savedDescription ? { title: saved, description: savedDescription } : { title: saved });
+      toast(known ? { title: saved, description: known } : { title: saved });
       setOpen(false);
       onCreated();
 
@@ -376,7 +381,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
     <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
       <DialogHeader><DialogTitle>{isEditMode ? "Edit Moment" : "Add Moment"}</DialogTitle></DialogHeader>
       <div className="space-y-4">
-        <Textarea value={description} onChange={(e) => { setDescription(e.target.value); if (suggestionApplied) setSuggestionApplied(false); }} placeholder="Describe what happened…" rows={4} />
+        <Textarea value={description} onChange={(e) => { setDescription(e.target.value); if (suggestionApplied) setSuggestionApplied(false); }} placeholder="Describe what happened…" aria-label="Describe what happened" rows={4} />
         <div className="space-y-1.5">
           <Button type="button" variant="outline" size="sm" onClick={handleAiSuggest} disabled={aiLoading || !description.trim()} className="w-full">
             {aiLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
@@ -384,10 +389,13 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
           </Button>
           {suggestionApplied && <p className="text-xs text-muted-foreground">{suggestionFilled > 0 ? "Suggestions applied - review and edit below." : "The suggestion left every field as it was."}</p>}
         </div>
-        <div className="space-y-2"><Label htmlFor={ids.title} onClick={focusOnly(ids.title)}>Title *</Label><Input id={ids.title} value={title} onChange={(e) => { setTitle(e.target.value); markFilled("title"); }} placeholder="Short title for this moment" /></div>
+        <div className="space-y-2"><div><Label htmlFor={ids.title} onClick={focusOnly(ids.title)}>Title</Label> <RequiredMark /></div><Input id={ids.title} aria-required="true" value={title} onChange={(e) => { setTitle(e.target.value); markFilled("title"); }} placeholder="Short title for this moment" /></div>
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2"><Label htmlFor={ids.dateStart} onClick={focusOnly(ids.dateStart)}>Start Date *</Label><Input id={ids.dateStart} type="date" value={dateStart} onChange={(e) => { setDateStart(e.target.value); markFilled("dateStart"); }} /></div>
-          <div className="space-y-2"><Label htmlFor={ids.dateEnd} onClick={focusOnly(ids.dateEnd)}>End Date</Label><Input id={ids.dateEnd} type="date" value={dateEnd} onChange={(e) => { setDateEnd(e.target.value); markFilled("dateEnd"); }} /></div>
+          <div className="space-y-2">
+            <div><Label htmlFor={ids.dateStart} onClick={focusOnly(ids.dateStart)}>Start Date</Label>{!dateOptional && <> <RequiredMark /></>}</div>
+            <Input id={ids.dateStart} aria-required={dateOptional ? undefined : true} type="date" value={dateStart} onChange={(e) => { setDateStart(e.target.value); markFilled("dateStart"); }} />
+          </div>
+          <div className="space-y-2"><Label htmlFor={ids.dateEnd} onClick={focusOnly(ids.dateEnd)}>End Date</Label><Input id={ids.dateEnd} type="date" value={dateEnd} aria-invalid={endBeforeStart || undefined} aria-describedby={endBeforeStart ? ids.dateEndError : undefined} onChange={(e) => { setDateEnd(e.target.value); markFilled("dateEnd"); }} />{endBeforeStart && <p id={ids.dateEndError} className="text-xs text-destructive">{END_BEFORE_START}</p>}</div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
@@ -399,14 +407,20 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2"><Label id={ids.confDateLabel} onClick={focusOnly(ids.confDate)}>Confidence (Date): {confDate ?? "Not set"}</Label><Slider value={[confDate ?? 5]} onValueChange={([v]) => { setConfDate(v); markFilled("confDate"); }} min={0} max={10} step={1} thumbProps={{ id: ids.confDate, "aria-labelledby": ids.confDateLabel }} /></div>
+          <div className="space-y-2">
+            <div><Label id={ids.confDateLabel} onClick={focusOnly(ids.confDate)}>Confidence (Date)</Label><LabelAside>: {confDateText}</LabelAside></div>
+            <Slider value={[confDate ?? 5]} onValueChange={([v]) => { setConfDate(v); markFilled("confDate"); }} min={0} max={10} step={1} thumbProps={{ id: ids.confDate, "aria-labelledby": ids.confDateLabel, "aria-valuetext": confDateText }} />
+          </div>
         </div>
         <ImportanceSlider value={impactLevel} onChange={(v) => { setImpactLevel(v); markFilled("impactLevel"); }} />
-        <div className="space-y-2"><Label id={ids.confTruthLabel} onClick={focusOnly(ids.confTruth)}>Confidence (Truth): {confTruth ?? "Not set"}</Label><Slider value={[confTruth ?? 5]} onValueChange={([v]) => { setConfTruth(v); markFilled("confTruth"); }} min={0} max={10} step={1} thumbProps={{ id: ids.confTruth, "aria-labelledby": ids.confTruthLabel }} /></div>
+        <div className="space-y-2">
+          <div><Label id={ids.confTruthLabel} onClick={focusOnly(ids.confTruth)}>Confidence (Truth)</Label><LabelAside>: {confTruthText}</LabelAside></div>
+          <Slider value={[confTruth ?? 5]} onValueChange={([v]) => { setConfTruth(v); markFilled("confTruth"); }} min={0} max={10} step={1} thumbProps={{ id: ids.confTruth, "aria-labelledby": ids.confTruthLabel, "aria-valuetext": confTruthText }} />
+        </div>
         <div className="space-y-2"><Label htmlFor={peopleFieldId} onClick={focusOnly(peopleFieldId)} className="text-xs">People</Label><PeopleMultiSelect id={peopleFieldId} people={people} value={matchedPeople} onChange={setMatchedPeople} newNames={typedNewPeople} onNewNamesChange={setTypedNewPeople} /></div>
         {suggestedNewPeople.length > 0 && <div className="space-y-2"><p id={ids.newPeopleLabel} className="text-xs font-medium leading-none text-muted-foreground">Add new people (not yet in your list)</p><div role="group" aria-labelledby={ids.newPeopleLabel} className="space-y-1.5">{suggestedNewPeople.map((name) => <label key={name} className="flex items-center gap-2 cursor-pointer"><Checkbox checked={selectedNewPeople.includes(name)} onCheckedChange={(checked) => setSelectedNewPeople((prev) => checked ? [...prev, name] : prev.filter((n) => n !== name))} /><span className="text-sm">{name}</span></label>)}</div></div>}
       </div>
-      <DialogFooter><Button onClick={handleSave} disabled={saving || !title.trim() || (!dateStart && !dateOptional)}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{isEditMode ? "Save Changes" : "Create Moment"}</Button></DialogFooter>
+      <DialogFooter><Button onClick={handleSave} disabled={saving || !title.trim() || (!dateStart && !dateOptional) || endBeforeStart}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{isEditMode ? "Save Changes" : "Create Moment"}</Button></DialogFooter>
     </DialogContent>
   );
 

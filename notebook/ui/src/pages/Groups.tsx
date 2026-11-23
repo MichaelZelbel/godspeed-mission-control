@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2, Plus, Search, Sparkles, Landmark, Clapperboard, Handshake, Podcast, UserSearch, Compass, UsersRound, Users } from "lucide-react";
 import { SEOHead } from "@/components/SEOHead";
@@ -96,6 +96,7 @@ function NewGroupDialog() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const selectedTemplate = selectedTemplateId ? getTemplateById(selectedTemplateId) : null;
   const [name, setName] = useState("");
+  const fieldId = useId();
   const [description, setDescription] = useState("");
 
   const chooseTemplate = (template: GroupTemplate | null) => {
@@ -171,12 +172,12 @@ function NewGroupDialog() {
         ) : (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Dream 100" />
+              <Label htmlFor={`${fieldId}-name`}>Name</Label>
+              <Input id={`${fieldId}-name`} value={name} onChange={(e) => setName(e.target.value)} placeholder="Dream 100" />
             </div>
             <div className="space-y-2">
-              <Label>Description</Label>
-              <Textarea value={description} onChange={(e) => setDescription(e.target.value)} className="min-h-24" />
+              <Label htmlFor={`${fieldId}-description`}>Description</Label>
+              <Textarea id={`${fieldId}-description`} value={description} onChange={(e) => setDescription(e.target.value)} className="min-h-24" />
             </div>
           </div>
         )}
@@ -258,7 +259,7 @@ export default function Groups() {
               <CardContent className="flex flex-col items-center justify-center py-14 text-center">
                 <Users className="mb-3 h-8 w-8 text-muted-foreground" />
                 <p className="font-medium">No groups yet.</p>
-                <p className="mt-1 text-sm text-muted-foreground">Start with a template to organize your people.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Choose New Group, then start from a template.</p>
               </CardContent>
             </Card>
             {isSuccess && <InitialMigrationCard />}

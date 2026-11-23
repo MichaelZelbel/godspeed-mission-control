@@ -1,0 +1,28 @@
+name: scenarios weekly
+# Once a week every scenario runs, the ones that can hold up a release and the rest. The night and a
+# candidate run only the release gate (scenarios.yml says which jobs and where that is written).
+#
+# This is a separate workflow on purpose. It starts scenarios.yml on main by dispatch with `all`, so
+# that run is a `workflow_dispatch` run titled "scenarios main, the week" and NOT a `schedule` run of
+# scenarios.yml: the factory driver's planner reads the newest `schedule` run on main and puts its
+# failing jobs into the next bug-fix release, and a weekly failure is an ordinary bug that must never
+# be planned that way. The weekly run files its failures as "Weekly test failed: <scenario>" (labels
+# bug, scenario-failure, weekly-test; never `priority`).
+on:
+  schedule:
+    # Sunday, early morning UTC, an hour no night or release run uses.
+    - cron: '17 4 * * 0'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+jobs:
+  start:
+    name: start the weekly run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch the full scenario run on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run scenarios.yml --repo "$GITHUB_REPOSITORY" --ref main -f all=true

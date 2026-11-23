@@ -3,21 +3,22 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { hydrateFileChats } from '@/local/file-chat';
 import { hydrateFilePreferences } from '@/local/file-preferences';
 import { toast } from 'sonner';
-import { signedInState } from './session-state.mjs';
+import { initialAuthState, signedInState } from './session-state.mjs';
+import { onThisComputer } from '@/lib/on-this-computer';
 export type AppRole = 'free' | 'premium' | 'premium_gift' | 'admin';
 const Context = createContext<any>(null);
 export async function authRequest(route:string, body?:any) {
   let response:Response;
   try { response = await fetch(route, { method:body===undefined?'GET':'POST', headers:{'Content-Type':'application/json'}, body:body===undefined?undefined:JSON.stringify(body), signal:AbortSignal.timeout(15000) }); }
-  catch { throw new Error('Cannot reach your server. Check your connection and try again.'); }
+  catch { throw new Error(onThisComputer()?'Cannot reach your notebook. Check that Godspeed Mission Control is running on this computer, then try again.':'Cannot reach your server. Check your connection and try again.'); }
   let data:any;
-  try { data=await response.json(); } catch { throw new Error('Your server did not answer correctly. Try again shortly.'); }
-  if (!response.ok) throw Object.assign(new Error(response.status>=500?'Your server is unavailable. Try again shortly.':data.error||'The request did not finish.'),{status:response.status,code:data.code});
+  try { data=await response.json(); } catch { throw new Error(onThisComputer()?'Your notebook could not be opened because it did not answer correctly. Try again shortly.':'Your server did not answer correctly. Try again shortly.'); }
+  if (!response.ok) throw Object.assign(new Error(response.status>=500?(onThisComputer()?'Your notebook could not be opened. Try again shortly.':'Your server is unavailable. Try again shortly.'):data.error||'The request did not finish.'),{status:response.status,code:data.code});
   return data;
 }
 export function AuthProvider({children}: {children:React.ReactNode}) {
   const [client] = useState(() => new QueryClient({defaultOptions:{queries:{retry:1,refetchOnWindowFocus:true}}}));
-  const [state,setState] = useState<any>({loading:true,user:null,session:null,profile:null,role:'premium',roleLoading:false,authError:'',expired:false});
+  const [state,setState] = useState<any>(()=>({...initialAuthState}));
   const active=useRef(false), mounted=useRef(true), generation=useRef(0);
   const refreshSession=useCallback(async()=>{
     const started=generation.current;
@@ -27,7 +28,7 @@ export function AuthProvider({children}: {children:React.ReactNode}) {
       const data=await authRequest('/api/session');
       if(!active.current) { await hydrateFileChats(); await hydrateFilePreferences(); }
       // signedInState keeps an unchanged user's identity (session-state.mjs says why).
-      if(mounted.current&&started===generation.current) { active.current=true;setState((s:any)=>signedInState(s,data.user,data.profile)); }
+      if(mounted.current&&started===generation.current) { active.current=true;setState((s:any)=>signedInState(s,data.user,data.profile,status.local)); }
     } catch(e:any) {
       if(!mounted.current||started!==generation.current)return;
       if(e.status===401) {

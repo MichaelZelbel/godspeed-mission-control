@@ -23,7 +23,8 @@ test('a one-time sign-in link survives a link preview and is used only by the pe
  const used=await press();assert.equal(used.status,303);assert.equal(used.headers.get('location'),'/dashboard/chat');
  const session=used.headers.get('set-cookie').split(';')[0];assert.equal((await fetch(base+'/api/session',{headers:{Cookie:session}})).status,200);
  assert.equal((await press()).status,401);
- const expired=await fetch(base+link);assert.equal(expired.status,401);await expired.text();
+ for(const address of [link,'/login/not-a-real-code']){const expired=await fetch(base+address);assert.equal(expired.status,401);const html=await expired.text();
+  assert.match(html,/This sign-in link expired or was already used\./);assert.match(html,/href="\/dashboard"/);assert.match(html,/<style/);}
  // The destination stays on this server.
  const other=(await json('/api/login-link',{},cookie)).data.path;
  const away=await fetch(base+other+'?next='+encodeURIComponent('/.//evil.example/phish'),{method:'POST',headers:{Origin:base},redirect:'manual'});assert.equal(away.headers.get('location'),'/dashboard');

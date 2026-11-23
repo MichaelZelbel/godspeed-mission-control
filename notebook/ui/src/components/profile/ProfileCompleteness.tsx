@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ProfileIcon } from "./ProfileIcon";
+import { nameMatchesQuery } from "@/lib/profile-field-filter";
 import type { ProfileCategory } from "@/hooks/useProfile";
 import type { ProfileFact } from "@/hooks/useFacts";
 
@@ -22,6 +23,8 @@ interface ProfileCompletenessProps {
    * owner page omits this prop and keeps its original per-row denominator.
    */
   totalSlots?: number;
+  /** The Filter fields text: the chips then list only categories whose name matches. */
+  filterQuery?: string;
 }
 
 function getCompletenessMessage(pct: number): string {
@@ -31,7 +34,7 @@ function getCompletenessMessage(pct: number): string {
   return "Impressive! Your agents have excellent context about who you are";
 }
 
-export function ProfileCompleteness({ categories, facts, totalSlots }: ProfileCompletenessProps) {
+export function ProfileCompleteness({ categories, facts, totalSlots, filterQuery = "" }: ProfileCompletenessProps) {
   const navigate = useNavigate();
 
   const { pct, emptyCategories } = useMemo(() => {
@@ -48,6 +51,10 @@ export function ProfileCompleteness({ categories, facts, totalSlots }: ProfileCo
     const emptyCategories = categories.filter((c) => !filledSet.has(c.slug));
     return { pct, emptyCategories };
   }, [categories, facts, totalSlots]);
+
+  const chipCategories = filterQuery.trim()
+    ? emptyCategories.filter((c) => nameMatchesQuery(c.name, filterQuery))
+    : emptyCategories;
 
   const radius = 36;
   const stroke = 5;
@@ -85,9 +92,9 @@ export function ProfileCompleteness({ categories, facts, totalSlots }: ProfileCo
       {/* Text */}
       <div className="flex-1 min-w-0 space-y-2">
         <p className="text-sm font-medium">{getCompletenessMessage(pct)}</p>
-        {emptyCategories.length > 0 && (
+        {chipCategories.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {emptyCategories.slice(0, 6).map((cat) => (
+            {chipCategories.slice(0, 6).map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => {
@@ -100,9 +107,9 @@ export function ProfileCompleteness({ categories, facts, totalSlots }: ProfileCo
                 {cat.name}
               </button>
             ))}
-            {emptyCategories.length > 6 && (
+            {chipCategories.length > 6 && (
               <span className="text-xs text-muted-foreground px-2 py-0.5">
-                +{emptyCategories.length - 6} more
+                +{chipCategories.length - 6} more
               </span>
             )}
           </div>

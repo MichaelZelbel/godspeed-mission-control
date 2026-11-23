@@ -236,7 +236,7 @@ export function AICollectionDialog({ open, onOpenChange, onCreated }: { open: bo
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [stage, setStage] = useState<"input" | "preview">("input");
   const [description, setDescription] = useState("");
-  const promptId = useId();
+  const descriptionId = useId();
   const [generated, setGenerated] = useState<GeneratedSchema | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
@@ -416,7 +416,7 @@ export function AICollectionDialog({ open, onOpenChange, onCreated }: { open: bo
       <DialogContent className="max-h-[90vh] max-w-[720px] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{titleId}</DialogTitle>
-          {stage === "input" && <p id={promptId} className="text-sm text-muted-foreground">Describe what you want to track in one sentence. {BRAND.name} will design the schema for you.</p>}
+          {stage === "input" && <label htmlFor={descriptionId} className="block text-sm text-muted-foreground">Describe what you want to track in one sentence. {BRAND.name} will design the schema for you.</label>}
         </DialogHeader>
 
         {stage === "input" && (
@@ -424,7 +424,7 @@ export function AICollectionDialog({ open, onOpenChange, onCreated }: { open: bo
             <div className="space-y-2">
               <Textarea
                 ref={textareaRef}
-                aria-labelledby={promptId}
+                id={descriptionId}
                 rows={5}
                 value={description}
                 disabled={isGenerating}
