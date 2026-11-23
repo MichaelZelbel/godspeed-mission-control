@@ -62,8 +62,12 @@ function entriesOf(type,steps){
     // Changing a name that was already set is a rename, a deliberate action of its own
     // (an assistant's query, a bulk update); only filling in a blank name belongs to the create.
     const renamed=kind==='update'&&!change&&p&&!blank(nameOf1(p))&&nameOf1(p)!==nameOf1(c);
-    if(kind==='update'&&!change&&!renamed&&open&&!open.change&&open.action!=='delete'&&(gap<=SAVE_GAP_MS||(autosaved(type,keys)&&gap<=FOLD_MS))){open.state=c;open.last=step.time;continue;}
-    open={id:step.id,time:step.time,last:step.time,state:c,before:p,action:kind,change,hidden:kind==='create'&&ownNote(c),purged,correction:Boolean(step.patch),from:p||c};
+    // A create and a later query update are separate actions even when requests arrive close
+    // together. The exceptions are editors that build their new record in several writes:
+    // notes autosave while their blank title is filled, and one person save can send several writes.
+    const canFoldIntoCreate=open?.action!=='create'||autosaved(type,keys)||type==='contacts';
+    if(kind==='update'&&!change&&!renamed&&open&&!open.change&&open.action!=='delete'&&canFoldIntoCreate&&(gap<=SAVE_GAP_MS||(autosaved(type,keys)&&gap<=FOLD_MS))){open.state=c;open.last=step.time;continue;}
+    open={id:step.id,time:step.time,last:step.time,state:c,before:p,action:kind,change,hidden:kind==='create'&&(ownNote(c)||(type==='profile_categories'&&c.is_default===true)),purged,correction:Boolean(step.patch),from:p||c};
     entries.push(open);
   }
   return entries;
@@ -89,7 +93,7 @@ export function activityRows({records,history,corrections,find}){
       const person=first(find('contacts',r.contact_id),['name']),group=first(find('contact_groups',r.group_id),['name']);
       return person&&group?person+' in '+group:person||group;
     }
-    if(type==='claims'){const a=first(r,['attribute']),v=typeof r.value==='string'?r.value.trim():'';return a&&v?a+': '+v:a||v;}
+    if(type==='claims'){const a=first(r,['attribute']),v=typeof r.value==='string'?r.value.trim():'';return a&&v?a+': '+v:a||v||first(r,['statement']);}
     if(type==='notes'||type==='moments'||type==='collection_items')return first(r,['title'])||first(fallback,['title'])||'Untitled';
     return first(r,['name','title','label'])||first(fallback,['name','title','label']);
   };

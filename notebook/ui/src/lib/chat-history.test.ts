@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { NOTE_MODIFYING_TOOLS, aiWorkedAt, recordAIWorked, unansweredReason, withSummary } from "./chat-history";
+import { AI_UNREADABLE } from "../../../core/no-ai.mjs";
 import { hydrateFilePreferences } from "@/local/file-preferences";
 
 // The note chat reports what it did by tool name (domains.mjs): update_note
@@ -34,6 +35,17 @@ it("a message that got no answer keeps its reason only while the AI still fails 
   expect(unansweredReason([failed], 0, "unreachable", 1999)).toBe("Your AI could not be reached.");
   expect(unansweredReason([failed], 0, "unreachable", 2000)).toBeNull();
   expect(unansweredReason([failed], 0, "refused", 5000)).toBeNull();
+});
+
+it("a message whose answer could not be used keeps its reason while the AI works, until answered", () => {
+  const reason = AI_UNREADABLE;
+  const failed = {role: "user" as const, content: "Fictional question", lastFailure: reason, failedAt: 2000};
+  const reply = {role: "assistant" as const, content: "Fictional answer"};
+  const followUp = {role: "user" as const, content: "Fictional follow-up"};
+  for (const state of ["ready", "refused", "unreachable", "settings-only"]) expect(unansweredReason([failed], 0, state, 5000)).toBe(reason);
+  for (const state of ["none", "checking"]) expect(unansweredReason([failed], 0, state, 5000)).toBeNull();
+  expect(unansweredReason([failed, reply], 0, "ready")).toBeNull();
+  expect(unansweredReason([failed, followUp, reply], 0, "ready")).toBeNull();
 });
 
 it("records when the AI last worked, and never moves it back", () => {

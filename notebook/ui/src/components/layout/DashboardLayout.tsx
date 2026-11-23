@@ -8,7 +8,6 @@ import { GlobalAIChatFAB } from "@/components/chat/GlobalAIChatFAB";
 import { CommandPalette } from "./CommandPalette";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { LowBalanceBanner } from "./LowBalanceBanner";
 import { useProcessingSweep } from "@/hooks/useProcessingSweep";
 import { RouteErrorBoundary } from "@/components/ErrorBoundary";
 import { PageLoader } from "@/components/LoadingStates";

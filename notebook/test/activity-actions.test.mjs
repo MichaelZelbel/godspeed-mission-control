@@ -158,3 +158,18 @@ test('a rename a few seconds after a create is its own entry and never rewrites 
   const r=rows([versions('notes','n','n1',[[0,{title:'Old'}],[0.5,{title:'New'}]]),versions('contacts','p','p1',[[0,{name:'Anna'}],[1.3,{name:'Anna Berg'}]]),versions('notes','m','m1',[[0,{title:'Zed'}],[3,{title:'Zee'}]])]);
   assert.deepEqual(lines(r).sort(),['Created a note: Old','Created a note: Zed','Created a person: Anna','Updated a note: New (was Old)','Updated a note: Zee (was Zed)','Updated a person: Anna Berg (was Anna)'].sort());
 });
+test('a query update after a create stays separate for facts and group memberships',t=>{
+  const b=bench(t),person=b.add('contacts',{name:'Anna'}),group=b.add('contact_groups',{name:'Climbing'});
+  b.tick(10*MIN);
+  const fact=b.add('claims',{statement:'Loves hotpot'});
+  const membership=b.add('contact_group_memberships',{contact_id:person.id,group_id:group.id,role:'member'});
+  b.tick(1000);
+  b.edit('claims',fact.id,{statement:'Loves ramen'});
+  b.edit('contact_group_memberships',membership.id,{role:'organizer'});
+  assert.deepEqual(b.log().slice(-4),[
+    'Created a fact: Loves hotpot',
+    'Created a group membership: Anna in Climbing',
+    'Updated a fact: Loves ramen (was Loves hotpot)',
+    'Updated a group membership: Anna in Climbing',
+  ]);
+});

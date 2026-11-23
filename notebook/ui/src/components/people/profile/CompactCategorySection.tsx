@@ -49,7 +49,7 @@ import { ProfileValue } from "@/components/profile/ProfileValue";
 import { ScopeBadge, SCOPE_OPTIONS } from "@/components/profile/ScopeBadge";
 import { EntryForm, type EntryFormData } from "@/components/profile/EntryForm";
 import { CATEGORY_SUGGESTED_LABELS } from "@/lib/profile-suggestions";
-import { highlightSegments, type FieldMatch } from "@/lib/profile-field-filter";
+import { highlightSegments, nameMatchesQuery, type FieldMatch } from "@/lib/profile-field-filter";
 import { formatValidityRange } from "@/lib/claims";
 import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/brand";
@@ -131,7 +131,8 @@ export function CompactCategorySection({
   const isOpen = isFiltering || expanded;
   const slotMatches = (slot: FactSlot) =>
     [...slot.current, ...slot.history].some((f) => matches.has(f.claim_id));
-  const visibleSlots = isFiltering ? section.slots.filter(slotMatches) : section.slots;
+  const nameMatches = nameMatchesQuery(section.name, filterQuery);
+  const visibleSlots = isFiltering && !nameMatches ? section.slots.filter(slotMatches) : section.slots;
   const currentCount = section.slots.filter((s) => s.current.length > 0).length;
 
   const suggestedLabels = section.slug ? CATEGORY_SUGGESTED_LABELS[section.slug] ?? [] : [];
@@ -198,7 +199,7 @@ export function CompactCategorySection({
             </Button>
           </div>
         ) : (
-          <span className="font-medium text-sm flex-1 truncate">{section.name}</span>
+          <span className="font-medium text-sm flex-1 min-w-0 break-words">{section.name}</span>
         )}
 
         {showScope && !isOther && <ScopeBadge scope={section.visibilityScope} />}
@@ -276,7 +277,7 @@ export function CompactCategorySection({
         </div>
       )}
 
-      {isOpen && !addingEntry && visibleSlots.length === 0 && !isFiltering && (
+      {isOpen && !addingEntry && visibleSlots.length === 0 && (!isFiltering || nameMatches) && (
         <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-border">
           <span className="text-sm text-muted-foreground">No facts yet. Add one.</span>
           <Button

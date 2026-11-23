@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { localDateISO, localTimeHM, parseInstant, showDate } from "@/lib/local-date";
 import {
@@ -917,12 +917,14 @@ function validateItemValues(fields: SchemaField[], values: FormValues) {
 }
 
 function LinkPicker({
+  id,
   field,
   value,
   onChange,
   collections,
   currentCollection,
 }: {
+  id?: string;
   field: SchemaField;
   value: LinkValue | null;
   onChange: (value: FormValue) => void;
@@ -1056,6 +1058,7 @@ function LinkPicker({
       <Popover>
         <PopoverTrigger asChild>
           <Button
+            id={id}
             type="button"
             variant="outline"
             className={cn(
@@ -1179,11 +1182,16 @@ export function FieldInput({
   currentCollection: Collection | null;
 }) {
   const selectedDate = parseDate(value);
-  const switchId = useId();
+  // A picker label focuses its control without opening it, like a native select's label.
+  const id = useId();
   const switchRef = useRef<HTMLButtonElement>(null);
+  const focusOnly = (event: MouseEvent) => {
+    event.preventDefault();
+    document.getElementById(id)?.focus();
+  };
   const label = (
     <div className="mb-2 flex items-center gap-2">
-      <Label>{field.label}</Label>
+      <Label htmlFor={id} onClick={focusOnly}>{field.label}</Label>
       {field.primary && (
         <Badge variant="secondary" className="text-[10px]">
           primary
@@ -1202,7 +1210,7 @@ export function FieldInput({
           <div className="flex items-center gap-2">
             {/* Like a checkbox's label: a click toggles the switch and focuses it. */}
             <Label
-              htmlFor={switchId}
+              htmlFor={id}
               className="cursor-pointer"
               onClick={(event) => {
                 event.preventDefault();
@@ -1218,7 +1226,7 @@ export function FieldInput({
               </Badge>
             )}
           </div>
-          <Switch id={switchId} ref={switchRef} checked={Boolean(value)} onCheckedChange={onChange} />
+          <Switch id={id} ref={switchRef} checked={Boolean(value)} onCheckedChange={onChange} />
         </div>
         {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
       </div>
@@ -1232,6 +1240,7 @@ export function FieldInput({
       <div>
         {label}
         <LinkPicker
+          id={id}
           field={field}
           value={isLinkValue(value) ? value : null}
           onChange={onChange}
@@ -1246,7 +1255,8 @@ export function FieldInput({
   if (["note", "person", "collection"].includes(field.type))
     return (
       <div>
-        {label}
+        {/* Nothing to name here yet, so a caption, not a label. */}
+        <p className="mb-2 text-sm font-medium leading-none">{field.label}</p>
         <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
           Link picker coming soon
         </div>
@@ -1259,6 +1269,7 @@ export function FieldInput({
       {label}
       {field.type === "longtext" ? (
         <Textarea
+          id={id}
           value={toInputString(value)}
           rows={3}
           className={cn("max-h-72 min-h-24 resize-none", inputClass)}
@@ -1270,6 +1281,7 @@ export function FieldInput({
         />
       ) : field.type === "number" ? (
         <Input
+          id={id}
           type="number"
           value={toInputString(value)}
           className={inputClass}
@@ -1280,6 +1292,7 @@ export function FieldInput({
           <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="number"
+            id={id}
             step="0.01"
             value={toInputString(value)}
             className={cn("pl-9", inputClass)}
@@ -1288,6 +1301,7 @@ export function FieldInput({
         </div>
       ) : field.type === "date" ? (
         <SmartDatePicker
+          id={id}
           value={selectedDate ?? null}
           onChange={(date) => onChange(date ? localDateISO(date) : "")}
           className={inputClass}
@@ -1295,6 +1309,7 @@ export function FieldInput({
       ) : field.type === "datetime" ? (
         <div className="grid grid-cols-[1fr_120px] gap-2">
           <SmartDatePicker
+            id={id}
             value={selectedDate ?? null}
             onChange={(date) => {
               const currentTime = toTimeInput(value) || "09:00";
@@ -1308,6 +1323,7 @@ export function FieldInput({
             <Clock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="time"
+              aria-label={`${field.label} time`}
               value={toTimeInput(value)}
               className="pl-9"
               onChange={(event) => {
@@ -1320,7 +1336,7 @@ export function FieldInput({
         </div>
       ) : field.type === "select" ? (
         <Select value={toInputString(value)} onValueChange={onChange}>
-          <SelectTrigger className={inputClass}>
+          <SelectTrigger id={id} className={inputClass}>
             <SelectValue placeholder="Select option" />
           </SelectTrigger>
           <SelectContent>
@@ -1336,6 +1352,7 @@ export function FieldInput({
           <Popover>
             <PopoverTrigger asChild>
               <Button
+                id={id}
                 type="button"
                 variant="outline"
                 className="w-full justify-start"
@@ -1387,6 +1404,7 @@ export function FieldInput({
           <div className="relative min-w-0 flex-1">
             <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              id={id}
               type="url"
               value={toInputString(value)}
               className={cn("pl-9", inputClass)}
@@ -1412,6 +1430,7 @@ export function FieldInput({
         <div className="relative">
           <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            id={id}
             type="email"
             value={toInputString(value)}
             className={cn("pl-9", inputClass)}
@@ -1422,6 +1441,7 @@ export function FieldInput({
         <div className="relative">
           <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            id={id}
             type="tel"
             value={toInputString(value)}
             className="pl-9"
@@ -1430,6 +1450,7 @@ export function FieldInput({
         </div>
       ) : (
         <Input
+          id={id}
           value={toInputString(value)}
           className={inputClass}
           onChange={(event) => onChange(event.target.value)}
@@ -2108,7 +2129,7 @@ function ItemSheet({
       <div className="flex h-full min-h-0 flex-col bg-background">
         <div className="flex items-start justify-between gap-4 border-b px-6 py-4">
           <div className="min-w-0">
-            <h2 className="truncate text-xl font-semibold font-display">{title}</h2>
+            <h2 className="text-xl font-semibold font-display [overflow-wrap:anywhere]">{title}</h2>
             <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
           </div>
           {!isCreate && item && onDuplicate && (
@@ -2170,6 +2191,7 @@ function EditCollectionDialog({
     Partial<Record<keyof typeof values, string>>
   >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const fieldId = useId();
 
   useEffect(() => {
     if (!collection || !open) return;
@@ -2226,8 +2248,9 @@ function EditCollectionDialog({
         </DialogHeader>
         <form className="space-y-5" onSubmit={submit}>
           <div className="space-y-2">
-            <Label>Name</Label>
+            <Label htmlFor={`${fieldId}-name`}>Name</Label>
             <Input
+              id={`${fieldId}-name`}
               value={values.name}
               maxLength={60}
               onChange={(event) =>
@@ -2242,7 +2265,7 @@ function EditCollectionDialog({
             )}
           </div>
           <div className="space-y-2">
-            <Label>Icon</Label>
+            <Label htmlFor={`${fieldId}-icon`}>Icon</Label>
             <div className="flex flex-wrap gap-2">
               {emojiOptions.map((emoji) => (
                 <button
@@ -2261,6 +2284,7 @@ function EditCollectionDialog({
               ))}
             </div>
             <Input
+              id={`${fieldId}-icon`}
               value={values.icon}
               maxLength={4}
               onChange={(event) =>
@@ -2276,8 +2300,9 @@ function EditCollectionDialog({
             )}
           </div>
           <div className="space-y-2">
-            <Label>Description</Label>
+            <Label htmlFor={`${fieldId}-description`}>Description</Label>
             <Textarea
+              id={`${fieldId}-description`}
               value={values.description}
               maxLength={200}
               onChange={(event) =>
@@ -2292,6 +2317,7 @@ function EditCollectionDialog({
             )}
           </div>
           <RadioGroup
+            aria-label="Visibility"
             value={values.visibility}
             onValueChange={(value) =>
               setValues((current) => ({

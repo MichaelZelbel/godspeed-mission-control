@@ -4,7 +4,11 @@ test('activity rows read as English',()=>{
   assert.equal(formatAction('create','action'),'Created an action');assert.equal(formatAction('create','event'),'Created an event');
   assert.equal(formatAction('update','note'),'Updated a note');assert.equal(formatAction('delete','world entity'),'Deleted a world entity');
 });
-test('activity rows name their record',()=>{
+test('activity rows name the record when it has a name',()=>{
+  assert.equal(formatAction('create','profile category',undefined,'Hobbies'),'Created a profile category: Hobbies');
+  assert.equal(formatAction('update','note',undefined,' Plan '),'Updated a note: Plan');
+  assert.equal(formatAction('delete','note',undefined,'Plan'),'Deleted a note: Plan');
+  for(const none of [undefined,null,'','  '])assert.equal(formatAction('create','note',undefined,none),'Created a note');
   assert.equal(formatAction('create','person',{}, 'Anna Lindqvist'),'Created a person: Anna Lindqvist');
   assert.equal(formatAction('update','note',{},'  '),'Updated a note');
   assert.equal(formatAction('update','note',{change:'trash'},'X'),'Moved a note to the trash: X');
