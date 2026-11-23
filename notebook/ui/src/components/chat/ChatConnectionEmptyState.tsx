@@ -1,4 +1,4 @@
-import {useEffect,useRef} from 'react';
+import {useEffect,useRef,useSyncExternalStore} from 'react';
 import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 import {CHAT_AVAILABILITIES} from '../../../../core/chat-availability.mjs';
@@ -60,6 +60,14 @@ function clearChatRead(){
 let pageLoadRead=false;
 // The card's Check again asks the next read to run the check, one read per press (#918).
 let checkAsked=false;
+// A check that asks the server to confirm the AI (page load or Check again) is in flight: the Home
+// card keeps its last known text during it instead of showing an in-between state (#1053).
+let checksRunning=0;
+const checkListeners=new Set<()=>void>();
+function setCheckRunning(delta:number){checksRunning+=delta;checkListeners.forEach(l=>l());}
+export function useChatCheckRunning(){
+  return useSyncExternalStore(l=>{checkListeners.add(l);return()=>{checkListeners.delete(l);};},()=>checksRunning>0);
+}
 export function askChatCheck(){checkAsked=true;}
 
 export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}={}){
@@ -79,6 +87,8 @@ export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}=
     checkAsked=false;
     const check=asked||(confirm.current&&chatReadSinceConfirm());
     confirm.current=false;
+    const running=check||(confirmOnMount&&!pageLoadRead);
+    if(running)setCheckRunning(1);
     try{
       let read=await chatOptions(check?{check:true}:{});
       if(check)clearChatRead();
@@ -91,6 +101,7 @@ export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}=
       }
       return read;
     }catch(error){confirm.current=check;throw error;}
+    finally{if(running)setCheckRunning(-1);}
   },refetchInterval:1000,refetchIntervalInBackground:true});
   useEffect(()=>listenForChatOptions((next:ChatOptions)=>queryClient.setQueryData(['chat-options'],next)),[queryClient]);
   // A picker that just read a newer state asks the shared query to read it too (#667).

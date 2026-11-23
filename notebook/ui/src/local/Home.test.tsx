@@ -164,6 +164,32 @@ describe("the Godspeed card", () => {
     expect(await screen.findByText("Your AI is not answering", undefined, WAIT)).toBeInTheDocument();
     expect(screen.queryByText(/could not be reached/)).toBeNull();
   });
+  // #1053: the check's own in-flight state is hidden; a stall read after it ended still shows.
+  it("keeps its last text and a disabled Checking button while a check runs, and shows a real stall after", async () => {
+    const body = (availability: string) => new Response(JSON.stringify({ connected: true, usable: false, availability }), { status: 200, headers: { "Content-Type": "application/json" } });
+    let release: (r: Response) => void = () => {};
+    let held = false;
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      if (String(url).startsWith("/api/chat/options?check=1")) { held = true; return new Promise<Response>(r => { release = r; }); }
+      if (String(url).startsWith("/api/chat/options")) return Promise.resolve(body("unreachable"));
+      return Promise.resolve(new Response(JSON.stringify({ runtimeConfigured: false, assistantProblem: null, show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("Your AI could not be reached", undefined, WAIT)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(held).toBe(true), WAIT);
+    // Something else publishes a stalled state while the check is open.
+    act(() => { client.setQueryData(["chat-options"], { connected: true, usable: false, availability: "stalled" }); });
+    expect(screen.getByText("Your AI could not be reached")).toBeInTheDocument();
+    expect(screen.getByText("Check its connection in Settings, Your AI.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled();
+    expect(screen.queryByText("Your AI is not answering")).toBeNull();
+    expect(screen.queryByText("Connecting…")).toBeNull();
+    await act(async () => { release(body("stalled")); });
+    expect(await screen.findByText("Your AI is not answering", undefined, WAIT)).toBeInTheDocument();
+    expect(screen.getByText(/It took a request and has not answered yet/)).toBeInTheDocument();
+  });
   it("says Connecting only while the status is loading", async () => {
     let answer: (r: Response) => void = () => {};
     vi.stubGlobal("fetch", vi.fn((url: string) => String(url).startsWith("/api/chat/options") ? new Promise<Response>(r => { answer = r; }) : Promise.resolve(new Response(JSON.stringify({ runtimeConfigured: false, assistantProblem: null, show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } }))));
