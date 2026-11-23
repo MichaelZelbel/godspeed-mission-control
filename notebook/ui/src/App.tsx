@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { onThisComputer } from '@/lib/on-this-computer';
 import { tabOnlyStorage } from '@/lib/tab-storage';
 import { BrowserRouter, Routes, Route, Navigate, Link, Outlet, useLocation } from 'react-router-dom';
 import { BRAIN_PAGE } from '@/lib/brain-page';
@@ -70,7 +71,7 @@ function Layout(){
 function SetupRoute(){
   const {user,local,authError,refreshSession}=useAuth();
   if(local)return <Navigate to="/dashboard" replace/>;
-  if(!user&&authError)return <Reconnect error={authError} refreshSession={refreshSession}/>;
+  if(!user&&authError&&onThisComputer())return <Reconnect error={authError} refreshSession={refreshSession}/>;
   return <AuthScreen/>;
 }
 // The notebook's addresses; App puts them in the browser's router, the tests in a memory router.
