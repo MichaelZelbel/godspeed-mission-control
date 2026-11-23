@@ -193,7 +193,7 @@ export function DashboardSearch() {
   };
 
   return (
-    <div ref={containerRef} className="relative w-full max-w-md">
+    <div ref={containerRef} className="w-full max-w-md sm:relative">
       <div className="relative">
         {/* Below sm the box is squeezed to about 85 px at 320 px, so the icon sits 8 px from the
             edge and the input keeps no right padding: with the desktop paddings (36 px left, 32 px
@@ -215,7 +215,7 @@ export function DashboardSearch() {
 
       {open && query.trim() && (
         <div
-          className="absolute top-full left-0 right-0 mt-1 z-50 rounded-lg border bg-popover shadow-lg overflow-hidden"
+          className="absolute top-full left-3 right-3 sm:left-0 sm:right-0 mt-1 z-50 rounded-lg border bg-popover shadow-lg overflow-hidden"
           onMouseEnter={() => { isHoveringRef.current = true; }}
           onMouseLeave={flushPending}
         >

@@ -134,6 +134,9 @@ export default function Notes() {
 
   
   const [selectedId, setSelectedId] = useState<string | null>(urlNoteId || null);
+  // At tablet widths an open sidebar left the note 176 px and cut its toolbar (#1017); close it like chatVisibility does.
+  const menuOpenRef=useRef(setMenuOpen);menuOpenRef.current=setMenuOpen;
+  useEffect(()=>{if(selectedId&&!isMobile&&window.innerWidth<1024)menuOpenRef.current(false);},[selectedId,isMobile]);
   const [searchMode, setSearchMode] = useState(false);
   const [showLocalGraph, setShowLocalGraph] = useState(false);
 

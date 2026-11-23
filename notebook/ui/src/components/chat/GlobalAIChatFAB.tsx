@@ -86,6 +86,9 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   const pageChat=pageContext??(page?PAGE_CHATS[new URLSearchParams(location.search).get('page')||'']:undefined);
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  // The on-screen keyboard shrinks only the visual viewport, so dvh does not track it (#1017).
+  const [visibleHeight,setVisibleHeight]=useState(()=>window.visualViewport?.height??window.innerHeight);
+  useEffect(()=>{const vv=window.visualViewport;const target:EventTarget=vv??window;const read=()=>setVisibleHeight(vv?.height??window.innerHeight);read();target.addEventListener("resize",read);return()=>target.removeEventListener("resize",read);},[]);
   // A narrow window shows one way into the chat at a time (chat-entry.ts, issue #530).
   const entryInView = useChatEntryInView();
   const [open, setOpen] = useState(page);
@@ -541,7 +544,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   // Dimensions per mode
   const isLarge = page || embedded || effectiveMode !== "docked";
   const panelStyle: React.CSSProperties =
-    embedded ? {height:isMobile?"max(360px, 42dvh)":"100%",width:isMobile?"100%":effectiveMode==="docked"?"clamp(320px, 35vw, 480px)":"clamp(360px, 42vw, 620px)",maxWidth:isMobile?"100%":"50%",flexShrink:0} : page ? {height:"calc(100dvh - 104px)",minHeight:400,width:"100%"} : effectiveMode === "fullscreen"
+    embedded ? {height:isMobile?Math.max(290,Math.round(visibleHeight)-104):"100%",width:isMobile?"100%":effectiveMode==="docked"?"clamp(320px, 35vw, 480px)":"clamp(360px, 42vw, 620px)",maxWidth:isMobile?"100%":"50%",flexShrink:0} : page ? {height:"calc(100dvh - 104px)",minHeight:400,width:"100%"} : effectiveMode === "fullscreen"
       ? {
           top: 16,
           right: 16,
@@ -606,12 +609,12 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                   {pageChat ? "Godspeed / "+pageChat.label : noteId ? "Godspeed / "+(noteTitle||contextTitle||"Current note") : "Godspeed"}
                 </span>
                 {!embedded && state.messages.length > 0 && (
-                  <span className="text-[10px] text-muted-foreground shrink-0">
-                     /  {state.messages.length} msgs{state.summary ? "  /  summary" : ""}
+                  <span className="hidden sm:inline text-[10px] text-muted-foreground shrink-0">
+                     /  {state.messages.length} {state.messages.length===1?"message":"messages"}{state.summary ? "  /  summary" : ""}
                   </span>
                 )}
               </div>
-              {page&&state.messages.length>0&&<Button variant="ghost" className="h-11" onClick={handleClear} disabled={isLoading || isClearing}>Clear conversation</Button>}
+              {page&&state.messages.length>0&&<Button variant="ghost" className="h-11 shrink-0 max-sm:w-11 max-sm:px-0" aria-label="Clear conversation" title="Clear conversation" onClick={handleClear} disabled={isLoading || isClearing}><Trash2 className="h-4 w-4 sm:hidden" aria-hidden="true"/><span className="max-sm:hidden">Clear conversation</span></Button>}
               {!page&&<div className="flex items-center gap-1">
                 <a className="inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded hover:bg-muted" href={popOutHref} target="_blank" rel="noreferrer" aria-label="Open chat in a new window" title="Open chat in a new window"><ExternalLink className="h-4 w-4"/></a>
                 {!embedded&&<span className="text-[10px] text-muted-foreground hidden xl:inline mr-1">Ctrl+Shift+K</span>}
@@ -797,7 +800,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
 
             <div className="shrink-0 pt-3 pb-1 px-1">
               <ChatComposer compact={embedded} value={input} onChange={setInput} onSend={sendMessage} onStop={stopReply} busy={isLoading || isClearing} files={files} onFiles={setFiles} model={model} effort={effort} onModel={setModel} onEffort={setEffort} reply={state.messages.filter(m=>m.role==='assistant').at(-1)?.content||''} context={pageChat?'This page: '+pageChat.label:noteId?undefined:personId?'Current person: '+(contextTitle||'Loading...'):collectionId?'Current collection':'Your notebook / Relevant notes and people'} onError={setError}/>
-              <p className="text-[11px] text-muted-foreground text-center pt-2">Enter to send · Shift+Enter for a new line</p>
+              <p className="text-[11px] text-muted-foreground text-center pt-2 max-sm:hidden">Enter to send · Shift+Enter for a new line</p>
             </div>
           </div>
         </div>
