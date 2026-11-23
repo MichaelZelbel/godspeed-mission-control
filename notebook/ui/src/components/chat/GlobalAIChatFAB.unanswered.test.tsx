@@ -92,7 +92,7 @@ const typeAndFail=async(kind:keyof typeof failures,text:string)=>{
  invoke.mockImplementationOnce(async()=>{ai=failure.state;return failure.answer();});
  fireEvent.change(await screen.findByLabelText('Message',{},WAIT),{target:{value:text}});
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
- expect(await screen.findByText(failure.reason,{},{timeout:3000})).toBeInTheDocument();
+ expect((await screen.findAllByText(failure.reason,{},{timeout:3000})).length).toBeGreaterThan(0);
 };
 const sendFailing=async(surface:keyof typeof surfaces,kind:keyof typeof failures)=>{
  surfaces[surface].show();
@@ -141,22 +141,23 @@ const SECOND='Fictional later question',SECOND_ANSWER='Fictional answer to the l
 const noAiError=()=>({data:null,error:{message:NO_AI_CHAT,context:new Response(JSON.stringify({error:NO_AI_CHAT}),{status:400})}});
 const settle=()=>new Promise(r=>setTimeout(r,1200));
 
-it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, a send with no AI connected keeps the no-AI note and Send again, also after a reload, until it is answered',async(surface)=>{
+it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, a send with no AI connected gets the plain no-AI sentence, also after a reload, and Send again once an AI works',async(surface)=>{
  ai=AI.none;
  invoke.mockResolvedValueOnce(noAiError());
  surfaces[surface].show();
  fireEvent.change(await screen.findByLabelText('Message',{},WAIT),{target:{value:QUESTION}});
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
  expect(await screen.findByText(NO_AI_CHAT,{},{timeout:1500})).toBeInTheDocument();
- expect(screen.getByText('No answer.')).toBeInTheDocument();
- expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(1);
+ expect(screen.queryByText('No answer.')).toBeNull();
+ expect(screen.queryByRole('button',{name:'Send again'})).toBeNull();
  expect(screen.getByLabelText('Message')).toHaveValue('');
  await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION]),WAIT);
 
  await reload(surface);
  expect(await screen.findByText(NO_AI_CHAT,{},WAIT)).toBeInTheDocument();
  expect(screen.getAllByText(QUESTION)).toHaveLength(1);
- expect(screen.getByText('No answer.')).toBeInTheDocument();
+ expect(screen.queryByText('No answer.')).toBeNull();
+ expect(screen.queryByRole('button',{name:'Send again'})).toBeNull();
 
  ai=AI.ready;
  expect(await screen.findByText(NO_ANSWER_AI_WORKS,{},{timeout:3000})).toBeInTheDocument();
@@ -228,7 +229,7 @@ it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, two messages
  };
  check();
  await reload(surface);
- await screen.findByText(REFUSED,{},{timeout:3000});
+ await waitFor(()=>expect(screen.getAllByText(REFUSED)).toHaveLength(2),{timeout:3000});
  check();
 });
 
@@ -268,12 +269,12 @@ it.each([
  expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(1);
 
  ai=AI.none;
- expect(await screen.findByText(failures[kind].reason,{},{timeout:3000})).toBeInTheDocument();
- expect(screen.getByText('No answer.')).toBeInTheDocument();
- expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(1);
+ expect(await screen.findByText(NO_AI_CHAT,{},{timeout:3000})).toBeInTheDocument();
+ expect(screen.queryByText('No answer.')).toBeNull();
+ expect(screen.queryByRole('button',{name:'Send again'})).toBeNull();
  await reload(surface);
- expect(await screen.findByText(failures[kind].reason,{},WAIT)).toBeInTheDocument();
- expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(1);
+ expect(await screen.findByText(NO_AI_CHAT,{},WAIT)).toBeInTheDocument();
+ expect(screen.queryByRole('button',{name:'Send again'})).toBeNull();
 });
 
 const savedMessages=(key:string)=>[...rows.values()].find(r=>r.context_key===key)?.state.messages;

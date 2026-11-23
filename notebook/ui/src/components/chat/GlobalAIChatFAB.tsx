@@ -20,6 +20,7 @@ import {
   buildApiMessages,
   withSummary,
   unansweredReason,
+  unansweredNote,
   unusableAnswer,
   NOTE_MODIFYING_TOOLS,
   NOTE_CREATING_TOOLS,
@@ -707,7 +708,8 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
 
               {state.messages.map((msg, i) => {
                 const newest = i === state.messages.length - 1;
-                const unanswered = isLoading && i === sendingAt ? null : unansweredReason(state.messages, i, aiState);
+                const note = isLoading && i === sendingAt ? null : unansweredNote(state.messages, i, aiState);
+                const unanswered = note?.text ?? null;
                 return (
                 <div key={i}>
                 <div className={`flex gap-2 ${msg.role === "user" ? "justify-end" : ""}`}>
@@ -773,7 +775,10 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                   </div>
 
                 </div>
-                {unanswered && (
+                {note?.plain && (
+                  <div role={newest ? "alert" : undefined} data-chat-reply-error={newest ? "" : undefined} className="mt-1 text-right text-destructive text-xs">{note.text}</div>
+                )}
+                {unanswered && !note?.plain && (
                   <div
                     role={newest ? "alert" : undefined}
                     data-chat-reply-error={newest ? "" : undefined}
