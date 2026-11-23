@@ -32,4 +32,18 @@ describe("installTabStorage", () => {
     expect(installTabStorage(win)).toBe(false);
     expect(win.localStorage).toBe(real);
   });
+
+  it("switches to tab-only storage when the browser starts refusing it mid-session", () => {
+    let blocked = false;
+    const real = { getItem: () => "x" } as unknown as Storage;
+    const win = windowWith(() => { if (blocked) throw new DOMException("denied", "SecurityError"); return real; });
+    expect(installTabStorage(win)).toBe(false);
+    expect(win.localStorage).toBe(real);
+    blocked = true;
+    const s = win.localStorage;
+    s.setItem("a", "1");
+    expect(win.localStorage.getItem("a")).toBe("1");
+    blocked = false;
+    expect(win.localStorage.getItem("a")).toBe("1");
+  });
 });
