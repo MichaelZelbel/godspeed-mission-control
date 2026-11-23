@@ -92,3 +92,34 @@ describe("the Home AI card after the assistant recovers (#918)", () => {
     expect(rt.checks).toBe(1);
   });
 });
+
+// #1053: the page-load check keeps the last known text, as Check again does.
+describe("the Home AI card during the page-load check (#1053)", () => {
+  it("keeps 'could not be reached' with a disabled Checking button after a reload, then shows the result", async () => {
+    sessionStorage.clear();
+    runtime("unreachable", false);
+    await load(true);
+    expect(await screen.findByRole("button", { name: "Check again" }, WAIT)).toBeEnabled();
+    // Reload: the check is held open.
+    let release: (r: Response) => void = () => {};
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      const u = String(url);
+      if (u.startsWith("/api/chat/options")) {
+        const body = (a: string) => new Response(JSON.stringify({ connected: true, usable: a === "ready", availability: a }), { status: 200, headers: { "Content-Type": "application/json" } });
+        if (u.includes("check=1")) return new Promise<Response>(r => { release = r; });
+        return Promise.resolve(body("unreachable"));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ runtimeConfigured: true, show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    }));
+    await load(true);
+    expect(screen.getByText("Your AI could not be reached")).toBeInTheDocument();
+    expect(screen.getByText("Check its connection in Settings, Your AI.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled();
+    await idle(300);
+    expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled();
+    expect(screen.queryByText("Connecting…")).toBeNull();
+    expect(screen.queryByText("Your AI is not answering")).toBeNull();
+    release(new Response(JSON.stringify({ connected: true, usable: true, availability: "ready" }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    expect(await screen.findByText("Ready to chat", undefined, WAIT)).toBeInTheDocument();
+  });
+});
