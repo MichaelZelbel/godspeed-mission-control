@@ -30,6 +30,32 @@ Version 2 is the current edition. The install lines on this page install the cur
 
 Godspeed carries the Workouts add-on. With Hevy Pro, open **Settings** > **Workouts from Hevy**, make a Hevy developer key, and connect it there. The key stays in the add-on's private state; Settings shows the imported-row count and last run, and the one hourly **Workouts from Hevy** routine appears under **Settings** > **Routines**. When taking over a standalone add-on schedule, Godspeed first proves the carried routine can import; if setup fails, Settings names the safe reason and retry time while the existing schedule stays in place. If retiring that schedule fails after the proof, the carried routine keeps running and Settings reports the removal retry. Disconnect stops that routine while keeping the tracker and its rows.
 
+## New in 2.0.0-beta.30
+
+Nothing to waive.
+
+- **Telegram answers in the language of the message.**
+- **Asking for a coaching talk in the notebook's chat opens it** instead of an error.
+- **Right after a background report, "what is this about?" is answered from what the report said.**
+- **A fresh server's first morning brief is built from the person's first goal alone**, with no records they never made.
+- **The notebook starts even when its saved AI connection file is damaged.**
+
+## New in 2.0.0-beta.29
+
+Every lane busy.
+
+- **The AI status never says "ready" right after a failed check.**
+- **A refused AI key is shown as a key problem with a next step, not as an outage, everywhere the AI's state appears, and an open chat catches up within about five seconds.**
+- **A prepared coaching talk opens ready on a normal install.**
+- **A yes-or-no question left unanswered for six hours gets one reminder, never a second.**
+- **An update keeps the nightly chat tidy-up running for a person whose chat is on Telegram.**
+- **The Add moment dialog on the Timeline lets the person attach someone they already know.**
+- **A background notice no longer ends with a "stop" hint for an unrelated job.**
+- **Every add-on Godspeed carries is exactly the version its own project released, and the video add-on's setup installs its animation tool.**
+- **Godspeed calls a piece of daily work ready only when a check of its content passed, and the morning message no longer lists approvals that already closed.**
+- **Godspeed tells you once when today's AI spending on your OpenRouter key passes your daily limit, or when your credit is about to run out**, with both amounts in Settings.
+- **Tell Godspeed a web address you want, and it tells you the moment it can be registered.**
+
 ## New in 2.0.0-beta.28
 
 three things Michael's server has done for him privately every day for months move into Godspeed for every user (rule `same-godspeed-as-every-user`), and his server then drops its private copies.

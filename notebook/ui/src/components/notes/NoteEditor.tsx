@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef, createRef } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useState, useEffect, useCallback, useRef, createRef, useLayoutEffect } from "react";
+import { useEditor, useEditorState, EditorContent } from "@tiptap/react";
 import { Markdown } from "tiptap-markdown";
 import StarterKit from "@tiptap/starter-kit";
 import UnderlineExt from "@tiptap/extension-underline";
@@ -33,7 +33,7 @@ import { useGitHubConnection, useGitHubSyncExport, useSyncLogForNote } from "@/h
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import { ExternalNotePanel } from "./ExternalNotePanel";
 import { WebClipPreview } from "./WebClipPreview";
-import { ForwardToAppDialog } from "./ForwardToAppDialog";
+import { ForwardToAppDialog, useActiveConnectedApps } from "./ForwardToAppDialog";
 import { WikilinkAutocomplete } from "./WikilinkAutocomplete";
 import { EditorBubbleMenu } from "./EditorBubbleMenu";
 import { Separator } from "@/components/ui/separator";
@@ -110,7 +110,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { VersionHistoryPanel } from "./VersionHistoryPanel";
-import { formatDistanceToNow, format } from "date-fns";
+import { localDateISO, parseInstant, showDate } from "@/lib/local-date";
 import { showToast } from "@/lib/toast";
 import { openExternalUrl } from "@/lib/safe-url";
 import { normalizeNoteContent, stripLeadingH1, coalesceTaskList, looksLikeHtml } from "@/lib/note-content";
@@ -431,6 +431,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: connectedApps = [] } = useActiveConnectedApps();
   const { data: ghConn } = useGitHubConnection();
   const ghSync = useGitHubSyncExport();
   const { data: syncLog } = useSyncLogForNote(note.id);
@@ -503,7 +504,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
 
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
-  const titleInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const lastLocalContentRef = useRef(restored.content ?? note.content ?? "");
   const pendingSaveContentRef = useRef<string | null>(restored.content ?? null);
   const lastLocalTitleRef = useRef(restored.title ?? note.title ?? "");
@@ -550,7 +551,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const queuedContentRef = useRef<string | null>(null);
   const lastSavedContentRef = useRef<string | null>(null);
   const lastSavedUpdatedAtRef = useRef<number>(
-    note.updated_at ? new Date(note.updated_at).getTime() : 0,
+    note.updated_at ? parseInstant(note.updated_at)?.getTime() ?? 0 : 0,
   );
 
   const saveContentNow = useCallback(
@@ -567,7 +568,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           onSuccess: (saved) => {
             savingRef.current = false;
             lastSavedContentRef.current = md;
-            const ts = saved?.updated_at ? new Date(saved.updated_at).getTime() : Date.now();
+            const ts = saved?.updated_at ? parseInstant(saved.updated_at)?.getTime() ?? Date.now() : Date.now();
             if (ts > lastSavedUpdatedAtRef.current) lastSavedUpdatedAtRef.current = ts;
             if (pendingSaveContentRef.current === md) pendingSaveContentRef.current = null;
             setSaveStatus("saved");
@@ -953,7 +954,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     // pre-edit text back into the editor, and the next autosave would then
     // persist it - silently losing the user's work. Ignore anything older than
     // the newest version this editor successfully wrote.
-    const incomingTs = note.updated_at ? new Date(note.updated_at).getTime() : 0;
+    const incomingTs = note.updated_at ? parseInstant(note.updated_at)?.getTime() ?? 0 : 0;
     if (noteChanged) {
       lastSavedUpdatedAtRef.current = incomingTs;
       lastSavedContentRef.current = null;
@@ -1027,11 +1028,11 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             lastSavedContentRef.current = pending;
             queuedContentRef.current = null;
             if (pendingSaveContentRef.current === pending) pendingSaveContentRef.current = null;
-            const ts = saved?.updated_at ? new Date(saved.updated_at).getTime() : Date.now();
+            const ts = saved?.updated_at ? parseInstant(saved.updated_at)?.getTime() ?? Date.now() : Date.now();
             if (ts > lastSavedUpdatedAtRef.current) lastSavedUpdatedAtRef.current = ts;
             setSaveStatus("saved");
             respond(
-              saved?.updated_at ?? new Date(lastSavedUpdatedAtRef.current).toISOString(),
+              saved?.updated_at ?? parseInstant(lastSavedUpdatedAtRef.current)!.toISOString(),
               pending,
             );
             return;
@@ -1040,7 +1041,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           }
         }
         const latest = lastSavedUpdatedAtRef.current
-          ? new Date(lastSavedUpdatedAtRef.current).toISOString()
+          ? parseInstant(lastSavedUpdatedAtRef.current)!.toISOString()
           : (note.updated_at ?? null);
         respond(latest, lastSavedContentRef.current ?? note.content ?? null);
       } catch {
@@ -1104,7 +1105,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           lastLocalContentRef.current = content;
           lastSavedContentRef.current = content;
           if (updatedAt) {
-            const ts = new Date(updatedAt).getTime();
+            const ts = parseInstant(updatedAt)?.getTime() ?? NaN;
             if (ts > lastSavedUpdatedAtRef.current) lastSavedUpdatedAtRef.current = ts;
           }
           if (wasFocused) {
@@ -1186,6 +1187,25 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     return data as unknown as Note | null;
   };
 
+  // Size the title field to its wrapped text (also when the value is set from
+  // outside, or the panel is resized), so no line of the title is hidden.
+  const fitTitleHeight = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+  useLayoutEffect(() => {
+    fitTitleHeight(titleInputRef.current);
+    const el = titleInputRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let width = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth !== width) { width = el.clientWidth; fitTitleHeight(el); }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [title]);
+
   const handleTitleChange = (val: string) => {
     setTitle(val);
     lastLocalTitleRef.current = val;
@@ -1218,7 +1238,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const mergeDuplicate = async () => {
     if (!duplicateTarget) return;
     const currentContent = pendingSaveContentRef.current ?? (editor ? editorToMarkdown(editor) : note.content ?? "");
-    const mergedContent = `${duplicateTarget.content || ""}\n\n---\n\n## Merged on ${format(new Date(), "yyyy-MM-dd")}\n\n${currentContent}`.trimEnd();
+    const mergedContent = `${duplicateTarget.content || ""}\n\n---\n\n## Merged on ${localDateISO(new Date())}\n\n${currentContent}`.trimEnd();
     const tags = [...new Set([...(duplicateTarget.tags || []), ...(note.tags || [])])];
     await updateNote.mutateAsync({ id: duplicateTarget.id, content: mergedContent, tags });
     await updateNote.mutateAsync({ id: note.id, is_trashed: true, trashed_at: new Date().toISOString() });
@@ -1288,7 +1308,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           if (queuedContentRef.current === content) queuedContentRef.current = null;
         }
         if (pendingSaveTitleRef.current === pendingTitle) pendingSaveTitleRef.current = null;
-        if (saved?.updated_at) lastSavedUpdatedAtRef.current = Math.max(lastSavedUpdatedAtRef.current, new Date(saved.updated_at).getTime());
+        if (saved?.updated_at) lastSavedUpdatedAtRef.current = Math.max(lastSavedUpdatedAtRef.current, parseInstant(saved.updated_at)?.getTime() ?? NaN);
         setSaveStatus("saved");
       }
       // Says why it failed: no AI, a refused key or an outage (#779). It said nothing before.
@@ -1443,9 +1463,20 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     showToast.success("Logged as interaction");
   };
 
-  const plainText = editor?.getText() || "";
-  const wordCount = plainText.trim() ? plainText.trim().split(/\s+/).length : 0;
-  const charCount = plainText.length;
+  // Read on every change of the text: the editor does not re-render this
+  // component as the person types, so a count taken at render time stayed
+  // behind ("0 words" in a new note with several words) until a save (#809).
+  const { wordCount, charCount } = useEditorState({
+    editor,
+    selector: ({ editor: e }) => {
+      const text = e?.getText() || "";
+      const trimmed = text.trim();
+      return { wordCount: trimmed ? trimmed.split(/\s+/).length : 0, charCount: text.length };
+    },
+  }) ?? { wordCount: 0, charCount: 0 };
+  // "1 word", not "1 words" (#818).
+  const wordsLabel = `${wordCount} ${wordCount === 1 ? "word" : "words"}`;
+  const charsLabel = `${charCount} ${charCount === 1 ? "character" : "characters"}`;
   const metadata = note.metadata as Record<string, unknown> | null;
   const mentionedPeople = Array.isArray(metadata?.people) ? (metadata.people as string[]) : [];
   const { data: mentionedGroupMatches = [] } = useQuery({
@@ -1548,14 +1579,14 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </>
           ) : (
             <>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"} aria-label={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
                 <Star className={cn("h-4 w-4", note.is_favorite && "fill-warning text-warning")} />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"} aria-label={note.is_pinned ? "Unpin" : "Pin to top"}>
                 <Pin className={cn("h-4 w-4", note.is_pinned && "text-primary")} />
               </Button>
               {!note.is_external && (
-                <Button variant="ghost" size="icon" className={cn("h-8 w-8", sourceMode && "bg-accent text-accent-foreground")} onClick={toggleSourceMode} title={sourceMode ? "Rich text mode" : "Markdown source"}>
+                <Button variant="ghost" size="icon" className={cn("h-8 w-8", sourceMode && "bg-accent text-accent-foreground")} onClick={toggleSourceMode} title={sourceMode ? "Rich text mode" : "Markdown source"} aria-label={sourceMode ? "Rich text mode" : "Markdown source"}>
                   <Code2 className="h-4 w-4" />
                 </Button>
               )}
@@ -1568,9 +1599,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       {/* Info panel */}
       {showInfo && (
         <div className="px-4 py-3 border-b border-border bg-muted/30 text-xs text-muted-foreground space-y-1 shrink-0">
-          <p>Created: {format(new Date(note.created_at), "PPp")}</p>
-          <p>Updated: {format(new Date(note.updated_at), "PPp")}</p>
-          <p>{wordCount} words · {charCount} characters</p>
+          <p>Created: {showDate(note.created_at, "time")}</p>
+          <p>Updated: {showDate(note.updated_at, "time")}</p>
+          <p>{wordsLabel} · {charsLabel}</p>
           {metadata?.type && <p>Type: {String(metadata.type)}</p>}
           {metadata?.summary && <p>Summary: {String(metadata.summary)}</p>}
           {Array.isArray(metadata?.topics) && (metadata.topics as string[]).length > 0 && (
@@ -1614,10 +1645,10 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           }}
           quickActions={
             <>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleFavorite} title={note.is_favorite ? "Remove from favorites" : "Add to favorites"} aria-label={note.is_favorite ? "Remove from favorites" : "Add to favorites"}>
                 <Star className={cn("h-3.5 w-3.5", note.is_favorite && "fill-warning text-warning")} />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={togglePin} title={note.is_pinned ? "Unpin" : "Pin to top"} aria-label={note.is_pinned ? "Unpin" : "Pin to top"}>
                 <Pin className={cn("h-3.5 w-3.5", note.is_pinned && "text-primary")} />
               </Button>
               {sharedNote?.is_active && (
@@ -1638,6 +1669,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                 className="h-7 w-7"
                 onClick={() => window.open(`/dashboard/notes/${note.id}`, "_blank")}
                 title="Open in new tab"
+                aria-label="Open in new tab"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
               </Button>
@@ -1647,6 +1679,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                 className="h-7 w-7 hover:text-destructive"
                 onClick={moveToTrash}
                 title="Move to trash"
+                aria-label="Move to trash"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
@@ -1655,7 +1688,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           noteActions={
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7" title="More actions">
+                <Button variant="ghost" size="icon" className="h-7 w-7" title="More actions" aria-label="More actions">
                   <MoreHorizontal className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
@@ -1702,7 +1735,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                 <DropdownMenuItem onClick={makeACopy} disabled={duplicateNote.isPending}>
                   <Copy className="mr-2 h-4 w-4" /> Make a copy
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => { navigator.clipboard.writeText(`${title}\n\n${plainText}`).then(() => showToast.success("Copied to clipboard"), () => showToast.error("Could not copy to the clipboard")); }}>
+                <DropdownMenuItem onClick={() => { navigator.clipboard.writeText(`${title}\n\n${editor?.getText() || ""}`).then(() => showToast.success("Copied to clipboard"), () => showToast.error("Could not copy to the clipboard")); }}>
                   <Copy className="mr-2 h-4 w-4" /> Copy to clipboard
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={downloadMarkdown}>
@@ -1728,9 +1761,11 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                     <Share2 className="mr-2 h-4 w-4" /> Share publicly
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => setShowForwardDialog(true)}>
-                  <Send className="mr-2 h-4 w-4" /> Send to app
-                </DropdownMenuItem>
+                {connectedApps.length > 0 && (
+                  <DropdownMenuItem onClick={() => setShowForwardDialog(true)}>
+                    <Send className="mr-2 h-4 w-4" /> Send to app
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           }
@@ -1816,10 +1851,14 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             beside the title it took the room the title needed, so on a narrow
             window the end of the title scrolled out of sight behind it. */}
         <div className="mb-4">
-          <input aria-label="Note title"
+          <textarea aria-label="Note title"
             ref={titleInputRef}
+            rows={1}
             value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
+            // A long title wraps onto further lines and the field grows to
+            // show all of it, instead of cutting it off at the panel's edge.
+            onInput={(e) => fitTitleHeight(e.currentTarget)}
+            onChange={(e) => handleTitleChange(e.target.value.replace(/[\r\n]+/g, " "))}
             onKeyDown={(e) => {
               // Enter ends the title and goes on in the note's text, as a
               // person expects; without this the next words joined the title
@@ -1835,7 +1874,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
               ed.view.focus();
             }}
             placeholder="Untitled"
-            className="w-full min-w-0 text-2xl font-bold font-display bg-transparent border-none outline-none placeholder:text-muted-foreground/40"
+            className="block w-full min-w-0 resize-none overflow-hidden break-words [overflow-wrap:anywhere] text-2xl font-bold font-display bg-transparent border-none outline-none placeholder:text-muted-foreground/40"
             disabled={note.is_trashed || note.is_external}
           />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 empty:hidden">
@@ -1986,7 +2025,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       <div className="flex items-center justify-between px-4 py-1.5 border-t border-border bg-muted/30 text-[10px] text-muted-foreground shrink-0">
         <div className="flex items-center gap-2">
           <span>
-            {updateNote.isPending ? "Saving…" : `Saved ${formatDistanceToNow(new Date(note.updated_at), { addSuffix: true })}`}
+            {updateNote.isPending ? "Saving…" : `Saved ${showDate(note.updated_at, "ago")}`}
           </span>
           {ghConn?.sync_enabled && (
             <span className="flex items-center gap-1">
@@ -2013,7 +2052,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </span>
           )}
         </div>
-        <span>{wordCount} words</span>
+        <span>{wordsLabel}</span>
       </div>
 
       {/* Delete confirmation */}

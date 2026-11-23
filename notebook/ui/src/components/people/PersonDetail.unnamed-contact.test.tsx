@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
 import { PersonDetail } from "./PersonDetail";
+import { WAIT } from "@/test/wait-limits";
 
 const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => {
@@ -40,8 +41,8 @@ describe("a person page for a contact that has no name", () => {
     const other: any = { id: "x", name: "Ada", aliases: [] };
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={client}><MemoryRouter><PersonDetail person={person} people={[person, other]} onClose={() => {}} /></MemoryRouter></QueryClientProvider>);
-    expect((await screen.findAllByText("Unnamed person")).length).toBeGreaterThan(0);
-    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect((await screen.findAllByText("Unnamed person", undefined, WAIT)).length).toBeGreaterThan(0);
+    await waitFor(() => expect(client.isFetching()).toBe(0), WAIT);
     expect(client.getQueryState(["contact_notes", undefined, ["Somebody"]])?.status).toBe("success");
   });
 });

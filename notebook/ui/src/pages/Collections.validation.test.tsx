@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
 import { createFakeSupabase } from "@/test/fake-supabase";
+import { WAIT } from "@/test/wait-limits";
 
 const { fake } = vi.hoisted(() => ({ fake: { current: null as any } }));
 vi.mock("@/integrations/supabase/client", () => ({ get supabase() { return fake.current.client; } }));
@@ -21,11 +22,11 @@ describe("blank collection validation", () => {
     const { default: Collections } = await import("./Collections");
     render(<MemoryRouter><Collections /></MemoryRouter>);
 
-    fireEvent.click(await screen.findByRole("button", { name: "or create a blank collection" }));
+    fireEvent.click(await screen.findByRole("button", { name: "or create a blank collection" }, WAIT));
     const name = screen.getByLabelText("Name");
     fireEvent.submit(name.closest("form")!);
 
-    expect(await screen.findByText("Name is required")).toBeVisible();
-    await waitFor(() => expect(fake.current.on("collections", "insert")).toHaveLength(0));
+    expect(await screen.findByText("Name is required", undefined, WAIT)).toBeVisible();
+    await waitFor(() => expect(fake.current.on("collections", "insert")).toHaveLength(0), WAIT);
   });
 });

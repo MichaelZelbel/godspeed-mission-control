@@ -25,6 +25,7 @@ import { LoadErrorState } from "@/components/collections/LoadErrorState";
 import { charmShelf, habitShelf, lastEntryDays, shelve, talksLabel, type CharmListed } from "@/lib/tracker-shelf";
 import type { HabitProgress } from "@/lib/habit-progress";
 import { CharmCard } from "@/components/collections/CharmCard";
+import { defaultField, toJsonSchema } from "@/components/collections/schemaFields";
 import { collectionNameSchema } from "@/lib/collection-name";
 
 type Collection = Database["public"]["Tables"]["collections"]["Row"];
@@ -223,7 +224,7 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
         icon: parsed.icon || null,
         description: parsed.description || null,
         visibility: parsed.visibility,
-        field_schema: [],
+        field_schema: toJsonSchema([defaultField()]),
         agent_instructions: null,
       })
       .select("slug")
@@ -280,7 +281,7 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
             </RadioGroup>
           </div>
 
-          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">URL: {BRAND.domain}/collections/{slugPreview}</p>
+          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">URL: {BRAND.url}/collections/{slugPreview}</p>
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -395,11 +396,14 @@ export default function Collections() {
   const charm = useMemo(() => charmShelf(collections, charmListed, lastWhen, new Date()), [collections, charmListed, lastWhen]);
   const hasTrackers = shelf.trackers.length + shelf.resting.length + habits.active.length + habits.resting.length + charm.active.length + charm.resting.length > 0;
   const resting = shelf.resting.length + habits.resting.length + charm.resting.length;
+  // The header's actions show whenever the empty state, which has its own, does not: habits or
+  // trackers from tracker-list with no collection yet still need a way to create one.
+  const showHeader = hasCollections || (hasTrackers && !isLoading && !loadFailed);
 
   return (
     <div className="w-full max-w-6xl">
       <SEOHead title="Collections - Godspeed Mission Control" noIndex />
-      {hasCollections && (
+      {showHeader && (
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold font-display">Collections</h1>
           <div className="flex flex-wrap items-center gap-2">

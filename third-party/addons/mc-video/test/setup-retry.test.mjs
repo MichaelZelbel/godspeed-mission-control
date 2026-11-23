@@ -24,7 +24,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 child.spawnSync = (cmd, args = [], opts = {}) => {
   if (args.includes("hyperframes@${L.HYPERFRAMES_VERSION}")) {
-    fs.appendFileSync(process.env.MC_VIDEO_NPM_CALLS, "attempt\\n");
+    fs.appendFileSync(process.env.MC_VIDEO_NPM_CALLS, "attempt " + args.join(" ") + " env:ONNXRUNTIME_NODE_INSTALL_CUDA=" + (opts.env || {}).ONNXRUNTIME_NODE_INSTALL_CUDA + "\\n");
     if (fs.readFileSync(process.env.MC_VIDEO_NPM_CALLS, "utf8").trim().split("\\n").length < Number(process.env.MC_VIDEO_NPM_SUCCEEDS_ON_ATTEMPT)) return { status: 1 };
     const pkg = path.join(opts.cwd, "node_modules", "hyperframes");
     fs.mkdirSync(path.join(pkg, "bin"), { recursive: true });
@@ -69,6 +69,10 @@ test("setup retries HyperFrames through its npm boundary before reporting ready"
   assert.equal(fs.readFileSync(record, "utf8").trim().split("\n").length, 2);
   assert.match(out, /Retrying the pinned HyperFrames/);
   assert.match(out, /Done\. Tell your assistant/);
+  for (const call of fs.readFileSync(record, "utf8").trim().split("\n")) {
+    assert.match(call, /env:ONNXRUNTIME_NODE_INSTALL_CUDA=skip$/, "every HyperFrames install skips the unavailable CUDA archive through the environment");
+    assert.doesNotMatch(call, /--onnxruntime-node-install-cuda/, "npm 12 refuses that flag, so it is never passed");
+  }
   assert.equal(JSON.parse(fs.readFileSync(path.join(home, "hyperframes", "node_modules", "hyperframes", "package.json"), "utf8")).version, L.HYPERFRAMES_VERSION);
 });
 

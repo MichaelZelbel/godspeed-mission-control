@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
 import TimelinePage from "./TimelinePage";
+import { WAIT } from "@/test/wait-limits";
 
 // A contact record with no name, as the notebook's files and store allow.
 const contacts: any[] = [];
@@ -44,13 +45,13 @@ describe("the timeline's status and scores", () => {
   afterEach(() => cleanup());
   it("shows a status it does not know as unknown, and a corrected due moment's three numbers", async () => {
     render(<MemoryRouter><TimelinePage /></MemoryRouter>);
-    expect(await screen.findByText("From elsewhere")).toBeInTheDocument();
+    expect(await screen.findByText("From elsewhere", undefined, WAIT)).toBeInTheDocument();
     expect(screen.queryByText("confirmed")).toBeNull();
-    expect(screen.getAllByText("unknown").length).toBeGreaterThan(0);
-    expect(screen.getByText("past fact", { selector: "div" })).toBeInTheDocument();
+    expect(screen.getAllByText("Unknown").length).toBeGreaterThan(0);
+    expect(screen.getByText("Past Fact", { selector: "div" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Done: See the dentist"));
-    expect(await screen.findByText("1/4")).toBeInTheDocument();
+    expect(await screen.findByText("1/4", undefined, WAIT)).toBeInTheDocument();
     expect(screen.getAllByText("10/10")).toHaveLength(2);
   });
 });

@@ -33,7 +33,9 @@ test('a malformed conversation response is repaired once before an actual numeri
 
 test('repeated malformed JSON is refused without executing its embedded operation',async()=>{
  let calls=0;const message='My goal is a fictional review';const {store,domains}=fixture(async()=>{calls++;return JSON.stringify({reply:'Saved.',operations:[{type:'goal-add',title:'Fictional review',measure:'A recorded result',source_quote:message}]})+' Extra narration';});
- await assert.rejects(domains.invoke('conversation-chat',{message,conversation_id:'fictional-bad-json'}),/JSON|non-whitespace/);assert.equal(calls,2);assert.equal(store.list('goals').length,0);assert.equal(store.list('notes').length,0);
+ // #833/#861: what a person reads is the AI's unreadable-reply sentence, never the parser's words.
+ const {AI_UNREADABLE}=await import('../core/no-ai.mjs');
+ await assert.rejects(domains.invoke('conversation-chat',{message,conversation_id:'fictional-bad-json'}),error=>error.message===AI_UNREADABLE);assert.equal(calls,2);assert.equal(store.list('goals').length,0);assert.equal(store.list('notes').length,0);
 });
 
 test('reported numeric outcomes reject strings and nonfinite values without corrupting the goal history',async()=>{

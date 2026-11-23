@@ -90,14 +90,16 @@ async function serviceWith(t,aiProvider){
   const send=async(chat,extra={})=>{const started=Date.now(),response=await fetch('http://127.0.0.1:'+service.address.port+'/api/functions/'+chat,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'What should I do today?',...extra})});return {...await response.json(),elapsed:Date.now()-started};};
   return {service,send};
 }
-test('a stalled send gets the reply an HTTP 500 gets on the chat page, note panel and collection panel, and the next send after recovery is answered',async t=>{
+// #808: a stall was told as an outage, "Your AI could not be reached". It is told as an AI not answering.
+const STALLED='Your AI is not answering. Try again in a moment, or check it in Settings, Your AI.';
+test('a stalled send says the AI is not answering on the chat page, note panel and collection panel, and the next send after recovery is answered',async t=>{
   const ai=await fakeAI(t,{mode:'500'}),{service,send}=await serviceWith(t,provider(ai,{stallWatch:{afterMs:200,timeoutMs:300,everyMs:400}}));
-  const outage=(await send('conversation-chat')).error;assert.ok(outage,'an HTTP 500 is an error reply');
+  assert.match((await send('conversation-chat')).error,/^Your AI could not be reached/,'an HTTP 500 is an outage');
   const note=service.store.save('notes',{title:'Shopping',content:'A list'}),collection=service.store.save('collections',{name:'Films',field_schema:[{key:'title',label:'Title',type:'text',primary:true}]});
   ai.mode='stalled';
   for(const [chat,extra] of [['conversation-chat',{}],['note-chat',{note_id:note.id}],['collection-chat',{collection_id:collection.id}]]){
     const chats=ai.chats,result=await send(chat,extra);
-    assert.equal(result.error,outage,chat);if(chat==='conversation-chat')assert.equal(ai.chats-chats,1,'a stalled meaning expansion is not followed by a chat call that would stall too');assert.ok(result.elapsed<1500,chat+' ended in '+result.elapsed+' ms');
+    assert.equal(result.error,STALLED,chat);if(chat==='conversation-chat')assert.equal(ai.chats-chats,1,'a stalled meaning expansion is not followed by a chat call that would stall too');assert.ok(result.elapsed<1500,chat+' ended in '+result.elapsed+' ms');
   }
   ai.mode='working';
   const answered=await send('conversation-chat');assert.equal(answered.error,null);assert.equal(answered.data.reply,'Here is your answer.');
@@ -109,8 +111,7 @@ test('a closed port keeps its own reply',async t=>{
   assert.match(result.error,/could not be reached/);assert.doesNotMatch(result.error,/stopped answering/);
 });
 test('a provider saved in Settings says a stall within a minute, also on this computer',{timeout:70000},async t=>{
-  const ai=await fakeAI(t,{mode:'500'}),{send}=await serviceWith(t,modelProvider({url:ai.url,key:'fictional-secret-key',model:'fictional-model',retryWaits:[]}));
-  const outage=(await send('conversation-chat')).error;
-  ai.mode='stalled';const result=await send('conversation-chat');
-  assert.equal(result.error,outage);assert.ok(result.elapsed<60000,'ended in '+result.elapsed+' ms');
+  const ai=await fakeAI(t,{mode:'stalled'}),{send}=await serviceWith(t,modelProvider({url:ai.url,key:'fictional-secret-key',model:'fictional-model',retryWaits:[]}));
+  const result=await send('conversation-chat');
+  assert.equal(result.error,STALLED);assert.ok(result.elapsed<60000,'ended in '+result.elapsed+' ms');
 });

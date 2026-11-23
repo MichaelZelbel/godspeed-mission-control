@@ -1,4 +1,5 @@
 import { useAICredits, type AICredits } from "@/hooks/useAICredits";
+import { parseInstant, showDate } from "@/lib/local-date";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -52,14 +53,11 @@ export function CreditsDisplay({ compact = false }: CreditsDisplayProps) {
     ? Math.round((credits.rolloverTokens / credits.tokensPerCredit / credits.creditsGranted) * 100)
     : 0;
 
-  const resetDate = new Date(credits.periodEnd).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+  const resetDate = showDate(credits.periodEnd, "date");
 
   const daysUntilReset = Math.max(
     0,
-    Math.ceil((new Date(credits.periodEnd).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    Math.ceil(((parseInstant(credits.periodEnd)?.getTime() ?? Date.now()) - Date.now()) / (1000 * 60 * 60 * 24))
   );
 
   // --- Compact (sidebar) ---
@@ -166,7 +164,7 @@ export function CreditsDisplay({ compact = false }: CreditsDisplayProps) {
             {credits.tokensPerCredit} tokens/credit
           </Badge>
           <Badge variant="outline" className="text-[10px]">
-            Period: {new Date(credits.periodStart).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {resetDate}
+            Period: {showDate(credits.periodStart, "date")} – {resetDate}
           </Badge>
         </div>
       </CardContent>

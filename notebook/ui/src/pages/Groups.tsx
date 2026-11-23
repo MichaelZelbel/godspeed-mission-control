@@ -49,7 +49,9 @@ function GroupCard({ group, memberCount }: { group: ContactGroup; memberCount: n
               <TemplateIcon icon={group.icon} />
             </div>
             <div className="min-w-0 flex-1">
-              <CardTitle className="truncate text-base">{group.name}</CardTitle>
+              {/* break-words, not truncate: a long name wraps (#867), and a name whose single word
+                  is wider than the card still breaks inside it instead of spilling out. */}
+              <CardTitle className="text-base break-words">{group.name}</CardTitle>
               <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{group.description || "No description"}</p>
             </div>
           </div>
@@ -256,7 +258,7 @@ export default function Groups() {
               <CardContent className="flex flex-col items-center justify-center py-14 text-center">
                 <Users className="mb-3 h-8 w-8 text-muted-foreground" />
                 <p className="font-medium">No groups yet.</p>
-                <p className="mt-1 text-sm text-muted-foreground">Start with a template to organize your people.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Choose New Group, then start from a template.</p>
               </CardContent>
             </Card>
             {isSuccess && <InitialMigrationCard />}

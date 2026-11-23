@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import { startNotebook, type RealNotebook } from "@/test/real-notebook";
+import { WAIT } from "@/test/wait-limits";
 
 // Issue #791 (19 November 2026): in a new note, typing a title and pressing
 // Enter did not move on to the note's text; the next words joined the title
@@ -63,13 +64,13 @@ async function openNote(id: string) {
       <MemoryRouter><NoteEditor key={data.id} note={data as any} /></MemoryRouter>
     </QueryClientProvider>,
   );
-  await waitFor(() => expect(document.querySelector(".ProseMirror")).not.toBeNull());
+  await waitFor(() => expect(document.querySelector(".ProseMirror")).not.toBeNull(), WAIT);
   return (document.querySelector(".ProseMirror") as any).editor;
 }
 
 // What typing a word does: the text goes in wherever the focus and the cursor are.
 function typeInto(target: Element, editor: any, words: string) {
-  if (target instanceof HTMLInputElement) {
+  if (target instanceof HTMLTextAreaElement) {
     fireEvent.change(target, { target: { value: target.value + words } });
   } else {
     act(() => { editor.view.dispatch(editor.state.tr.insertText(words)); });
@@ -78,7 +79,7 @@ function typeInto(target: Element, editor: any, words: string) {
 
 async function titleEnterText(id: string, titleWords: string, textWords: string) {
   const editor = await openNote(id);
-  const title = screen.getByRole("textbox", { name: "Note title" }) as HTMLInputElement;
+  const title = screen.getByRole("textbox", { name: "Note title" }) as HTMLTextAreaElement;
   act(() => { title.focus(); });
   typeInto(title, editor, titleWords);
 

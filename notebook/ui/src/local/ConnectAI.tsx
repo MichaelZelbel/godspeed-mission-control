@@ -4,9 +4,9 @@ import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger} from '@/components/ui/alert-dialog';
 import {AlertTriangle,CheckCircle2,Loader2} from 'lucide-react';
+import {parseInstant,showDate} from '@/lib/local-date';
 import {providerService} from '../../../core/provider-service.mjs';
-import {aiFailure} from '../../../core/ai-health.mjs';
-import {AI_REFUSED_STATUS,AI_UNREACHABLE_STATUS} from '../../../core/no-ai.mjs';
+import {AI_CONNECTION_UNREADABLE_STATUS} from '../../../core/no-ai.mjs';
 
 // Settings > Your AI (18 October 2026). What the person connects here powers the notebook and, unless
 // they untick it, the daily routines and the chat too (notebook/core/routine-ai.mjs): every installer
@@ -20,11 +20,11 @@ type SavedProvider=|{configured:false;key:false}|{configured:true;url:string;mod
 async function call(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 export const routineAIStatus=()=>call('routine-ai') as Promise<RoutineAI>;
 function providerResponse(value:unknown):SavedProvider{
-  if(!value||typeof value!=='object')throw new Error('The saved AI connection could not be read.');
+  if(!value||typeof value!=='object')throw new Error(AI_CONNECTION_UNREADABLE_STATUS);
   const data=value as Record<string,unknown>;
   if(data.configured===false&&data.key===false)return {configured:false,key:false};
   if(data.configured===true&&typeof data.url==='string'&&typeof data.model==='string'&&typeof data.key==='boolean')return data as SavedProvider;
-  throw new Error('The saved AI connection could not be read.');
+  throw new Error(AI_CONNECTION_UNREADABLE_STATUS);
 }
 const savedProvider=async()=>providerResponse(await call('provider'));
 // THE CHOICES, the same for the main AI and the backup (22 October 2026, discussion #20): a key of
@@ -46,26 +46,11 @@ export function serviceName(provider?:string|null,base?:string|null){
   if((provider==='custom'||provider==='api')&&base){try{return new URL(base).hostname;}catch{}}
   return provider||'an AI service';
 }
-// WHAT "TEST AND CONNECT" SAYS WHEN THE AI DID NOT ANSWER (#763). The server passes on the provider's
-// own failure ("Model provider failed with HTTP 403: Forbidden"); a person reads instead what happened
-// and what to do, in the chats' words for the same states (core/no-ai.mjs). The provider's text is
-// dropped: it can quote part of the key. Anything that is not a provider failure (a refusal of the
-// form itself, a timeout already said plainly) is shown as the server wrote it.
-export const KEY_REFUSED=AI_REFUSED_STATUS+'. The service did not accept this key. Check it, or replace it with a new key from your AI service, then try again.';
-export const AI_UNREACHABLE=AI_UNREACHABLE_STATUS+'. Nothing answered at its address. Check that this computer is online and that the address is right, then try again.';
-export const AI_SERVICE_FAILED='Your AI service had a problem on its side and did not answer. Your key was not refused. Try again in a few minutes.';
-export const AI_REQUEST_LIMITED='Your AI service turned the request away for now, often because of a usage limit or no credit left. Check your account with the service, then try again.';
-export const AI_REQUEST_REJECTED='Your AI service did not accept the request. Check the model name and the address, then try again.';
-export function connectionError(message:string){
-  const failed=/Model provider failed with HTTP (\d{3})/.exec(message),status=failed?Number(failed[1]):0;
-  if(failed&&aiFailure(message)==='refused'||/needs sign-in/i.test(message))return KEY_REFUSED;
-  if(/could not be reached|fetch failed/i.test(message))return AI_UNREACHABLE;
-  if(status>=500)return AI_SERVICE_FAILED;
-  if(status===429)return AI_REQUEST_LIMITED;
-  if(status)return AI_REQUEST_REJECTED;
-  return message;
-}
-const when=(at:string)=>{const d=new Date(at);return isNaN(d.getTime())?at:d.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});};
+// WHAT "TEST AND CONNECT" SAYS WHEN THE AI DID NOT ANSWER (#763, #861). The server picks the
+// sentence from the AI's outcome (core/ai-outcome.mjs connectionTestError) and answers with it, so
+// what arrives is already what a person reads; the provider's raw words never travel here. Anything
+// that is not the AI (a refusal of the form itself) is shown as the server wrote it.
+const when=(at:string)=>showDate(at,'time');
 const DAY=24*3600*1000;
 
 type SpendGuard={enabled:boolean;daily_limit:number;low_balance:number;openrouter_connected:boolean;provider_message:string};
@@ -117,19 +102,34 @@ export function RoutineAIState({status,checking,onCheck,connected=false}:{status
 export function ConnectAI(){
   const qc=useQueryClient(),id=useId();
   const status=useQuery({queryKey:['routine-ai'],queryFn:routineAIStatus});
-  const saved=useQuery({queryKey:['provider'],queryFn:savedProvider});
+  // The saved file is read again while this page is open (#826): a connection damaged or repaired
+  // on disk reaches it within one status refresh, the same five seconds the chat reads keep.
+  const saved=useQuery({queryKey:['provider'],queryFn:savedProvider,refetchInterval:5000,refetchIntervalInBackground:true});
   const [service,setService]=useState('openrouter'),[address,setAddress]=useState(''),[model,setModel]=useState(''),[key,setKey]=useState('');
   const [routines,setRoutines]=useState<boolean|null>(null),[busy,setBusy]=useState(false),[checking,setChecking]=useState(false),[error,setError]=useState(''),[done,setDone]=useState('');
   const data=status.data,useForRoutines=routines??(data?.source!=='hermes');
-  const filled=useRef(false);
-  useEffect(()=>{if(filled.current||!saved.data)return;filled.current=true;if(!saved.data.configured)return;
+  useEffect(()=>{
+    if(!saved.isError)return;
+    setDone('');
+    setError('');
+  },[saved.isError]);
+  // The form is filled from the saved connection, and filled again only when that connection itself
+  // changes on disk (a repair or a replacement while the page is open, #826). While it stays the
+  // same, text the person is editing is never dropped.
+  const loaded=useRef<string>();
+  useEffect(()=>{
+    if(!saved.data)return;
+    const signature=JSON.stringify(saved.data);
+    if(signature===loaded.current)return;
+    loaded.current=signature;
+    if(!saved.data.configured)return;
     const url=saved.data.url,selected=providerService(url);
     setService(selected);setAddress(selected==='other'?url:'');setModel(saved.data.model||'');
   },[saved.data]);
   const check=async()=>{setChecking(true);setError('');try{qc.setQueryData(['routine-ai'],await call('routine-ai/check',{}));}catch(e:any){setError(e.message);}finally{setChecking(false);}};
   // An AI nobody checked for a day is checked once when Settings opens, so what it says is seen, not assumed.
   const looked=useRef(false);
-  useEffect(()=>{if(looked.current||!data?.available||data.source==='none')return;looked.current=true;if(!data.check||Date.now()-Date.parse(data.check.at)>DAY)check();},[data]);
+  useEffect(()=>{if(looked.current||!data?.available||data.source==='none')return;looked.current=true;if(!data.check||Date.now()-(parseInstant(data.check.at)?.getTime()??NaN)>DAY)check();},[data]);
   const selectedUrl=service==='other'?address.trim():SERVICES.find(s=>s.id===service)?.url||'';
   const editableAddress=(value:string)=>value.replace(/\/chat\/completions\/?$/,'').replace(/\/+$/,'');
   const canRetainKey=!!saved.data?.configured&&saved.data.key&&editableAddress(selectedUrl)===editableAddress(saved.data.url);
@@ -139,7 +139,7 @@ export function ConnectAI(){
       if(result.routines?.available)qc.setQueryData(['routine-ai'],result.routines);
       setDone(!useForRoutines||!result.routines?.available?'Connected. The notebook uses it.':result.routines.check?.ok?'Connected. The routines, the chat and the notebook use it, and the routines reached it just now.':'Connected for the notebook, but the routines could not reach it: '+(result.routines.check?.error||'no answer')+'.');
       qc.invalidateQueries({queryKey:['candidate-status']});
-    }catch(err:any){setError(connectionError(err.message));}finally{setBusy(false);}};
+    }catch(err:any){setError(err.message);}finally{setBusy(false);}};
   // Removing the saved connection (#779): the server forgets its key, here and in Hermes when it was
   // written there, and the form asks for a new one.
   const [removing,setRemoving]=useState(false);
@@ -155,7 +155,10 @@ export function ConnectAI(){
     <AlertDialogContent>
       <AlertDialogHeader>
         <AlertDialogTitle>Remove your AI connection?</AlertDialogTitle>
-        <AlertDialogDescription>Godspeed forgets its key and stops using this AI. The notebook, the chat and the routines that used it have no AI until you connect one again.</AlertDialogDescription>
+        <AlertDialogDescription>{saved.error
+          // #825: the damaged file is deleted too, and no copy is kept; say so before the person confirms.
+          ?'The saved connection file can\'t be read, so Godspeed deletes it. No copy of it is kept. The notebook, the chat and the routines that used it have no AI until you connect one again.'
+          :'Godspeed forgets its key and stops using this AI. The notebook, the chat and the routines that used it have no AI until you connect one again.'}</AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
         <AlertDialogCancel>Keep it</AlertDialogCancel>
@@ -165,8 +168,11 @@ export function ConnectAI(){
   </AlertDialog>;
   return <section id="connect-ai" className="border rounded p-4 space-y-4" aria-labelledby="connect-ai-title">
     <h2 id="connect-ai-title" className="text-xl">Your AI</h2>
-    {status.isLoading?<p role="status">Reading which AI your routines use…</p>:<RoutineAIState status={data} checking={checking} onCheck={check} connected={!!saved.data?.configured}/>}
-    {saved.error?<div className="space-y-3"><p role="alert" className="text-red-500">The saved AI connection could not be read. The form is unavailable so it cannot be overwritten. Remove it to connect one again.</p>{removeControl}{done&&<p role="status">{done}</p>}{error&&<p role="alert" className="text-red-500">{error}</p>}</div>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
+    {/* #945: while the saved file cannot be read (the refetch fails), react-query keeps the last
+    good data, so "configured" alone would keep saying a connected AI answers the chat while the
+    notice below says the file cannot be read. The two must agree. */}
+    {status.isLoading?<p role="status">Reading which AI your routines use…</p>:<RoutineAIState status={data} checking={checking} onCheck={check} connected={!saved.error&&!!saved.data?.configured}/>}
+    {saved.error?<div className="space-y-3"><p role="alert" className="text-red-500">{AI_CONNECTION_UNREADABLE_STATUS} The form is unavailable so it cannot be overwritten. Remove it to connect one again.</p>{removeControl}{error&&<p role="alert" className="text-red-500">{error}</p>}</div>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
       <p>Connect the AI account you pay for. The key stays on this device and never goes into your notes.</p>
       <div><label className="block" htmlFor={id+'service'}>Your AI service</label>
         <select id={id+'service'} className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!data?.available).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
@@ -216,7 +222,7 @@ export function BackupAI(){
     try{qc.setQueryData(['backup-ai'],await call('backup-ai',{url,key,model}));setKey('');setModel('');
       setDone('Connected as your backup. It answered a test just now, and it steps in only when your main AI fails.');
       qc.invalidateQueries({queryKey:['routine-ai']});
-    }catch(err:any){setError(connectionError(err.message));}finally{setBusy(false);}};
+    }catch(err:any){setError(err.message);}finally{setBusy(false);}};
   const remove=async()=>{setRemoving(true);setError('');setDone('');
     try{qc.setQueryData(['backup-ai'],await call('backup-ai/remove',{}));setDone('The backup is removed. When your main AI fails, the work waits for it again.');qc.invalidateQueries({queryKey:['routine-ai']});}
     catch(err:any){setError(err.message);}finally{setRemoving(false);}};

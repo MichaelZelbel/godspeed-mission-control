@@ -133,7 +133,9 @@ function TemplateCard({ template, onClick }: { template: Template; onClick: () =
       <CardHeader>
         <div className="mb-2 text-4xl" aria-hidden="true">{template.icon || "📁"}</div>
         <CardTitle className="text-base">{template.name}</CardTitle>
-        <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">{template.description || "No description"}</p>
+        {/* The whole description, so nothing on the card is cut off (#852); a short one still
+            reserves two lines so the cards line up. */}
+        <p className="min-h-10 text-sm text-muted-foreground">{template.description || "No description"}</p>
       </CardHeader>
       <CardFooter className="flex flex-wrap gap-3 text-xs text-muted-foreground">
         <span>{fields.length} field{fields.length === 1 ? "" : "s"}</span>
@@ -212,7 +214,7 @@ function ConfirmCreateDialog({ template, open, onOpenChange }: { template: Templ
             placeholder="My Books"
           />
           {nameError && <p id="template-collection-name-error" className="text-xs text-destructive">{nameError}</p>}
-          <p className="text-xs text-muted-foreground">URL: {BRAND.domain}/collections/{slugify(name)}</p>
+          <p className="text-xs text-muted-foreground">URL: {BRAND.url}/collections/{slugify(name)}</p>
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" disabled={isCreating} onClick={() => onOpenChange(false)}>Cancel</Button>

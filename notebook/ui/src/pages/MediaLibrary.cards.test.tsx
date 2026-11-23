@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
 import { createFakeSupabase } from "@/test/fake-supabase";
 import { MEDIA_CARRY_MAX_MB } from "../../../shared/media-limits.mjs";
+import { WAIT } from "@/test/wait-limits";
 
 // #528: a Media Library card for media with no note title said "Untitled" although its file name
 // was known, and the type filter had no PDF option although PDFs travel with the private copy.
@@ -76,7 +77,7 @@ describe("Media Library cards", () => {
       ],
       [{ id: "note-1", title: "Washing machine" }, { id: "note-untitled", title: "" }],
     );
-    await waitFor(() => expect(cardTitles()).toContain("Washing machine"));
+    await waitFor(() => expect(cardTitles()).toContain("Washing machine"), WAIT);
     const titles = cardTitles();
     expect(titles).toContain("holiday-photo.png");
     expect(titles).toContain("scan.pdf");
@@ -95,11 +96,11 @@ describe("Media Library cards", () => {
       ],
       [{ id: "note-1", title: "" }, { id: "note-2", title: "" }],
     );
-    await waitFor(() => expect(cardTitles()).toHaveLength(4));
+    await waitFor(() => expect(cardTitles()).toHaveLength(4), WAIT);
     fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
-    const pdf = await screen.findByRole("option", { name: "PDF" });
+    const pdf = await screen.findByRole("option", { name: "PDF" }, WAIT);
     fireEvent.click(pdf);
-    await waitFor(() => expect(screen.getByRole("combobox")).toHaveTextContent("PDF"));
+    await waitFor(() => expect(screen.getByRole("combobox")).toHaveTextContent("PDF"), WAIT);
     expect(cardTitles().sort()).toEqual(["brochure.pdf", "contract.pdf"]);
   });
 
@@ -108,7 +109,7 @@ describe("Media Library cards", () => {
     const localOnlyPath = rows[500].storage_path;
     const fetchMock = await open(rows, [], localOnlyPath);
 
-    expect(await screen.findByText("Kept on another computer")).toBeInTheDocument();
+    expect(await screen.findByText("Kept on another computer", undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByText(new RegExp(`Open it on the computer where it was added, or make it smaller than ${MEDIA_CARRY_MAX_MB} MB`))).toBeInTheDocument();
     const presenceCalls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/api/media/presence"));
     expect(presenceCalls).toHaveLength(2);
@@ -122,7 +123,7 @@ describe("Media Library cards", () => {
       { path, contentType: "application/pdf", filename: "Tickets for Berlin.pdf", note_id: "note-remote" },
     ]);
 
-    expect(await screen.findByText("Kept on another computer")).toBeInTheDocument();
+    expect(await screen.findByText("Kept on another computer", undefined, WAIT)).toBeInTheDocument();
     expect(cardTitles()).toContain("Trip plans");
     expect(screen.getByText("Tickets for Berlin.pdf")).toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: "Search media" }), { target: { value: "Berlin" } });

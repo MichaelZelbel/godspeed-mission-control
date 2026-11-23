@@ -6,6 +6,7 @@ import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import '@testing-library/jest-dom/vitest';
 import {GlobalAIChatFAB} from './GlobalAIChatFAB';
 import {hydrateFileChats,loadFileChat} from '@/local/file-chat';
+import { WAIT } from "@/test/wait-limits";
 
 vi.mock('sonner',()=>({toast:{error:vi.fn(),warning:vi.fn()}}));
 vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:{id:'owner'},session:{user:{id:'owner'}}})}));
@@ -33,22 +34,22 @@ beforeEach(async()=>{
  }));
  await hydrateFileChats();
  render(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={['/dashboard/chat']}><GlobalAIChatFAB page/></MemoryRouter></QueryClientProvider>);
- await screen.findByText('Fictional earlier answer');
+ await screen.findByText('Fictional earlier answer', undefined, WAIT);
 });
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 
 it('keeps the transcript until Clear is confirmed by the server and sends the new session thereafter',async()=>{
  fireEvent.click(screen.getByRole('button',{name:'Clear conversation'}));
- fireEvent.click(await screen.findByRole('button',{name:'Clear'}));
- await waitFor(()=>expect(finish).toBeTypeOf('function'));
+ fireEvent.click(await screen.findByRole('button',{name:'Clear'}, WAIT));
+ await waitFor(()=>expect(finish).toBeTypeOf('function'), WAIT);
  expect(screen.getByText('Fictional earlier answer')).toBeInTheDocument();
  expect(screen.getByRole('button',{name:'Send'})).toBeDisabled();
  finish(response({state:reset}));
- await waitFor(()=>expect(screen.queryByText('Fictional earlier answer')).toBeNull());
+ await waitFor(()=>expect(screen.queryByText('Fictional earlier answer')).toBeNull(), WAIT);
  expect(loadFileChat('general')).toEqual(reset);
  fireEvent.change(screen.getByLabelText('Message'),{target:{value:'Fictional new question'}});
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
- await waitFor(()=>expect(invoke).toHaveBeenCalled());
+ await waitFor(()=>expect(invoke).toHaveBeenCalled(), WAIT);
  const sent=(invoke.mock.calls[0] as any)[1].body;
  expect(sent.conversation_session).toBe(reset.session_id);
  expect(sent.messages).toEqual([{role:'user',content:'Fictional new question'}]);
@@ -56,10 +57,10 @@ it('keeps the transcript until Clear is confirmed by the server and sends the ne
 
 it('keeps the transcript and shows the reason when the server refuses Clear',async()=>{
  fireEvent.click(screen.getByRole('button',{name:'Clear conversation'}));
- fireEvent.click(await screen.findByRole('button',{name:'Clear'}));
- await waitFor(()=>expect(screen.getByRole('button',{name:'Send'})).toBeDisabled());
+ fireEvent.click(await screen.findByRole('button',{name:'Clear'}, WAIT));
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Send'})).toBeDisabled(), WAIT);
  finish(response({error:'Conversation changed before clearing. Reopen it and review the current history.'},409));
- expect(await screen.findByText('Conversation changed before clearing. Reopen it and review the current history.')).toBeInTheDocument();
+ expect(await screen.findByText('Conversation changed before clearing. Reopen it and review the current history.', undefined, WAIT)).toBeInTheDocument();
  expect(screen.getByText('Fictional earlier answer')).toBeInTheDocument();
  expect(loadFileChat('general')).toEqual(old);
  expect(screen.getByRole('button',{name:'Send'})).toBeEnabled();

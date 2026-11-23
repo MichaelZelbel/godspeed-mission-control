@@ -3,8 +3,9 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {hash} from './records/store.mjs';
 import {assistantEnvironment} from './assistant-files.mjs';
-import {hermesResponse,hermesFailureMessage,childFailure} from './runtime.mjs';
+import {hermesResponse,hermesFailureMessage,hermesFailure,childFailure} from './runtime.mjs';
 import {runChild} from './child-process.mjs';
+import {savedProviderOrNull} from './saved-provider.mjs';
 import {keepAiFailure} from './ai-failures.mjs';
 import {charmConversation} from './charm-operation.mjs';
 
@@ -44,7 +45,7 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
   // NOT written into the home here: that is the home the routines think with, and a person who
   // unticked "Use it for the daily routines and the chat too" chose not to spend that AI on them. Ticked (the box's
   // default on a fresh install), Settings writes the model into the home and the chat just works.
-  const saved=providerFile&&fs.existsSync(providerFile)?JSON.parse(fs.readFileSync(providerFile,'utf8')):null;
+  const saved=providerFile?savedProviderOrNull(providerFile):null;
   if(saved&&!input.model&&!homeHasModel(home)){
    const said=NO_MODEL_IN_HOME;
    keepAiFailure({file:keptFile,diagnostic:'The assistant\'s home ('+home+') names no model, and the AI connected in Settings was not set for the routines, which is where the assistant reads its model. Nothing was asked of the assistant.',said,extra:{exit_code:null,model:saved.model||null,conversation:String(input.conversation_id||input.note_id||'general').slice(0,80)}});
@@ -70,7 +71,7 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
   if(result.code||!reply){
    const diagnostic=result.stderr+'\n'+reply,secrets=[saved?.key,process.env.OPENAI_API_KEY].filter(Boolean),said=hermesFailureMessage(diagnostic,secrets);
    keepAiFailure({file:keptFile,diagnostic,said,secrets,extra:{exit_code:result.code,model:input.model||saved?.model||null,conversation:String(input.conversation_id||input.note_id||'general').slice(0,80)}});
-   throw new Error(said);
+   throw hermesFailure(diagnostic,secrets);
   }
   return {reply};
  }finally{release?.();}};

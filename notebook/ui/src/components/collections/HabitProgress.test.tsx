@@ -26,10 +26,10 @@ describe("Habit progress", () => {
     render(<HabitProgress progress={progressFixture} />);
     const days = within(screen.getByRole("list", { name: "Recent days" })).getAllByRole("listitem");
     expect(days).toHaveLength(7);
-    expect(days[0]).toHaveAccessibleName("Wednesday, 7 October 2026: Done");
-    expect(days[1]).toHaveAccessibleName("Thursday, 8 October 2026: Protected");
-    expect(days[4]).toHaveAccessibleName("Sunday, 11 October 2026: Not recorded");
-    expect(days[6]).toHaveTextContent("Tue13 OctToday");
+    expect(days[0]).toHaveAccessibleName("Wed, Oct 7, 2026: Done");
+    expect(days[1]).toHaveAccessibleName("Thu, Oct 8, 2026: Protected");
+    expect(days[4]).toHaveAccessibleName("Sun, Oct 11, 2026: Not recorded");
+    expect(days[6]).toHaveTextContent("TueOct 13, 2026Today");
     expect(screen.queryByRole("list", { name: "Calendar key" })).not.toBeInTheDocument();
     expect(days[0].querySelector("img")?.src).toContain("flame-done.svg");
     expect(days[1].querySelector("img")?.src).toContain("flame-ice.svg");
@@ -56,7 +56,7 @@ describe("Habit progress", () => {
   });
   it("keeps an unresolved gap distinct from a confirmed missed activity and discloses limited history", () => {
     render(<HabitProgress progress={{ ...progressFixture, coverage: { from: "2026-10-13", scheduleHistoryComplete: false, note: "Streak history starts with a dated schedule." }, calendar: [{ ...progressFixture.calendar[5], answer: null }] }} />);
-    expect(within(screen.getByRole("list", { name: "Recent days" })).getByRole("listitem")).toHaveAccessibleName("Monday, 12 October 2026: Gap in record");
+    expect(within(screen.getByRole("list", { name: "Recent days" })).getByRole("listitem")).toHaveAccessibleName("Mon, Oct 12, 2026: Gap in record");
     expect(screen.getByText("Streak history starts with a dated schedule.")).toBeInTheDocument();
     expect(screen.getByText("Recent days still to record.")).toBeVisible();
   });
