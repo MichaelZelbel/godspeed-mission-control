@@ -49,6 +49,17 @@ test('Run now refuses an unknown or paused routine in plain words',t=>withServic
  assert.ok(paused.status>=400);assert.match((await paused.json()).error,/This routine is paused\. Resume it, then run it\./);
 }));
 
+test('Run now refuses a routine owned elsewhere, awaiting review, or while another runs',t=>withService(t,async({service,post})=>{
+ await setup(post);
+ const refused=async(patch,re)=>{service.store.save('jobs',{id:'memory-daily',paused:false,state:'pending',owner:'local',...patch});const r=await post('/api/jobs/run',{id:'memory-daily'});assert.ok(r.status>=400);assert.match((await r.json()).error,re);};
+ await refused({owner:'vps'},/does not run here/);
+ await refused({state:'needs_review'},/needs its previous attempt reviewed/);
+ await refused({state:'awaiting_approval'},/needs its previous attempt reviewed/);
+ service.scheduler.running=true;
+ await refused({},/already running/);
+ service.scheduler.running=false;
+}));
+
 test('the program\'s failure never carries its output',async()=>{
  const store={root:'/tmp/ws'};
  await assert.rejects(runRememberWhatYouSaid({store,run:async()=>({code:1,stderr:'sk-secret',stdout:''})}),e=>e.message==='Remember what you said could not finish.');

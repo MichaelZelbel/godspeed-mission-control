@@ -94,6 +94,7 @@ export class Scheduler {
     const job=typeof id==='string'?this.store.get('jobs',id):null,settings=this.store.get('settings','installation');
     if(!job)throw new Error('Choose an existing routine');
     if(!settings||settings.owner!==this.device)throw new Error('Routines run on the machine named '+(settings?.owner||'in setup')+'. Run the routine there, or choose this machine to run the routines.');
+    if(job.owner!==this.device||(this.only&&!this.only.has(job.kind)))throw new Error('This routine does not run here.');
     if(job.paused)throw new Error('This routine is paused. Resume it, then run it.');
     if(['awaiting_approval','needs_review'].includes(job.state))throw new Error('This routine needs its previous attempt reviewed before it can run.');
     if(this.running||this.unfinished.has(id))throw new Error('A routine is already running. Try again in a moment.');

@@ -147,4 +147,12 @@ describe("Run now in Routines", () => {
       expect(JSON.parse(call![1].body)).toEqual({ id: "memory-daily" });
     }, WAIT);
   });
+
+  it("offers Run now on Hermes only for rows Hermes can start", async () => {
+    const row = (id: string, native?: boolean) => ({ id, kind: id, title: id, owner: "local", paused: false, state: "pending", next_run: "2030-01-02T02:40:00.000Z", ...(native ? { native } : {}) });
+    const { findByText, queryByRole } = settings("/dashboard/settings", { routineSwitches: { note: "n", routines: [] }, schedules: [row("hermes-task", true), row("spend-guard")] });
+    await findByText("hermes-task", undefined, WAIT);
+    expect(queryByRole("button", { name: "Run hermes-task now" })).toBeTruthy();
+    expect(queryByRole("button", { name: "Run spend-guard now" })).toBeNull();
+  });
 });
