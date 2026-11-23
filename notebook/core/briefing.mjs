@@ -85,6 +85,10 @@ export function asksForTodaysBrief(text){
  return false;
 }
 
+// Today's saved briefing when the message only asks for it, else null. Every chat answers such a
+// message with this note and asks no AI, so no check of the AI stands in front of it (#1039).
+export function savedBriefAnswer(store,message){return asksForTodaysBrief(message)?savedBriefToday(store).note:null;}
+
 export async function briefing(job,{store,query,provider,now=new Date(),notices}){
  if(job.rehearsal){
   const copy=path.join(store.state,'brief-rehearsals',randomUUID());fs.mkdirSync(copy,{recursive:true,mode:0o700});
