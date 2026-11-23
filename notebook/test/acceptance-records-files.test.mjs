@@ -40,3 +40,13 @@ test('the tables and functions of deleted pages are still read, recorded and not
  for(const t of deleted.tables){assert.ok(tables.has(t),`query.mjs does not know table ${t}`);assert.ok(keys.has('domain:'+t),`acceptance-matrix has no domain:${t}`);assert.ok(!inventory.dependencies.some(d=>d.tables.includes(t)),`source-inventory lists ${t} again`);}
  for(const f of deleted.functions){assert.ok(keys.has('function:'+f),`acceptance-matrix has no function:${f}`);assert.ok(!inventory.dependencies.some(d=>d.functions.includes(f)),`source-inventory lists ${f} again`);}
 });
+
+test('rerunning the generator reproduces both committed matrices apart from checked_at',async()=>{
+ const {execFileSync}=await import('node:child_process');
+ const names=['acceptance-matrix.json','capability-matrix.json','capabilities.md'],file=n=>path.join(root,'docs/full-version',n);
+ const before=Object.fromEntries(names.map(n=>[n,fs.readFileSync(file(n),'utf8')])),strip=s=>s.replace(/"checked_at": "[^"]*"/,'');
+ try{
+  execFileSync(process.execPath,[path.join(root,'notebook/scripts/acceptance-matrix.mjs')],{stdio:'pipe'});
+  for(const n of names)assert.equal(strip(fs.readFileSync(file(n),'utf8')),strip(before[n]),`${n} is not what the generator writes`);
+ }finally{for(const n of names)fs.writeFileSync(file(n),before[n]);}
+});

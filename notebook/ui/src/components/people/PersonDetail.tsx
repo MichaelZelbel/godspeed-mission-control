@@ -189,7 +189,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl p-4 sm:p-6">
           {/* Persistent person header - visible across all tabs */}
-          <div className="mb-4 space-y-4 bg-background pb-2 sm:sticky sm:top-0 sm:z-10">
+          <div className="mb-4 space-y-4 bg-background pb-2 [@media(min-width:640px)_and_(min-height:600px)]:sticky [@media(min-width:640px)_and_(min-height:600px)]:top-0 [@media(min-width:640px)_and_(min-height:600px)]:z-10">
             <Card>
               <CardHeader>
                 <div className="flex flex-wrap items-start justify-between gap-3">
