@@ -37,6 +37,8 @@ interface ProfileSectionsProps {
   excludeSlugs?: string[];
   /** List every category, empty or not, so a first fact can be added in any of them. */
   showEmptyCategories?: boolean;
+  /** Told the Filter fields text whenever it changes, so a card above can follow it. */
+  onFilterChange?: (query: string) => void;
 }
 
 /**
@@ -98,8 +100,13 @@ export function ProfileSections({
   children,
   excludeSlugs = NO_EXCLUDED_SECTIONS,
   showEmptyCategories = false,
+  onFilterChange,
 }: ProfileSectionsProps) {
-  const [filterQuery, setFilterQuery] = useState("");
+  const [filterQuery, setFilterQueryState] = useState("");
+  const setFilterQuery = (query: string) => {
+    setFilterQueryState(query);
+    onFilterChange?.(query);
+  };
   const [addingCategory, setAddingCategory] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [newCatIcon, setNewCatIcon] = useState("folder");
