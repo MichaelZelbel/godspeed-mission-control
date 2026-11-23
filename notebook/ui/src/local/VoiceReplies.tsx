@@ -3,6 +3,7 @@ import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {AlertTriangle,Loader2} from 'lucide-react';
+import {showDate} from '@/lib/local-date';
 
 // Settings > Voice replies (25 October 2026, discussion #41; notebook/core/voice-replies.mjs). A voice
 // note sent in Telegram is answered with a voice note and the same text. Here: which voice speaks
@@ -16,7 +17,7 @@ export type VoiceStatus={available:boolean;
   transcribe?:{service:'elevenlabs'|'local'|'hermes'|'unavailable';model?:string|null;provider?:string;words?:string|null};
   failing?:{since:string;error:string|null;at:string|null}|null;sample?:string};
 async function call(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
-const when=(at:string)=>{const d=new Date(at);return isNaN(d.getTime())?at:d.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});};
+const when=(at:string)=>showDate(at,'time');
 // eleven_v4_turbo first: it is the fastest of them and what a voice note gets unless another is picked.
 const MODELS=['eleven_v4_turbo','eleven_multilingual_v2','eleven_v3','eleven_flash_v2_5','eleven_turbo_v2_5'];
 export const DEFAULT_MODEL=MODELS[0];

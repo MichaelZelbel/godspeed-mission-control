@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Check, CircleHelp, Minus, Pause, Circle, X } from "lucide-react";
-import { habitDayLabel, habitDateLabel, type HabitDayStatus, type HabitProgress as Progress } from "@/lib/habit-progress";
+import { habitDayLabel, type HabitDayStatus, type HabitProgress as Progress } from "@/lib/habit-progress";
+import { showDate } from "@/lib/local-date";
 import ready from "../../../../core/progress-assets/playful/flame-ready.svg";
 import done from "../../../../core/progress-assets/playful/flame-done.svg";
 import ice from "../../../../core/progress-assets/playful/flame-ice.svg";
@@ -45,10 +46,10 @@ export function HabitProgress({ progress, habitStatus = "active", children }: { 
     {week.length > 0 && <div className="habit-week-section">
       <h3 className="habit-week-heading">Seven little steps</h3>
       <ol className="habit-week" aria-label="Recent days">
-        {week.map(day => <li key={day.date} className={"habit-calendar-day habit-day-" + day.status + (day.date === progress.today ? " habit-is-today" : "")} aria-label={habitDateLabel(day.date, true) + ": " + habitDayLabel(day) + (day.reason ? ". " + day.reason : "")}>
+        {week.map(day => <li key={day.date} className={"habit-calendar-day habit-day-" + day.status + (day.date === progress.today ? " habit-is-today" : "")} aria-label={day.weekday + ", " + showDate(day.date, "day") + ": " + habitDayLabel(day) + (day.reason ? ". " + day.reason : "")}>
           <span className="habit-weekday">{day.weekday}</span>
           <span className="habit-day-symbol">{calm ? <span className="habit-calm-symbol" aria-hidden="true">{day.status === "completed" ? "✓" : day.status === "protected" ? "◇" : day.status === "missed" ? "○" : "·"}</span> : day.status === "unknown" ? day.date === progress.today ? <svg className="habit-waiting-spark" viewBox="0 0 48 56" aria-hidden="true"><path d="M25 6c2 10-5 13-5 20-5-1-7-5-6-9C4 27 3 39 9 46c7 8 23 8 30-1 7-9 3-19-3-25 1 7-2 9-4 9 2-10-2-16-7-23Z" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round"/><path d="m24 35 3 5-3 5-3-5Z" fill="currentColor" opacity=".5"/></svg> : <span className="habit-unrecorded-dot" aria-hidden="true" /> : <HabitDayIcon status={day.status === "missed" && day.answer === null ? "gap" : day.status} />}</span>
-          <time dateTime={day.date} className="habit-date">{habitDateLabel(day.date)}</time>
+          <time dateTime={day.date} className="habit-date">{showDate(day.date, "day")}</time>
           <span className="habit-day-caption">{shortLabel(day)}</span>
         </li>)}
       </ol>
@@ -63,7 +64,7 @@ export function HabitProgress({ progress, habitStatus = "active", children }: { 
         {!calm && <><p>Unrecorded planned days have 48 hours after that day ends to catch up. Then a freeze protects the gap, if available.</p><p>Without a freeze, a gap can end the displayed streak. It does not mean you missed the activity. Your all-time total stays.</p><p>You have {progress.protections.limit} freezes in any {progress.protections.windowDays}-day window. Pauses and excused dates do not use ice.</p></>}
         <p>Only completed days increase your total. Add a past day below if you completed it.</p>
         {progress.coverage.note && <p>{progress.coverage.note}</p>}
-        {!calm && <><p>Longest streak: {progress.longestRun} completed planned days.</p>{progress.nextMilestone && <div><p>Next milestone: {progress.nextMilestone.days} completed days. {progress.nextMilestone.remaining} to go.</p><progress className="habit-milestone" max={progress.nextMilestone.days} value={progress.lifetimeCompletedDays} aria-label={"Next milestone: " + progress.nextMilestone.days + " completed days"} /></div>}<h3 className="font-semibold">Past achievements</h3>{progress.achievements.length ? <ul>{progress.achievements.map(a => <li key={a.id}>{a.id === "graduated" ? "Habit graduated" : String(a.days) + " completed days"}{a.earnedOn ? ", reached " + habitDateLabel(a.earnedOn) : ""}</li>)}</ul> : <p>Your first milestone is ahead. Your completed days already count.</p>}</>}
+        {!calm && <><p>Longest streak: {progress.longestRun} completed planned days.</p>{progress.nextMilestone && <div><p>Next milestone: {progress.nextMilestone.days} completed days. {progress.nextMilestone.remaining} to go.</p><progress className="habit-milestone" max={progress.nextMilestone.days} value={progress.lifetimeCompletedDays} aria-label={"Next milestone: " + progress.nextMilestone.days + " completed days"} /></div>}<h3 className="font-semibold">Past achievements</h3>{progress.achievements.length ? <ul>{progress.achievements.map(a => <li key={a.id}>{a.id === "graduated" ? "Habit graduated" : String(a.days) + " completed days"}{a.earnedOn ? ", reached " + showDate(a.earnedOn, "day") : ""}</li>)}</ul> : <p>Your first milestone is ahead. Your completed days already count.</p>}</>}
       </div>
     </details>
   </section>;

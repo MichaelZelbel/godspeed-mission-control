@@ -2,7 +2,9 @@
 // #913: a member added through Add Member showed "Invalid Date" in a group's
 // Joined column, because the insert wrote no joined_at and the cell formatted
 // whatever came back. A member now joins on the day they were added, and a
-// row with no readable joined_at reads "—", never "Invalid Date".
+// row with no readable joined_at reads "Not set", never "Invalid Date".
+// #925: a plain-day joined_at (no time of day) must read that day, not the
+// day before, west of UTC — the cell reads it through showDate in both.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -11,6 +13,7 @@ import "@testing-library/jest-dom/vitest";
 import { createFakeSupabase, filterValue, type RecordedQuery } from "@/test/fake-supabase";
 import GroupDetail from "./GroupDetail";
 import { WAIT } from "@/test/wait-limits";
+import { showDate } from "@/lib/local-date";
 
 const { fake } = vi.hoisted(() => ({ fake: { current: null as any } }));
 vi.mock("@/integrations/supabase/client", () => ({ get supabase() { return fake.current.client; } }));
@@ -145,10 +148,10 @@ describe("the Joined column on a group's List tab", () => {
 
     // The new member appears in the list with the day they were added.
     await waitFor(() => expect(joinedCellOf("Fictional Ada").textContent).not.toBe("—"), WAIT);
-    expect(joinedCellOf("Fictional Ada").textContent).toBe(new Date().toLocaleDateString());
+    expect(joinedCellOf("Fictional Ada").textContent).toBe(showDate(new Date(), "date"));
   });
 
-  it("reads a membership with no readable joined_at as an em dash, never Invalid Date", async () => {
+  it("reads a membership with no readable joined_at as Not set, never Invalid Date", async () => {
     fake.current = database([
       memberRow({ contact_id: "person-bea", joined_at: null }),
       memberRow({ contact_id: "person-ada", joined_at: "not-a-date" }),
@@ -157,8 +160,17 @@ describe("the Joined column on a group's List tab", () => {
     expect(await screen.findByRole("heading", { name: "Fictional Book Club" }, WAIT)).toBeVisible();
 
     await waitFor(() => expect(screen.getAllByRole("row")).toHaveLength(3), WAIT);
-    expect(joinedCellOf("Fictional Bea").textContent).toBe("—");
-    expect(joinedCellOf("Fictional Ada").textContent).toBe("—");
+    expect(joinedCellOf("Fictional Bea").textContent).toBe("Not set");
+    expect(joinedCellOf("Fictional Ada").textContent).toBe("Not set");
     expect(document.body.textContent).not.toContain("Invalid Date");
+  });
+
+  it("reads a plain stored day in the Joined column as that day", async () => {
+    fake.current = database([memberRow({ contact_id: "person-bea", joined_at: "2025-03-05" })]);
+    renderPage();
+    expect(await screen.findByRole("heading", { name: "Fictional Book Club" }, WAIT)).toBeVisible();
+
+    await waitFor(() => expect(screen.getAllByRole("row")).toHaveLength(2), WAIT);
+    expect(joinedCellOf("Fictional Bea").textContent).toBe("Mar 5, 2025");
   });
 });

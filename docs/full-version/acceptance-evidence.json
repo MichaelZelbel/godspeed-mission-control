@@ -603,12 +603,16 @@
     "target_test": "Exercise social-visuals through its installed entry point and check actual results after restart"
   },
   "recipe:video-captions": {
+    "retained": {
+      "after": "talking-head-recut"
+    },
     "status": "partial",
     "evidence": [
       "Full maintained portable workflow, original caption generator and adapted burn tool are generated into the recipe. The generated entry point rendered a synthetic 1080x1920 fixture with a supplied transcript; two renders matched exactly, caption glyphs were within x269..801 and audio packet SHA-256 was preserved. Logs and fictional-video-captions-verification.json retain proof. New speech transcription, Linux font override and packaged installation acceptance remain required.",
       "Real Windows source-entry execution transcribed synthetic speech into 23 correct timed words and burned an actual 9.1-second video, including explicit CPU execution and retained libass Archivo Black font selection. Visible representative phrase and stream duration were checked. Source commits e43e8fe and 626617f; private caption-evidence contains commands, original, outputs, timing checks and frame. Installed Linux/full embedded acceptance remains open."
     ],
-    "target_test": "Exercise video-captions through its installed entry point and check actual results after restart"
+    "target_test": "Exercise video-captions through its installed entry point and check actual results after restart",
+    "criterion": "Burn timed captions into a supplied video using one maintained style, retain the original and transcript, and inspect the actual rendered result. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
   },
   "behavior:reminders": {
     "status": "partial",
@@ -655,5 +659,172 @@
     "evidence": [
       "2026-10-18: GitHub's macos-latest runner (Apple chip, the Mac's own /bin/bash 3.2), notebook/test/native-install-mac.sh in installers-mac-linux.yml (runs 39131383911, 39133867010, 39134121863): the notebook step installed as a LaunchAgent in the desktop session (gui/501), answered, came back by itself after kill -9, upgraded to a second version, took over from a notebook started by hand, and mc-uninstall removed it with the folder kept. Not done on a Mac: the whole one-line install with Hermes, a reboot and login, and the routines after them."
     ]
+  },
+  "recipe:embedded-captions": {
+    "retained": {
+      "after": "due"
+    },
+    "criterion": "> Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:faceless-explainer": {
+    "retained": {
+      "after": "excalidraw-visuals"
+    },
+    "criterion": "\"Turn arbitrary text — an article, notes, a topic, a brief — into a faceless explainer video: there is no site or footage to capture, so the visuals are invented per scene (typography, abstract graphics, diagrams, data-viz). Use for topic explainers, concept breakdowns, how-tos, listicles. Not a video built from a website (/product-launch-video — promo or tour). Unclear → /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:figma": {
+    "retained": {
+      "after": "faceless-explainer"
+    },
+    "criterion": "Import Figma content into a HyperFrames composition — rendered assets, brand tokens, components, storyboard sections → reconstructed motion (frames read as states, not slides) (REST/CLI), connector-assisted motion when available, and shaders from a connector or native export. Use when the user pastes a figma.com link or asks to bring a Figma design, frame, logo, brand, or animation into a video/composition. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:general-video": {
+    "retained": {
+      "after": "found-company"
+    },
+    "criterion": "> Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:hyperframes": {
+    "retained": {
+      "after": "headache-tracker"
+    },
+    "criterion": "> Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:hyperframes-animation": {
+    "retained": {
+      "after": "hyperframes"
+    },
+    "criterion": "\"All animation knowledge for HyperFrames — atomic motion rules, multi-phase scene blueprints, scene transitions, broader motion-design techniques, AND the seven runtime adapters (GSAP default, plus Lottie, Three.js, Anime.js, CSS keyframes, Web Animations API, TypeGPU). Use for any motion or animation task: pick 2-4 rules and compose, or load a blueprint, or look up runtime-specific API (e.g. GSAP eases / Lottie player / Three.js mixer). Also covers auditing an existing composition's choreography (animation map) and 24 named text-animation effects. HyperFrames-native: single paused timeline, seek-safe, deterministic.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:hyperframes-audio": {
+    "retained": {
+      "after": "hyperframes-animation"
+    },
+    "criterion": "> Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:hyperframes-cli": {
+    "retained": {
+      "after": "hyperframes-audio"
+    },
+    "criterion": "> Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:hyperframes-core": {
+    "retained": {
+      "after": "hyperframes-cli"
+    },
+    "criterion": "The HyperFrames composition contract — build one renderable project. Use for composition structure, the `data-*` timing attributes, `class=\"clip\"`, tracks, sub-compositions, variables, framework-owned media playback, deterministic-render rules, and validation. Read before writing composition HTML. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:hyperframes-creative": {
+    "retained": {
+      "after": "hyperframes-core"
+    },
+    "criterion": "Non-animation creative direction for HyperFrames videos. Use for design spec (frame.md / design.md) handling, palettes, typography, narration, beat planning, audio-reactive visuals, composition patterns, and brand / style decisions. For atomic motion patterns and scene blueprints, use `hyperframes-animation`. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:hyperframes-keyframes": {
+    "retained": {
+      "after": "hyperframes-creative"
+    },
+    "criterion": "> Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:hyperframes-registry": {
+    "retained": {
+      "after": "hyperframes-keyframes"
+    },
+    "criterion": "Search, install, and wire registry blocks and components into HyperFrames compositions. Use BEFORE hand-building any named visual — whenever a brief, a user, or a storyboard names a look, effect, treatment, or transition such as CRT scanlines, glitch, chromatic aberration, film grain, a shimmer sweep, a chart, a code or terminal window, a map, or a confetti burst — because roughly 400 hosted items already cover many of them and the search ranks all of them with nothing installed, no project, and no account. Also use when running hyperframes add or hyperframes catalog, installing one item or every block matching a tag, wiring an installed item into index.html, or working with hyperframes.json. Covers discovery, install locations, block sub-composition wiring, component snippet merging, and authoring a new block or component to contribute upstream (idea → scaffold → validate → PR). Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:media-use": {
+    "retained": {
+      "after": "mc-radar"
+    },
+    "criterion": "Agent Media OS, the single skill for every media need in a HyperFrames project. Resolve BGM, SFX, image, icon, brand logo, voice, color grade, or LUT into a frozen local file or paste-ready block + ledger record (one verb, `resolve`); generate via TTS / music / image models when the catalog misses; produce voiceover, transcription, captions, and background removal through one shared audio engine; operate on media (cut / reframe / transform); and reuse assets across projects. Also use for vague feedback that real footage looks dark, flat, boring, should feel retro/camcorder/print/ASCII, needs privacy, or needs a media reveal. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:motion-graphics": {
+    "retained": {
+      "after": "morning-note"
+    },
+    "criterion": "> Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:music-to-video": {
+    "retained": {
+      "after": "move-godspeed"
+    },
+    "criterion": "\"Turn a music track (an audio file, a video to pull audio from, or a track generated from a mood brief) into a beat-synced video — lyric video, slideshow, or kinetic promo. The music drives all pacing; any user-supplied images/videos are cut onto the same beat grid, and a complete video needs zero assets. Narrated pieces → the input-matched workflow (see /hyperframes). Unclear → /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:pr-to-video": {
+    "retained": {
+      "after": "phone-errands"
+    },
+    "criterion": "\"Turn a GitHub pull request (a PR URL, owner/repo#N, or 'this PR' in a checked-out repo) into a code-change explainer video — changelog, feature reveal, fix, or refactor walkthrough built from the diff, commits, and files: the input is a code change, not a website. Not a product promo (/product-launch-video) or a no-PR topic explainer (/faceless-explainer). Unclear → /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:product-launch-video": {
+    "retained": {
+      "after": "pr-to-video"
+    },
+    "criterion": "\"Turn a product or marketing URL, pasted script, or brief into a product launch / promo video — SaaS promos, feature reveals, product demos, app and company launches. Use when the user wants to market, launch, promote, or reveal a product; the default for any commercial URL. Site tours / showcases of a website route here too — the brief carries the show-it-as-is intent. Unclear → /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:remotion-to-hyperframes": {
+    "retained": {
+      "after": "product-launch-video"
+    },
+    "criterion": "'Port an existing Remotion (React) composition''s source to HyperFrames HTML. Use ONLY on an explicit ask to port/convert/migrate/translate a Remotion source — one-way, Remotion-only. A passing Remotion mention, reference-only code, or \"make something like my Remotion video\" is a fresh build (/general-video). Unclear → /hyperframes.' Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:slideshow": {
+    "retained": {
+      "after": "scroll-craft"
+    },
+    "criterion": "> Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:talking-head-recut": {
+    "retained": {
+      "after": "talk-about"
+    },
+    "criterion": "Package an existing talking-head / interview / podcast video with timed, designed GRAPHIC OVERLAY cards — kinetic titles, lower-thirds, data callouts, quotes, side panels, picture-in-picture — synced to the transcript, on a 16:9 / 9:16 / 4:5 canvas of your choice; the clip plays untouched underneath. Trigger on \"graphic overlays\", \"on-screen graphics\", \"package / dress up my video\". Not plain subtitles (/embedded-captions). Unclear → /hyperframes. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:video-finishing": {
+    "retained": {
+      "after": "video-captions"
+    },
+    "criterion": "Use when the person wants a video finished for posting - captions burned in, a vertical version for Reels, TikTok or Shorts, an animated title card, slides, or graphic overlays on a clip they recorded - or says \"caption this\", \"make the vertical cut\", \"add a title card\", \"put graphics on my video\". Captions and the vertical cut run through the mc-video command; anything animated goes to the HyperFrames recipes. The person records and cuts; this recipe finishes and never posts. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:video-hooks": {
+    "retained": {
+      "after": "video-finishing"
+    },
+    "criterion": "Use when the user wants a hook for a YouTube video or a Short, the first sentence or two they say on camera, from a script, beat sheet or bullet list that already exists. Trigger on \"write me hooks\", \"hook ideas for this video\", \"how should this video open\", \"these hooks don't work\", or a rejection of an earlier set. Writes wide in forced slots, then a judge that did not write them checks every candidate against the script's facts and against every note they have ever given on this video, and only the survivors reach them. Three good ones, or \"none passed and here is why\", never eight weak ones. Not for titles, thumbnails or post images. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "recipe:coach-prep-review": {
+    "omit": true
+  },
+  "recipe:tracker": {
+    "criterion": "Track anything the person names. Use for every message that starts with \"track\" (any case, typed or dictated, \"Track:\" too, also inside a German sentence), the habits, headaches, the period and food included, since this recipe hands those on, but not \"track journal\" or \"track Tagebuch\", which go to the journal; when they answer yes to \"Start a new tracker called ...?\"; when they ask to set up a tracker (\"I want to track my sleep: hours, and quality from 1 to 5\"); when they correct or delete a tracked entry (\"that was 91, not 92\", \"delete the last belly\", \"delete the last walk to work\"); when they ask about something they track (\"how has my belly changed this month?\"); and when they say which coaching talk may look at a tracker or a habit, or no longer needs it (\"The health talk may also look at my sleep tracker\", \"The health talk no longer needs my sleep tracker\", \"The work talk may also look at my stretching habit\"). Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation."
+  },
+  "procedure:spend-guard": {
+    "trigger": "Hourly native record routine",
+    "durable_state": "Secret-free aggregate observation, independent notice timestamps, schedule and receipts",
+    "execution": "notebook/core/spend-guard.mjs through procedures.mjs",
+    "activation": "On by default and silent without an OpenRouter key; configurable in Settings",
+    "permissions": "Authenticated owner; read-only OpenRouter key and credits endpoints",
+    "dependencies": [],
+    "criterion": "Sum daily use across unique held OpenRouter keys, warn for daily spend and the lowest remaining credit at most once per kind in six hours, and retain no credential outside its private source. Settings change both thresholds and can stop all calls; failed or absent-key samples stay silent.",
+    "status": "tested",
+    "evidence": [
+      "notebook/test/spend-guard.test.mjs"
+    ],
+    "target_test": "Stub both OpenRouter reads and verify aggregation, settings, failure silence, six-hour restart throttling and credential exclusion"
+  },
+  "procedure:domain-watch": {
+    "trigger": "Selected schedule or command domain-watch",
+    "durable_state": "Schedule, receipts and affected files",
+    "execution": "notebook/core/procedures.mjs / runtime.mjs",
+    "activation": "Explicit user choice; inspect installed schedules and settings",
+    "permissions": "Authenticated owner; outward changes require exact approval",
+    "dependencies": [],
+    "criterion": "Read owner-selected authoritative domain registration endpoints; do not buy domains. Verify the domain-watch result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
+    "status": "verified working",
+    "evidence": [
+      "notebook/test/domain-watch.test.mjs: add, list, archive and restore through one six-hour sweeper; exact RDAP endpoints and headers; fallback; a lookup that fails on every server keeps the last state, sends no notice, is named in the run's outcome and is retried at the next six-hour slot through the real scheduler tick, for more runs than max_retries without pausing the sweeper, and one always-failing domain does not stop a healthy one being checked and noticed; baseline, changed, return-to-registered and unchanged states; bounded Telegram batches deliver every transition once; after one delivered batch and an uncertain next batch, the next run delivers the rest exactly once; chat add, list and remove; Settings add, list and remove through the running server",
+      "notebook/ui/src/local/PersonalControl.domain-watch.test.tsx: Settings lists domain state, says when no registry answered, and submits add and remove operations"
+    ],
+    "target_test": "Exercise domain-watch through its installed entry point and check actual results after restart"
   }
 }

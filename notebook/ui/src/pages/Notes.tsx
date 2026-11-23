@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { OFFLINE_CORE } from "@/lib/flags";
+import { parseInstant } from "@/lib/local-date";
 import { localNoteUpdatedAt, upsertNotesLocal } from "@/sync/local-replica";
 
 import { SEOHead } from "@/components/SEOHead";
@@ -712,8 +713,8 @@ export default function Notes() {
       }
       const aRaw = (a as unknown as Record<string, unknown>)[sortField];
       const bRaw = (b as unknown as Record<string, unknown>)[sortField];
-      const aTs = typeof aRaw === "string" ? new Date(aRaw).getTime() : 0;
-      const bTs = typeof bRaw === "string" ? new Date(bRaw).getTime() : 0;
+      const aTs = typeof aRaw === "string" ? parseInstant(aRaw)?.getTime() ?? 0 : 0;
+      const bTs = typeof bRaw === "string" ? parseInstant(bRaw)?.getTime() ?? 0 : 0;
       return dir * (aTs - bTs);
     });
     return sorted;
@@ -742,8 +743,8 @@ export default function Notes() {
     if (!fallback) return selectedNoteRow;
     // Prefer whichever copy is newer so a stale list entry can never clobber
     // the freshly saved row (and vice-versa).
-    const rowTs = new Date(selectedNoteRow.updated_at || 0).getTime();
-    const fallbackTs = new Date(fallback.updated_at || 0).getTime();
+    const rowTs = parseInstant(selectedNoteRow.updated_at || 0)?.getTime() ?? 0;
+    const fallbackTs = parseInstant(fallback.updated_at || 0)?.getTime() ?? 0;
     return rowTs >= fallbackTs ? selectedNoteRow : fallback;
   }, [selectedId, selectedNoteRow, allNotes, trashNotes, favNotes, searchResults]);
 
@@ -758,8 +759,8 @@ export default function Notes() {
       try {
         const localTs = await localNoteUpdatedAt(selectedNoteRow.id);
         if (cancelled) return;
-        const serverTs = new Date(selectedNoteRow.updated_at || 0).getTime();
-        if (localTs && new Date(localTs).getTime() >= serverTs) return;
+        const serverTs = parseInstant(selectedNoteRow.updated_at || 0)?.getTime() ?? 0;
+        if (localTs && (parseInstant(localTs)?.getTime() ?? 0) >= serverTs) return;
         await upsertNotesLocal([selectedNoteRow]);
       } catch (error) {
         console.warn("Local replica self-heal failed", error);

@@ -58,7 +58,7 @@ describe("the timeline with a dateless and a sparse moment", () => {
 
     fireEvent.click(screen.getByText("Written without a date"));
     // The drawer names the same day in full: it did not crash.
-    expect(await screen.findByText("March 14, 2026", undefined, WAIT)).toBeInTheDocument();
+    expect(await screen.findByText("Mar 14, 2026", undefined, WAIT)).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("No day at all"));
     // A moment with no day at all opens too, described as Undated.

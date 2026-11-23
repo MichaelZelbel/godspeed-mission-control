@@ -5,7 +5,7 @@ import { functionErrorMessage } from "@/lib/function-error";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Loader2, GitCommit, X, ChevronRight } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { showDate } from "@/lib/local-date";
 import { showToast } from "@/lib/toast";
 import { VersionPreviewDialog } from "./VersionPreviewDialog";
 
@@ -182,7 +182,7 @@ export function VersionHistoryPanel({ noteId, onClose }: Props) {
                   <p className="text-foreground truncate mt-0.5">{meta.message || "No message"}</p>
                   {meta.date && (
                     <p className="text-muted-foreground mt-0.5">
-                      {formatDistanceToNow(new Date(meta.date), { addSuffix: true })}
+                      {showDate(meta.date, "ago")}
                     </p>
                   )}
                 </button>

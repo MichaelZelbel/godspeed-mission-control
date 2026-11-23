@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Pencil, Trash2, X } from "lucide-react";
 import { FactsPanel } from "@/components/facts/FactsPanel";
-import { parseDateOnly } from "@/lib/local-date";
+import { showDate } from "@/lib/local-date";
 import {
   useDeleteEntity,
   useEntityMoments,
@@ -179,7 +179,7 @@ export function EntityDetail({ entity, onDeleted }: EntityDetailProps) {
                     {m.title}
                   </Link>
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {parseDateOnly(m.happened_at)?.toLocaleDateString() ?? ""}
+                    {showDate(m.happened_at, "day")}
                   </span>
                 </li>
               ))}

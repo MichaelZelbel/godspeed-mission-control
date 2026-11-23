@@ -7,4 +7,7 @@ export default defineConfig({ build: { assetsInlineLimit: 0 }, esbuild:{jsx:'aut
   '@powersync/tanstack-react-query': path.resolve(__dirname, 'src/local/disabled-row-sync.ts'),
   '@powersync/react': path.resolve(__dirname, 'src/local/disabled-row-sync.ts'),
   '@powersync/web': path.resolve(__dirname, 'src/local/disabled-row-sync.ts'),
-}}, define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString()) }, server: { host:'127.0.0.1', port:4177, proxy:{'/api':'http://127.0.0.1:47831'} }, test: { testTimeout: TEST_MS } });
+}}, define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString()) }, server: { host:'127.0.0.1', port:4177, proxy:{'/api':'http://127.0.0.1:47831'} }, test: { testTimeout: TEST_MS, projects: [
+  { extends: true, test: { name: 'local' } },
+  { extends: true, test: { name: 'los-angeles', env: { TZ: 'America/Los_Angeles' } } },
+] } });

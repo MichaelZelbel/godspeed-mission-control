@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { ArrowUpRight, ChevronDown, ChevronRight } from "lucide-react";
 import { useStickyPanelPreference } from "@/hooks/useStickyPanelPreference";
-import { formatDistanceToNow } from "date-fns";
+import { showDate } from "@/lib/local-date";
 import { dbErrorMessage } from "@/lib/function-error";
 
 interface OutgoingLinksPanelProps {
@@ -90,7 +90,7 @@ export function OutgoingLinksPanel({ noteId, onNavigate }: OutgoingLinksPanelPro
                   {ln.title || "Untitled"}
                 </span>
                 <span className="text-[9px] text-muted-foreground shrink-0 ml-2">
-                  {formatDistanceToNow(new Date(ln.updated_at), { addSuffix: true })}
+                  {showDate(ln.updated_at, "ago")}
                 </span>
               </div>
             </button>
