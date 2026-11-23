@@ -3,6 +3,7 @@ import { flushNoteSave, applyNoteEdit, applyNoteEditVerified, hashNoteContent } 
 import { toast } from "sonner";
 import { readScopedChat, updateScopedChat, persistScopedChat } from "@/local/scoped-chat-state.mjs";
 
+import {noAiAnswer} from '../../../../core/no-ai.mjs';
 
 import { Link, useLocation } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -19,8 +20,8 @@ import {
   buildApiMessages,
   withSummary,
   unansweredReason,
+  unansweredNote,
   unusableAnswer,
-  recordAIWorked,
   NOTE_MODIFYING_TOOLS,
   NOTE_CREATING_TOOLS,
   COLLECTION_MODIFYING_TOOLS,
@@ -75,8 +76,8 @@ type PageContext={page:string;label:string;toggleEvent?:string;changedEvent?:str
 // The same conversation opened in its own window (/dashboard/chat?page=identity).
 const PAGE_CHATS:Record<string,PageContext>={identity:{page:'identity',label:BRAIN_PAGE.label}};
 export const OPEN_CHAT_EVENT="godspeed:open-chat";
-// Handed to sendMessage by a note's "Send again": sends the newest message again, without a copy.
-const RESEND=Symbol("resend");
+// Handed to sendMessage by a note's "Send again": sends the message at that index again, in place, without a copy.
+class Resend{constructor(readonly index:number){}}
 // Opens the floating chat when one is on the page, and sends `message` there when one is given (the
 // dashboard's "Tell Godspeed about you" sends "context"); returns false when no floating chat answered.
 export function openFloatingChat(message?:string){const event=new CustomEvent(OPEN_CHAT_EVENT,{cancelable:true,detail:{message}});window.dispatchEvent(event);return event.defaultPrevented;}
@@ -101,6 +102,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   const [confirm, confirmDialog] = useConfirmDialog();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [sendingAt, setSendingAt] = useState<number | null>(null);
   const [isClearing, setIsClearing] = useState(false);
   const clearingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -310,11 +312,11 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   );
 
   const sendMessage = useCallback(async (override?: unknown) => {
-    const resend = override === RESEND;
+    const resend = override instanceof Resend;
     // A message handed in (openFloatingChat) is sent as if typed; a click or key event is not one.
     const text = (typeof override === "string" ? override : input).trim();
     if (isLoading || clearingRef.current || requestRef.current || !session) return;
-    const failed = resend && unansweredReason(state.messages, state.messages.length - 1, aiState) ? state.messages.at(-1) : undefined;
+    const failed = resend && unansweredReason(state.messages, override.index, aiState) ? state.messages[override.index] : undefined;
     if (resend ? !failed : !text && !files.length) return;
     const content = text||"Please describe the attached files.";
     // The same words sent again after a send that got no answer (the newest message is still the
@@ -331,12 +333,20 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
       ...state,
       messages: [...(repeated ? state.messages.slice(0, -1) : state.messages), userMsg],
     };
+    const at = resend ? override.index : nextState.messages.length - 1;
     followRef.current=true;setState(nextState);
     if (!resend) {setInput("");setFiles([]);}
-    setIsLoading(true);stoppedRef.current=false;requestRef.current=crypto.randomUUID();
+    setIsLoading(true);setSendingAt(at);stoppedRef.current=false;requestRef.current=crypto.randomUUID();
 
     try {
-      const apiMessages = buildApiMessages(nextState);
+      // The AI is asked an earlier message now, with everything said since as its context.
+      const apiMessages = buildApiMessages(failed && at < nextState.messages.length - 1
+        ? {
+            ...nextState,
+            messages: [...nextState.messages.filter((_, i) => i !== at), failed],
+            summarizedUpTo: at < nextState.summarizedUpTo ? nextState.summarizedUpTo - 1 : nextState.summarizedUpTo,
+          }
+        : nextState);
       const chatFn = collectionId ? "collection-chat" : noteId ? "note-chat" : "conversation-chat";
       // Flush the open editor's pending autosave so the agent edits on top of
       // the user's newest text (and knows which version it is based on). The
@@ -366,7 +376,6 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
           };
 
 
-      const askedAt = Date.now();
       const { data, error: fnErr } = await supabase.functions.invoke(chatFn, {
         body: {...invokeBody,conversation_session:state.session_id||'',message:userMsg.content,conversation_id:'notebook:'+contextKey,talk_id:talkId||undefined,page:pageChat?.page,page_label:pageChat?.label,files:userMsg.attachments?.length?userMsg.attachments:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current},
       });
@@ -394,9 +403,11 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
         toolResults: data.tool_results,
         ...(notesCreated?.length ? { notesCreated } : {}),
       };
+      const answeredUser = { ...nextState.messages[at] };
+      delete answeredUser.lastFailure;
       const updated: PersistedChatState = {
         ...nextState,
-        messages: [...nextState.messages, assistantMsg],
+        messages: [...nextState.messages.slice(0, at), answeredUser, assistantMsg, ...nextState.messages.slice(at + 1)],
       };
 
       // If a note-modifying tool ran, refresh the editor live + invalidate queries.
@@ -457,8 +468,6 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
         window.dispatchEvent(new CustomEvent(pageChat.changedEvent ?? "godspeed:page-chat-changed", { detail: { page: pageChat.page } }));
       }
 
-      // The AI answered: a "No answer" note from before this send stays cleared in every chat (#821).
-      recordAIWorked(askedAt);
       deliver(sentKey, sentUserId, sentContext, updated);
       summarizeLater(chatFn, sentKey, sentUserId, sentContext, updated);
 
@@ -467,22 +476,25 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
       // The error belongs to the conversation that asked; do not show it in another.
       const shown = chatKeyRef.current === sentKey;
       const reason: string = stoppedRef.current ? "Reply stopped." : err.message || "Something went wrong";
-      // A send the AI refused, could not be reached for, or answered unusably stays marked on its message, with when, so
-      // the reason survives a reload while that failure applies; a conversation cleared meanwhile
-      // has no such message left to mark. Any other failure (no AI connected, no credits) is said
-      // as before: on the line under the conversation, with the words back in the composer.
+      // A send with no AI connected, or that the AI refused, could not be reached for, or answered
+      // unusably, stays marked on its message until it is answered, so the reason survives a reload;
+      // a conversation cleared meanwhile has no such message left to mark. Any other failure (no
+      // credits, a stop) is said as before: on the line under the conversation, with the words back
+      // in the composer.
       const said = stoppedRef.current ? null : stateSaid(reason);
       const cleared = (loadChatState(sentUserId, sentContext).session_id || "") !== (nextState.session_id || "");
       const down = said === "refused" || said === "unreachable";
-      if ((down || (!stoppedRef.current && unusableAnswer(reason))) && !cleared) {
+      const noAI = !stoppedRef.current && noAiAnswer(reason);
+      if ((down || noAI || (!stoppedRef.current && unusableAnswer(reason))) && !cleared) {
         deliver(sentKey, sentUserId, sentContext, {
           ...nextState,
-          messages: nextState.messages.map((m, i) => (i === nextState.messages.length - 1 ? { ...m, lastFailure: reason, failedAt: Date.now() } : m)),
+          messages: nextState.messages.map((m, i) => (i === at ? { ...m, lastFailure: reason } : m)),
         });
         // The notebook now reads the AI as this send found it (the newest request wins, ai-health.mjs):
         // every surface in this window says so at once, not at the next read. An unusable answer says
         // nothing about whether the AI answers, so it leaves the shared state alone.
         if (down) queryClient.setQueryData(['chat-options'], (previous: any) => ({connected: true, ...previous, usable: false, availability: said}));
+        if (noAI) queryClient.setQueryData(['chat-options'], (previous: any) => ({...previous, connected: false}));
       } else if (shown) {
         setError(reason);
         if (!stoppedRef.current && !resend) {
@@ -491,7 +503,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
         }
       }
     } finally {
-      setIsLoading(false);requestRef.current=null;
+      setIsLoading(false);setSendingAt(null);requestRef.current=null;
     }
   }, [input, files, model, effort, isLoading, session, state, aiState, page, noteId, personId,talkId, pageChat, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
 
@@ -698,7 +710,8 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
 
               {state.messages.map((msg, i) => {
                 const newest = i === state.messages.length - 1;
-                const unanswered = isLoading && newest ? null : unansweredReason(state.messages, i, aiState);
+                const note = isLoading && i === sendingAt ? null : unansweredNote(state.messages, i, aiState);
+                const unanswered = note?.text ?? null;
                 return (
                 <div key={i}>
                 <div className={`flex gap-2 ${msg.role === "user" ? "justify-end" : ""}`}>
@@ -764,7 +777,10 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                   </div>
 
                 </div>
-                {unanswered && (
+                {note?.plain && (
+                  <div role={newest ? "alert" : undefined} data-chat-reply-error={newest ? "" : undefined} className="mt-1 text-right text-destructive text-xs">{note.text}</div>
+                )}
+                {unanswered && !note?.plain && (
                   <div
                     role={newest ? "alert" : undefined}
                     data-chat-reply-error={newest ? "" : undefined}
@@ -773,11 +789,9 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                     <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                     <span>No answer.</span>
                     <span>{unanswered}</span>
-                    {newest && (
-                      <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => sendMessage(RESEND)} disabled={isLoading || isClearing}>
-                        Send again
-                      </Button>
-                    )}
+                    <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => sendMessage(new Resend(i))} disabled={isLoading || isClearing}>
+                      Send again
+                    </Button>
                   </div>
                 )}
                 </div>

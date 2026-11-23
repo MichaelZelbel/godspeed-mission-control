@@ -81,3 +81,18 @@ test('two windows that send at the same moment keep each question once, each fol
   }finally{await service.close();}
  }
 });
+
+test('a message keeps its saved failure text while unanswered and loses it once answered',async()=>{
+ const service=await createService({root:fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-failure-')),port:0}),base='http://127.0.0.1:'+service.address.port;
+ const key='note:fictional-failure',failure='No AI is connected yet. Connect your AI service in Settings, Your AI, then ask Godspeed again.';
+ const post=async state=>(await fetch(base+'/api/chat-state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({context_key:key,state})})).json();
+ const wrap=messages=>({messages,summary:'',summarizedUpTo:0});
+ try{
+  await post(wrap([{role:'user',content:'Fictional question?',lastFailure:failure}]));
+  const unanswered=await post(wrap([{role:'user',content:'Fictional question?'}]));
+  assert.equal(unanswered.state.messages[0].lastFailure,failure);
+  const answered=await post(wrap([{role:'user',content:'Fictional question?'},{role:'assistant',content:'Fictional answer'}]));
+  assert.equal('lastFailure' in answered.state.messages[0],false);
+  assert.equal('lastFailure' in service.store.list('note_conversations')[0].state.messages[0],false);
+ }finally{await service.close();}
+});
