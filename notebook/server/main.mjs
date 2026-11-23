@@ -988,6 +988,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const processingTimer=setInterval(()=>{if(!menerioImport.mutating)void processing.tick().catch(()=>{});},60000);processingTimer.unref?.();
   const backupSchedule=new BackupSchedule({store,runner:backupRunner,device}),backupTimer=setInterval(()=>{if(!menerioImport.mutating)void backupSchedule.tick().catch(()=>{});},600000);backupTimer.unref?.();
   const automaticTimer=setInterval(()=>{if(!menerioImport.mutating)void automaticUpdate.tick().catch(()=>{});},60000);automaticTimer.unref?.();
+  void scheduler.ensureStartingJobs?.().catch(()=>{});
   const factTimer=setInterval(()=>{if(!menerioImport.mutating)void factClosing.tick().catch(()=>{});},600000);factTimer.unref?.();
   // Finished journal tasks become moments (core/journal-moments.mjs).
   const journalMoments=new JournalMoments({store,query,device}),journalMomentsTimer=setInterval(()=>{if(!menerioImport.mutating)void journalMoments.tick().catch(()=>{});},60000);journalMomentsTimer.unref?.();

@@ -12,14 +12,12 @@ test('inactive routines do not repeatedly rescan the vault and later activation 
  const at=new Date().toISOString();
  for(let i=0;i<30;i++)store.save('jobs',{id:'paused-'+i,kind:'selftest',owner:'local',paused:true,next_run:at,state:'pending',interval_ms:60000});
  store.save('jobs',{id:'later',kind:'selftest',owner:'local',paused:false,next_run:new Date(Date.now()+3600000).toISOString(),state:'pending',interval_ms:60000});
- // A notebook that already has the starting routines the scheduler adds when missing.
- store.save('jobs',{id:'memory-daily',kind:'memory-daily',owner:'local',paused:false,next_run:new Date(Date.now()+3600000).toISOString(),state:'pending',interval_ms:86400000});
  store.save('jobs',{id:'other-owner',kind:'selftest',owner:'vps',paused:false,next_run:at,state:'pending',interval_ms:60000});
  let runs=0,scans=0;const scan=store.scan.bind(store);store.scan=()=>{scans++;return scan();};
  const scheduler=new Scheduler(store,{executor:async()=>{runs++;return {verified:true,silent:true};}});
  // Two reads of the folder per tick; a third, for goal work to pull forward, went with the notebook's
- // own goal loop on 18 October 2026; a third, since #903, looks for a catalogue routine the notebook lacks.
- assert.deepEqual(await scheduler.tick(),[]);assert.equal(runs,0);assert.equal(scans,3);
+ // own goal loop on 18 October 2026.
+ assert.deepEqual(await scheduler.tick(),[]);assert.equal(runs,0);assert.equal(scans,2);
  assert.equal(store.list('job_receipts').length,0);
  store.save('jobs',{id:'paused-0',paused:false});
  await scheduler.tick();assert.equal(runs,1);

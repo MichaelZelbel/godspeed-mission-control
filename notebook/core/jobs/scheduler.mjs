@@ -80,8 +80,8 @@ export class Scheduler {
   // A catalogue routine the notebook does not have yet (an older notebook, or one added to the
   // catalogue later) is created; one that exists is left as the person set it. The four first-setup
   // jobs are made only by setup.
-  async addStartingJobs(settings,now){
-    const missing=()=>{const have=new Set(this.store.list('jobs').map(j=>j.id));return startingJobs().filter(e=>e.routine&&!have.has(e.id));};
+  async addStartingJobs(settings,now,jobs=this.store.list('jobs')){
+    const missing=()=>{const have=new Set(jobs.map(j=>j.id));return startingJobs().filter(e=>e.routine&&!have.has(e.id));};
     if(!missing().length)return;
     await this.store.withLockAsync(()=>{
       // A routine added later is built from a day from now, so its first run is the next calendar time after that
@@ -89,6 +89,14 @@ export class Scheduler {
       const at=new Date(now+86400000).toISOString(),records=missing().map(e=>this.store.prepare('jobs',startingJobRecord(e,{owner:settings.owner,timezone:settings.timezone,at})));
       if(records.length)this.store.commit(records);
     });
+  }
+  // Looked for once when the server starts (an older notebook), not on every tick, so a tick reads the
+  // folder no more often than before.
+  async ensureStartingJobs(now=Date.now()){
+    if(this.only)return;
+    const settings=this.store.get('settings','installation');
+    if(!settings||settings.owner!==this.device)return;
+    await this.addStartingJobs(settings,now);
   }
   // Run now: the checks are answered at once and the run goes on in the background, since a routine
   // can take up to fifteen minutes (as NativeScheduler.startRun).
@@ -136,7 +144,6 @@ export class Scheduler {
       // sync or from a backup after this machine started) is taken over now.
       if(settings?.owner===LEGACY_DEVICE&&this.claimLegacy){try{await this.claimLegacy();}catch{}settings=this.store.get('settings','installation');}
       if (!settings || settings.owner !== this.device) return [];
-      if(!this.only)try{await this.addStartingJobs(settings,now);}catch{}
       for(const finish of [...this.unfinished.values()])try{await finish();}catch{}
       for (const snapshot of this.store.list('jobs')) {
         // An inactive snapshot cannot authorize execution. A later activation

@@ -41,12 +41,12 @@ test('Run now on another routine row runs that routine and answers its result',t
  assert.ok(job.last_run,'the review routine ran');assert.ok(Date.parse(job.next_run)>Date.now());
 }));
 
-test('an older notebook gains the routine on the next tick and keeps what the person set',t=>withService(t,async({service,post})=>{
+test('an older notebook gains the routine when the server starts and keeps what the person set',t=>withService(t,async({service,post})=>{
  await setup(post);
  service.store.commit([],{removeKeys:['jobs/memory-daily']});
  assert.equal(service.store.get('jobs','memory-daily'),undefined);
  service.store.save('jobs',{id:'coaching',paused:true,next_run:'2031-01-01T00:00:00.000Z'});
- await service.scheduler.tick();
+ await service.scheduler.ensureStartingJobs();
  assert.ok(service.store.get('jobs','memory-daily'));
  const coaching=service.store.get('jobs','coaching');
  assert.equal(coaching.paused,true);assert.equal(coaching.next_run,'2031-01-01T00:00:00.000Z');
