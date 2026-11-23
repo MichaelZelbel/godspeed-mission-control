@@ -2039,7 +2039,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                   type="button"
                   className="flex items-center gap-1 text-warning hover:underline"
                   title="This note changed on GitHub and here. Saves to GitHub wait until you choose a version."
-                  onClick={() => navigate("/dashboard/settings?tab=github")}
+                  onClick={() => navigate("/dashboard/settings#review-conflicts")}
                 >
                   <AlertCircle className="h-2.5 w-2.5" />
                   Sync conflict

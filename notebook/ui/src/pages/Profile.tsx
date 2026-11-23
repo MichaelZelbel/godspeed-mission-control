@@ -143,6 +143,7 @@ export default function Profile() {
               facts={facts}
               actions={actions}
               showScope
+              showEmptyCategories
               onUpdateCategory={(data) => upsertCategory.mutate(data)}
               onDeleteCategory={(id) => deleteCategory.mutate(id)}
               onAddCategory={(data) => upsertCategory.mutate(data)}
