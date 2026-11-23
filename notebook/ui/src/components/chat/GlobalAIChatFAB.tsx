@@ -485,7 +485,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
       if ((down || noAI || (!stoppedRef.current && unusableAnswer(reason))) && !cleared) {
         deliver(sentKey, sentUserId, sentContext, {
           ...nextState,
-          messages: nextState.messages.map((m, i) => (i === at ? { ...m, lastFailure: reason, failedAt: Date.now() } : m)),
+          messages: nextState.messages.map((m, i) => (i === at ? { ...m, lastFailure: reason } : m)),
         });
         // The notebook now reads the AI as this send found it (the newest request wins, ai-health.mjs):
         // every surface in this window says so at once, not at the next read. An unusable answer says

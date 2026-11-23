@@ -20,7 +20,7 @@ it("a summary from an earlier session cannot return after Clear, even when the n
 });
 
 it("a message that got no answer keeps its reason until the next message is the AI's answer, whatever the AI's state", () => {
-  const failed = {role: "user" as const, content: "Fictional question", lastFailure: "Your AI could not be reached.", failedAt: 2000};
+  const failed = {role: "user" as const, content: "Fictional question", lastFailure: "Your AI could not be reached."};
   const reply = {role: "assistant" as const, content: "Fictional answer"};
   const followUp = {role: "user" as const, content: "Fictional follow-up"};
   for (const state of ["unreachable", "refused", "none", "settings-only", "checking"]) expect(unansweredReason([failed], 0, state)).toBe("Your AI could not be reached.");
@@ -34,7 +34,7 @@ it("a message that got no answer keeps its reason until the next message is the 
 
 it("a message whose answer could not be used keeps its reason in every state, until answered", () => {
   const reason = AI_UNREADABLE;
-  const failed = {role: "user" as const, content: "Fictional question", lastFailure: reason, failedAt: 2000};
+  const failed = {role: "user" as const, content: "Fictional question", lastFailure: reason};
   const reply = {role: "assistant" as const, content: "Fictional answer"};
   for (const state of ["ready", "refused", "unreachable", "settings-only", "none", "checking"]) expect(unansweredReason([failed], 0, state)).toBe(reason);
   expect(unansweredReason([failed, reply], 0, "ready")).toBeNull();

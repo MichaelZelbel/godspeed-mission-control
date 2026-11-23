@@ -33,11 +33,9 @@ export interface PersistedChatMessage {
   /**
    * On a user message whose latest send got no answer because no AI was connected, the AI refused
    * it, could not be reached, or answered with something that could not be used: the reason the person
-   * was shown, and when (`failedAt`, this browser's clock, kept for the record and not read). The
-   * server keeps both after a later reply, so read them through unansweredReason.
+   * was shown. The server keeps it after a later reply, so read it through unansweredReason.
    */
   lastFailure?: string;
-  failedAt?: number;
 }
 
 /** What an unanswered message says once the AI reads ready, for a reason that is not an unusable answer. */
