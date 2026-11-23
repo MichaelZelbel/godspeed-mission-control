@@ -116,6 +116,7 @@ const comparisons=new Set(['eq','neq','in','contains','overlaps','gt','gte','lt'
 // reached condition() and failed as "object is not iterable", which an assistant is shown only as
 // "Something went wrong on the server" (the book's capture run, Finding 5).
 const filterExample='["eq","id","<id>"]';
+const operations=['select','insert','upsert','update','delete'];
 const filterHelp='Each filter is a list of three: an operator, a column and a value, for example '+filterExample;
 export function checkFilters(filters){
   if(!Array.isArray(filters))throw new Error('filters is a list. '+filterHelp+'.');
@@ -358,6 +359,9 @@ export class QueryService {
   execute(request) {
     const { table, operation = 'select', values, filters = [], orders = [], selection = '*', options = {}, single = false, maybeSingle = false, expected = {}, baselines = {} } = request;
     if (!tables.has(table)) throw new Error('Unknown record domain ' + table);
+    // Any other name used to fall into the write branch below and rewrite every
+    // record of the kind (issue 956); refuse it before anything is read.
+    if (!operations.includes(operation)) throw new Error('Unknown operation ' + JSON.stringify(operation) + '. The supported operations are ' + operations.join(', ') + '.');
     // A writer that sends its record under a misnamed field (the assistant's
     // "data" instead of "values") used to crash on the record itself and
     // answer the server's generic sentence, with no hint how to fix the

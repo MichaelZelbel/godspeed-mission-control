@@ -258,7 +258,7 @@ export default function Groups() {
               <CardContent className="flex flex-col items-center justify-center py-14 text-center">
                 <Users className="mb-3 h-8 w-8 text-muted-foreground" />
                 <p className="font-medium">No groups yet.</p>
-                <p className="mt-1 text-sm text-muted-foreground">Start with a template to organize your people.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Choose New Group, then start from a template.</p>
               </CardContent>
             </Card>
             {isSuccess && <InitialMigrationCard />}
