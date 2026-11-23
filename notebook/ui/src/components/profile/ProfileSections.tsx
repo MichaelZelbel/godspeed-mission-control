@@ -14,7 +14,7 @@ import { PinnedHighlights } from "@/components/people/profile/PinnedHighlights";
 import { ProfileFieldFilter } from "@/components/people/profile/ProfileFieldFilter";
 import { CompactCategorySection, type SectionOption } from "@/components/people/profile/CompactCategorySection";
 import { PROFILE_TAXONOMY, taxonomyBySlug, taxonomyOrder } from "@/lib/profile-taxonomy";
-import { filterEntries } from "@/lib/profile-field-filter";
+import { filterEntries, nameMatchesQuery } from "@/lib/profile-field-filter";
 import { showToast } from "@/lib/toast";
 import type { ProfileCategory } from "@/hooks/useProfile";
 import { groupFacts, groupSlots, type FactActions, type FactSection, type ProfileFact } from "@/hooks/useFacts";
@@ -119,6 +119,7 @@ export function ProfileSections({
 
   const visibleSections = isFiltering
     ? sections.filter((s) =>
+        nameMatchesQuery(s.name, filterQuery) ||
         s.slots.some((slot) => [...slot.current, ...slot.history].some((f) => matches.has(f.claim_id))),
       )
     : sections;
@@ -236,7 +237,7 @@ export function ProfileSections({
       <ProfileFieldFilter value={filterQuery} onChange={setFilterQuery} />
 
       {isFiltering && visibleSections.length === 0 && (
-        <p className="text-sm text-muted-foreground text-center py-4">No facts match "{filterQuery.trim()}".</p>
+        <p className="text-sm text-muted-foreground text-center py-4">No categories or facts match "{filterQuery.trim()}".</p>
       )}
 
       {visibleSections.map((section) => (
