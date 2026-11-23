@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, createRef, useLayoutEffect } from "react";
+import { type MouseEvent, useState, useEffect, useCallback, useRef, useId, createRef, useLayoutEffect } from "react";
 import { useEditor, useEditorState, EditorContent } from "@tiptap/react";
 import { Markdown } from "tiptap-markdown";
 import StarterKit from "@tiptap/starter-kit";
@@ -33,7 +33,7 @@ import { useGitHubConnection, useGitHubSyncExport, useSyncLogForNote } from "@/h
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import { ExternalNotePanel } from "./ExternalNotePanel";
 import { WebClipPreview } from "./WebClipPreview";
-import { ForwardToAppDialog } from "./ForwardToAppDialog";
+import { ForwardToAppDialog, useActiveConnectedApps } from "./ForwardToAppDialog";
 import { WikilinkAutocomplete } from "./WikilinkAutocomplete";
 import { EditorBubbleMenu } from "./EditorBubbleMenu";
 import { Separator } from "@/components/ui/separator";
@@ -431,6 +431,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: connectedApps = [] } = useActiveConnectedApps();
   const { data: ghConn } = useGitHubConnection();
   const ghSync = useGitHubSyncExport();
   const { data: syncLog } = useSyncLogForNote(note.id);
@@ -490,6 +491,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const [duplicateTarget, setDuplicateTarget] = useState<Note | null>(null);
   const [pendingDuplicateTitle, setPendingDuplicateTitle] = useState("");
   const [interactionGroupId, setInteractionGroupId] = useState<string | null>(null);
+  const interactionFieldId = useId();
   const [interactionType, setInteractionType] = useState("meeting");
   const [interactionSummary, setInteractionSummary] = useState(note.title);
   // Wikilink autocomplete state
@@ -753,7 +755,8 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       TaskListShortcut,
     ],
     editorProps: {
-      attributes: { "aria-label": "Note text" },
+      // The note's text box is named, like its title box (#742).
+      attributes: { role: "textbox", "aria-multiline": "true", "aria-label": "Note text" },
       handleClick: (_view, _pos, event) => {
         const target = event.target as HTMLElement;
         const wikilinkEl = target.closest?.(".wikilink-node") as HTMLElement | null;
@@ -1760,9 +1763,11 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                     <Share2 className="mr-2 h-4 w-4" /> Share publicly
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => setShowForwardDialog(true)}>
-                  <Send className="mr-2 h-4 w-4" /> Send to app
-                </DropdownMenuItem>
+                {connectedApps.length > 0 && (
+                  <DropdownMenuItem onClick={() => setShowForwardDialog(true)}>
+                    <Send className="mr-2 h-4 w-4" /> Send to app
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           }
@@ -2039,7 +2044,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                   type="button"
                   className="flex items-center gap-1 text-warning hover:underline"
                   title="This note changed on GitHub and here. Saves to GitHub wait until you choose a version."
-                  onClick={() => navigate("/dashboard/settings?tab=github")}
+                  onClick={() => navigate("/dashboard/settings#review-conflicts")}
                 >
                   <AlertCircle className="h-2.5 w-2.5" />
                   Sync conflict
@@ -2127,9 +2132,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Type</Label>
+            <Label htmlFor={`${interactionFieldId}-type`} onClick={(event: MouseEvent) => { event.preventDefault(); document.getElementById(`${interactionFieldId}-type`)?.focus(); }}>Type</Label>
             <Select value={interactionType} onValueChange={setInteractionType}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id={`${interactionFieldId}-type`}><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="chat">Chat</SelectItem>
                 <SelectItem value="meeting">Meeting</SelectItem>
@@ -2138,8 +2143,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Summary</Label>
+            <Label htmlFor={`${interactionFieldId}-summary`}>Summary</Label>
             <input
+              id={`${interactionFieldId}-summary`}
               value={interactionSummary}
               onChange={(event) => setInteractionSummary(event.target.value)}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"

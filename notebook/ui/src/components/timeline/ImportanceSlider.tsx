@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { Label, LabelAside } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
 import { HelpCircle } from "lucide-react";
@@ -18,10 +18,12 @@ interface ImportanceSliderProps {
 export default function ImportanceSlider({ value, onChange }: ImportanceSliderProps) {
   const labelId = useId();
   const thumbId = useId();
+  const valueText = value == null ? "Not set" : `${value} - ${impactLabels[value]}`;
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">
-        <Label id={labelId} onClick={(e) => { e.preventDefault(); document.getElementById(thumbId)?.focus(); }}>{value == null ? "Impact: Not set" : `Impact: ${value} - ${impactLabels[value]}`}</Label>
+        <Label id={labelId} onClick={(e) => { e.preventDefault(); document.getElementById(thumbId)?.focus(); }}>Impact</Label>
+        <LabelAside className="-ml-1.5">: {valueText}</LabelAside>
         <Popover>
           <PopoverTrigger asChild>
             <Button aria-label="What importance means" type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
@@ -41,7 +43,7 @@ export default function ImportanceSlider({ value, onChange }: ImportanceSliderPr
           </PopoverContent>
         </Popover>
       </div>
-      <Slider value={[value ?? 1]} onValueChange={([v]) => onChange(v)} min={1} max={4} step={1} thumbProps={{ id: thumbId, "aria-labelledby": labelId }} />
+      <Slider value={[value ?? 1]} onValueChange={([v]) => onChange(v)} min={1} max={4} step={1} thumbProps={{ id: thumbId, "aria-labelledby": labelId, "aria-valuetext": valueText }} />
     </div>
   );
 }

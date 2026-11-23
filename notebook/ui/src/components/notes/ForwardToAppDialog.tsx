@@ -38,14 +38,11 @@ interface ForwardToAppDialogProps {
   note: Note;
 }
 
-export function ForwardToAppDialog({ open, onOpenChange, note }: ForwardToAppDialogProps) {
+export function useActiveConnectedApps(enabled = true) {
   const { user } = useAuth();
-  const [selectedApp, setSelectedApp] = useState<string>("");
-  const [entityType, setEntityType] = useState<string>(note.entity_type || "note");
-
-  const { data: apps = [] } = useQuery<ConnectedApp[]>({
+  return useQuery<ConnectedApp[]>({
     queryKey: ["connected_apps_active", user?.id],
-    enabled: !!user && open,
+    enabled: !!user && enabled,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("connected_apps" as any)
@@ -57,6 +54,14 @@ export function ForwardToAppDialog({ open, onOpenChange, note }: ForwardToAppDia
       return (data as unknown as ConnectedApp[]) || [];
     },
   });
+}
+
+export function ForwardToAppDialog({ open, onOpenChange, note }: ForwardToAppDialogProps) {
+  const { user } = useAuth();
+  const [selectedApp, setSelectedApp] = useState<string>("");
+  const [entityType, setEntityType] = useState<string>(note.entity_type || "note");
+
+  const { data: apps = [] } = useActiveConnectedApps(open);
 
   const chosen = apps.find((a) => a.id === selectedApp);
 
@@ -84,38 +89,33 @@ export function ForwardToAppDialog({ open, onOpenChange, note }: ForwardToAppDia
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Send className="h-5 w-5" /> An App senden
+            <Send className="h-5 w-5" /> Send to app
           </DialogTitle>
           <DialogDescription>
-            Öffne diese Notiz in einer verbundenen App, um dort einen neuen Eintrag zu erstellen.
+            Open this note in a connected app to create a new entry there.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label>App auswählen</Label>
+            <Label>Choose an app</Label>
             <Select value={selectedApp} onValueChange={setSelectedApp}>
               <SelectTrigger>
-                <SelectValue placeholder="Wähle eine App…" />
+                <SelectValue placeholder="Choose an app…" />
               </SelectTrigger>
               <SelectContent>
                 {apps.map((app) => (
                   <SelectItem key={app.id} value={app.id} disabled={!app.webhook_url}>
                     {app.display_name}
-                    {!app.webhook_url && " (keine Webhook-URL)"}
+                    {!app.webhook_url && " (no web address set)"}
                   </SelectItem>
                 ))}
-                {apps.length === 0 && (
-                  <div className="px-2 py-3 text-sm text-muted-foreground text-center">
-                    Keine aktiven Apps. Verbinde eine App unter Settings → Apps.
-                  </div>
-                )}
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
-            <Label>Entitäts-Typ</Label>
+            <Label>Type of entry</Label>
             <Select value={entityType} onValueChange={setEntityType}>
               <SelectTrigger>
                 <SelectValue />
@@ -132,8 +132,8 @@ export function ForwardToAppDialog({ open, onOpenChange, note }: ForwardToAppDia
 
           {chosen && (
             <p className="text-xs text-muted-foreground">
-              Die Notiz „{note.title || "Untitled"}" wird in <strong>{chosen.display_name}</strong> geöffnet.
-              Nach dem Erstellen verlinkt {chosen.display_name} den Eintrag automatisch zurück.
+              The note “{note.title || "Untitled"}” opens in <strong>{chosen.display_name}</strong>.
+              After the entry is created, {chosen.display_name} links it back automatically.
             </p>
           )}
         </div>
@@ -145,7 +145,7 @@ export function ForwardToAppDialog({ open, onOpenChange, note }: ForwardToAppDia
             className="gap-2"
           >
             <ExternalLink className="h-4 w-4" />
-            {chosen ? `Öffnen in ${chosen.display_name}` : "App auswählen"}
+            {chosen ? `Open in ${chosen.display_name}` : "Choose an app"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -4,6 +4,7 @@ import {Link} from 'react-router-dom';
 import {CHAT_AVAILABILITIES} from '../../../../core/chat-availability.mjs';
 import {AI_CONNECTION_UNREADABLE_STATUS,AI_REFUSED_STATUS,AI_STALLED_STATUS,AI_UNREACHABLE_STATUS,NO_AI_STATUS,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../../../../core/no-ai.mjs';
 import {listenForChatOptions} from '@/local/chat-options.mjs';
+import {recordAIWorked} from '@/lib/chat-history';
 export type ChatAvailability=(typeof CHAT_AVAILABILITIES)[number];
 type ChatOptions={connected?:boolean;usable?:boolean;availability?:ChatAvailability};
 export type ChatAIState='checking'|ChatAvailability;
@@ -20,9 +21,12 @@ export function chatAIState(options?:ChatOptions):ChatAIState{
 export const CHAT_AVAILABILITY_CHANGED='godspeed:chat-availability-changed';
 let lastAvailability:string|undefined;
 async function chatOptions({check}:{check?:boolean}={}){
+  const asked=Date.now();
   const response=await fetch('/api/chat/options'+(check?'?check=1':''));
   if(!response.ok)throw Error('Could not read AI connection status');
   const options=await response.json() as ChatOptions,known=chatAIState(options);
+  // A "No answer" note older than this read stays cleared (#821); stamped when it was asked.
+  if(known==='ready')recordAIWorked(asked);
   if(lastAvailability!==undefined&&lastAvailability!==known&&typeof window!=='undefined')window.dispatchEvent(new Event(CHAT_AVAILABILITY_CHANGED));
   lastAvailability=known;
   return options;
@@ -52,6 +56,12 @@ function clearChatRead(){
   catch{/* no storage: nothing to clear */}
 }
 
+// The first Dashboard read of this page load; a reload starts it again (#918).
+let pageLoadRead=false;
+// The card's Check again asks the next read to run the check, one read per press (#918).
+let checkAsked=false;
+export function askChatCheck(){checkAsked=true;}
+
 export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}={}){
   const queryClient=useQueryClient();
   // A surface that arrives wants the AI confirmed afresh, not the warm state an open chat kept
@@ -65,11 +75,20 @@ export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}=
   // seconds of that check (#590).
   const options=useQuery<ChatOptions>({queryKey:['chat-options'],queryFn:async()=>{
     if(!confirmOnMount)markChatRead();
-    const check=confirm.current&&chatReadSinceConfirm();
+    const asked=checkAsked;
+    checkAsked=false;
+    const check=asked||(confirm.current&&chatReadSinceConfirm());
     confirm.current=false;
     try{
-      const read=await chatOptions(check?{check:true}:{});
+      let read=await chatOptions(check?{check:true}:{});
       if(check)clearChatRead();
+      // A page load that finds the AI unreachable checks it once, so a recovered AI shows as ready (#918).
+      if(confirmOnMount&&!pageLoadRead){
+        pageLoadRead=true;
+        if(!check&&chatAIState(read)==='unreachable'){
+          try{read=await chatOptions({check:true});clearChatRead();}catch{/* the plain read stands */}
+        }
+      }
       return read;
     }catch(error){confirm.current=check;throw error;}
   },refetchInterval:1000,refetchIntervalInBackground:true});

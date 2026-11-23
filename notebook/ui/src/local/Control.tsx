@@ -29,7 +29,7 @@ function TelegramSettings(){
   // server's operator switched Telegram off it says that instead (issue #919): the installer would
   // not help there.
   const unavailable=!status.data.available&&status.data.managed!=='environment';
-  return <section className="border rounded p-4 space-y-3"><h2 className="text-xl">Telegram</h2>{unavailable?<p>{status.data.reason==='switched-off'?telegramSwitchedOff:telegramUnavailable}</p>:<TelegramConnect/>}</section>;
+  return <section id="telegram" className="border rounded p-4 space-y-3"><h2 className="text-xl">Telegram</h2>{unavailable?<p>{status.data.reason==='switched-off'?telegramSwitchedOff:telegramUnavailable}</p>:<TelegramConnect/>}</section>;
 }
 function WorkoutsSettings(){
   const qc=useQueryClient(),status=useQuery({queryKey:['workouts-status'],queryFn:()=>call('workouts')});
@@ -70,7 +70,18 @@ export default function Control(){
   // A link to one section of Settings (#connect-ai from the sidebar's "Connect AI") opens that
   // section and scrolls to it. Until 18 October 2026 that link opened the top of Settings.
   const location=useLocation();
-  useEffect(()=>{const id=decodeURIComponent(location.hash.slice(1));if(!id)return;const timer=setTimeout(()=>{const target=document.getElementById(id);if(!target)return;if(target instanceof HTMLDetailsElement)target.open=true;target.scrollIntoView({block:'start'});},0);return ()=>clearTimeout(timer);},[location.hash]);
+  useEffect(()=>{
+    const id=decodeURIComponent(location.hash.slice(1));if(!id)return;
+    const reveal=()=>{const target=document.getElementById(id);if(!target)return false;if(target instanceof HTMLDetailsElement)target.open=true;target.scrollIntoView({block:'start'});return true;};
+    let observer:MutationObserver|undefined;let giveUp:ReturnType<typeof setTimeout>|undefined;
+    const timer=setTimeout(()=>{
+      if(reveal())return;
+      observer=new MutationObserver(()=>{if(reveal()){observer?.disconnect();clearTimeout(giveUp);}});
+      observer.observe(document.body,{childList:true,subtree:true});
+      giveUp=setTimeout(()=>observer?.disconnect(),10000);
+    },0);
+    return ()=>{clearTimeout(timer);clearTimeout(giveUp);observer?.disconnect();};
+  },[location.hash]);
   return <div className="max-w-4xl space-y-6"><h1 className="text-2xl font-bold">Settings</h1><p>Manage your notebook, assistant and connected devices.</p>
     <p role="alert" className="text-red-400">{error}</p>
     <Button asChild className="min-h-11 gap-2"><Link to="/dashboard/settings/import"><Download className="h-4 w-4" aria-hidden="true"/>Import from Menerio</Link></Button>

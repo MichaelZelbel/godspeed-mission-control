@@ -238,7 +238,10 @@ export class SearchIndex {
       // reach the index through the store.
       const page = !relative.startsWith(recordsFolder + '/') || this.store.documents?.has(absolute);
       if (stat?.isFile() && page && shared(relative) && stat.size <= 512 * 1024 && /\.(md|json|jsonl|txt)$/.test(relative)) {
-        const document = this.fileDocument(relative, fs.readFileSync(absolute, 'utf8'));
+        // One file the notebook may not read must not lose its neighbours.
+        let text = null; try { text = fs.readFileSync(absolute, 'utf8'); } catch {}
+        if (text === null) { if (this.indexed.has(uid)) removed.push(uid); continue; }
+        const document = this.fileDocument(relative, text);
         if (this.indexed.get(uid) !== document[5]) changed.push(document);
       } else if (this.indexed.has(uid)) removed.push(uid);
     }

@@ -4,7 +4,7 @@ import {momentDraft} from './moment-draft.mjs';
 import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
 import {startCharmJudgement} from './charm-judgement.mjs';
 import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
-import {asksForTodaysBrief,savedBriefToday} from './briefing.mjs';
+import {savedBriefAnswer} from './briefing.mjs';
 import {NOTEBOOK_CHAT_FUNCTIONS} from './notebook-chat.mjs';
 
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
@@ -47,7 +47,7 @@ import {leadWords} from './lead-commands.mjs';
 import {radarWords} from './radar-lifecycle.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
 import {retireShares} from './shares.mjs';
-import {hasCoachAreas,resolvedCoachArea,coachTalkStart,coachTalkRecordProblem,coachTalkRecordOpening,coachTalkCorrectedOpening,coachTalkRetryMessage,markCoachTalkShown,coachTalkRecordShownOpening} from './coach-chat.mjs';
+import {hasCoachAreas,resolvedCoachArea,coachTalkStart,coachTalkRecordProblem,coachTalkRecordOpening,coachTalkCorrectedOpening,coachTalkDays,removeStrayCoachTalks,coachTalkRetryMessage,markCoachTalkShown,coachTalkRecordShownOpening} from './coach-chat.mjs';
 import {canStartTalk} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 // The note screens' content hash (ui/src/lib/note-ai-edit.ts hashNoteContent,
 // FNV-1a and the length): what a chat request says the owner was looking at.
@@ -353,8 +353,8 @@ export class Domains {
       input={...input,conversation_id:conversationRuntimeId(input)};
       if(!input.message)input={...input,message:input.messages?.filter(m=>m.role==='user').at(-1)?.content||''};
     }
-    if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode!=='summarize'&&asksForTodaysBrief(input.message)){
-      const saved=savedBriefToday(this.store).note;
+    if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode!=='summarize'){
+      const saved=savedBriefAnswer(this.store,input.message);
       if(saved){
         const reply=String(saved.content||'');
         await this.store.saveAsync('conversation_messages',{role:'assistant',content:reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'morning-brief'},undefined,{signal:input.signal});
@@ -373,6 +373,7 @@ export class Domains {
       const files=input.uploadedFiles||[];if(files.length)chatAttachments(this.mediaRoot,files,carriedRoot(this.store));
       const nativeFiles=files.map(item=>({name:item.name||item.path,path:this.media(item.path).file}));
       const start=await this.nativeCoachStart(input);
+      const talkDaysBefore=start?coachTalkDays(this.store,start):null;
       // The Charm Challenge's slip judgement runs while the assistant works (core/charm-judgement.mjs).
       const judged=startCharmJudgement(this,input);
       const ask=message=>this.nativeAgent({...input,message,nativeFiles,page_context:input[IDENTITY_PAGE],step_context:input.step_context,coach_talk_start:start});
@@ -391,6 +392,8 @@ export class Domains {
         if(!problem)result=again;
         else{const opening=coachTalkRecordOpening(this.store,start);if(opening){result={...again,reply:opening};problem=null;}}
       }
+      // The assistant's wrong-day record must not stay open beside the start's own talk (issue #984).
+      if(start){try{removeStrayCoachTalks(this.store,start,talkDaysBefore);}catch(error){judged.drop();throw error;}}
       if(problem){judged.drop();throw Error(problem);}
       if(start?.opening)judged.drop();else result.reply=await judged.end(result.reply);
       await this.store.saveAsync('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'hermes'},undefined,{signal:input.signal});

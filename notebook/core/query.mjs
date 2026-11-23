@@ -17,7 +17,9 @@ import {momentDates} from './timestamps.mjs';
 import {personNames} from './person-names.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
-export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
+// Tables of the unreachable pages Menerio shipped, whose files are gone from the tree but whose records stay.
+const deleted = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../data/deleted-source-inventory.json', import.meta.url)), 'utf8'));
+export const tables = new Set([...inventory.dependencies.flatMap(d => d.tables), ...deleted.tables].filter(t => t !== 'note-attachments'));
 for (const table of ['goals', 'jobs', 'job_receipts', 'settings', 'permissions', 'decisions', 'habits', 'journal', 'deadlines', 'comments', 'notifications', 'note_conversations', 'import_mappings','record_history','event_corrections','embeddings']) tables.add(table);
 for(const table of ['health_episodes','medications','health_observations','watch_topics','watch_observations','domain_watches','domain_watch_observations','outside_numbers','subscriptions','forecasts','work_items','coach_talks','connector_status','work_tool_receipts','approvals','command_receipts'])tables.add(table);
 // The Lexicon's records (Menerio's wiki pages, their sources and revisions)
@@ -114,6 +116,7 @@ const comparisons=new Set(['eq','neq','in','contains','overlaps','gt','gte','lt'
 // reached condition() and failed as "object is not iterable", which an assistant is shown only as
 // "Something went wrong on the server" (the book's capture run, Finding 5).
 const filterExample='["eq","id","<id>"]';
+const operations=['select','insert','upsert','update','delete'];
 const filterHelp='Each filter is a list of three: an operator, a column and a value, for example '+filterExample;
 export function checkFilters(filters){
   if(!Array.isArray(filters))throw new Error('filters is a list. '+filterHelp+'.');
@@ -260,7 +263,9 @@ export class QueryService {
       const tracked=new Set(['notes','contacts','claims','entities','collections','collection_items','moments','contact_groups','contact_group_memberships','action_items','contact_topics','profile_categories','fact_slots']);
       const label={notes:'note',contacts:'person',claims:'fact',entities:'world entity',collections:'collection',collection_items:'collection item',moments:'event',contact_groups:'group',contact_group_memberships:'group membership',action_items:'action',contact_topics:'discussion topic',profile_categories:'profile category',fact_slots:'fact setting'};
       const current=all().filter(r=>tracked.has(r.type)),prior=list('record_history').filter(r=>tracked.has(r.source_type)).map(r=>r.snapshot),versions=[...prior,...current];
-      const derived=versions.map(r=>({id:'activity-'+hash([r.uid,r.revision,r.updated_at]).slice(0,32),actor_id:'owner',user_id:'owner',item_id:r.id,item_type:label[r.type],action:r.removed_at?'delete':r.revision===1?'create':'update',created_at:r.updated_at,metadata:{source_uid:r.uid,revision:r.revision}}));
+      // The notebook writes the default profile categories itself when My Profile first opens, so their creation is not the person's action; a later edit or removal is. Templates and settings are not tracked. A tracked type that gains a seeder must be skipped here too.
+      const named=r=>[r.name,r.title,r.label].find(v=>typeof v==='string'&&v.trim())?.trim()??null;
+      const derived=versions.filter(r=>!(r.type==='profile_categories'&&r.revision===1&&r.is_default===true)).map(r=>({item_name:named(r),id:'activity-'+hash([r.uid,r.revision,r.updated_at]).slice(0,32),actor_id:'owner',user_id:'owner',item_id:r.id,item_type:label[r.type],action:r.removed_at?'delete':r.revision===1?'create':'update',created_at:r.updated_at,metadata:{source_uid:r.uid,revision:r.revision}}));
       for(const r of list('event_corrections'))derived.push({id:'activity-'+r.uid,actor_id:'owner',user_id:'owner',item_id:r.moment_id,item_type:'event',action:r.patch.removed_at?'delete':'update',created_at:r.created_at,metadata:{correction:true}});
       return [...new Map([...list(table),...derived].map(r=>[r.id,r])).values()];
     }
@@ -356,6 +361,9 @@ export class QueryService {
   execute(request) {
     const { table, operation = 'select', values, filters = [], orders = [], selection = '*', options = {}, single = false, maybeSingle = false, expected = {}, baselines = {} } = request;
     if (!tables.has(table)) throw new Error('Unknown record domain ' + table);
+    // Any other name used to fall into the write branch below and rewrite every
+    // record of the kind (issue 956); refuse it before anything is read.
+    if (!operations.includes(operation)) throw new Error('Unknown operation ' + JSON.stringify(operation) + '. The supported operations are ' + operations.join(', ') + '.');
     // A writer that sends its record under a misnamed field (the assistant's
     // "data" instead of "values") used to crash on the record itself and
     // answer the server's generic sentence, with no hint how to fix the
