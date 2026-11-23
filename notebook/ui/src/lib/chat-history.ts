@@ -67,6 +67,10 @@ export function recordAIWorked(at: number): void {
   }
 }
 
+export function unusableAnswer(reason?: string | null): boolean {
+  return String(reason ?? "").startsWith(AI_UNREADABLE);
+}
+
 /**
  * Why the message at `index` got no answer, while that failure still applies (#790); else null.
  * It applies while no later message has been answered, the AI still reads as refused or unreachable
@@ -77,10 +81,6 @@ export function recordAIWorked(at: number): void {
  * until a later message is answered, whatever the AI's state, except before the state is known and
  * with no AI connected.
  */
-export function unusableAnswer(reason?: string | null): boolean {
-  return String(reason ?? "").startsWith(AI_UNREADABLE);
-}
-
 export function unansweredReason(messages: PersistedChatMessage[], index: number, aiState: string, workedAt = aiWorkedAt()): string | null {
   const message = messages[index];
   if (message?.role !== "user" || !message.lastFailure) return null;
