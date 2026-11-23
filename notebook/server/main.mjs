@@ -7,7 +7,7 @@ import { pipeline } from 'node:stream';
 import os from 'node:os';
 import { Store, atomic, hash } from '../core/records/store.mjs';
 import { seed } from '../core/seeds.mjs';
-import { SearchIndex } from '../core/index/search.mjs';
+import { SearchIndex, isUnreadable } from '../core/index/search.mjs';
 import { MeaningIndex, embeddingConfig, saveEmbeddingConfig, embedder } from '../core/index/meaning.mjs';
 import { QueryService } from '../core/query.mjs';
 import { Domains } from '../core/domains.mjs';
@@ -144,6 +144,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // The store keeps every record in memory and re-reads only the files its
   // watcher names; the index follows the store's changes row by row.
   const store = new Store(root,{device,watch:true}), index = new SearchIndex(store,{background:true}), query = new QueryService(store), sync = new FileSync(store);
+  index.onUnreadable=(entered,cleared)=>{
+    for(const name of entered)console.error('Godspeed Mission Control: search cannot read '+name+'; the other folders are still indexed');
+    for(const name of cleared)console.error('Godspeed Mission Control: search can read '+name+' again');
+  };
   const readiness=startupReadiness(index.initialPublication);
   index.initialPublication.then(
     ()=>console.error(startupTrace('index-published')),
@@ -1044,13 +1048,55 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     watchers.set(name,watcher);
     watcher.on('error',()=>{try{watcher.close();}catch{}if(watchers.get(name)===watcher){watchers.delete(name);changed(name)('rename',null);rearm(name);}});
   };
-  for(const name of durableRoots)watchRoot(name);
+  // A root that cannot be watched yet is tried again by `reconcile`; only a
+  // permission failure is let through, anything else still fails the start.
+  const watchRootOrWait=name=>{try{watchRoot(name);}catch(error){if(!isUnreadable(error))throw error;}};
+  for(const name of durableRoots)watchRootOrWait(name);
   // A manual or extra instructions changed by anything (a sync from another machine, a session, an
   // editor) bring the assistant's own identity file in step with them (assistant-soul.mjs).
   let soulDebounce;const followPersona=()=>{clearTimeout(soulDebounce);soulDebounce=setTimeout(()=>{try{shelf.followPersona();}catch{}},2000);soulDebounce.unref?.();};
-  const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){try{watchRoot(name);}catch{rearm(name);}changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
+  const onRootEvent=(event,name)=>{
+    const first=name==null?null:String(name).split(/[\\/]/)[0];
+    if(durableRoots.includes(first)){try{watchRoot(first);}catch{rearm(first);}changed(first)(event,null);}
+    else if(durableFiles.includes(first)){changed('')(event,first);if(first==='AGENTS.md')followPersona();}
+  };
+  const inodeOf=()=>{try{return fs.statSync(store.root).ino;}catch{return null;}};
+  let rootWatcher=null,rootInode=inodeOf();
+  const openRootWatcher=()=>{const watcher=fs.watch(store.root,onRootEvent);watcher.on('error',()=>{});return watcher;};
+  try{rootWatcher=openRootWatcher();}catch(error){if(rootInode!==null&&error?.code!=='ENOENT')throw error;}
+  // Once a second: a folder that appeared (a durable root created after start,
+  // including one under a parent such as routines/) or could not be watched yet
+  // is watched now; and the workspace folder itself, replaced under the running
+  // notebook, leaves every watcher on a folder that no longer exists, so all of
+  // them are armed again against the new one and the index is read in full.
+  const reconcile=setInterval(()=>{
+    if(menerioImport.mutating)return;
+    const inode=inodeOf();
+    if(inode===null)return;
+    if(inode!==rootInode){
+      // The new folder's watcher and the notes store are armed before anything
+      // else is torn down and before the inode is remembered: a failure here (a
+      // folder or its notes folder not yet readable or writable, no handles
+      // left) is retried on the next tick, never thrown out of the timer.
+      let next;try{next=openRootWatcher();}catch{return;}
+      try{store.unwatch();store.watch();}catch{store.unwatch();try{next.close();}catch{}return;}
+      rootInode=inode;
+      try{rootWatcher?.close();}catch{}
+      rootWatcher=next;
+      for(const watcher of watchers.values()){try{watcher.close();}catch{}}
+      watchers.clear();
+      for(const timer of rewatches.values())clearTimeout(timer);
+      rewatches.clear();
+      changed('')('rename',null);
+    }
+    for(const name of durableRoots){
+      if(watchers.has(name))continue;
+      try{watchRoot(name);}catch{continue;}
+      if(watchers.has(name))changed(name)('rename',null);
+    }
+  },1000);reconcile.unref?.();
   let localServer = null;
-  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(automaticTimer);clearInterval(factTimer);clearInterval(journalMomentsTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();watchers.clear();for(const timer of rewatches.values())clearTimeout(timer);rewatches.clear();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
+  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(automaticTimer);clearInterval(factTimer);clearInterval(journalMomentsTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();clearInterval(reconcile);rootWatcher?.close();for(const watcher of watchers.values())watcher.close();watchers.clear();for(const timer of rewatches.values())clearTimeout(timer);rewatches.clear();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
   // A container's main door listens on its network interface and always needs sign-in.
   // Add-ons and tools in that same container may use this opt-in, loopback-only door,
   // with the exact Host/Origin guards and API contract of a native local installation.
