@@ -35,3 +35,17 @@ it.each([
   expect(box.className).toContain("sm:max-h-none"); // no cap from 640px up
   expect(box.className).toContain("overflow-y-auto");
 });
+
+it("keeps a short note title on one centred line", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter initialEntries={["/dashboard/chat?note=n1"]}><GlobalAIChatFAB page noteTitle="Groceries" /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+  const heading = await screen.findByText("Godspeed / Groceries", undefined, WAIT);
+  expect(heading.className).toContain("whitespace-nowrap");
+  const box = screen.getByTestId("chat-header-title");
+  expect(box.className).toContain("items-center");
+  expect(box.parentElement?.className).toContain("items-center");
+});
