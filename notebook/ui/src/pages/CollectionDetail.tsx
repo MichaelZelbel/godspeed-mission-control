@@ -3663,7 +3663,7 @@ function CollectionDetailPage() {
                     )}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="end" collisionPadding={8} className="w-[22rem] max-w-[calc(100vw-1rem)] max-h-[70vh] overflow-y-auto">
+                <PopoverContent align="end" collisionPadding={8} className="w-[22rem] max-w-[calc(100vw-1rem)] max-h-[min(70vh,var(--radix-popover-content-available-height))] overflow-y-auto">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">Filters</span>

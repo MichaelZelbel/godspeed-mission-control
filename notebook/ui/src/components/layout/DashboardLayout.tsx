@@ -20,6 +20,9 @@ export function DashboardLayout() {
   // Godspeed's brain docks its own chat beside its content, as Notes does: no floating button
   // over the rule being changed.
   const isChat=pathname==="/dashboard/chat",isNotes=pathname.startsWith("/dashboard/notes"),isImport=pathname==="/dashboard/settings/import",isHabit=pathname.startsWith("/trackers/habits/"),isBrain=pathname===BRAIN_PAGE.path;
+  // A collection page (not templates or schema) reaches the window's bottom at phone widths: the
+  // button floats over it, and its own card leaves room (#1045). Other pages keep the reserve.
+  const isCollection=/^\/collections\/(?!templates(\/|$))[^/]+(\/(?!schema$)[^/]+)?\/?$/.test(pathname);
   const floatingChat=!isChat&&!isNotes&&!isImport&&!isHabit&&!isBrain;
 
   return (
@@ -48,7 +51,7 @@ export function DashboardLayout() {
               --page-h is main's content box (the cap minus main's own 3rem of vertical padding);
               pages that fill it use it, so their budget cannot drift from this cap. At phone widths
               the content reaches the window's bottom and the button floats over it (#1045). */}
-          <main className={floatingChat?"flex-1 overflow-auto p-6 max-h-[calc(100dvh-9.5rem)] [--page-h:calc(100dvh-12.5rem)] max-sm:max-h-[calc(100dvh-3.5rem)] max-sm:[--page-h:calc(100dvh-6.5rem)]":"flex-1 overflow-auto p-6"}>
+          <main data-collection-page={isCollection||undefined} className={floatingChat?"flex-1 overflow-auto p-6 max-h-[calc(100dvh-9.5rem)] [--page-h:calc(100dvh-12.5rem)]"+(isCollection?" max-sm:max-h-[calc(100dvh-3.5rem)] max-sm:[--page-h:calc(100dvh-6.5rem)]":""):"flex-1 overflow-auto p-6"}>
             {/* A crashing page no longer takes the sidebar with it, and the
                 boundary clears on the next navigation. Loading a page's code
                 keeps the sidebar and header on screen. */}
