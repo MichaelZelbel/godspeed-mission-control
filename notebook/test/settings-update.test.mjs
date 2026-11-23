@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';import {pathToFileURL} from 'node:url';
 import {createService} from '../server/main.mjs';
 import {startUpdate,readStatus,updateOverview,writeStatus} from '../core/update.mjs';
+import {VERSION} from '../core/version.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -29,12 +30,14 @@ async function standIn(t,version='2.0.0-beta.30'){
 const withEnv=(t,values)=>{Object.assign(process.env,values);t.after(()=>{for(const key of Object.keys(values))delete process.env[key];});};
 
 test('on a Docker server Settings shows the newest version and the line to run on the server, and the button refuses',async t=>{
-  withEnv(t,{...await standIn(t),GODSPEED_REVISION:'c'.repeat(40)});
+  const nextVersion=`${Number(VERSION.split('.')[0])+1}.0.0`;
+  withEnv(t,{...await standIn(t,nextVersion),GODSPEED_REVISION:'c'.repeat(40)});
   const root=temporary('docker'),service=await createService({root,port:0,device:'vps'});t.after(()=>service.close());
   const base='http://127.0.0.1:'+service.address.port;
   const shown=await (await fetch(base+'/api/update')).json();
   assert.equal(shown.way,'server');assert.equal(shown.command,'sudo godspeed-update');
-  assert.equal(shown.newest.version,'2.0.0-beta.30');assert.equal(shown.newer,true);assert.equal(shown.error,null);
+  assert.equal(shown.installed,VERSION);
+  assert.equal(shown.newest.version,nextVersion);assert.equal(shown.newer,true);assert.equal(shown.error,null);
   const refused=await fetch(base+'/api/update',{method:'POST'});
   assert.equal(refused.status,409);
   assert.match((await refused.json()).error,/sudo godspeed-update/);
