@@ -6,6 +6,8 @@ import {QueryService} from '../query.mjs';
 import {watchDue} from '../watch-commands.mjs';
 import {beatWhile,HEARTBEAT_EVERY} from '../supervisor-health.mjs';
 import {LEGACY_DEVICE} from '../device-id.mjs';
+import {STARTING_ROUTINES} from '../starting-routines.mjs';
+import {cronCalendar} from '../routine-times.mjs';
 // No goal-decision or goal-work (18 October 2026): a goal's loop is the original assistant's
 // (mc-research, mc-decide, mc-work-run, run by Hermes' routines), the one every installation runs.
 export const kinds = ['habit-check', 'coaching', 'deadline-reminder', 'profiling', 'review', 'morning-brief', 'audit', 'memory-review', 'watch',...procedureKinds];
@@ -20,7 +22,22 @@ const KEEP_MS=14*86400000,KEEP_HISTORY_MS=2*86400000,KEEP_LAST=3,PRUNE_EVERY=6*3
 // first runs in a week). A routine that has run before (a repeated setup) says when it next runs:
 // the time when that is today on the person's clock, else the day. Results for other routines are
 // kept as they are.
-export const STARTING_JOBS=['deadline-reminder','coaching','profiling','review'];
+// The Hermes starting routines the notebook runs itself when no assistant runs them.
+const RECORD_STARTING_ROUTINES=['memory-daily'];
+// The record scheduler's catalogue of starting jobs. A Hermes routine's name and time come from
+// STARTING_ROUTINES, so both runtimes say the same thing. STARTING_ROUTINES is read only inside this
+// function: starting-routines.mjs reaches this file through runtime.mjs, and a read while this
+// module loads would fail when starting-routines.mjs is loaded first.
+export function startingJobs(){
+  return [{id:'deadline-reminder',kind:'deadline-reminder',interval_ms:3600000,first:'now'},{id:'coaching',kind:'coaching',interval_ms:604800000},{id:'profiling',kind:'profiling',interval_ms:86400000},{id:'review',kind:'review',interval_ms:604800000},
+    ...STARTING_ROUTINES.filter(r=>RECORD_STARTING_ROUTINES.includes(r.key)).map(r=>({id:r.key,kind:r.key,routine:true,title:r.name,calendar:{time:cronCalendar(r.schedule).times[0]},interval_ms:86400000}))];
+}
+function startingJobRecord(entry,{owner,timezone,at}){
+  const from=Date.parse(at);
+  return {id:entry.id,kind:entry.kind,owner,paused:false,state:'pending',interval_ms:entry.interval_ms,
+    next_run:entry.first==='now'?at:entry.calendar?nextCalendarRun({calendar:entry.calendar},timezone,from):new Date(from+entry.interval_ms).toISOString(),
+    ...(entry.title?{title:entry.title}:{}),...(entry.calendar?{calendar:entry.calendar}:{})};
+}
 export function setupResults(store,results=[],now=Date.now()){
   const seen=new Set(results.map(r=>r.id)),out=[...results];
   // The day on the person's own clock: a routine due at 23:30 UTC first runs the next day in Berlin.
@@ -28,7 +45,7 @@ export function setupResults(store,results=[],now=Date.now()){
   const day=at=>new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).format(at);
   const time=at=>new Intl.DateTimeFormat('en-GB',{timeZone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(at);
   const when=(job,at)=>!job.last_run?'it first runs on '+day(at):day(at)===day(now)?'it next runs at '+time(at):'it next runs on '+day(at);
-  for(const id of STARTING_JOBS){
+  for(const {id} of startingJobs()){
     if(seen.has(id))continue;const job=store.get('jobs',id),at=Date.parse(job?.next_run);
     if(!job||!Number.isFinite(at))continue;
     out.push({id,state:'not due',next_run:job.next_run,reason:job.paused?'It is paused.':'Not due yet: '+when(job,at)+'.'});
@@ -51,8 +68,7 @@ export class Scheduler {
       const records = [(!existing||firstGoal&&requestedTimezone)&&this.store.prepare('settings', { id: 'installation', owner, timezone, delivery, permissions },existing),
         !this.store.get('profiles','owner')&&this.store.prepare('profiles', { id: 'owner', display_name: 'Owner', timezone }),
         goal?.trim()&&!this.store.list('goals').some(g=>g.title===goal.trim())&&this.store.prepare('goals', { title: goal.trim(), own_words:goal.trim(), status: 'adopted', areas: ['health','work-money','relationships'], progress: [] }),
-        this.store.prepare('jobs', { id: 'deadline-reminder', kind: 'deadline-reminder', owner, paused: false, next_run: at, interval_ms: 3600000, state: 'pending' }),
-        ...[['coaching',604800000],['profiling',86400000],['review',604800000]].map(([kind,interval_ms])=>this.store.prepare('jobs',{id:kind,kind,owner,paused:false,next_run:new Date(Date.parse(at)+interval_ms).toISOString(),interval_ms,state:'pending'}))];
+        ...startingJobs().map(e=>this.store.prepare('jobs',startingJobRecord(e,{owner,timezone,at})))];
       const missing=records.filter(Boolean).filter(r=>!this.store.get(r.type,r.id)||r.type==='settings'&&firstGoal&&requestedTimezone);
       this.store.commit(missing); return { configured: true, preserved:!!existing, firstWorkPending: false };
     });
@@ -60,6 +76,36 @@ export class Scheduler {
   transfer(owner) {
     const setting = this.store.get('settings','installation'); if(!setting)throw new Error('Complete setup first');
     return this.store.withLock(()=>this.store.commit([this.store.prepare('settings',{owner},setting),...this.store.list('jobs').map(j=>this.store.prepare('jobs',{owner},j))]));
+  }
+  // A catalogue routine the notebook does not have yet (an older notebook, or one added to the
+  // catalogue later) is created; one that exists is left as the person set it. The four first-setup
+  // jobs are made only by setup.
+  async addStartingJobs(settings,now){
+    const missing=()=>{const have=new Set(this.store.list('jobs').map(j=>j.id));return startingJobs().filter(e=>e.routine&&!have.has(e.id));};
+    if(!missing().length)return;
+    await this.store.withLockAsync(()=>{
+      const at=new Date(now).toISOString(),records=missing().map(e=>this.store.prepare('jobs',startingJobRecord(e,{owner:settings.owner,timezone:settings.timezone,at})));
+      if(records.length)this.store.commit(records);
+    });
+  }
+  // Run now: the checks are answered at once and the run goes on in the background, since a routine
+  // can take up to fifteen minutes (as NativeScheduler.startRun).
+  startRun(id){
+    const job=typeof id==='string'?this.store.get('jobs',id):null,settings=this.store.get('settings','installation');
+    if(!job)throw new Error('Choose an existing routine');
+    if(!settings||settings.owner!==this.device)throw new Error('Routines run on the machine named '+(settings?.owner||'in setup')+'. Run the routine there, or choose this machine to run the routines.');
+    if(job.paused)throw new Error('This routine is paused. Resume it, then run it.');
+    if(['awaiting_approval','needs_review'].includes(job.state))throw new Error('This routine needs its previous attempt reviewed before it can run.');
+    if(this.running||this.unfinished.has(id))throw new Error('A routine is already running. Try again in a moment.');
+    const run=this.runNow(id);this.started=run;run.catch(e=>{try{this.onFailure?.(e);}catch{}});
+    return {started:true,id};
+  }
+  async runNow(id,now=Date.now()){
+    this.running=true;this.onProgress?.();
+    try{
+      await this.store.withLockAsync(()=>{const current=this.store.get('jobs',id);if(current&&Date.parse(current.next_run)>now)this.store.commit([this.store.prepare('jobs',{next_run:new Date(now).toISOString()},current)]);});
+      return await this.run(id,this.store.get('settings','installation'),now);
+    }finally{this.running=false;this.onProgress?.();}
   }
   // Which jobs this scheduler may start now. A job awaiting review is never
   // started: until 6 October 2026 one whose delivery was uncertain could be
@@ -78,6 +124,7 @@ export class Scheduler {
       // sync or from a backup after this machine started) is taken over now.
       if(settings?.owner===LEGACY_DEVICE&&this.claimLegacy){try{await this.claimLegacy();}catch{}settings=this.store.get('settings','installation');}
       if (!settings || settings.owner !== this.device) return [];
+      if(!this.only)try{await this.addStartingJobs(settings,now);}catch{}
       for(const finish of [...this.unfinished.values()])try{await finish();}catch{}
       for (const snapshot of this.store.list('jobs')) {
         // An inactive snapshot cannot authorize execution. A later activation
