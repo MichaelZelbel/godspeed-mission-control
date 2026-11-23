@@ -169,3 +169,16 @@ test('only the computer that runs the routines writes moments',t=>{
  assert.equal(new JournalMoments({store,query,device:'pc'}).due(),false);
  assert.equal(new JournalMoments({store,query,device:'vps'}).due(),true);
 });
+
+test('a task closed by proof from before it started is written without an end',async t=>{
+ const root=fixture(t),nb=open(root);
+ start(root,'09:00','t-1','Early proof','');
+ entry(root,'10:00',{kind:'done',task:'t-1',source:'evidence',evidence_at:'2026-10-30T10:00:00Z',words:'proved'});
+ start(root,'11:00','t-2','Normal task');
+ entry(root,'12:00',{kind:'done',task:'t-2',words:'done'});
+ assert.equal((await reconcile(nb)).written.length,2);
+ const early=live(nb).find(m=>m.source_id==='t-1'),normal=live(nb).find(m=>m.source_id==='t-2');
+ assert.equal(early.happened_end,null);assert.equal(early.metadata.journal_ended,'2026-10-30T10:00:00Z');
+ assert.equal(normal.happened_end,at('12:00').toISOString());
+ assert.deepEqual(await reconcile(nb),{written:[],updated:[],removed:[]});
+});
