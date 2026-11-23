@@ -492,6 +492,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const [pendingDuplicateTitle, setPendingDuplicateTitle] = useState("");
   const [interactionGroupId, setInteractionGroupId] = useState<string | null>(null);
   const interactionFieldId = useId();
+  const titleFieldId = useId();
+  const textLabelId = useId();
+  const sourceFieldId = useId();
   const [interactionType, setInteractionType] = useState("meeting");
   const [interactionSummary, setInteractionSummary] = useState(note.title);
   // Wikilink autocomplete state
@@ -756,7 +759,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     ],
     editorProps: {
       // The note's text box is named, like its title box (#742).
-      attributes: { role: "textbox", "aria-multiline": "true", "aria-label": "Note text" },
+      attributes: { role: "textbox", "aria-multiline": "true", "aria-labelledby": textLabelId },
       handleClick: (_view, _pos, event) => {
         const target = event.target as HTMLElement;
         const wikilinkEl = target.closest?.(".wikilink-node") as HTMLElement | null;
@@ -1853,7 +1856,8 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             beside the title it took the room the title needed, so on a narrow
             window the end of the title scrolled out of sight behind it. */}
         <div className="mb-4">
-          <textarea aria-label="Note title"
+          <label htmlFor={titleFieldId} className="block text-xs font-medium text-muted-foreground">Note title</label>
+          <textarea id={titleFieldId}
             ref={titleInputRef}
             rows={1}
             value={title}
@@ -1916,7 +1920,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </div>
           )}
         {sourceMode ? (
-          <textarea aria-label="Markdown source"
+          <>
+          <label htmlFor={sourceFieldId} className="block text-xs font-medium text-muted-foreground">Markdown source</label>
+          <textarea id={sourceFieldId}
             value={sourceText}
             onChange={(e) => {
               setSourceText(e.target.value);
@@ -1933,8 +1939,10 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             placeholder="Markdown source…"
             disabled={note.is_trashed || note.is_external}
           />
+          </>
         ) : (
           <>
+            <label id={textLabelId} className="block text-xs font-medium text-muted-foreground" onClick={() => editor?.view.dom.focus()}>Note text</label>
             <EditorContent editor={editor} className="tiptap-editor" />
             {editor && !isMobile && !note.is_trashed && !note.is_external && (
               <EditorBubbleMenu
