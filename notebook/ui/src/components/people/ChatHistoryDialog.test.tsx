@@ -62,6 +62,27 @@ describe("Add a chat history", () => {
     expect(state.inserted[0]).toMatchObject({ person_id: "mia", happened_at: "2025-02-03", title: "Moving to Lisbon (2025-02)" });
     expect(state.participants[0].map((p: any) => p.person_id).sort()).toEqual(["ben", "mia"]);
   });
+  it("stops asking the AI once the dialog is closed mid-run", async () => {
+    let release: (v: { data: unknown; error: unknown }) => void = () => {};
+    invoke.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    const view = open(); choose(chat);
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
+    view.rerender(<ChatHistoryDialog open={false} onOpenChange={() => {}} personId="mia" personName="Mia Muster" people={[]} onSaved={() => {}} />);
+    release({ data: { moments: [{ title: "Late", happened_at: "2025-02-04", quote: "", status: "past_fact", impact_level: 1, participants: [] }] }, error: null });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Late")).toBeNull();
+  });
+  it("keeps a suggestion once when Keep all is pressed twice", async () => {
+    open(); choose(chat);
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    await screen.findByText(/Done: all 2 months read/);
+    const all = screen.getByRole("button", { name: "Keep all" });
+    fireEvent.click(all); fireEvent.click(all);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Keep all" })).toBeNull());
+    expect(state.inserted).toHaveLength(3);
+  });
   it("refuses a file that is not a WhatsApp export in one sentence", async () => {
     open(); choose("milk\neggs", "list.txt");
     expect(await screen.findByRole("alert")).toHaveTextContent("This is not a WhatsApp chat export.");

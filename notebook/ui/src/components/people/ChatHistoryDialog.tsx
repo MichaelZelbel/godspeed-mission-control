@@ -19,9 +19,11 @@ const MONTH_NAME = (month: string) => new Date(month + "-15T12:00:00").toLocaleD
 
 // The moments the timeline already holds, with the names of the people in each.
 async function knownMoments(): Promise<KnownMoment[]> {
-  const { data: rows } = await supabase.from("moments" as any).select("id, title, happened_at, person_id").is("deleted_at", null);
-  const { data: links } = await supabase.from("moment_participants" as any).select("moment_id, person_id");
-  const { data: contacts } = await supabase.from("contacts" as any).select("id, name");
+  const { data: rows, error: rowsError } = await supabase.from("moments" as any).select("id, title, happened_at, person_id").is("deleted_at", null);
+  const { data: links, error: linksError } = await supabase.from("moment_participants" as any).select("moment_id, person_id");
+  const { data: contacts, error: contactsError } = await supabase.from("contacts" as any).select("id, name");
+  const failure = rowsError || linksError || contactsError;
+  if (failure) throw failure;
   const names = new Map<string, string>((contacts || []).map((c: any) => [c.id, c.name]));
   return (rows || []).filter((m: any) => m.happened_at).map((m: any) => {
     const ids = new Set<string>([m.person_id, ...(links || []).filter((l: any) => l.moment_id === m.id).map((l: any) => l.person_id)].filter(Boolean));
@@ -39,6 +41,8 @@ export function ChatHistoryDialog({ open, onOpenChange, personId, personName, pe
   const [finished, setFinished] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [saved, setSaved] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const savingNow = useRef(false);
   const run = useRef(0);
 
   const reset = () => { run.current++; setMonths(null); setProblem(""); setRunning(false); setDone(0); setFinished(false); setSuggestions([]); setSaved(0); };
@@ -79,7 +83,9 @@ export function ChatHistoryDialog({ open, onOpenChange, personId, personName, pe
   };
 
   const keep = async (items: Suggestion[]) => {
-    if (!user || !items.length) return;
+    if (!user || !items.length || savingNow.current) return;
+    savingNow.current = true; setSaving(true);
+    let keptAny = false;
     try {
       for (const s of items) {
         const { data, error } = await supabase.from("moments" as any).insert({
@@ -89,13 +95,19 @@ export function ChatHistoryDialog({ open, onOpenChange, personId, personName, pe
         if (error || !data) throw error || new Error("Moment was not created");
         const others = s.people.slice(1).map((n) => people.find((p) => p.name.toLowerCase() === n.toLowerCase())?.id).filter((x): x is string => !!x && x !== personId);
         const { error: linkError } = await supabase.from("moment_participants" as any).insert([...new Set([personId, ...others])].map((person_id) => ({ moment_id: (data as any).id, person_id })));
-        if (linkError) throw linkError;
+        if (linkError) {
+          await supabase.from("moments" as any).delete().eq("id", (data as any).id);
+          throw linkError;
+        }
+        keptAny = true;
         setSuggestions((list) => list.filter((x) => x.id !== s.id));
         setSaved((n) => n + 1);
       }
-      onSaved();
     } catch {
-      setProblem("A moment could not be saved. The ones already kept are on the timeline.");
+      setProblem(keptAny ? "A moment could not be saved. The ones already kept are on the timeline; this one is still listed." : "A moment could not be saved. It is still listed.");
+    } finally {
+      savingNow.current = false; setSaving(false);
+      if (keptAny) onSaved();
     }
   };
 
@@ -134,7 +146,7 @@ export function ChatHistoryDialog({ open, onOpenChange, personId, personName, pe
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium">{suggestions.length} suggested moment{suggestions.length === 1 ? "" : "s"}</h3>
-                <Button size="sm" variant="outline" onClick={() => void keep(suggestions)}>Keep all</Button>
+                <Button size="sm" variant="outline" disabled={saving} onClick={() => void keep(suggestions)}>Keep all</Button>
               </div>
               <ul className="space-y-2">
                 {suggestions.map((s) => (
@@ -143,7 +155,7 @@ export function ChatHistoryDialog({ open, onOpenChange, personId, personName, pe
                     <p className="font-medium">{s.title}</p>
                     {s.quote && <p className="mt-1 text-sm italic text-muted-foreground">“{s.quote}”</p>}
                     <div className="mt-2 flex gap-2">
-                      <Button size="sm" aria-label={`Keep ${s.title}`} onClick={() => void keep([s])}>Keep</Button>
+                      <Button size="sm" aria-label={`Keep ${s.title}`} disabled={saving} onClick={() => void keep([s])}>Keep</Button>
                       <Button size="sm" variant="ghost" aria-label={`Drop ${s.title}`} onClick={() => setSuggestions((list) => list.filter((x) => x.id !== s.id))}>Drop</Button>
                     </div>
                   </li>
