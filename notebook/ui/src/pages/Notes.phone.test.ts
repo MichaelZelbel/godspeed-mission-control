@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { startNotebook, type RealNotebook } from "@/test/real-notebook";
+import { WAIT } from "@/test/wait-limits";
 
 // New Note, New Folder and the forms that gained a visible label (#1051), in the built app at a
 // phone's width. A person at 390 px opens New Note again and again, and every field of the forms
@@ -112,7 +113,7 @@ describe("forms with visible labels at a phone's width", () => {
   it("opens New Note every time at 390 px, with title and text named by visible labels", async () => {
     await inPage(PHONE, "/dashboard/notes", async (page) => {
       await newNoteFromPlus(page);
-      await page.getByLabel("Note title", { exact: true }).waitFor();
+      await page.getByLabel("Note title", { exact: true }).waitFor(WAIT);
       await page.getByLabel("Note title", { exact: true }).fill("First");
       await page.keyboard.press("Enter");
       await page.keyboard.type("A line");
@@ -121,8 +122,8 @@ describe("forms with visible labels at a phone's width", () => {
         const before = page.url();
         await open();
         await page.waitForURL((url) => url.toString() !== before);
-        await page.getByLabel("Note title", { exact: true }).waitFor();
-        await page.getByLabel("Note text", { exact: true }).waitFor();
+        await page.getByLabel("Note title", { exact: true }).waitFor(WAIT);
+        await page.getByLabel("Note text", { exact: true }).waitFor(WAIT);
         expect(await page.getByLabel("Note title", { exact: true }).count()).toBe(1);
         expect(await page.getByLabel("Note text", { exact: true }).count()).toBe(1);
         expect(seen.has(noteId(page))).toBe(false);
@@ -140,7 +141,7 @@ describe("forms with visible labels at a phone's width", () => {
       await page.getByRole("button", { name: "New note or folder" }).click();
       await page.getByRole("menuitem", { name: "New Folder" }).click();
       const dialog = page.getByRole("alertdialog");
-      await dialog.waitFor();
+      await dialog.waitFor(WAIT);
       const box = dialog.getByLabel("Folder name", { exact: true });
       expect(await box.count()).toBe(1);
       const where = await box.boundingBox();
@@ -149,7 +150,7 @@ describe("forms with visible labels at a phone's width", () => {
       expect(await box.evaluate((el) => (el as HTMLInputElement).labels?.[0]?.textContent)).toBe("Folder name");
       await box.fill("Garden");
       await dialog.getByRole("button", { name: "Create folder" }).click();
-      await page.getByText("Garden", { exact: true }).waitFor();
+      await page.getByText("Garden", { exact: true }).waitFor(WAIT);
     });
   }, 120_000);
 
@@ -157,7 +158,7 @@ describe("forms with visible labels at a phone's width", () => {
     it("on a new note", async () => {
       await inPage(NARROW, "/dashboard/notes", async (page) => {
         await newNoteFromPlus(page);
-        await page.getByLabel("Note title", { exact: true }).waitFor();
+        await page.getByLabel("Note title", { exact: true }).waitFor(WAIT);
         expect(await labelProblems(page, ["Note title", "Note text"]), "new note").toEqual([]);
       });
     }, 120_000);
@@ -166,7 +167,7 @@ describe("forms with visible labels at a phone's width", () => {
       await inPage(NARROW, "/dashboard/notes", async (page) => {
         await page.getByRole("button", { name: "New note or folder" }).click();
         await page.getByRole("menuitem", { name: "New Folder" }).click();
-        await page.getByRole("alertdialog").waitFor();
+        await page.getByRole("alertdialog").waitFor(WAIT);
         expect(await labelProblems(page, ["Folder name"]), "New Folder dialog").toEqual([]);
       });
     }, 120_000);
@@ -189,7 +190,7 @@ describe("forms with visible labels at a phone's width", () => {
       await inPage(NARROW, "/collections", async (page) => {
         await page.getByRole("button", { name: /Create with AI/ }).first().click();
         const dialog = page.getByRole("dialog");
-        await dialog.waitFor();
+        await dialog.waitFor(WAIT);
         const prompt = await dialog.locator("label").first().textContent();
         expect(await labelProblems(page, [prompt!.trim()]), "Create with AI").toEqual([]);
       });
