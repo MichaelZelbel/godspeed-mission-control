@@ -55,7 +55,7 @@ afterEach(() => { cleanup(); invoke.mockClear(); state.inserted.length = 0; stat
 describe("Add a chat history", () => {
   it("says what goes to the AI, sends nothing before Start, skips known moments and saves only kept ones", async () => {
     open(); choose(chat);
-    expect(await screen.findByText(/sends this chat, month by month, to your connected AI. It covers 2 months/, {}, WAIT)).toBeInTheDocument();
+    expect(await screen.findByText("Starting sends this chat, month by month, to your connected AI, and the chat covers 2 months, February 2025 to March 2025.", {}, WAIT)).toBeInTheDocument();
     expect(invoke).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
     expect(await screen.findByText(/Done: all 2 months read/, {}, WAIT)).toBeInTheDocument();

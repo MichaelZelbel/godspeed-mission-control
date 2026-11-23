@@ -64,7 +64,7 @@ describe("a year-long chat export against a 127.0.0.1 stand-in AI", () => {
       const before = new Set(filesOnDisk());
       render(<ChatHistoryDialog open onOpenChange={() => {}} personId="mia" personName="Mia Muster" people={[]} onSaved={() => {}} />);
       fireEvent.change(screen.getByLabelText(/WhatsApp export file/), { target: { files: [new File([text], "_chat.txt")] } });
-      expect(await screen.findByText(/It covers 12 months/, {}, WAIT)).toBeInTheDocument();
+      expect(await screen.findByText("Starting sends this chat, month by month, to your connected AI, and the chat covers 12 months, January 2025 to December 2025.", {}, WAIT)).toBeInTheDocument();
       expect(standIn.requests).toHaveLength(0);
       fireEvent.click(screen.getByRole("button", { name: "Start" }));
       expect(await screen.findByText(/Done: all 12 months read/, {}, WAIT)).toBeInTheDocument();

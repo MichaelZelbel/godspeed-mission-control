@@ -117,7 +117,7 @@ export function ChatHistoryDialog({ open, onOpenChange, personId, personName, pe
 
   const first = months?.[0], last = months?.[months.length - 1];
   const sentence = months && first && last
-    ? `Starting sends this chat, month by month, to your connected AI. It covers ${months.length} month${months.length === 1 ? "" : "s"}, ${MONTH_NAME(first.month)} to ${MONTH_NAME(last.month)}.`
+    ? `Starting sends this chat, month by month, to your connected AI, and the chat covers ${months.length} month${months.length === 1 ? "" : "s"}, ${MONTH_NAME(first.month)} to ${MONTH_NAME(last.month)}.`
     : "";
 
   return (
