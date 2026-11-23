@@ -42,7 +42,7 @@ describe("World on an empty notebook", () => {
     expect(screen.queryByText("Nothing matches.")).not.toBeInTheDocument();
     expect(screen.getByText(/No things yet\. Add your first place, project or anything else with Add a thing\./)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add the first thing" }));
-    expect(screen.getByPlaceholderText("Name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toBeInTheDocument();
   });
 
   it("Events says nothing has happened yet and sends you to the Timeline", () => {
