@@ -46,8 +46,9 @@ export function DashboardLayout() {
               pinned to the viewport's corner, so room kept only at the end of the content (issue
               #530's pb-24) still left a card under it at every scroll before the end (#878).
               --page-h is main's content box (the cap minus main's own 3rem of vertical padding);
-              pages that fill it use it, so their budget cannot drift from this cap. */}
-          <main className={floatingChat?"flex-1 overflow-auto p-6 max-h-[calc(100dvh-9.5rem)] [--page-h:calc(100dvh-12.5rem)]":"flex-1 overflow-auto p-6"}>
+              pages that fill it use it, so their budget cannot drift from this cap. At phone widths
+              the content reaches the window's bottom and the button floats over it (#1045). */}
+          <main className={floatingChat?"flex-1 overflow-auto p-6 max-h-[calc(100dvh-9.5rem)] [--page-h:calc(100dvh-12.5rem)] max-sm:max-h-[calc(100dvh-3.5rem)] max-sm:[--page-h:calc(100dvh-6.5rem)]":"flex-1 overflow-auto p-6"}>
             {/* A crashing page no longer takes the sidebar with it, and the
                 boundary clears on the next navigation. Loading a page's code
                 keeps the sidebar and header on screen. */}
