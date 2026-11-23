@@ -41,6 +41,8 @@ function stepsOf(versions,corrections){
   return steps;
 }
 
+const nameOf1=r=>first(r,['name','title','label']);
+
 function entriesOf(type,steps){
   const entries=[];let open=null,prev=null;
   for(const step of steps){
@@ -57,7 +59,10 @@ function entriesOf(type,steps){
       kind='update';
     }
     const gap=open?ms(step.time)-ms(open.last):Infinity;
-    if(kind==='update'&&!change&&open&&!open.change&&open.action!=='delete'&&(gap<=SAVE_GAP_MS||(autosaved(type,keys)&&gap<=FOLD_MS))){open.state=c;open.last=step.time;continue;}
+    // Changing a name that was already set is a rename, a deliberate action of its own
+    // (an assistant's query, a bulk update); only filling in a blank name belongs to the create.
+    const renamed=kind==='update'&&!change&&p&&!blank(nameOf1(p))&&nameOf1(p)!==nameOf1(c);
+    if(kind==='update'&&!change&&!renamed&&open&&!open.change&&open.action!=='delete'&&(gap<=SAVE_GAP_MS||(autosaved(type,keys)&&gap<=FOLD_MS))){open.state=c;open.last=step.time;continue;}
     open={id:step.id,time:step.time,last:step.time,state:c,before:p,action:kind,change,hidden:kind==='create'&&ownNote(c),purged,correction:Boolean(step.patch),from:p||c};
     entries.push(open);
   }

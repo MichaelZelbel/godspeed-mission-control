@@ -154,3 +154,7 @@ test('a conversation tab autosave on a person folds into one update',()=>{
   assert.deepEqual(lines(r),['Created a person: A','Updated a person: A']);
   assert.ok(SAVE_GAP_MS<120000);
 });
+test('a rename a few seconds after a create is its own entry and never rewrites the create',()=>{
+  const r=rows([versions('notes','n','n1',[[0,{title:'Old'}],[0.5,{title:'New'}]]),versions('contacts','p','p1',[[0,{name:'Anna'}],[1.3,{name:'Anna Berg'}]]),versions('notes','m','m1',[[0,{title:'Zed'}],[3,{title:'Zee'}]])]);
+  assert.deepEqual(lines(r).sort(),['Created a note: Old','Created a note: Zed','Created a person: Anna','Updated a note: New (was Old)','Updated a note: Zee (was Zed)','Updated a person: Anna Berg (was Anna)'].sort());
+});
