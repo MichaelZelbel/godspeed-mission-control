@@ -46,7 +46,7 @@ function entriesOf(type,steps){
   for(const step of steps){
     const {state:c}=step,p=prev;prev=c;
     let kind,change,keys=[];
-    if(!p)kind='create';
+    if(!p)kind=c.removed_at?'delete':'create';
     else if(c.removed_at&&!p.removed_at)kind='delete';
     else if(c.is_trashed===true&&p.is_trashed!==true){kind='update';change='trash';}
     else if(p.is_trashed===true&&c.is_trashed!==true){kind='update';change='restore';}
@@ -54,7 +54,6 @@ function entriesOf(type,steps){
       const all=step.patch?Object.keys(step.patch):[...new Set([...Object.keys(p),...Object.keys(c)])],differing=all.filter(k=>!same(p[k],c[k]));keys=differing.filter(k=>!OWN_FIELDS.has(k));
       // The notebook's own processing of a note, or a write that changed nothing a person sees.
       if(differing.includes('processing_status')||differing.includes('processed_at')||!keys.length)continue;
-      if(keys.includes('metadata')&&keys.every(k=>k==='metadata'||k==='tags'))continue;
       kind='update';
     }
     const gap=open?ms(step.time)-ms(open.last):Infinity;

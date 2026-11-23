@@ -50,6 +50,11 @@ test('the notebook\'s own writes are not the person\'s',()=>{
   ],{corrections:[{uid:'k1',moment_id:'m1',sequence:1,patch:{title:'Dinner'},created_at:at(700)}]});
   assert.deepEqual(lines(r),['Created a note: X','Created a moment: Dinner']);
 });
+test('a metadata-only note edit is the person\'s update, and a purged record reads as a delete',()=>{
+  const r=rows([versions('notes','u1','n1',[[0,{title:'Plan',content:'a'}],[600,{metadata:{topic:'x'}}]]),versions('collections','u2','c1',[[0,{name:'Tracker',removed_at:at(0)}]])]);
+  assert.deepEqual(r.map(x=>x.action).sort(),['create','delete','update']);
+});
+
 test('a moment edit is named by its new title',()=>{
   const r=rows([versions('moments','u3','m1',[[0,{title:'Dinner'}]])],{corrections:[{uid:'k1',moment_id:'m1',sequence:1,patch:{title:'Lunch'},created_at:at(700)}]});
   assert.deepEqual(lines(r),['Created a moment: Dinner','Updated a moment: Lunch (was Dinner)']);
