@@ -567,13 +567,13 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
           <div className={page||embedded?"bg-background overflow-hidden flex flex-col h-full w-full":"bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full w-full"}>
             {/* Header */}
             <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border shrink-0">
-              <div className="flex items-center gap-2 min-w-0 max-h-16 overflow-y-auto sm:max-h-none sm:overflow-visible" data-testid="chat-header-title">
-                <Bot className="h-4 w-4 text-primary shrink-0" />
-                <span className={cn("text-sm font-semibold min-w-0 [overflow-wrap:anywhere]", shortHeaderTitle && "whitespace-nowrap")} title={pageChat?.label||noteTitle||contextTitle||"Godspeed"}>
+              <div className="flex items-start gap-2 min-w-0 max-h-16 overflow-y-auto sm:max-h-none sm:overflow-visible" data-testid="chat-header-title">
+                <Bot className="h-4 w-4 text-primary shrink-0 my-auto" />
+                <span className={cn("text-sm font-semibold min-w-0 my-auto [overflow-wrap:anywhere]", shortHeaderTitle && "truncate whitespace-nowrap")} title={pageChat?.label||noteTitle||contextTitle||"Godspeed"}>
                   {headerTitle}
                 </span>
                 {!embedded && state.messages.length > 0 && (
-                  <span className="text-[10px] text-muted-foreground shrink-0">
+                  <span className="text-[10px] text-muted-foreground shrink-0 my-auto">
                      /  {state.messages.length} msgs{state.summary ? "  /  summary" : ""}
                   </span>
                 )}

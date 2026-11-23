@@ -34,6 +34,9 @@ it.each([
   expect(box.className).toContain("max-h-16");
   expect(box.className).toContain("sm:max-h-none"); // no cap from 640px up
   expect(box.className).toContain("overflow-y-auto");
+  // not centred inside the scroll box: centring hides the start of an overflowing title
+  expect(box.className).not.toContain("items-center");
+  expect(heading.className).toContain("my-auto");
 });
 
 it("keeps a short note title on one centred line", async () => {
@@ -45,7 +48,8 @@ it("keeps a short note title on one centred line", async () => {
   );
   const heading = await screen.findByText("Godspeed / Groceries", undefined, WAIT);
   expect(heading.className).toContain("whitespace-nowrap");
+  expect(heading.className).toContain("truncate"); // a cut at 320px shows an ellipsis
   const box = screen.getByTestId("chat-header-title");
-  expect(box.className).toContain("items-center");
+  expect(heading.className).toContain("my-auto");
   expect(box.parentElement?.className).toContain("items-center");
 });
