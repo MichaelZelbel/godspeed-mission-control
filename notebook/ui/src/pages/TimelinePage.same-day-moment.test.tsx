@@ -14,6 +14,7 @@ const base = { description: null, verified: false, is_potential_major: false, st
 const moments = [
   { ...base, id: "m-same", title: "Same day", happened_at: "2025-03-05", happened_end: "2025-03-05" },
   { ...base, id: "m-span", title: "Several days", happened_at: "2025-03-05", happened_end: "2025-03-08" },
+  { ...base, id: "m-undated", title: "No start", happened_at: null, happened_end: "2025-03-08" },
 ];
 vi.mock("@/integrations/supabase/client", () => {
   // Every query-builder call returns the same chain; awaiting it answers for its table.
@@ -54,5 +55,12 @@ describe("a moment whose end is its start", () => {
     const dialog = await screen.findByRole("dialog", undefined, WAIT);
     const desc = dialog.querySelector("p")!;
     expect(desc).toHaveTextContent(/^Mar 5, 2025$/);
+  });
+
+  it("reads \"Undated – <end>\" in the details of a moment with an end but no start", async () => {
+    render(<MemoryRouter><TimelinePage /></MemoryRouter>);
+    fireEvent.click(await screen.findByText("No start", undefined, WAIT));
+    const dialog = await screen.findByRole("dialog", undefined, WAIT);
+    expect(dialog.querySelector("p")!).toHaveTextContent(/^Undated – Mar 8, 2025$/);
   });
 });

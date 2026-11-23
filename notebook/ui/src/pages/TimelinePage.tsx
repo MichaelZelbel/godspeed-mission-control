@@ -97,7 +97,7 @@ const formatMomentRange = (m: Pick<TimelineMoment, "happened_at" | "moment_date"
   const start = formatMomentDay(m);
   if (!m.happened_end) return start ?? "";
   const end = showDate(m.happened_end, "day");
-  return start === end ? end : `${start ?? ""} – ${end}`;
+  return start === end ? end : `${start ?? UNDATED} – ${end}`;
 };
 
 // A score the writer left out reads as "Not set", never as a blank tile; 0 is
