@@ -17,7 +17,6 @@ import {
   FolderOpen,
   ArrowRight,
   Activity,
-  RotateCcw,
 } from "lucide-react";
 
 const ACTION_ICONS: Record<string, React.ElementType> = {
@@ -115,7 +114,7 @@ export function ActivityFeed({ limit = 5, showViewAll = true }: ActivityFeedProp
         ) : (
           <ul className="space-y-3">
             {events.map((ev) => {
-              const Icon = (ev.metadata?.change === "trash" ? Trash2 : ev.metadata?.change === "restore" ? RotateCcw : ACTION_ICONS[ev.action]) || FolderOpen;
+              const Icon = ACTION_ICONS[ev.action] || FolderOpen;
               return (
                 <li key={ev.id} className="flex items-start gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">

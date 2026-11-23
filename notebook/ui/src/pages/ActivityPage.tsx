@@ -27,7 +27,6 @@ import {
   Search,
   X,
   Calendar,
-  RotateCcw,
 } from "lucide-react";
 
 const ACTION_ICONS: Record<string, React.ElementType> = {
@@ -191,7 +190,7 @@ export default function ActivityPage() {
       ) : (
         <div className="space-y-2">
           {events.map((ev) => {
-            const Icon = (ev.metadata?.change === "trash" ? Trash2 : ev.metadata?.change === "restore" ? RotateCcw : ACTION_ICONS[ev.action]) || FolderOpen;
+            const Icon = ACTION_ICONS[ev.action] || FolderOpen;
             return (
               <div key={ev.id} className="flex items-start gap-3 rounded-lg border bg-card p-3 transition-colors hover:bg-accent/50">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted">
