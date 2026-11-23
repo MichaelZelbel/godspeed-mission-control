@@ -1,4 +1,6 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { tabOnlyStorage } from '@/lib/tab-storage';
 import { BrowserRouter, Routes, Route, Navigate, Link, Outlet, useLocation } from 'react-router-dom';
 import { BRAIN_PAGE } from '@/lib/brain-page';
 import { ThemeProvider } from 'next-themes';
@@ -46,6 +48,12 @@ function ShortAddress(){
 function Reconnect({error,refreshSession}:{error:string;refreshSession:()=>Promise<void>}){
   return <AuthShell><h2>Let’s reconnect</h2><p className="auth-intro" role="alert">{error}</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
 }
+const TAB_ONLY_NOTICE="This browser blocks site data for this page, so text not saved yet and choices kept in this browser last only until you close or reload this tab. To keep them, allow site data (cookies and site data) for this address in your browser's settings.";
+let noticeShown=false;
+function TabOnlyStorageNotice(){
+  useEffect(()=>{if(!tabOnlyStorage||noticeShown)return;noticeShown=true;toast.info(TAB_ONLY_NOTICE,{id:'tab-only-storage',duration:15000});},[]);
+  return null;
+}
 function Layout(){
   const {user,loading,authError,refreshSession,local}=useAuth();
   if(loading)return <AuthShell><h2>Opening Godspeed Mission Control</h2><p role="status">Checking your sign-in…</p></AuthShell>;
@@ -54,7 +62,7 @@ function Layout(){
   // never lands on the server's sign-in, invite or setup screens, even if a read comes back oddly.
   if(!user&&local)return <AuthShell><h2>Reconnecting to your notebook</h2><p className="auth-intro" role="status">Your notebook is on this computer and needs no sign-in.</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
   if(!user)return <AuthScreen/>;
-  return <><KeepUnsavedNotes/><DashboardLayout/></>;
+  return <><KeepUnsavedNotes/><TabOnlyStorageNotice/><DashboardLayout/></>;
 }
 // A setup link only means something on a server install. A local notebook's server always answers
 // signed in, so its stale setup link goes back to the dashboard; a read that fails cannot say

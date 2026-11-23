@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Eye, EyeOff, ShieldCheck, KeyRound, Download, Copy, Check } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { authRequest, useAuth } from '@/contexts/AuthContext';
+import { onThisComputer } from '@/lib/on-this-computer';
 import logo from '@/assets/godspeed-logo.png';
 import './auth.css';
 
@@ -18,11 +19,11 @@ async function firstStop(destination:string,created:boolean){
   return destination;
 }
 export function AuthShell({children}:{children:React.ReactNode}) {
-  return <main className="auth-page"><div className="auth-wrap"><header className="auth-brand"><img src={logo} width="56" height="56" alt=""/><h1>Godspeed<br/>Mission Control</h1></header><section className="auth-panel">{children}</section><footer className="auth-server"><ShieldCheck size={16} aria-hidden="true"/><span>Your server: {location.hostname}</span></footer></div></main>;
+  return <main className="auth-page"><div className="auth-wrap"><header className="auth-brand"><img src={logo} width="56" height="56" alt=""/><h1>Godspeed<br/>Mission Control</h1></header><section className="auth-panel">{children}</section><footer className="auth-server"><ShieldCheck size={16} aria-hidden="true"/><span>{onThisComputer()?'Your notebook is on this computer':`Your server: ${location.hostname}`}</span></footer></div></main>;
 }
 export function AuthScreen() {
   const auth=useAuth(), route=useLocation(), navigate=useNavigate();
-  const [mode,setMode]=useState<'loading'|'login'|'invite'|'setup'|'recover'|'saved'>('loading');
+  const [mode,setMode]=useState<'loading'|'reconnect'|'login'|'invite'|'setup'|'recover'|'saved'>('loading');
   const [username,setUsername]=useState(''),[password,setPassword]=useState(''),[confirmation,setConfirmation]=useState('');
   const [setupCode,setSetupCode]=useState(''),[code,setCode]=useState(''),[recovery,setRecovery]=useState('');
   const [remember,setRemember]=useState(false),[visible,setVisible]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -35,13 +36,12 @@ export function AuthScreen() {
     setError('');setMode('loading');
     try {
       const status=await authRequest('/api/auth/status');
-      // A notebook on this computer is always open (the server answers signed in there), so its
-      // setup link never opens the server's screens; the dashboard is where the person already was.
-      if(status.local){navigate('/dashboard',{replace:true});return;}
+      // A notebook on this computer needs no sign-in (the server answers signed in there).
+      if(status.local){await auth.refreshSession();navigate(safeNext(next.current),{replace:true});return;}
       if(status.configured){setMode('login');return;}
       if(invite.current){await authRequest('/api/auth/invite',{invite:invite.current});setMode('setup');}
       else setMode('invite');
-    } catch(e:any){setMode('invite');setError(e.message);}
+    } catch(e:any){setMode(onThisComputer()?'reconnect':'invite');setError(e.message);}
   }
   // The /setup gate (App.tsx SetupRoute) decides from the auth context whether the server's
   // screens may show at all; inspect waits for that answer, so a failing read can never land on
@@ -69,8 +69,9 @@ export function AuthScreen() {
     const blob=new Blob([`Godspeed Mission Control recovery code\nServer: ${location.origin}\nUsername: ${username.trim()}\n\n${recovery}\n\nKeep this code private. It lets you reset your username and password.\nAfter a reset, save the new code; this code will no longer work.\n`],{type:'text/plain'});
     const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='godspeed-recovery-code.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
-  const title={loading:'Opening your server',login:'Welcome back',invite:'Your first visit',setup:'Make it yours',recover:'Recover your account',saved:'Keep your way back in'}[mode];
-  const description={loading:'Checking your sign-in…',login:'Sign in to your Godspeed Mission Control.',invite:'Use your private setup link, or the setup code you saved during installation.',setup:'Choose a username and password for this server. No email address needed.',recover:'Your saved recovery code lets you choose a new username and password.',saved:'Save this recovery code somewhere private. You will need it if you forget your password.'}[mode];
+  if(mode==='reconnect')return <AuthShell><h2>Let’s reconnect</h2><p className="auth-intro" role="alert">{error}</p><button className="auth-primary" onClick={inspect}>Try again</button></AuthShell>;
+  const title={loading:onThisComputer()?'Opening your notebook':'Opening your server',reconnect:'Let’s reconnect',login:'Welcome back',invite:'Your first visit',setup:'Make it yours',recover:'Recover your account',saved:'Keep your way back in'}[mode];
+  const description={loading:'Checking your sign-in…',reconnect:'',login:'Sign in to your Godspeed Mission Control.',invite:'Use your private setup link, or the setup code you saved during installation.',setup:'Choose a username and password for this server. No email address needed.',recover:'Your saved recovery code lets you choose a new username and password.',saved:'Save this recovery code somewhere private. You will need it if you forget your password.'}[mode];
   return <AuthShell><h2>{title}</h2><p className="auth-intro">{description}</p>
     {auth.expired && mode==='login' && <p className="auth-notice" role="status">Your sign-in has expired. Sign in again to return to your page.</p>}
     <p className="auth-error" role="alert" tabIndex={-1} ref={errorRef} hidden={!error}>{error}</p>

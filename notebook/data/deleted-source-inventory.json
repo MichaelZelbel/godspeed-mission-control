@@ -1,0 +1,22 @@
+{
+ "tables": [
+  "discord_connections",
+  "gdrive_connections",
+  "gdrive_imports",
+  "godspeed_connections",
+  "mcp_api_tokens",
+  "notification_preferences",
+  "telegram_connections",
+  "user_mcp_servers"
+ ],
+ "functions": [
+  "backfill-wikilinks",
+  "delete-my-account",
+  "enrich-people",
+  "gdrive-proxy",
+  "gdrive-sync",
+  "github-import-vault",
+  "github-sync-pull",
+  "quick-capture"
+ ]
+}
