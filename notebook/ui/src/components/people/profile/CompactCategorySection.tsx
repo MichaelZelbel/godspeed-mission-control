@@ -198,7 +198,7 @@ export function CompactCategorySection({
             </Button>
           </div>
         ) : (
-          <span className="font-medium text-sm flex-1 truncate">{section.name}</span>
+          <span className="font-medium text-sm flex-1 min-w-0 break-words">{section.name}</span>
         )}
 
         {showScope && !isOther && <ScopeBadge scope={section.visibilityScope} />}
