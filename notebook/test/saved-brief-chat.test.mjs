@@ -162,6 +162,8 @@ test('with the AI connected only to the notebook, the chat asked twice shows the
   const [response,body]=await ask(message);
   assert.equal(response.status,200);assert.equal(body.data.reply,content);assert.doesNotMatch(body.data.reply,/REFUSED-1039/);
  }
+ const panel=await fetch(origin+'/api/functions/conversation-chat',{method:'POST',headers:json,body:JSON.stringify({request_id:crypto.randomUUID(),conversation_id:'notebook:settings-only-panel',messages:[{role:'user',content:"today's brief"}]})});
+ assert.equal(panel.status,200);assert.equal((await panel.json()).data.reply,content);
  assert.equal(aiRequests,before);
  assert.equal(service.query.rows('notes').filter(note=>note.source_app==='morning-brief').length,1);
 });
