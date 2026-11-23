@@ -56,6 +56,12 @@ function clearChatRead(){
   catch{/* no storage: nothing to clear */}
 }
 
+// The first Dashboard read of this page load; a reload starts it again (#918).
+let pageLoadRead=false;
+// The card's Check again asks the next read to run the check, one read per press (#918).
+let checkAsked=false;
+export function askChatCheck(){checkAsked=true;}
+
 export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}={}){
   const queryClient=useQueryClient();
   // A surface that arrives wants the AI confirmed afresh, not the warm state an open chat kept
@@ -69,11 +75,20 @@ export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}=
   // seconds of that check (#590).
   const options=useQuery<ChatOptions>({queryKey:['chat-options'],queryFn:async()=>{
     if(!confirmOnMount)markChatRead();
-    const check=confirm.current&&chatReadSinceConfirm();
+    const asked=checkAsked;
+    checkAsked=false;
+    const check=asked||(confirm.current&&chatReadSinceConfirm());
     confirm.current=false;
     try{
-      const read=await chatOptions(check?{check:true}:{});
+      let read=await chatOptions(check?{check:true}:{});
       if(check)clearChatRead();
+      // A page load that finds the AI unreachable checks it once, so a recovered AI shows as ready (#918).
+      if(confirmOnMount&&!pageLoadRead){
+        pageLoadRead=true;
+        if(!check&&chatAIState(read)==='unreachable'){
+          try{read=await chatOptions({check:true});clearChatRead();}catch{/* the plain read stands */}
+        }
+      }
       return read;
     }catch(error){confirm.current=check;throw error;}
   },refetchInterval:1000,refetchIntervalInBackground:true});
