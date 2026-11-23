@@ -17,7 +17,7 @@ function github(table){
   const fetchImpl=async address=>{asked.push(address);const body=table[address];return body===undefined?new Response('',{status:404}):new Response(typeof body==='string'||Buffer.isBuffer(body)?body:JSON.stringify(body));};
   return {fetchImpl,asked};
 }
-function release({tag='candidate/2.0.0-beta.30',version='2.0.0-beta.30',archive=Buffer.from('the archive'),sums,extra={}}={}){
+function release({version='2.0.0-beta.30',tag='candidate/'+version,archive=Buffer.from('the archive'),sums,extra={}}={}){
   return {
     [API+'/releases/latest']:{tag_name:tag,draft:false,prerelease:false},
     [RAW+'/'+tag+'/stage.json']:stage(version),
@@ -39,6 +39,8 @@ function computer(version){
 const spy=(answer=()=>0)=>{const calls=[];const run=async(command,args,options)=>{calls.push({command,args,options});return answer(command,args,options);};return {run,calls};};
 const silent={log:()=>{},product:temporary('checkout')};
 const installer=new URL('../scripts/install-native-notebook.sh',import.meta.url);
+// Windows, Docker and a checkout all use the package version when no native runtime is present.
+const nextVersion=`${Number(VERSION.split('.')[0])+1}.0.0`;
 
 test('versions are ordered the way semantic versioning orders them',()=>{
   const order=['2.0.0-alpha.1','2.0.0-beta.9','2.0.0-beta.10','2.0.0-beta.20','2.0.0-beta.20.commit.abc1234','2.0.0-rc.1','2.0.0','2.0.1','2.1.0','10.0.0'];
@@ -227,7 +229,7 @@ test('Windows runs the checked setup without questions; from Settings it outlive
   const windows=temporary('windows'),kit=path.join(windows,'payload','kit');fs.mkdirSync(kit,{recursive:true});
   fs.writeFileSync(path.join(windows,'payload','candidate-manifest.json'),JSON.stringify({kitCommit:'b'.repeat(40)}));
   for(const fromSettings of [false,true]){
-    const root=temporary('pc'),{fetchImpl}=github(release()),{run,calls}=spy();
+    const root=temporary('pc'),{fetchImpl}=github(release({version:nextVersion})),{run,calls}=spy();
     const outcome=await runUpdate({...silent,product:kit,root,fetchImpl,run,env:{},fromSettings,platform:'win32'});
     assert.equal(outcome.state,fromSettings?'started':'updated');
     assert.deepEqual(calls.map(call=>[path.basename(call.command),call.args,!!call.options.detached]),[[WINDOWS_SETUP,WINDOWS_FLAGS,fromSettings]]);
@@ -235,7 +237,7 @@ test('Windows runs the checked setup without questions; from Settings it outlive
 });
 
 test('a Docker server is updated on the server, and a copy no installer made not at all',async()=>{
-  const {fetchImpl}=github(release()),{run,calls}=spy();
+  const {fetchImpl}=github(release({version:nextVersion})),{run,calls}=spy();
   await assert.rejects(runUpdate({...silent,root:temporary('docker'),fetchImpl,run,env:{GODSPEED_REVISION:'c'.repeat(40)}}),/run sudo godspeed-update there/);
   await assert.rejects(runUpdate({...silent,root:temporary('checkout'),fetchImpl,run,env:{}}),/No installer put this copy of Godspeed here/);
   assert.equal(calls.length,0);
