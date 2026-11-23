@@ -47,13 +47,24 @@ function page(telegram: Record<string, unknown>, start: string) {
   );
 }
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+// jsdom has no scrollIntoView; Settings scrolls to the section a link names.
+const scrolled: string[] = [];
+Element.prototype.scrollIntoView = function () { scrolled.push((this as Element).id); };
+
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); scrolled.length = 0; });
 
 describe("The Dashboard empty state's Telegram tile", () => {
   it("leads to a page that says why Telegram cannot be connected, when it is not available", async () => {
     page({ available: false, managed: null, connected: false, phase: "none" }, "/dashboard/notes");
     fireEvent.click(await screen.findByRole("link", { name: /Telegram/ }, WAIT));
     expect(await screen.findByText(TELEGRAM_UNAVAILABLE, undefined, WAIT)).toBeInTheDocument();
+  });
+
+  // Issue #1019: the tile linked to ?tab=telegram, which Settings ignores, so Settings opened at the top.
+  it("opens Settings scrolled to its Telegram section", async () => {
+    page({ available: true, managed: "web", connected: false, phase: "none" }, "/dashboard/notes");
+    fireEvent.click(await screen.findByRole("link", { name: /Telegram/ }, WAIT));
+    await waitFor(() => expect(scrolled).toContain("telegram"), WAIT);
   });
 
   it("leads to the Telegram setup where Telegram is available", async () => {

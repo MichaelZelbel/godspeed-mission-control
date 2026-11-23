@@ -41,8 +41,8 @@ describe("a moment that ends before it starts", () => {
     const onCreated = vi.fn();
     render(<AddEventDialog people={[]} onCreated={onCreated} open onOpenChange={() => {}} />);
     const dialog = screen.getByRole("dialog", { name: "Add Moment" });
-    fireEvent.change(within(dialog).getByLabelText("Title *"), { target: { value: "Backwards" } });
-    fireEvent.change(within(dialog).getByLabelText("Start Date *"), { target: { value: "2025-03-05" } });
+    fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Backwards" } });
+    fireEvent.change(within(dialog).getByLabelText("Start Date"), { target: { value: "2025-03-05" } });
     const end = within(dialog).getByLabelText("End Date") as HTMLInputElement;
     fireEvent.change(end, { target: { value: "2025-03-01" } });
 
@@ -53,8 +53,8 @@ describe("a moment that ends before it starts", () => {
     expect(create).toBeDisabled();
     fireEvent.click(create);
     expect(fake.current.on("moments", "insert")).toHaveLength(0);
-    expect((within(dialog).getByLabelText("Title *") as HTMLInputElement).value).toBe("Backwards");
-    expect((within(dialog).getByLabelText("Start Date *") as HTMLInputElement).value).toBe("2025-03-05");
+    expect((within(dialog).getByLabelText("Title") as HTMLInputElement).value).toBe("Backwards");
+    expect((within(dialog).getByLabelText("Start Date") as HTMLInputElement).value).toBe("2025-03-05");
     expect(end.value).toBe("2025-03-01");
 
     fireEvent.change(end, { target: { value: "2025-03-05" } });

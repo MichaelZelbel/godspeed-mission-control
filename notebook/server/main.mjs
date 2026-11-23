@@ -36,6 +36,7 @@ import { spawn } from 'node:child_process';
 import {ApiKeys,toolScope} from '../core/api-keys.mjs';
 import {Telegram} from '../core/telegram.mjs';
 import {NOTEBOOK_CHAT_FUNCTIONS} from '../core/notebook-chat.mjs';
+import {savedBriefAnswer} from '../core/briefing.mjs';
 import {browserChat} from './browser-chat.mjs';
 import {KEPT_FILE} from '../core/ai-failures.mjs';
 import {transcribeRecording} from '../core/dictation.mjs';
@@ -382,9 +383,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // The page's own form must carry its origin (same-origin), and the code in
       // its address still never goes to another site.
       if(route.startsWith('/login/')){
-        const code=route.slice(7),expiry=loginLinks.get(code),page=(status,text,button)=>{res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'same-origin','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Godspeed Mission Control</title><body style="font-family:system-ui,sans-serif;max-width:28rem;margin:4rem auto;padding:0 1rem;line-height:1.5"><h1 style="font-size:1.3rem">'+text+'</h1>'+(button?'<form method="post"><button type="submit" style="font-size:1.05rem;padding:.6rem 1.4rem">Continue</button></form>':'')+'</body></html>');};
-        if(!expiry||expiry<Date.now())return page(401,'This sign-in link expired or was already used.',false);
-        if(req.method!=='POST')return page(200,'Open your Godspeed Mission Control',true);
+        const code=route.slice(7),expiry=loginLinks.get(code),page=(status,{title,text,button,link})=>{res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'same-origin','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Godspeed Mission Control</title><style>body{font-family:system-ui,sans-serif;background:hsl(222 30% 8%);color:hsl(220 15% 90%);margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem;box-sizing:border-box;line-height:1.5}main{max-width:28rem;width:100%;padding:2rem;border-radius:.75rem;border:1px solid hsl(220 15% 90%/.2);background:hsl(222 30% 11%)}p.brand{margin:0 0 1rem;font-size:.85rem;opacity:.7}h1{font-size:1.3rem;margin:0 0 .75rem}p{margin:0 0 1.25rem}.go{display:inline-block;font-size:1.05rem;padding:.6rem 1.4rem;border:0;border-radius:.5rem;background:hsl(217 75% 58%);color:#fff;text-decoration:none;cursor:pointer}@media (prefers-color-scheme:light){body{background:hsl(216 43% 97%);color:hsl(225 62% 12%)}main{background:#fff;border-color:hsl(225 62% 12%/.2)}.go{background:hsl(220 70% 45%)}}</style><body><main><p class="brand">Godspeed Mission Control</p><h1>'+title+'</h1>'+(text?'<p>'+text+'</p>':'')+(button?'<form method="post"><button type="submit" class="go">Continue</button></form>':'')+(link?'<a class="go" href="'+link.href+'">'+link.label+'</a>':'')+'</main></body></html>');};
+        if(!expiry||expiry<Date.now())return page(401,{title:'This sign-in link expired or was already used.',text:'Each sign-in link works once, for five minutes.',link:{href:'/dashboard',label:'Go to your notebook'}});
+        if(req.method!=='POST')return page(200,{title:'Open your Godspeed Mission Control',button:true});
         loginLinks.delete(code);
         if(!auth.configured()) { res.writeHead(303,{'Location':auth.invite().path,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});return res.end(); }
         const destination=safeReturn(url.searchParams.get('next')||'/dashboard');
@@ -855,7 +856,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         // included, says what Settings says and asks the provider loaded before the damage nothing.
         // Read before the settings-only check: with the file damaged, its advice cannot be followed.
         if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&domains.provider&&!assistantMissing&&chatAIAvailability()==='unreadable')throw new Error(AI_CONNECTION_UNREADABLE_STATUS);
-        if(isChat&&domains.provider&&!assistantMissing&&settingsOnlyAI())throw new Error(SETTINGS_ONLY_AI_STATUS+'. '+SETTINGS_ONLY_AI_HELP);
+        if(isChat&&domains.provider&&!assistantMissing&&settingsOnlyAI()&&!savedBriefAnswer(store,input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||''))throw new Error(SETTINGS_ONLY_AI_STATUS+'. '+SETTINGS_ONLY_AI_HELP);
         if(isChat&&id&&(!/^[a-f0-9-]{36}$/.test(id)||chatRequests.has(id)))throw new Error('Invalid chat request');
         const receiptId=isChat&&id?'chat-request-'+id:null,requestHash=hash({name,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
         if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,{data:previous.result,error:null});throw Error('This interrupted chat request needs review before replay');}
