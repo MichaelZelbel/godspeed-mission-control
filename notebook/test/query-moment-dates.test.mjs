@@ -50,3 +50,14 @@ test('a moment stored backwards before the rule still takes a change that leaves
   await query.executeAsync({table:'moments',operation:'update',values:{title:'Renamed'},filters:[['eq','id','old']]});
   assert.equal(query.rows('moments').find(m=>m.id==='old').title,'Renamed');
 });
+
+test('a correction that would make a moment end before it starts is refused with 400',()=>withService(async base=>{
+  await stored(base);
+  for(const patch of [{happened_end:'2020-01-01'},{happened_at:'2025-03-10'}]){
+    const r=await post(base,{table:'event_corrections',operation:'insert',values:{moment_id:'m1',patch,sequence:1}});
+    assert.equal(r.status,400);assert.match((await r.json()).error,/end date is before the start date/);
+  }
+  const ok=await post(base,{table:'event_corrections',operation:'insert',values:{moment_id:'m1',patch:{happened_end:'2025-03-08'},sequence:1}});
+  assert.equal(ok.status,200);
+  const [m]=await moments(base);assert.equal(m.happened_end.slice(0,10),'2025-03-08');
+}));

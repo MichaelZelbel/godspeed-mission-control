@@ -431,6 +431,12 @@ export class QueryService {
             const merged={...(current||defaults.moments),...payload};
             if(endsBeforeStart(merged.happened_at,merged.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
           }
+          if(table==='event_corrections'&&operation!=='delete'){
+            // The same rule for a date patch written as a correction, which is merged over the moment on read.
+            const patch=payload.patch||{};
+            const moment=('happened_at' in patch||'happened_end' in patch)&&this.rows('moments').find(r=>r.id===(payload.moment_id||old?.moment_id));
+            if(moment&&endsBeforeStart(patch.happened_at??moment.happened_at,patch.happened_end??moment.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
+          }
           if(table==='moments'&&old){
             const correction=this.store.prepare('event_corrections',{moment_id:old.id,patch:payload,sequence:this.store.list('event_corrections').filter(c=>c.moment_id===old.id).length+1,references:[{type:'moments',id:old.id,uid:old.uid}]});
             return correction;
