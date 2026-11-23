@@ -1,4 +1,6 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { tabOnlyStorage } from '@/lib/tab-storage';
 import { BrowserRouter, Routes, Route, Navigate, Link, Outlet, useLocation } from 'react-router-dom';
 import { BRAIN_PAGE } from '@/lib/brain-page';
 import { ThemeProvider } from 'next-themes';
@@ -43,12 +45,18 @@ function ShortAddress(){
   if(!(SHORT_ADDRESSES as readonly string[]).includes(name))return <Unavailable/>;
   return <Navigate to={['/dashboard',name,...rest].join('/')+search+hash} replace/>;
 }
+const TAB_ONLY_NOTICE="This browser blocks site data for this page, so text not saved yet and choices kept in this browser last only until you close or reload this tab. To keep them, allow site data (cookies and site data) for this address in your browser's settings.";
+let noticeShown=false;
+function TabOnlyStorageNotice(){
+  useEffect(()=>{if(!tabOnlyStorage||noticeShown)return;noticeShown=true;toast.info(TAB_ONLY_NOTICE,{id:'tab-only-storage',duration:15000});},[]);
+  return null;
+}
 function Layout(){
   const {user,loading,authError,refreshSession}=useAuth();
   if(loading)return <AuthShell><h2>Opening Godspeed Mission Control</h2><p role="status">Checking your sign-in…</p></AuthShell>;
   if(!user&&authError)return <AuthShell><h2>Let’s reconnect</h2><p className="auth-intro" role="alert">{authError}</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
   if(!user)return <AuthScreen/>;
-  return <><KeepUnsavedNotes/><DashboardLayout/></>;
+  return <><KeepUnsavedNotes/><TabOnlyStorageNotice/><DashboardLayout/></>;
 }
 // The notebook's addresses; App puts them in the browser's router, the tests in a memory router.
 export function AppRoutes(){return <Routes><Route path="/setup" element={<AuthScreen/>}/><Route path="/shared/:token" element={<Suspense fallback={<p>Opening...</p>}><SharedNote/></Suspense>}/><Route element={<Layout/>}>
