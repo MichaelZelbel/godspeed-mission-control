@@ -84,7 +84,8 @@ export class Scheduler {
     const missing=()=>{const have=new Set(this.store.list('jobs').map(j=>j.id));return startingJobs().filter(e=>e.routine&&!have.has(e.id));};
     if(!missing().length)return;
     await this.store.withLockAsync(()=>{
-      const at=new Date(now).toISOString(),records=missing().map(e=>this.store.prepare('jobs',startingJobRecord(e,{owner:settings.owner,timezone:settings.timezone,at})));
+      // A routine added later first runs from tomorrow on, so adding it never starts a run inside a tick.
+      const at=new Date(now+86400000).toISOString(),records=missing().map(e=>this.store.prepare('jobs',startingJobRecord(e,{owner:settings.owner,timezone:settings.timezone,at})));
       if(records.length)this.store.commit(records);
     });
   }

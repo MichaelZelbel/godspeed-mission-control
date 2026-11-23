@@ -139,7 +139,7 @@ describe("Run now in Routines", () => {
     const memory = { id: "memory-daily", kind: "memory-daily", title: "Remember what you said", owner: "local", paused: false, state: "pending", interval_ms: 86400000, calendar: { time: "03:40" }, next_run: "2030-01-02T02:40:00.000Z" };
     const { findByText, findByRole } = settings("/dashboard/settings", { schedules: [memory] });
     await findByText("Remember what you said", undefined, WAIT);
-    fireEvent.click(await findByRole("button", { name: "Run Remember what you said now" }));
+    fireEvent.click(await findByRole("button", { name: "Run Remember what you said now" }, WAIT));
     await waitFor(() => {
       const call = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(([url]) => String(url).endsWith("/api/jobs/run"));
       expect(call).toBeTruthy();
