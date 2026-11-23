@@ -197,7 +197,7 @@ export default function ActivityPage() {
                   <Icon className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm text-foreground">{formatAction(ev.action, ev.item_type, ev.metadata)}</p>
+                  <p className="text-sm text-foreground">{formatAction(ev.action, ev.item_type, ev.metadata, ev.item_name)}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <p className="text-[11px] text-muted-foreground">
                       {showDate(ev.created_at, "time")}
