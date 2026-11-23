@@ -1875,6 +1875,7 @@ function ItemSheet({
 
   const save = useCallback(async () => {
     if (!collection || !userId || savingRef.current) return;
+    if (isCreate && fields.length === 0) return;
     const validated = validateItemValues(fields, values);
     setErrors(validated.errors);
     if (Object.keys(validated.errors).length > 0) return;
@@ -1992,6 +1993,20 @@ function ItemSheet({
   const body = (
     <>
       <div className={cn("flex-1 overflow-y-auto", inline ? "px-6 py-6" : "-mx-6 px-6 py-4")}>
+        {isCreate && fields.length === 0 && (
+          <div
+            role="status"
+            className={cn("space-y-2 text-sm", inline && "mx-auto max-w-2xl")}
+          >
+            <p>This collection has no fields yet, so there is nothing to fill in.</p>
+            <Link
+              to={`/collections/${collection?.slug}/schema`}
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              Add fields on the Schema page
+            </Link>
+          </div>
+        )}
         <form
           className={cn("space-y-5", inline && "mx-auto max-w-2xl")}
           onSubmit={(event) => {
@@ -2055,7 +2070,11 @@ function ItemSheet({
           <Button type="button" variant="ghost" onClick={close}>
             {inline ? "Back" : "Cancel"}
           </Button>
-          <Button type="button" onClick={save} disabled={isSaving}>
+          <Button
+            type="button"
+            onClick={save}
+            disabled={isSaving || (isCreate && fields.length === 0)}
+          >
             {isSaving ? "Saving…" : "Save"}
           </Button>
         </div>
@@ -3404,7 +3423,7 @@ function CollectionDetailPage() {
       >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
             <Link to="/collections" className="hover:text-foreground">
               Collections
             </Link>{" "}
