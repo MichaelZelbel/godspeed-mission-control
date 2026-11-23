@@ -29,10 +29,11 @@ Range.prototype.getClientRects ??= (() => ({ length: 0, item: () => null, [Symbo
 document.elementFromPoint ??= () => null;
 
 const KEY = "sk-fictional-classify-secret";
-let notebook: RealNotebook, ai: http.Server, aiStatus = 401, aiUrl = "";
+let notebook: RealNotebook, ai: http.Server, aiStatus = 401, aiUrl = "", aiRequests = 0;
 beforeAll(async () => {
   notebook = await startNotebook();
   ai = http.createServer((req, res) => {
+    aiRequests++;
     req.resume();
     req.on("end", () => {
       res.writeHead(aiStatus, { "content-type": "application/json" });
@@ -83,8 +84,18 @@ const connect = async () => {
 describe("Classify with AI when the AI fails", () => {
   it("says no AI is connected yet", async () => {
     const said = await classify();
+    expect(aiRequests).toBe(0);
     expect(said).toMatch(new RegExp("^error: " + NO_AI_STATUS));
     expect(said).not.toMatch(/refused|could not be reached/);
+  }, 60_000);
+
+  it("says the key was refused for a 403 and that the AI could not be reached for an HTTP 500", async () => {
+    await connect();
+    aiStatus = 403;
+    expect(await classify()).toBe("error: " + AI_REFUSED_STATUS + ". Check it in Settings, Your AI, then try again.");
+    cleanup(); toasts.length = 0;
+    aiStatus = 500;
+    expect(await classify()).toBe("error: " + AI_UNREACHABLE_STATUS + ". Check its connection in Settings, Your AI, then try again.");
   }, 60_000);
 
   it("says the key was refused, then that the AI could not be reached", async () => {

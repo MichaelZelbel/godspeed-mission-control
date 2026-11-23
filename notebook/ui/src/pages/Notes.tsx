@@ -1369,7 +1369,9 @@ export default function Notes() {
             <AlertDialogDescription>{promptState.description}</AlertDialogDescription>
           )}
         </AlertDialogHeader>
+        <label htmlFor="notes-prompt-folder-name" className="block text-xs font-medium text-muted-foreground">Folder name</label>
         <Input
+          id="notes-prompt-folder-name"
           autoFocus
           value={promptValue}
           onChange={(e) => setPromptValue(e.target.value)}
@@ -1382,8 +1384,6 @@ export default function Notes() {
               if (action && value) void action(value);
             }
           }}
-          placeholder="Folder name"
-          aria-label="Folder name"
         />
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
