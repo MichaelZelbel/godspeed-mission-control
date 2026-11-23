@@ -170,3 +170,13 @@ it('keeps model selection and Enter submission behavior with the responsive tool
  fireEvent.keyDown(screen.getByRole('textbox',{name:'Message'}),{key:'Enter',shiftKey:false});
  expect(onSend).toHaveBeenCalledOnce();
 });
+
+it('keeps the composer border whole while the message box has focus: no ring offset paints over it, and the composer shows the focus ring',()=>{
+  const {container}=render(<ChatComposer value="" onChange={()=>{}} onSend={()=>{}} onStop={()=>{}} busy={false} files={[]} onFiles={()=>{}} model="" effort="" onModel={()=>{}} onEffort={()=>{}} reply="" onError={()=>{}}/>);
+  const box=screen.getByLabelText('Message');
+  expect(box.className).toContain('focus-visible:ring-offset-0');
+  expect(box.className).not.toMatch(/(^|\s)focus-visible:ring-offset-2/);
+  const composer=container.querySelector('.chat-composer')!;
+  expect(composer.className).toContain('border');
+  expect(composer.className).toContain('focus-within:ring-2');
+});
