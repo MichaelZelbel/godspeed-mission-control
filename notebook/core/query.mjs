@@ -406,6 +406,7 @@ export class QueryService {
       rows = holding(() => {
         // ignoreDuplicates is ON CONFLICT DO NOTHING: an existing link keeps its metadata.
         const inputs = operation === 'insert' || operation === 'upsert' ? (Array.isArray(values) ? values : [values]).filter(value => !(operation === 'upsert' && options.ignoreDuplicates && existing(value))) : rows;
+        const batchSequence = new Map();
         const changed = inputs.map(value => {
           const old = operation === 'insert' ? null : operation === 'upsert' ? existing(value) : table==='moments'?value:this.store.get(table, value.id);
           if (operation === 'insert' && value.id && this.store.get(table, value.id)) throw new Error('Record already exists');
@@ -436,7 +437,8 @@ export class QueryService {
           }
           if(table==='moments'&&old){
             // Above every correction already on the moment, removed ones too: the reader applies them all.
-            const sequence=Math.max(0,...this.store.ofType('event_corrections').filter(c=>c.moment_id===old.id).map(c=>Number(c.sequence)||0))+1;
+            const sequence=Math.max(batchSequence.get(old.id)||0,...this.store.ofType('event_corrections').filter(c=>c.moment_id===old.id).map(c=>Number(c.sequence)||0))+1;
+            batchSequence.set(old.id,sequence);
             const correction=this.store.prepare('event_corrections',{moment_id:old.id,patch:payload,sequence,references:[{type:'moments',id:old.id,uid:old.uid}]});
             return correction;
           }
@@ -470,6 +472,18 @@ export class QueryService {
           }
           record.references = this.references(table, record); return record;
         });
+        if((table==='moments'||table==='event_corrections')&&operation!=='delete'){
+          // The whole request is judged as the reader will merge it: stored corrections plus this batch's, a record of the same id replacing the stored one.
+          for(const id of new Set(changed.map(c=>c.moment_id))){
+            const original=this.store.get('moments',id);
+            if(!original||original.removed_at)continue;
+            const mine=changed.filter(c=>c.moment_id===id),mineIds=new Set(mine.map(c=>c.id));
+            if(!mine.some(c=>c.patch&&('happened_at' in c.patch||'happened_end' in c.patch)))continue;
+            const others=this.store.ofType('event_corrections').filter(c=>c.moment_id===id&&!mineIds.has(c.id));
+            const merged=momentDates(applyCorrections(original,[...others,...mine]));
+            if(endsBeforeStart(merged.happened_at,merged.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
+          }
+        }
         const gone=operation==='delete'&&table==='contacts'?this.personBelongings(changed.map(c=>c.id)):operation==='delete'&&table==='contact_group_memberships'?this.membershipTwins(changed):[];
         this.store.commit([...changed,...gone]); return table==='moments'?this.rows(table).filter(r=>changed.some(c=>c.id===r.id||c.moment_id===r.id)):changed;
       });

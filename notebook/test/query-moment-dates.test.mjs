@@ -113,3 +113,25 @@ test('a moment update is stored above the corrections already on the moment',()=
   const [m]=await moments(base);
   assert.equal(m.happened_at.slice(0,10),'2025-03-02');assert.equal(m.happened_end.slice(0,10),'2025-03-04');
 }));
+
+test('two rows of one request that are each fine alone are judged together',()=>withService(async base=>{
+  await stored(base);
+  const c=await post(base,{table:'event_corrections',operation:'insert',values:[
+    {id:'c1',moment_id:'m1',patch:{happened_at:'2025-03-06'},sequence:1},
+    {id:'c2',moment_id:'m1',patch:{happened_end:'2025-03-05'},sequence:2}]});
+  assert.equal(c.status,400);assert.match((await c.json()).error,/end date is before the start date/);
+  const u=await post(base,{table:'moments',operation:'upsert',values:[{id:'m1',happened_at:'2025-03-06'},{id:'m1',happened_end:'2025-03-05'}]});
+  assert.equal(u.status,400);
+  const [m]=await moments(base);
+  assert.equal(m.happened_at.slice(0,10),'2025-03-05');assert.equal(m.happened_end.slice(0,10),'2025-03-07');
+  const ok=await post(base,{table:'moments',operation:'upsert',values:[{id:'m1',happened_at:'2025-03-06'},{id:'m1',happened_end:'2025-03-09'}]});
+  assert.equal(ok.status,200);
+}));
+
+test('when both dates carry a time the instants are compared; a date-only end is judged by day',()=>withService(async base=>{
+  const ins=values=>post(base,{table:'moments',operation:'insert',values});
+  const r=await ins({title:'x',happened_at:'2025-06-01T15:00:00Z',happened_end:'2025-06-01T09:00:00Z'});
+  assert.equal(r.status,400);
+  assert.equal((await ins({title:'y',happened_at:'2025-06-01T09:00:00Z',happened_end:'2025-06-01T15:00:00Z'})).status,200);
+  assert.equal((await ins({title:'z',happened_at:'2025-06-01T15:00:00Z',happened_end:'2025-06-01'})).status,200);
+}));
