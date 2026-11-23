@@ -206,6 +206,8 @@ it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, an earlier m
  const answer=await screen.findByText('Fictional answer to the first question',{},{timeout:1500});
  const sent=(invoke.mock.calls.at(-1) as any)[1].body;
  expect(sent.message).toBe(QUESTION);
+ expect(sent.messages.at(-1)).toEqual({role:'user',content:QUESTION});
+ expect(sent.messages.filter((m:any)=>m.content===QUESTION)).toHaveLength(1);
  expect(follows(screen.getByText(QUESTION),answer)).toBe(true);
  expect(follows(answer,screen.getByText(SECOND))).toBe(true);
  expect(screen.queryByText('No answer.')).toBeNull();

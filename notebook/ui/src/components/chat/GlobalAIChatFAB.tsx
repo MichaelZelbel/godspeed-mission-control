@@ -340,7 +340,11 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
     try {
       // The AI is asked an earlier message now, with everything said since as its context.
       const apiMessages = buildApiMessages(failed && at < nextState.messages.length - 1
-        ? {...nextState, messages: [...nextState.messages.filter((_, i) => i !== at), failed]}
+        ? {
+            ...nextState,
+            messages: [...nextState.messages.filter((_, i) => i !== at), failed],
+            summarizedUpTo: at < nextState.summarizedUpTo ? nextState.summarizedUpTo - 1 : nextState.summarizedUpTo,
+          }
         : nextState);
       const chatFn = collectionId ? "collection-chat" : noteId ? "note-chat" : "conversation-chat";
       // Flush the open editor's pending autosave so the agent edits on top of
