@@ -102,12 +102,21 @@ async function stepFfmpeg(cfg, flags) {
   }
   const line = `${install.cmd} ${install.args.join(" ")}`;
   if (!(await askYes(`Install now with: ${line} ?`, flags))) {
-    warn(`run \`${line}\` yourself, then run this setup again.`);
+    warn(`run \`${L.installLine(install)}\` yourself, then run this setup again.`);
     return exe;
   }
-  const r = spawnSync(install.cmd, install.args, { stdio: "inherit", shell: isWin });
+  const doInstall = () => spawnSync(install.cmd, install.args, { stdio: "inherit", shell: isWin });
+  let r = doInstall();
+  const refresh = r.status !== 0 ? L.aptRefreshCommand(install) : null;
+  if (refresh) {
+    // A package list a few days old makes apt fail with 404 / Failed to fetch: refresh it once, try once more.
+    console.log("   The install failed. Refreshing the package list once and trying again.");
+    // The update may exit non-zero because one repository is down while it still refreshed what we need, so retry regardless.
+    spawnSync(refresh.cmd, refresh.args, { stdio: "inherit", shell: isWin });
+    r = doInstall();
+  }
   if (r.status !== 0) {
-    warn(`\`${line}\` did not finish cleanly. Run it yourself and read what it says, then run this setup again.`);
+    warn(`\`${L.installLine(install)}\` did not finish cleanly. Run it yourself and read what it says, then run this setup again.`);
     return exe;
   }
   ({ exe } = findFfmpeg(cfg));
