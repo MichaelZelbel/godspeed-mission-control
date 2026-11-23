@@ -84,7 +84,8 @@ export class Scheduler {
     const missing=()=>{const have=new Set(this.store.list('jobs').map(j=>j.id));return startingJobs().filter(e=>e.routine&&!have.has(e.id));};
     if(!missing().length)return;
     await this.store.withLockAsync(()=>{
-      // A routine added later first runs from tomorrow on, so adding it never starts a run inside a tick.
+      // A routine added later is built from a day from now, so its first run is the next calendar time after that
+      // (up to two days away) and adding it never starts a run inside a tick.
       const at=new Date(now+86400000).toISOString(),records=missing().map(e=>this.store.prepare('jobs',startingJobRecord(e,{owner:settings.owner,timezone:settings.timezone,at})));
       if(records.length)this.store.commit(records);
     });
@@ -92,6 +93,17 @@ export class Scheduler {
   // Run now: the checks are answered at once and the run goes on in the background, since a routine
   // can take up to fifteen minutes (as NativeScheduler.startRun).
   startRun(id){
+    this.requireRunnable(id);
+    const run=this.runNow(id);this.started=run;run.catch(e=>{try{this.onFailure?.(e);}catch{}});
+    return {started:true,id};
+  }
+  // Run now that waits for the run and answers what it did, for a routine that finishes quickly.
+  async runAndWait(id){
+    this.requireRunnable(id);
+    const run=this.runNow(id);this.started=run;
+    const result=await run;return result?[result]:[];
+  }
+  requireRunnable(id){
     const job=typeof id==='string'?this.store.get('jobs',id):null,settings=this.store.get('settings','installation');
     if(!job)throw new Error('Choose an existing routine');
     if(!settings||settings.owner!==this.device)throw new Error('Routines run on the machine named '+(settings?.owner||'in setup')+'. Run the routine there, or choose this machine to run the routines.');
@@ -99,8 +111,6 @@ export class Scheduler {
     if(job.paused)throw new Error('This routine is paused. Resume it, then run it.');
     if(['awaiting_approval','needs_review'].includes(job.state))throw new Error('This routine needs its previous attempt reviewed before it can run.');
     if(this.running||this.unfinished.has(id))throw new Error('A routine is already running. Try again in a moment.');
-    const run=this.runNow(id);this.started=run;run.catch(e=>{try{this.onFailure?.(e);}catch{}});
-    return {started:true,id};
   }
   async runNow(id,now=Date.now()){
     this.running=true;this.onProgress?.();

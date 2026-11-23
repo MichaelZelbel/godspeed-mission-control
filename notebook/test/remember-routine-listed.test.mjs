@@ -29,6 +29,18 @@ test('setup lists Remember what you said and Run now runs it, saying nothing wit
  assert.equal(job.last_outcome,'verified');assert.ok(job.last_run);assert.ok(Date.parse(job.next_run)>Date.now());
 }));
 
+test('Run now on another routine row runs that routine and answers its result',t=>withService(t,async({service,post})=>{
+ await setup(post);
+ const before=service.store.get('jobs','review');
+ assert.ok(before&&!before.last_run);
+ const reply=await post('/api/jobs/run',{id:'review'});
+ assert.equal(reply.status,200);
+ const {results}=await reply.json();
+ assert.equal(results.length,1);assert.equal(results[0].id,'review');
+ const job=service.store.get('jobs','review');
+ assert.ok(job.last_run,'the review routine ran');assert.ok(Date.parse(job.next_run)>Date.now());
+}));
+
 test('an older notebook gains the routine on the next tick and keeps what the person set',t=>withService(t,async({service,post})=>{
  await setup(post);
  service.store.commit([],{removeKeys:['jobs/memory-daily']});
