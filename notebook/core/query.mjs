@@ -434,22 +434,24 @@ export class QueryService {
             const merged={...(current||defaults.moments),...payload};
             if(endsBeforeStart(merged.happened_at,merged.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
           }
-          if(table==='event_corrections'&&operation!=='delete'){
-            // The same rule for a correction, judged on the moment as the reader will merge it (applyCorrections).
-            const candidate={...old,...payload},dated=p=>p&&('happened_at' in p||'happened_end' in p);
-            const touches=dated(candidate.patch)||dated(old?.patch)||(old&&(old.moment_id!==candidate.moment_id||old.sequence!==candidate.sequence));
-            const original=touches&&this.store.get('moments',candidate.moment_id);
-            if(original&&!original.removed_at){
-              const others=this.store.list('event_corrections').filter(c=>c.moment_id===original.id&&c.id!==old?.id);
-              const merged=momentDates(applyCorrections(original,[...others,{...candidate,id:candidate.id??''}]));
-              if(endsBeforeStart(merged.happened_at,merged.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
-            }
-          }
           if(table==='moments'&&old){
-            const correction=this.store.prepare('event_corrections',{moment_id:old.id,patch:payload,sequence:this.store.list('event_corrections').filter(c=>c.moment_id===old.id).length+1,references:[{type:'moments',id:old.id,uid:old.uid}]});
+            // Above every correction already on the moment, removed ones too: the reader applies them all.
+            const sequence=Math.max(0,...this.store.ofType('event_corrections').filter(c=>c.moment_id===old.id).map(c=>Number(c.sequence)||0))+1;
+            const correction=this.store.prepare('event_corrections',{moment_id:old.id,patch:payload,sequence,references:[{type:'moments',id:old.id,uid:old.uid}]});
             return correction;
           }
           const record = this.store.prepare(table, { ...(defaults[table] || {}), ...old, ...payload }, old);
+          if(table==='event_corrections'&&operation!=='delete'){
+            // The same rule for a correction, judged under its real id on the set the reader merges (applyCorrections).
+            const dated=p=>p&&('happened_at' in p||'happened_end' in p);
+            const touches=dated(record.patch)||dated(old?.patch)||(old&&(old.moment_id!==record.moment_id||old.sequence!==record.sequence));
+            const original=touches&&this.store.get('moments',record.moment_id);
+            if(original&&!original.removed_at){
+              const others=this.store.ofType('event_corrections').filter(c=>c.moment_id===original.id&&c.id!==record.id);
+              const merged=momentDates(applyCorrections(original,[...others,record]));
+              if(endsBeforeStart(merged.happened_at,merged.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
+            }
+          }
           // Opening a person records when (last_viewed_at); that is not a change to them, and is
           // let through for a person saved without a name before the rule. Until issue 266 it was
           // refused, and the first open of such a person ended in this error.

@@ -86,3 +86,30 @@ test('corrections are judged as the reader merges them: sequence order, replaced
   assert.equal(byId.m1.happened_end,null);
   assert.equal(byId.m2.happened_end.slice(0,10),'2025-03-20');
 }));
+
+test('a deleted correction still applies on read, so the check keeps it',()=>withService(async base=>{
+  await stored(base);
+  const corr=values=>post(base,{table:'event_corrections',...values});
+  assert.equal((await corr({operation:'insert',values:{id:'c1',moment_id:'m1',patch:{happened_at:'2025-03-06'},sequence:1}})).status,200);
+  assert.equal((await corr({operation:'delete',filters:[['eq','id','c1']]})).status,200);
+  const r=await corr({operation:'insert',values:{id:'c2',moment_id:'m1',patch:{happened_end:'2025-03-05'},sequence:2}});
+  assert.equal(r.status,400);
+}));
+
+test('a correction without an id is ordered by the id it will be given',()=>withService(async base=>{
+  await stored(base);
+  const ins=values=>post(base,{table:'event_corrections',operation:'insert',values});
+  assert.equal((await ins({id:'a',moment_id:'m1',patch:{happened_at:'2025-03-25',happened_end:'2025-04-01'},sequence:1})).status,200);
+  const r=await ins({moment_id:'m1',patch:{happened_end:'2025-03-20'},sequence:1});
+  assert.equal(r.status,400);
+}));
+
+test('a moment update is stored above the corrections already on the moment',()=>withService(async base=>{
+  await stored(base);
+  const ins=await post(base,{table:'event_corrections',operation:'insert',values:{id:'c1',moment_id:'m1',patch:{happened_at:'2025-03-06'},sequence:5}});
+  assert.equal(ins.status,200);
+  const up=await post(base,{table:'moments',operation:'update',values:{happened_at:'2025-03-02',happened_end:'2025-03-04'},filters:[['eq','id','m1']]});
+  assert.equal(up.status,200);
+  const [m]=await moments(base);
+  assert.equal(m.happened_at.slice(0,10),'2025-03-02');assert.equal(m.happened_end.slice(0,10),'2025-03-04');
+}));
