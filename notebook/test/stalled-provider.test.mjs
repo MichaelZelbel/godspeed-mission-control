@@ -94,6 +94,8 @@ test('a connection check that got no answer from a stalled AI on this computer m
 });
 test('a connection check that got no answer from a remote AI makes the next send be sent once more when the AI answers again',async t=>{
   const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original;});
+  // The mocked fetch holds no socket, so on Node 22 nothing else keeps the process alive while the send waits.
+  const keepAlive=setInterval(()=>{},1000);t.after(()=>clearInterval(keepAlive));
   let mode='stalled',calls=0;
   globalThis.fetch=async(url,init)=>{
     calls++;
