@@ -191,7 +191,7 @@ describe("chat and search at phone and tablet widths", () => {
 
   it("shows the whole word Godspeed in the chat page header and the pop-out at 375 px", async () => {
     const wholeWord = (page: Page) => page.evaluate(() => {
-      const span = document.querySelector("span.font-semibold.truncate")!;
+      const span = document.querySelector("[data-testid=\"chat-header-title\"] span.font-semibold")!;
       const range = document.createRange();
       range.setStart(span.firstChild!, 0);
       range.setEnd(span.firstChild!, 8);
@@ -212,7 +212,7 @@ describe("chat and search at phone and tablet widths", () => {
 
   it("keeps the desktop chat page header, with the count worded in full", async () => {
     await inPage({ viewport: DESKTOP }, "/dashboard/chat", async (page) => {
-      const header = () => page.evaluate(() => document.querySelector("span.font-semibold.truncate")!.closest(".border-b")!.textContent!.replace(/\s+/g, " "));
+      const header = () => page.evaluate(() => document.querySelector("[data-testid=\"chat-header-title\"] span.font-semibold")!.closest(".border-b")!.textContent!.replace(/\s+/g, " "));
       await send(page, "hi");
       expect(await header()).toContain("/ 1 message");
       expect(await header()).not.toContain("1 messages");
