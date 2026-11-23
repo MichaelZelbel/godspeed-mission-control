@@ -748,7 +748,9 @@ function CollectionItemsTree({
   onMoveItemToFolder,
   onDuplicateItem,
   onDeleteItem,
+  pageFlow = false,
 }: {
+  pageFlow?: boolean;
   collection: Collection | null;
   folders: FolderLite[];
   treeItems: ItemLite[];
@@ -768,7 +770,13 @@ function CollectionItemsTree({
   onDeleteItem: (itemId: string) => void;
 }) {
   return (
-    <aside className="flex w-full shrink-0 flex-col border-b bg-background lg:h-full lg:w-80 lg:border-b-0 lg:border-r">
+    <aside
+      className={cn(
+        "flex w-full shrink-0 flex-col border-b bg-background lg:h-full lg:w-80 lg:border-b-0 lg:border-r",
+        // No item open on a phone: the list is a 16rem strip so the table below stays reachable.
+        pageFlow && "max-lg:max-h-64",
+      )}
+    >
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <CollectionIcon icon={collection?.icon} className="h-4 w-4" />
         <div className="min-w-0 flex-1">
@@ -1888,6 +1896,7 @@ function ItemSheet({
 
   const save = useCallback(async () => {
     if (!collection || !userId || savingRef.current) return;
+    if (isCreate && fields.length === 0) return;
     const validated = validateItemValues(fields, values);
     setErrors(validated.errors);
     if (Object.keys(validated.errors).length > 0) return;
@@ -2005,6 +2014,20 @@ function ItemSheet({
   const body = (
     <>
       <div className={cn("flex-1 overflow-y-auto", inline ? "px-6 py-6" : "-mx-6 px-6 py-4")}>
+        {isCreate && fields.length === 0 && (
+          <div
+            role="status"
+            className={cn("space-y-2 text-sm", inline && "mx-auto max-w-2xl")}
+          >
+            <p>This collection has no fields yet, so there is nothing to fill in.</p>
+            <Link
+              to={`/collections/${collection?.slug}/schema`}
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              Add fields on the Schema page
+            </Link>
+          </div>
+        )}
         <form
           className={cn("space-y-5", inline && "mx-auto max-w-2xl")}
           onSubmit={(event) => {
@@ -2068,7 +2091,11 @@ function ItemSheet({
           <Button type="button" variant="ghost" onClick={close}>
             {inline ? "Back" : "Cancel"}
           </Button>
-          <Button type="button" onClick={save} disabled={isSaving}>
+          <Button
+            type="button"
+            onClick={save}
+            disabled={isSaving || (isCreate && fields.length === 0)}
+          >
             {isSaving ? "Saving…" : "Save"}
           </Button>
         </div>
@@ -3382,12 +3409,20 @@ function CollectionDetailPage() {
   // The pane fills main's content height where the floating chat button shows, defined in
   // DashboardLayout.
   return (
-    <div className="flex h-[var(--page-h)] w-full flex-col overflow-hidden rounded-md border bg-background lg:flex-row">
+    <div
+      data-testid="collection-page"
+      className={cn(
+        "flex h-[var(--page-h)] w-full flex-col overflow-hidden rounded-md border bg-background lg:flex-row",
+        // No item open on a phone: the page itself scrolls instead of squeezing the table into a strip.
+        !routeItemId && "max-lg:h-auto max-lg:overflow-visible",
+      )}
+    >
       <SEOHead
         title={`${collection?.name ?? "Collection"} - Godspeed Mission Control`}
         noIndex
       />
       <CollectionItemsTree
+        pageFlow={!routeItemId}
         collection={collection}
         folders={folders}
         treeItems={treeItems}
@@ -3406,10 +3441,15 @@ function CollectionDetailPage() {
         onDuplicateItem={handleDuplicateItemFromTree}
         onDeleteItem={handleDeleteItemFromTree}
       />
-      <section className="min-w-0 flex-1 overflow-y-auto p-6">
+      <section
+        className={cn(
+          "min-w-0 flex-1 overflow-y-auto p-6",
+          !routeItemId && "max-lg:overflow-visible",
+        )}
+      >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
             <Link to="/collections" className="hover:text-foreground">
               Collections
             </Link>{" "}

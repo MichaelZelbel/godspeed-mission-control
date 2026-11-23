@@ -188,13 +188,13 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
   const friendlyAiError = (code?: string | null): { title: string; description: string } | null => {
     switch (code) {
       case "AI_NO_DRAFT":
-        return { title: "Kein Vorschlag möglich", description: "Die AI konnte aus dieser Beschreibung keinen Vorschlag bilden. Bitte etwas konkreter formulieren oder kürzen." };
+        return { title: "No suggestion possible", description: "The AI could not make a suggestion from this description. Try wording it more concretely, or shorten it." };
       case "AI_REFUSED":
-        return { title: "Text abgelehnt", description: "Die AI hat den Text abgelehnt (vermutlich Safety-Filter). Bitte umformulieren." };
+        return { title: "Text declined", description: "The AI declined this text, probably because of its safety filter. Try rewording it." };
       case "AI_TRUNCATED":
-        return { title: "Beschreibung zu lang", description: "Die Beschreibung ist zu lang für einen Vorschlag. Bitte kürzen." };
+        return { title: "Description too long", description: "The description is too long for a suggestion. Please shorten it." };
       case "PROVIDER_ERROR":
-        return { title: "AI-Provider-Fehler", description: "Der AI-Provider hat einen Fehler zurückgegeben." };
+        return { title: "AI provider error", description: "The AI provider returned an error." };
       case "INSUFFICIENT_CREDITS":
         return { title: "No AI credits left", description: OUT_OF_CREDITS_MESSAGE };
       default:
