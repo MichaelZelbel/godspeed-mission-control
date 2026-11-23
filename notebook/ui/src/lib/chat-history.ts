@@ -1,3 +1,4 @@
+import { AI_UNREADABLE } from '../../../core/no-ai.mjs';
 import { loadFileChat, saveFileChat, clearFileChat } from '@/local/file-chat';
 /**
  * Persistent chat history helpers.
@@ -30,9 +31,10 @@ export interface PersistedChatMessage {
     folder_path: string;
   }>;
   /**
-   * On a user message whose latest send got no answer because the AI refused it or could not be
-   * reached: the reason the person was shown, and when (`failedAt`, this browser's clock). The server
-   * keeps both after a later reply, so read them through unansweredReason.
+   * On a user message whose latest send got no answer because the AI refused it, could not be
+   * reached, or answered with something that could not be used: the reason the person was shown, and
+   * when (`failedAt`, this browser's clock). The server keeps both after a later reply, so read them
+   * through unansweredReason.
    */
   lastFailure?: string;
   failedAt?: number;
@@ -71,13 +73,24 @@ export function recordAIWorked(at: number): void {
  * (`aiState`, the state every chat surface shares), and the AI has not worked since the failure
  * (`workedAt`). Once the AI works again, or no AI is connected (that case says its own sentence),
  * or before the state is known, there is no note.
+ * An answer that could not be used (`unusableAnswer`) is different: the AI did work, so its note lasts
+ * until a later message is answered, whatever the AI's state, except before the state is known and
+ * with no AI connected.
  */
+export function unusableAnswer(reason?: string | null): boolean {
+  return String(reason ?? "").startsWith(AI_UNREADABLE);
+}
+
 export function unansweredReason(messages: PersistedChatMessage[], index: number, aiState: string, workedAt = aiWorkedAt()): string | null {
   const message = messages[index];
   if (message?.role !== "user" || !message.lastFailure) return null;
+  const answeredLater = messages.slice(index + 1).some((m) => m.role === "assistant");
+  if (unusableAnswer(message.lastFailure)) {
+    return aiState === "none" || aiState === "checking" || answeredLater ? null : message.lastFailure;
+  }
   if (aiState !== "refused" && aiState !== "unreachable") return null;
   if ((message.failedAt ?? 0) <= workedAt) return null;
-  return messages.slice(index + 1).some((m) => m.role === "assistant") ? null : message.lastFailure;
+  return answeredLater ? null : message.lastFailure;
 }
 
 export interface PersistedChatState {
