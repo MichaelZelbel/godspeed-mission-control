@@ -14,20 +14,52 @@ export class TabStorage implements Storage {
   [name: string]: any;
 }
 
-/** Returns whether the tab-only stand-in is now what `win.localStorage` answers with. */
+function findDescriptor(win: Window): PropertyDescriptor | undefined {
+  for (let o: any = win; o; o = Object.getPrototypeOf(o)) {
+    const d = Object.getOwnPropertyDescriptor(o, "localStorage");
+    if (d) return d;
+  }
+  return undefined;
+}
+
+/**
+ * Returns whether the tab-only stand-in is now what `win.localStorage` answers with.
+ * When storage works at startup it is still guarded: if the browser starts refusing site data mid-session (#1014),
+ * the next read switches to tab-only storage for the rest of the tab instead of throwing.
+ */
 export function installTabStorage(win: Window = window): boolean {
+  const original = findDescriptor(win);
+  const tab = new TabStorage();
+  const useTab = () => {
+    try {
+      Object.defineProperty(win, "localStorage", { configurable: true, enumerable: true, get: () => tab });
+    } catch { /* leave the getter below; it keeps answering with the tab storage */ }
+  };
+  let failed = false;
   try {
     win.localStorage.getItem("godspeed:storage-probe");
-    return false;
   } catch {
-    try {
-      const tab = new TabStorage();
-      Object.defineProperty(win, "localStorage", { configurable: true, enumerable: true, get: () => tab });
-      return true;
-    } catch {
-      return false;
-    }
+    useTab();
+    return true;
   }
+  if (!original?.get) return false;
+  try {
+    Object.defineProperty(win, "localStorage", {
+      configurable: true,
+      enumerable: original.enumerable ?? true,
+      get() {
+        if (failed) return tab;
+        try {
+          return original.get!.call(win);
+        } catch {
+          failed = true;
+          useTab();
+          return tab;
+        }
+      },
+    });
+  } catch { /* storage stays unguarded */ }
+  return false;
 }
 
 export const tabOnlyStorage: boolean = typeof window !== "undefined" && installTabStorage();
