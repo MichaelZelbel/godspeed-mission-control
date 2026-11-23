@@ -45,10 +45,16 @@ function ShortAddress(){
   if(!(SHORT_ADDRESSES as readonly string[]).includes(name))return <Unavailable/>;
   return <Navigate to={['/dashboard',name,...rest].join('/')+search+hash} replace/>;
 }
-const TAB_ONLY_NOTICE="This browser blocks site data for this page, so text not saved yet and choices kept in this browser last only until you close or reload this tab. To keep them, allow site data (cookies and site data) for this address in your browser's settings.";
+const TAB_ONLY_NOTICE="This browser blocks site data for this page. What you type and choose is kept only until you close or reload this tab. To keep it, allow site data (cookies and site data) for this address in your browser's settings.";
 let noticeShown=false;
 function TabOnlyStorageNotice(){
-  useEffect(()=>{if(!tabOnlyStorage||noticeShown)return;noticeShown=true;toast.info(TAB_ONLY_NOTICE,{id:'tab-only-storage',duration:15000});},[]);
+  useEffect(()=>{
+    if(!tabOnlyStorage)return;
+    if(!noticeShown){noticeShown=true;toast.info(TAB_ONLY_NOTICE,{id:'tab-only-storage',duration:12000,closeButton:true,position:'bottom-center'});}
+    const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape')toast.dismiss('tab-only-storage');};
+    window.addEventListener('keydown',onKey);
+    return()=>window.removeEventListener('keydown',onKey);
+  },[]);
   return null;
 }
 function Layout(){

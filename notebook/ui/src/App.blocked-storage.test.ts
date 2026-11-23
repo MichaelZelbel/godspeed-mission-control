@@ -76,7 +76,11 @@ describe("the notebook with the browser's site data blocked", () => {
 
       await page.goto(notebook.base + "/dashboard");
       await page.getByRole("heading", { name: "Your notebook" }).waitFor({ timeout: 15_000 });
-      await page.getByText(/allow site data/).waitFor({ timeout: 5000 });
+      await page.getByText(/allow site data \(cookies and site data\) for this address/).waitFor({ timeout: 5000 });
+      expect(await body()).toContain("kept only until you close or reload this tab");
+      expect(await body()).not.toContain("so text not saved yet");
+      await page.getByRole("button", { name: /close toast/i }).click();
+      await page.getByText(/allow site data/).waitFor({ state: "detached", timeout: 3000 });
       const text = await body();
       expect(text).not.toContain("Let’s reconnect");
       expect(text).not.toContain("denied");
