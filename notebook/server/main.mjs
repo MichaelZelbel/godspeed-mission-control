@@ -297,6 +297,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const factClosing=domains.factClosing=new FactClosing({store,query,device});
   const menerioImport=new MenerioImport(store,mediaRoot,()=>{index.rebuild();factClosing.request();},{beat});
   const telegramConnection=new TelegramConnection();
+  // A send the person stopped is not a failure: it ends as the plain outcome the chat already shows, never the engine's abort error.
+  const stoppedReply=(controller,error)=>controller.signal.aborted?Object.assign(new Error('Reply stopped.'),{status:409}):error;
   const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store),backupRunner=new BackupRunner(store,mediaRoot);let dictationBusy=false;
   // The page that shows who the assistant is (core/identity-shelf.mjs): who it is, its rules, what
   // it knows about its owner and its skills, with every earlier version. Its assistant's own identity file follows
@@ -468,7 +470,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
             const sourceId=input.request_id?'browser-message-'+hash([conversation,input.request_id]):undefined;if(!sourceId||!store.get('conversation_messages',sourceId))await store.saveAsync('conversation_messages',{id:sourceId,role:'user',content:input.message,conversation_id:conversation,source_app:'browser-chat'},undefined,{signal:controller.signal});
             const result=await domains.invoke('conversation-chat',{message:input.message,conversation_id:conversation,request_id:input.request_id,talk_id:talk?.id,signal:controller.signal}),saved={reply:result.reply};
             if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'verified',result:saved},undefined,{signal:controller.signal});return send(res,200,saved);
-          }catch(error){if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message});throw error;}finally{if(receiptId)chatRequests.delete(receiptId);}
+          }catch(raw){const error=stoppedReply(controller,raw);if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message});throw error;}finally{if(receiptId)chatRequests.delete(receiptId);}
         }
         return send(res,405,{error:'Use GET or POST'});
       }
@@ -880,7 +882,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           if(isChat)await retainCompletedConversation(store,input,data,{asyncWriter:true,signal:controller.signal});
           if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'verified',result:data},undefined,{signal:controller.signal});
           return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});
-        }catch(error){
+        }catch(raw){
+          const error=isChat?stoppedReply(controller,raw):raw;
           if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});
           // Every AI failure is already the one plain sentence a person reads: Domains.invoke
           // translated it (core/ai-outcome.mjs), for this route and for every other one, so no

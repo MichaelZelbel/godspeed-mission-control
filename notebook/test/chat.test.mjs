@@ -87,10 +87,10 @@ test('a question about a note cannot turn a model-supplied edit into a saved cha
 });
 test('stop aborts the running provider and prevents an assistant write',async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-stop-'));let running,started;const ready=new Promise(r=>started=r);
-  const provider=input=>new Promise((resolve,reject)=>{running=input.signal;started();input.signal.addEventListener('abort',()=>reject(new Error('Reply stopped')),{once:true});});
+  const provider=input=>new Promise((resolve,reject)=>{running=input.signal;started();input.signal.addEventListener('abort',()=>reject(new DOMException('This operation was aborted','AbortError')),{once:true});});
   const s=await createService({root,port:0,provider}),base='http://127.0.0.1:'+s.address.port,id='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
   const post=(route,body)=>fetch(base+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  try{const response=post('/api/functions/note-chat',{message:'hi',request_id:id});await ready;assert.equal((await post('/api/chat/stop',{id})).status,200);assert.equal((await response).status,400);assert.equal(running.aborted,true);assert.equal(s.query.rows('conversation_messages').filter(m=>m.role==='assistant').length,0);assert.equal(s.query.rows('conversation_messages').find(m=>m.role==='user').content,'hi');}finally{await s.close();}
+  try{const response=post('/api/functions/note-chat',{message:'hi',request_id:id});await ready;assert.equal((await post('/api/chat/stop',{id})).status,200);const answered=await response,text=await answered.text();assert.equal(answered.status,409);assert.equal(JSON.parse(text).error,'Reply stopped.');assert.doesNotMatch(text,/aborted|AbortError|"code"/i);assert.equal(running.aborted,true);assert.doesNotMatch(JSON.stringify(s.query.rows('command_receipts')),/aborted|AbortError/i);assert.equal(s.query.rows('conversation_messages').filter(m=>m.role==='assistant').length,0);assert.equal(s.query.rows('conversation_messages').find(m=>m.role==='user').content,'hi');}finally{await s.close();}
 });
 test('reading a collection cannot cause a provider to add rows',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-collection-read-'))),collection=store.save('collections',{name:'Fictional reading list',field_schema:[{key:'title',type:'text'}]}),domains=new Domains(new QueryService(store),{provider:async()=>({reply:'An empty fictional reading list.',items_created:[{data:{title:'Unrequested'}}]})});
