@@ -7,7 +7,7 @@ import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
 import {MenerioSource} from '../core/migration-source.mjs';
-import {isoTimestamp, isoTimestamps, momentDates} from '../core/timestamps.mjs';
+import {isoTimestamp, isoTimestamps, momentDates, endsBeforeStart} from '../core/timestamps.mjs';
 
 const fixture = t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-moment-dates-'));
@@ -94,4 +94,13 @@ test('momentDates and isoTimestamps return the same object when nothing changes'
   assert.equal(isoTimestamps(done), done);
   assert.deepEqual(momentDates({title: 'x'}), {title: 'x'});
   assert.ok(!('happened_end' in momentDates({happened_at: '2026-10-05 00:00:00+00'})));
+});
+
+test('endsBeforeStart compares the days as written', () => {
+  assert.equal(endsBeforeStart('2025-03-05', '2025-03-01'), true);
+  assert.equal(endsBeforeStart('2025-03-05', '2025-03-05T08:00:00+02:00'), false);
+  assert.equal(endsBeforeStart('2025-03-05 10:00:00+00', '2025-03-04'), true);
+  assert.equal(endsBeforeStart('2025-03-05', null), false);
+  assert.equal(endsBeforeStart(undefined, '2025-03-01'), false);
+  assert.equal(endsBeforeStart('soon', '2025-03-01'), false);
 });
