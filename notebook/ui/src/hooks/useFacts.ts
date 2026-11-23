@@ -111,7 +111,8 @@ export interface AddFactInput {
 
 /** Everything a fact list can do, passed down to the section components. */
 export interface FactActions {
-  add: (input: AddFactInput) => void;
+  /** Resolves once the fact is saved; rejects with the reason when it was not. */
+  add: (input: AddFactInput) => Promise<unknown>;
   /** "It changed": the new value from `validFrom`; the old one becomes history. */
   changed: (fact: ProfileFact, value: string, validFrom: string) => void;
   /** "Fix a mistake": the value is corrected in place. */
@@ -819,7 +820,7 @@ export function useFacts(subject: FactSubject | null) {
   });
 
   const actions: FactActions = {
-    add: (input) => addFact.mutate(input),
+    add: (input) => addFact.mutateAsync(input),
     changed: (fact, value, validFrom) => changeFact.mutate({ fact, value, validFrom }),
     fix: (fact, value) => fixFact.mutate({ fact, value }),
     redate: (fact, validFrom) => redateFact.mutate({ fact, validFrom }),
