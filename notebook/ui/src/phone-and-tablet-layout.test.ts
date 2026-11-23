@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type BrowserContextOptions, type Page } from "playwright-core";
 import { startNotebook, type RealNotebook } from "@/test/real-notebook";
+import { WAIT } from "@/test/wait-limits";
 
 // Chat and header search at phone and tablet widths (#1017), read the way a person sees them in a
 // real browser: jsdom has no layout, so a class assertion would prove nothing here. The test
@@ -104,7 +105,7 @@ describe("chat and search at phone and tablet widths", () => {
 
   const openNoteChat = async (page: Page) => {
     await page.getByRole("button", { name: "Chat with Godspeed" }).first().click();
-    await messageBox(page).waitFor();
+    await messageBox(page).waitFor(WAIT);
     await settle(page);
   };
 
@@ -172,7 +173,7 @@ describe("chat and search at phone and tablet widths", () => {
     it(`header search results are as wide as the screen less its margins at ${viewport.width} px`, async () => {
       await inPage({ viewport }, "/dashboard", async (page) => {
         await page.locator("header input").first().fill("Reunion");
-        await page.locator("header .absolute.top-full").getByText(LONG_TITLE).waitFor();
+        await page.locator("header .absolute.top-full").getByText(LONG_TITLE).waitFor(WAIT);
         const m = await page.evaluate((title) => {
           const d = document.querySelector("header .absolute.top-full")!;
           const b = d.getBoundingClientRect();
@@ -224,7 +225,7 @@ describe("chat and search at phone and tablet widths", () => {
   it("keeps the desktop search results as wide as the search box", async () => {
     await inPage({ viewport: DESKTOP }, "/dashboard", async (page) => {
       await page.locator("header input").first().fill("Reunion");
-      await page.locator("header .absolute.top-full").waitFor();
+      await page.locator("header .absolute.top-full").waitFor(WAIT);
       const m = await page.evaluate(() => {
         const d = document.querySelector("header .absolute.top-full")!.getBoundingClientRect();
         const c = document.querySelector("header .absolute.top-full")!.parentElement!.getBoundingClientRect();
@@ -256,6 +257,13 @@ describe("chat and search at phone and tablet widths", () => {
         await page.locator("[data-sidebar=trigger]").first().click();
         await page.waitForTimeout(500);
         expect(await sidebarWidth(page)).toBeGreaterThan(200);
+        // With the sidebar reopened and the note still open, the toolbar is not cut off.
+        const t = await page.evaluate(() => {
+          const toolbar = [...document.querySelectorAll(".overflow-x-auto")].find((e) => e.querySelector(".min-w-\\[18rem\\]")) as HTMLElement;
+          return { scrollWidth: toolbar.scrollWidth, clientWidth: toolbar.clientWidth, right: toolbar.getBoundingClientRect().right };
+        });
+        expect(t.scrollWidth).toBeLessThanOrEqual(t.clientWidth);
+        expect(t.right).toBeLessThanOrEqual(768);
       });
     }, 120_000);
 

@@ -126,7 +126,7 @@ export default function Notes() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
-  const {setOpen:setMenuOpen}=useSidebar();
+  const {open:menuIsOpen,setOpen:setMenuOpen}=useSidebar();
   const [chatOpen,setChatOpen]=useState(false);
   const [treeCollapsed,setTreeCollapsed]=useState(()=>window.localStorage.getItem("godspeed:notes-tree-collapsed")==="true");
   const toggleTree=()=>setTreeCollapsed(v=>{window.localStorage.setItem("godspeed:notes-tree-collapsed",String(!v));return !v;});
@@ -841,6 +841,8 @@ export default function Notes() {
       <div className={cn(
         "shrink-0 border-r border-border flex-col bg-background min-w-0",
         isMobile ? "w-full" : "w-72",
+        // Sidebar reopened by hand beside an open note at tablet width: the list steps aside so the note keeps its toolbar (#1017).
+        !isMobile && menuIsOpen && selectedId && "max-lg:!hidden",
         (isMobile && (selectedId||chatOpen)) || (!isMobile&&treeCollapsed) ? "hidden" : "flex"
       )}>
 
