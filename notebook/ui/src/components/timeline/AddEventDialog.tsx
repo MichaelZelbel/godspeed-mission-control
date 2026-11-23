@@ -19,7 +19,7 @@ import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import ImportanceSlider from "./ImportanceSlider";
 import { UNNAMED_PERSON } from "./people";
-import { END_BEFORE_START, NO_AI_FACTS, aiFailureKind, factsNotPulledOut, filledOnOpen, endsBeforeStart, mergeSuggestion, newPeopleToCreate, noAiFacts } from "./moment-form.mjs";
+import { END_BEFORE_START, aiFailureKind, factsNotPulledOut, filledOnOpen, endsBeforeStart, mergeSuggestion, newPeopleToCreate, noAiFacts } from "./moment-form.mjs";
 
 export interface TimelineContact {
   id: string;
@@ -327,11 +327,10 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
       const saved = isEditMode ? "Moment updated" : "Moment created";
       // A refused, unreachable or stalled AI the tab already knows about keeps its at-once answer
       // (#796). With no AI connected at all (the tab's own status, refreshed every few seconds) no
-      // extraction is asked for (#881): the person still sees the #812 line, without a request that
-      // can only fail. When the tab's picture still says an AI is connected, the extraction decides
-      // when the moment is saved (#812): the connection may have been removed or connected while the
-      // tab was open, so a tab whose picture is out of date gets the answer from the extraction's
-      // own reply, which names Settings, Your AI.
+      // extraction is asked for (#881): a moment with people still gets the no-AI explanation
+      // (#784). When the tab still says an AI is connected, the extraction decides when the moment
+      // is saved (#812). If the connection was removed while the tab was open, the extraction's
+      // own reply supplies the answer.
       // A cached answer that says no AI is connected is read afresh before the save skips anything
       // (#907): connecting the AI again in Settings, Your AI leaves the tab's last poll answer
       // standing until the next one, so a save made in between must not skip on the older picture.
@@ -345,20 +344,20 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
           statusAvailability = fresh.data.aiAvailability as AIAvailability | undefined;
         }
       }
-      const known = statusConfigured ? null : factsNotPulledOut(statusAvailability);
+      const hasPeople = desiredIds.length > 0;
       const noneConnected = !statusConfigured && statusAvailability === "none";
+      const known = statusConfigured || (noneConnected && !hasPeople) ? null : factsNotPulledOut(statusAvailability);
       if (momentId && !known && !noneConnected) {
         supabase.functions
           .invoke("extract-moment-profile", { body: { moment_id: momentId } })
           .then(({ error }) => {
             const message = String(error?.message || "");
-            const skipped = noAiFacts(message) || factsNotPulledOut(aiFailureKind(message));
+            const skipped = (hasPeople ? noAiFacts(message) : null) || factsNotPulledOut(aiFailureKind(message));
             if (skipped) toast({ title: saved, description: skipped });
           })
           .catch(() => {});
       }
-      const savedDescription = known || (noneConnected ? NO_AI_FACTS : null);
-      toast(savedDescription ? { title: saved, description: savedDescription } : { title: saved });
+      toast(known ? { title: saved, description: known } : { title: saved });
       setOpen(false);
       onCreated();
 
