@@ -146,6 +146,7 @@ export function aiFailureKind(message) {
 // What a saved moment's confirmation adds when no facts were pulled out of it
 // because of the AI (#779), or null when there is nothing to add.
 export function factsNotPulledOut(kind) {
+  if (kind === 'none') return NO_AI_FACTS;
   if (kind === 'refused') return 'No facts were pulled out of it. ' + AI_REFUSED_STATUS + '. Check it in Settings, Your AI.';
   if (kind === 'unreachable') return 'No facts were pulled out of it. ' + AI_UNREACHABLE_STATUS + '. Check its connection in Settings, Your AI.';
   // The stalled sentence is the shared one (AI_STALLED, core/no-ai.mjs), so a reword there keeps
@@ -156,11 +157,9 @@ export function factsNotPulledOut(kind) {
   return null;
 }
 
-// What a saved moment's confirmation says when the extraction answers that no AI is connected
-// (#812): built from the shared no-AI wording (core/no-ai.mjs), it names Settings, Your AI the
-// way the refused and unreachable answers above do. The extraction is asked when the moment is
-// saved, so a tab whose cached picture still says an AI is connected gets the same answer.
-export const NO_AI_FACTS = 'No facts were pulled out of it. ' + NO_AI_STATUS + '. Connect your AI service in Settings, Your AI.';
+// A moment with people gets the same explanation whether the tab already knows no AI is
+// connected or learns it from the extraction response (#784, #812).
+export const NO_AI_FACTS = NO_AI_STATUS + ', so no facts about its people were pulled out. Connect your AI service in Settings, Your AI.';
 export function noAiFacts(message) {
   return String(message ?? '').startsWith(NO_AI_STATUS) ? NO_AI_FACTS : null;
 }
