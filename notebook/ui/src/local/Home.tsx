@@ -15,6 +15,9 @@ import {useChatEntry} from '@/components/chat/chat-entry';
 import {peopleCountRequest} from './home-counts.mjs';
 import {askChatCheck,chatAIState,useChatCheckRunning,useChatOptions} from '@/components/chat/ChatConnectionEmptyState';
 import {AI_CONNECTION_UNREADABLE_STATUS,AI_STALLED_STATUS,NO_AI_STATUS,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../../../core/no-ai.mjs';
+const LAST_AI_STATE_KEY='godspeed-home-last-ai-state';
+function readLastAIState(){try{return sessionStorage.getItem(LAST_AI_STATE_KEY);}catch{return null;}}
+function saveLastAIState(v:string){try{sessionStorage.setItem(LAST_AI_STATE_KEY,v);}catch{/* not kept */}}
 export default function Home(){
  const navigate=useNavigate(),notes=useNotes('all'),chatEntry=useChatEntry<HTMLButtonElement>();
  const status=useQuery({queryKey:['candidate-status'],queryFn:async()=>{const r=await fetch('/api/status');if(!r.ok)throw new Error('Could not read connection status');return r.json();},refetchInterval:5000});
@@ -22,10 +25,12 @@ export default function Home(){
  const readState=chatAvailability.isSuccess?chatAIState(chatAvailability.data):null;
  // While a check runs (page load or Check again) a card that last said "could not be reached" keeps
  // saying it, with a disabled "Checking…" button, instead of an in-between state (#1053).
- const checkRunning=useChatCheckRunning(),lastState=useRef<string|null>(null);
- const holding=checkRunning&&lastState.current==='unreachable';
+ // The last state survives a reload (sessionStorage), so the page-load check, which has no state of
+ // its own to show yet, keeps the same text as Check again (#1053).
+ const checkRunning=useChatCheckRunning(),lastState=useRef<string|null>(readLastAIState());
+ const holding=(checkRunning||!readState)&&lastState.current==='unreachable'&&!chatAvailability.isError;
  const aiState=holding?'unreachable':readState;
- if(!checkRunning)lastState.current=readState;
+ if(!checkRunning&&readState&&lastState.current!==readState){lastState.current=readState;saveLastAIState(readState);}
  const [checking,setChecking]=useState(false),[stillDown,setStillDown]=useState(false);
  useEffect(()=>{if(aiState!=='unreachable')setStillDown(false);},[aiState]);
  const checkAgain=async()=>{setChecking(true);askChatCheck();try{const r=await chatAvailability.refetch();setStillDown(chatAIState(r.data)==='unreachable');}finally{setChecking(false);}};

@@ -177,7 +177,7 @@ describe("the Godspeed card", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
     expect(await screen.findByText("Your AI could not be reached", undefined, WAIT)).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Check again" }, WAIT));
     await waitFor(() => expect(held).toBe(true), WAIT);
     // Something else publishes a stalled state while the check is open.
     act(() => { client.setQueryData(["chat-options"], { connected: true, usable: false, availability: "stalled" }); });
