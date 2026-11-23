@@ -178,6 +178,9 @@ describe("the Settings page names every field by its label", () => {
         await openSettings(page, notebook.base);
         await check(page);
       } finally {
+        // Let a request a route handler still has running (the /api/status fetch) finish before the
+        // context goes, so it cannot reject as "Request context disposed" after the test ends.
+        await Promise.all(context.pages().map((p) => p.unrouteAll({ behavior: "wait" }))).catch(() => {});
         await context.close();
       }
     }
