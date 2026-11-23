@@ -4,7 +4,7 @@
 export interface ChatMessage { day: string; name: string; text: string }
 export interface ChatMonth { month: string; messages: ChatMessage[] }
 
-export const NOT_WHATSAPP = "This is not a WhatsApp chat export. Export the chat from WhatsApp without media and choose that file.";
+export const NOT_WHATSAPP = "This file is not a WhatsApp chat export, so export the chat from WhatsApp without media and choose that file.";
 
 // iPhone "[DD.MM.YY, HH:MM:SS] Name: text" and Android "DD/MM/YYYY, HH:MM - Name: text", with
 // either separator, 12- or 24-hour clocks and a leading direction mark.

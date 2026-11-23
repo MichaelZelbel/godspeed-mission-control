@@ -109,7 +109,7 @@ describe("Add a chat history", () => {
   });
   it("refuses a file that is not a WhatsApp export in one sentence", async () => {
     open(); choose("milk\neggs", "list.txt");
-    expect(await screen.findByRole("alert", {}, WAIT)).toHaveTextContent("This is not a WhatsApp chat export.");
+    expect(await screen.findByRole("alert", {}, WAIT)).toHaveTextContent("This file is not a WhatsApp chat export");
     expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
   });
   it("with no AI connected says so and sends nothing", async () => {
