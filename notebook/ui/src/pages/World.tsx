@@ -152,6 +152,7 @@ export default function World() {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && create()}
+              aria-label="Name"
               placeholder="Name"
               className="h-8 w-48 text-sm"
               autoFocus
@@ -160,6 +161,7 @@ export default function World() {
               value={newType}
               onChange={(e) => setNewType(e.target.value)}
               list="entity-type-suggestions"
+              aria-label="Type"
               placeholder="Type"
               className="h-8 w-36 text-sm"
             />

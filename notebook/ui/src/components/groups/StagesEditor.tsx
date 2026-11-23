@@ -67,7 +67,7 @@ export function StagesEditor({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <Label className="text-sm font-medium">Pipeline Stages</Label>
+        <p className="text-sm font-medium leading-none">Pipeline Stages</p>
         <span className="text-xs text-muted-foreground">Rename, reorder, add, or remove stages. Members in a deleted stage move to {firstStageLabel}.</span>
       </div>
       <div className="space-y-2 rounded-md border border-border p-3">
