@@ -236,6 +236,40 @@ describe("chat and search at phone and tablet widths", () => {
     });
   }, 120_000);
 
+  // A phone held sideways (#1033): the person's details fill one page-sized scroll area below the back
+  // bar (or the page itself scrolls), with no short nested strip and no empty band under the page.
+  describe("a person's details on a phone held sideways", () => {
+    const SIDEWAYS = [{ width: 667, height: 375 }, { width: 568, height: 320 }, { width: 740, height: 360 }, { width: 844, height: 390 }];
+    const readPerson = (page: Page) => page.evaluate(`(() => {
+      const main = document.querySelector("main");
+      const name = [...document.querySelectorAll("h1,h2,h3,div,span")].reverse().find((e) => e.children.length === 0 && e.textContent.includes("Sideways Sam") && e.getClientRects().length > 0);
+      if (!name) return ["the person's details are not shown"];
+      const wrong = [];
+      let nested = null, bottom = 0;
+      for (let e = name.parentElement; e && e !== main; e = e.parentElement) {
+        const o = getComputedStyle(e).overflowY;
+        if ((o === "auto" || o === "scroll") && nested === null) { nested = Math.round(e.clientHeight); bottom = e.getBoundingClientRect().bottom; }
+      }
+      const mainRect = main.getBoundingClientRect();
+      // The area ends where main's own 24 px of padding does: it fills the height below the back bar.
+      if (nested !== null && bottom < window.innerHeight - 24 - 1) wrong.push("the details sit in a nested scroll area " + nested + " px tall on a " + window.innerHeight + " px window");
+      if (window.innerHeight - mainRect.bottom > 1) wrong.push("an empty band of " + Math.round(window.innerHeight - mainRect.bottom) + " px lies below the page");
+      return wrong;
+    })()`);
+
+    for (const viewport of SIDEWAYS) {
+      it(`shows one page-sized scroll area and no empty band at ${viewport.width}x${viewport.height}`, async () => {
+        const sam = await notebook.query({ table: "contacts", operation: "insert", values: { name: "Sideways Sam", notes: "A long note. ".repeat(60) }, selection: "id", single: true });
+        await inPage({ viewport, isMobile: true, hasTouch: true }, `/dashboard/people/${sam.id}`, async (page) => {
+          await page.getByText("Sideways Sam").locator("visible=true").first().waitFor(WAIT);
+          await settle(page);
+          const problems = (await readPerson(page)) as string[];
+          expect(problems, problems.join("\n")).toEqual([]);
+        });
+      }, 120_000);
+    }
+  });
+
   describe("the note panel with the sidebar open at 768 px", () => {
     const sidebarWidth = (page: Page) => page.evaluate(() => document.querySelector("[data-sidebar=sidebar]")!.getBoundingClientRect().width);
 

@@ -15,11 +15,17 @@ import { BRAIN_PAGE } from "@/lib/brain-page";
 
 
 
+// A phone held sideways is under 500 px tall: the 9.5rem kept for the chat button would leave the person's
+// details a short strip with an empty band below it (#1033), so the People pages take the whole height below
+// the header there (the button floats over the page's corner, as it does over any scrolled page).
+const SIDEWAYS_FULL=" [@media(max-height:500px)]:max-h-none [@media(max-height:500px)]:[--page-h:calc(100dvh-6.5rem)]";
+
 export function DashboardLayout() {
   const pathname=useLocation().pathname;
   // Godspeed's brain docks its own chat beside its content, as Notes does: no floating button
   // over the rule being changed.
   const isChat=pathname==="/dashboard/chat",isNotes=pathname.startsWith("/dashboard/notes"),isImport=pathname==="/dashboard/settings/import",isHabit=pathname.startsWith("/trackers/habits/"),isBrain=pathname===BRAIN_PAGE.path;
+  const isPeople=pathname.startsWith("/dashboard/people");
   const floatingChat=!isChat&&!isNotes&&!isImport&&!isHabit&&!isBrain;
 
   return (
@@ -48,7 +54,7 @@ export function DashboardLayout() {
               #530's pb-24) still left a card under it at every scroll before the end (#878).
               --page-h is main's content box (the cap minus main's own 3rem of vertical padding);
               pages that fill it use it, so their budget cannot drift from this cap. */}
-          <main className={floatingChat?"flex-1 overflow-auto p-6 max-h-[calc(100dvh-9.5rem)] [--page-h:calc(100dvh-12.5rem)]":"flex-1 overflow-auto p-6"}>
+          <main className={floatingChat?"flex-1 overflow-auto p-6 max-h-[calc(100dvh-9.5rem)] [--page-h:calc(100dvh-12.5rem)]"+(isPeople?SIDEWAYS_FULL:""):"flex-1 overflow-auto p-6"}>
             {/* A crashing page no longer takes the sidebar with it, and the
                 boundary clears on the next navigation. Loading a page's code
                 keeps the sidebar and header on screen. */}
