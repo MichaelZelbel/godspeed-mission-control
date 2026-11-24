@@ -3426,8 +3426,8 @@ function CollectionDetailPage() {
       data-testid="collection-page"
       className={cn(
         "flex h-[var(--page-h)] w-full flex-col overflow-hidden rounded-md border bg-background lg:flex-row",
-        // No item open on a phone: the page itself scrolls instead of squeezing the table into a strip.
-        !routeItemId && "max-lg:h-auto max-lg:overflow-visible",
+        // On a phone the page flows and the content pane scrolls it; no fixed-height box with an inner scroller.
+        "max-lg:h-auto max-lg:overflow-visible",
       )}
     >
       <SEOHead
@@ -3458,8 +3458,7 @@ function CollectionDetailPage() {
       <section
         data-testid="collection-item-view"
         className={cn(
-          "min-w-0 flex-1 overflow-y-auto p-4 sm:p-6",
-          !routeItemId && "max-lg:overflow-visible",
+          "min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 max-lg:overflow-visible",
         )}
       >
       {selectedItem && (

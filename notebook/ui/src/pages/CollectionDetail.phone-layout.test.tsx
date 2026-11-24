@@ -107,6 +107,15 @@ describe("a collection page at phone width", () => {
     expect(page.className).toContain("lg:flex-row");
   });
 
+  it("lets the page flow, not a fixed-height box, with an item open on a phone", async () => {
+    open("/collections/books/i1");
+    const view = await screen.findByTestId("collection-item-view", {}, WAIT);
+    const page = screen.getByTestId("collection-page");
+    expect(page.className).toContain("max-lg:h-auto");
+    expect(page.className).toContain("max-lg:overflow-visible");
+    expect(view.className).toContain("max-lg:overflow-visible");
+  });
+
   it("hides the list on phones and keeps it beside an open item on desktop", async () => {
     open("/collections/books/i1");
     const view = await screen.findByTestId("collection-item-view", {}, WAIT);
