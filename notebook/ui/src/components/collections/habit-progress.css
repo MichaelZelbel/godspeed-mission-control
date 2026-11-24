@@ -54,6 +54,6 @@ details[open] > .habit-summary::before { content: '−'; }
 .habit-progress-calm .habit-next-step { border-color: hsl(var(--border)); }
 .habit-progress-calm .habit-next-step button { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); box-shadow: none; }
 .habit-calm-symbol { font-size: 1.5rem; color: hsl(var(--muted-foreground)); }
-@media (max-width: 480px) { .habit-hero { gap: .5rem; } .habit-hero-art { width: 104px; height: 104px; } .habit-next-step button { width: 100%; } .habit-week { gap: 0; } .habit-day-symbol { height: 48px; } .habit-lifetime { gap: .75rem; } .habit-lifetime p { font-size: .8125rem; } }
+@media (max-width: 480px) { .habit-date { white-space: normal; overflow-wrap: anywhere; font-size: .6875rem; } .habit-hero { gap: .5rem; } .habit-hero-art { width: 104px; height: 104px; } .habit-next-step button { width: 100%; } .habit-week { gap: 0; } .habit-day-symbol { height: 48px; } .habit-lifetime { gap: .75rem; } .habit-lifetime p { font-size: .8125rem; } }
 @media (max-width: 350px) { .habit-hero-art { width: 88px; height: 88px; } .habit-hero-title { font-size: 1.5rem; } .habit-eyebrow { font-size: .75rem; } .habit-hero-note { font-size: .8125rem; } .habit-day-symbol { height: 42px; } .habit-ice-icons img { width: 36px; height: 36px; } }
 @media (prefers-reduced-motion: reduce) { .habit-tracker button { transition: none; transform: none !important; } }

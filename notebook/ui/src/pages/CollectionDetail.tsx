@@ -775,6 +775,8 @@ function CollectionItemsTree({
         "flex w-full shrink-0 flex-col border-b bg-background lg:h-full lg:w-80 lg:border-b-0 lg:border-r",
         // No item open on a phone: the list is a 16rem strip so the table below stays reachable.
         pageFlow && "max-lg:max-h-64",
+        // An item open on a phone takes the whole pane; the breadcrumb's collection link leads back (#887).
+        !pageFlow && "max-lg:hidden",
       )}
     >
       <div className="flex items-center gap-2 border-b px-3 py-2">
@@ -1680,8 +1682,8 @@ function ItemNotesPanel({
 
   return (
     <section className="mt-8 border-t pt-6">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0 flex-1 basis-48">
           <h3 className="text-sm font-semibold">Notes</h3>
           <p className="text-xs text-muted-foreground">
             Link notes from your vault to this item. Editing happens in the Notes app.
