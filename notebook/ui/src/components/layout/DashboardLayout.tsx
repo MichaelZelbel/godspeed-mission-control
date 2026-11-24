@@ -12,7 +12,7 @@ import { useProcessingSweep } from "@/hooks/useProcessingSweep";
 import { RouteErrorBoundary } from "@/components/ErrorBoundary";
 import { PageLoader } from "@/components/LoadingStates";
 import { BRAIN_PAGE } from "@/lib/brain-page";
-
+import { isCollectionPage } from "./collection-route";
 
 
 export function DashboardLayout() {
@@ -20,6 +20,9 @@ export function DashboardLayout() {
   // Godspeed's brain docks its own chat beside its content, as Notes does: no floating button
   // over the rule being changed.
   const isChat=pathname==="/dashboard/chat",isNotes=pathname.startsWith("/dashboard/notes"),isImport=pathname==="/dashboard/settings/import",isHabit=pathname.startsWith("/trackers/habits/"),isBrain=pathname===BRAIN_PAGE.path;
+  // A collection page (not templates or schema) reaches the window's bottom at phone widths: the
+  // button floats over it, and its own card leaves room (#1045). Other pages keep the reserve.
+  const isCollection=isCollectionPage(pathname);
   const floatingChat=!isChat&&!isNotes&&!isImport&&!isHabit&&!isBrain;
 
   return (
@@ -47,8 +50,9 @@ export function DashboardLayout() {
               pinned to the viewport's corner, so room kept only at the end of the content (issue
               #530's pb-24) still left a card under it at every scroll before the end (#878).
               --page-h is main's content box (the cap minus main's own 3rem of vertical padding);
-              pages that fill it use it, so their budget cannot drift from this cap. */}
-          <main className={floatingChat?"flex-1 overflow-auto p-6 max-h-[calc(100dvh-9.5rem)] [--page-h:calc(100dvh-12.5rem)]":"flex-1 overflow-auto p-6"}>
+              pages that fill it use it, so their budget cannot drift from this cap. At phone widths
+              the content reaches the window's bottom and the button floats over it (#1045). */}
+          <main data-collection-page={isCollection||undefined} className={floatingChat?"flex-1 overflow-auto p-6 max-h-[calc(100dvh-9.5rem)] [--page-h:calc(100dvh-12.5rem)]"+(isCollection?" max-sm:max-h-[calc(100dvh-3.5rem)] max-sm:[--page-h:calc(100dvh-6.5rem)]":""):"flex-1 overflow-auto p-6"}>
             {/* A crashing page no longer takes the sidebar with it, and the
                 boundary clears on the next navigation. Loading a page's code
                 keeps the sidebar and header on screen. */}

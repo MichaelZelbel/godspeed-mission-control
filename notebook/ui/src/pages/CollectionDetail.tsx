@@ -2385,7 +2385,7 @@ function FilterRow({
                 max: filter.max,
               })
             }
-            className="h-8"
+            className="h-8 min-w-0"
           />
           <Input
             type="number"
@@ -2398,7 +2398,7 @@ function FilterRow({
                 max: e.target.value === "" ? null : Number(e.target.value),
               })
             }
-            className="h-8"
+            className="h-8 min-w-0"
           />
         </div>
       )}
@@ -2414,7 +2414,7 @@ function FilterRow({
                 to: filter.to,
               })
             }
-            className="h-8"
+            className="h-8 min-w-0"
           />
           <Input
             type="date"
@@ -2426,7 +2426,7 @@ function FilterRow({
                 to: e.target.value || null,
               })
             }
-            className="h-8"
+            className="h-8 min-w-0"
           />
         </div>
       )}
@@ -3488,7 +3488,7 @@ function CollectionDetailPage() {
           )}
         </div>
         {!selectedItem && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2" data-testid="collection-actions">
             <Button onClick={() => openNewItem()}>
               <Plus className="mr-2 h-4 w-4" />
               New Item
@@ -3663,7 +3663,7 @@ function CollectionDetailPage() {
                     )}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-[22rem] max-h-[70vh] overflow-y-auto">
+                <PopoverContent align="end" collisionPadding={8} className="w-[22rem] max-w-[calc(100vw-1rem)] max-h-[min(70vh,var(--radix-popover-content-available-height))] overflow-y-auto">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">Filters</span>
