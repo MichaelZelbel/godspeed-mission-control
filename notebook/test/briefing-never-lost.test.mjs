@@ -393,11 +393,24 @@ for(const [kind,save,claim,reason] of [
  assert.ok(query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback').reasons.includes(reason));
 });
 
-test('a rejected goal is left out while another saved goal still gives the action',async()=>{
- const {store,query}=fixture([]);const rejected=store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});store.save('goals',{title:'Plant the fictional garden',status:'adopted'});
- const provider=async input=>input.kind==='brief-verification'?sourceRejects(input,'Prepare a fictional guide is unsupported',[rejected.id]):'Unsupported draft.';
- const result=await run(provider,query,store,'brief-rejected-one-goal'),content=store.get('notes',result.record_id).content;
- assert.doesNotMatch(content,/fictional guide/i);assert.match(content,/Ask Godspeed to work on Plant the fictional garden/);
+for(const workFirst of [true,false])test('a refused goal is still named, and the goal with verified work is named first ('+(workFirst?'work goal saved first':'work goal saved last')+')',async()=>{
+ const {store,query}=fixture([]),titles=workFirst?['Plant the fictional garden','Prepare a fictional guide']:['Prepare a fictional guide','Plant the fictional garden'];
+ const [first,second]=titles.map(title=>store.save('goals',{title,status:'adopted'})),worked=workFirst?first:second,idle=workFirst?second:first;
+ store.save('work_items',{kind:'draft',title:'Checked fictional outline',state:'verified',goal_id:worked.id});
+ const provider=async input=>input.kind==='brief-verification'?sourceRejects(input,idle.title+' is unsupported',[idle.id]):'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-goal-with-work-'+workFirst),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.match(content,new RegExp('One of your saved goals is '+worked.title));assert.doesNotMatch(content,new RegExp(idle.title));
+ assert.match(content,/review the work Godspeed verified/);
+});
+
+test('a refused first draft ends as one honest fallback with a repair item and no work marked done',async()=>{
+ const {store,query}=fixture([]),goal=store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const item=store.save('work_items',{kind:'draft',title:'Fictional first draft',state:'open',goal_id:goal.id});
+ let drafts=0;
+ const provider=async input=>{if(input.kind==='brief-verification')return readerFails(input,'The draft is not useful enough.');drafts++;return 'Rejected private model prose.';};
+ const result=await run(provider,query,store,'brief-refused-first-draft'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.equal(drafts,2);assert.match(content,/could not be written today/);assert.match(content,/Prepare a fictional guide/);
+ assert.equal(repairs(query).length,1);assert.equal(store.get('work_items',item.id).state,'open');assert.doesNotMatch(content,/Fictional first draft/);
 });
 
 // A source rejection is retained across both attempts, so a first-attempt rejection still holds

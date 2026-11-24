@@ -238,8 +238,10 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
   if(contribution&&([contribution.id,contribution.note_id,...contribution.source_ids].some(id=>id!=null&&rejectedIds.has(String(id)))))context.contribution=null;
   const required=[context.done_line,context.cycle_heads_up,context.charm_line].filter(Boolean);
   // A goal line states only the record's own title, which no refused draft sentence can make unsupported, so a rejected id never drops it (#1105).
-  const goal=context.goals.find(row=>text(row.title)),anyGoal=context.goals.length>0;
-  addFirst(context.goals,row=>text(row.title)?'One of your saved goals is '+text(row.title)+'.':null);
+  const workedOn=new Set(context.work.filter(row=>row.state==='verified'&&row.kind!=='repair'&&row.goal_id!=null&&!excluded(row)).map(row=>row.goal_id));
+  const goals=[...context.goals].sort((a,b)=>Number(workedOn.has(b.id))-Number(workedOn.has(a.id)));
+  const goal=goals.find(row=>text(row.title)),anyGoal=goals.length>0;
+  addFirst(goals,row=>text(row.title)?'One of your saved goals is '+text(row.title)+'.':null);
   const verified=context.work.filter(row=>row.state==='verified'&&row.kind!=='repair'&&!excluded(row)).sort((a,b)=>String(b.verification?.at||b.updated_at||'').localeCompare(String(a.verification?.at||a.updated_at||'')));
   // Work the daily round filed in the work register reaches the notebook as a legacy row with its
   // fields as written, WHAT for its title (9 November 2026: a first day's verified playbook went
