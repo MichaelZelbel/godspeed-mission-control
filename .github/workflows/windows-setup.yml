@@ -21,7 +21,13 @@ on:
 permissions:
   contents: read
 env:
-  # The kit-bootstrap commit the Windows setup is built with: kit-bootstrap #5 merged for
+  # The kit-bootstrap commit the Windows setup is built with: kit-bootstrap #9 merged (2988dc9: the
+  # hidden launcher run-hidden.vbs no longer shows an error box, or leaves a scheduled task stuck
+  # "Running", when a task's folder or program is missing; it logs a line and exits 3 or 4). It also
+  # carries kit-bootstrap #8 (efc3ee3, built for 2.0.0-beta.18, product known issue #7: one
+  # Godspeed entry in Windows Apps after an update over the first edition), which was merged on 4
+  # November 2026 but never pinned. Up to that release the setup was built with
+  # 7ae7d664c0a3864216190c6c06aa7d895bcec0fc: kit-bootstrap #5 merged for
   # 2.0.0-beta.15 (an install from before 2.0.0-beta.11 moves to the folder names without "Full
   # Alpha" on update, product issue #6). 2.0.0-beta.11 to 2.0.0-beta.14 were built with
   # fe78248e4a9ccd72c6eea36984eaf0f83999a59c (#3 and #4: no "Full Alpha" in a new Windows install's
@@ -30,7 +36,7 @@ env:
   # cbe395a88a1cfd366ede8b80c01ec086b34527c3, and 2.0.0-beta.7 and 2.0.0-beta.8 with
   # 5364e82b44ab0b093e04262c680a21d666faf5e1 (their stage files name it as windowsBootstrapCommit). A
   # release that changes it changes it here, together with KB_PIN in server/install.sh.
-  KIT_BOOTSTRAP_COMMIT: 7ae7d664c0a3864216190c6c06aa7d895bcec0fc
+  KIT_BOOTSTRAP_COMMIT: 2988dc9a93bf6a3c918894fa430ed5ee262a900e
 jobs:
   setup:
     name: windows setup
