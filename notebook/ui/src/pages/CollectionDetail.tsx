@@ -748,8 +748,10 @@ function CollectionItemsTree({
   onMoveItemToFolder,
   onDuplicateItem,
   onDeleteItem,
+  itemOpen,
   pageFlow = false,
 }: {
+  itemOpen?: boolean;
   pageFlow?: boolean;
   collection: Collection | null;
   folders: FolderLite[];
@@ -771,8 +773,9 @@ function CollectionItemsTree({
 }) {
   return (
     <aside
+      data-testid="collection-items-list"
       className={cn(
-        "flex w-full shrink-0 flex-col border-b bg-background lg:h-full lg:w-80 lg:border-b-0 lg:border-r",
+        `${itemOpen ? "hidden lg:flex" : "flex"} w-full shrink-0 flex-col border-b bg-background lg:h-full lg:w-80 lg:border-b-0 lg:border-r`,
         // No item open on a phone: the list is a 16rem strip so the table below stays reachable.
         pageFlow && "max-lg:max-h-64",
         // An item open on a phone takes the whole pane; the breadcrumb's collection link leads back (#887).
@@ -1683,13 +1686,13 @@ function ItemNotesPanel({
   return (
     <section className="mt-8 border-t pt-6">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0 flex-1 basis-48">
+        <div className="min-w-0 basis-48 flex-1">
           <h3 className="text-sm font-semibold">Notes</h3>
           <p className="text-xs text-muted-foreground">
             Link notes from your vault to this item. Editing happens in the Notes app.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Popover open={linkOpen} onOpenChange={setLinkOpen}>
             <PopoverTrigger asChild>
               <Button type="button" size="sm" variant="outline">
@@ -2015,7 +2018,14 @@ function ItemSheet({
 
   const body = (
     <>
-      <div className={cn("flex-1 overflow-y-auto", inline ? "px-6 py-6" : "-mx-6 px-6 py-4")}>
+      <div
+        data-testid={inline ? "inline-item-fields" : undefined}
+        className={cn(
+          inline
+            ? "min-w-0 px-4 py-6 sm:px-6 lg:flex-1 lg:overflow-y-auto"
+            : "-mx-6 flex-1 overflow-y-auto px-6 py-4",
+        )}
+      >
         {isCreate && fields.length === 0 && (
           <div
             role="status"
@@ -2073,8 +2083,8 @@ function ItemSheet({
       </div>
       <div
         className={cn(
-          "flex items-center justify-between gap-2 border-t pt-4",
-          inline && "px-6 pb-6",
+          "flex flex-wrap items-center justify-between gap-2 border-t pt-4",
+          inline && "px-4 pb-6 sm:px-6",
         )}
       >
         <div>
@@ -2089,7 +2099,7 @@ function ItemSheet({
             </Button>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button type="button" variant="ghost" onClick={close}>
             {inline ? "Back" : "Cancel"}
           </Button>
@@ -2128,7 +2138,10 @@ function ItemSheet({
   if (inline) {
     if (!open) return null;
     return (
-      <div className="flex h-full min-h-0 flex-col bg-background">
+      <div
+        data-testid="inline-item-sheet"
+        className="flex min-h-0 flex-col bg-background lg:h-full"
+      >
         <div className="flex items-start justify-between gap-4 border-b px-6 py-4">
           <div className="min-w-0">
             <h2 className="text-xl font-semibold font-display [overflow-wrap:anywhere]">{title}</h2>
@@ -3415,8 +3428,8 @@ function CollectionDetailPage() {
       data-testid="collection-page"
       className={cn(
         "flex h-[var(--page-h)] w-full flex-col overflow-hidden rounded-md border bg-background lg:flex-row",
-        // No item open on a phone: the page itself scrolls instead of squeezing the table into a strip.
-        !routeItemId && "max-lg:h-auto max-lg:overflow-visible",
+        // On a phone the page flows and the content pane scrolls it; no fixed-height box with an inner scroller.
+        "max-lg:h-auto max-lg:overflow-visible",
       )}
     >
       <SEOHead
@@ -3442,13 +3455,26 @@ function CollectionDetailPage() {
         onMoveItemToFolder={handleMoveItemToFolder}
         onDuplicateItem={handleDuplicateItemFromTree}
         onDeleteItem={handleDeleteItemFromTree}
+        itemOpen={!!selectedItem}
       />
       <section
+        data-testid="collection-item-view"
         className={cn(
-          "min-w-0 flex-1 overflow-y-auto p-6",
-          !routeItemId && "max-lg:overflow-visible",
+          "min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 max-lg:overflow-visible",
         )}
       >
+      {selectedItem && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="-ml-2 mb-2 lg:hidden"
+          onClick={closeItem}
+        >
+          <ChevronLeft className="mr-1 h-4 w-4" />
+          Back to list
+        </Button>
+      )}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
@@ -3462,7 +3488,7 @@ function CollectionDetailPage() {
                   {collection?.name}
                 </Link>{" "}
                 /{" "}
-                <span className="text-foreground">
+                <span className="text-foreground [overflow-wrap:anywhere]">
                   {selectedItem.id === "new"
                     ? "New item"
                     : selectedItem.title || "Untitled"}
