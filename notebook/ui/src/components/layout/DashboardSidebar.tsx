@@ -32,6 +32,7 @@ import { NavLink } from "@/components/NavLink";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { BRAND, GUIDE_URL } from "@/lib/brand";
 import { brandLogo } from "@/lib/brand-assets";
+import { localDateISO, localTimeHM, parseInstant } from "@/lib/local-date";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -62,17 +63,16 @@ const newTab = (url: string) => (/^https?:/.test(url) ? { target: "_blank", rel:
 // old cached build shows an older time than a fresh load does.
 const BUILD_LABEL = (() => {
   const iso = typeof __BUILD_TIME__ === "string" ? __BUILD_TIME__ : "";
-  const d = iso ? new Date(iso) : null;
-  if (!d || Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const d = parseInstant(iso);
+  if (!d) return "";
+  return `${localDateISO(d)} ${localTimeHM(d)}`;
 })();
 
 export function DashboardSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
-  const { role, signOut } = useAuth();
+  const { role, signOut, local } = useAuth();
   const navigate = useNavigate();
   const isPremium = role === "premium" || role === "premium_gift" || role === "admin";
   const { completeness } = useProfileSummary();
@@ -87,7 +87,7 @@ export function DashboardSidebar() {
   }, [collapsed]);
 
   const profileDotColor =
-    completeness < 30 ? "bg-destructive" : completeness < 70 ? "bg-yellow-500" : "bg-green-500";
+    completeness < 30 ? "bg-blue-400" : completeness < 70 ? "bg-yellow-500" : "bg-green-500";
 
   // Whole path segments: a bare prefix lit "Weekly Review" (/dashboard/review)
   // on the Review Queue (/dashboard/review-queue) as well.
@@ -195,7 +195,7 @@ export function DashboardSidebar() {
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                       {item.title === "My Profile" && !collapsed && (
-                        <span className={`ml-auto h-2 w-2 rounded-full ${profileDotColor}`} />
+                        <span role="img" aria-label={`Profile ${completeness}% complete`} title={`Profile ${completeness}% complete`} className={`ml-auto h-2 w-2 rounded-full ${profileDotColor}`} />
                       )}
                     </NavLink>
                   </SidebarMenuButton>
@@ -240,16 +240,19 @@ export function DashboardSidebar() {
 
       <SidebarFooter>
         {!collapsed && <SidebarSeparator />}
-        <Button
-          variant="ghost"
-          size={collapsed ? "icon" : "sm"}
-          className="w-full justify-start text-muted-foreground hover:text-destructive"
-          onClick={async () => { if(await signOut()) navigate("/"); }}
-          title="Sign Out"
-        >
-          <LogOut className="h-4 w-4" />
-          {!collapsed && <span className="ml-2">Sign Out</span>}
-        </Button>
+        {/* A notebook on this computer needs no sign-in, so it offers no Sign Out (#959). */}
+        {!local && (
+          <Button
+            variant="ghost"
+            size={collapsed ? "icon" : "sm"}
+            className="w-full justify-start text-muted-foreground hover:text-destructive"
+            onClick={async () => { if(await signOut()) navigate("/"); }}
+            title="Sign Out"
+          >
+            <LogOut className="h-4 w-4" />
+            {!collapsed && <span className="ml-2">Sign Out</span>}
+          </Button>
+        )}
         {!collapsed && (
           <p className="px-2 text-[10px] text-muted-foreground">
             © {new Date().getFullYear()} {BRAND.name}

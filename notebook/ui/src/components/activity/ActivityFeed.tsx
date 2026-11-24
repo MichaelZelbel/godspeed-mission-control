@@ -1,4 +1,5 @@
 import { formatAction } from "@/lib/activity-text.mjs";
+import { parseInstant, showDate } from "@/lib/local-date";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,7 +30,7 @@ const ACTION_ICONS: Record<string, React.ElementType> = {
 
 
 function timeAgo(date: string): string {
-  const diff = Date.now() - new Date(date).getTime();
+  const diff = Date.now() - (parseInstant(date)?.getTime() ?? NaN);
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "Just now";
   if (mins < 60) return `${mins}m ago`;
@@ -37,7 +38,7 @@ function timeAgo(date: string): string {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
-  return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return showDate(date, "date");
 }
 
 interface ActivityFeedProps {
@@ -120,7 +121,7 @@ export function ActivityFeed({ limit = 5, showViewAll = true }: ActivityFeedProp
                     <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-foreground">{formatAction(ev.action, ev.item_type, ev.metadata)}</p>
+                    <p className="text-sm text-foreground">{formatAction(ev.action, ev.item_type, ev.metadata, ev.item_name)}</p>
                     <p className="text-[11px] text-muted-foreground">{timeAgo(ev.created_at)}</p>
                   </div>
                 </li>

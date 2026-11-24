@@ -41,6 +41,11 @@ const BRIEFING_SOURCE_SELECTORS=Object.freeze({
  lead_entries:({contribution})=>contribution?[contribution]:[],
 });
 export const BRIEFING_SOURCE_TABLES=Object.freeze(Object.keys(BRIEFING_SOURCE_SELECTORS));
+// The only job receipts the brief reads: other kinds, such as the spend guard's (#974), are not its source.
+const briefRehearsals=rows=>rows.filter(r=>r.kind==='brief-rehearsal').slice(-2);
+// What the brief would read out of a table's raw rows: the one place a source table is narrower than the table.
+const BRIEFING_RAW_READS={job_receipts:briefRehearsals};
+export const briefingReads=(table,rows)=>(BRIEFING_RAW_READS[table]||(all=>all))(rows);
 // The day a briefing note belongs to is the day it was asked for (brief_day), which a write that
 // commits after local midnight must not move; notes saved before that field have only created_at.
 const briefedOn=(note,zone)=>note.source_app==='morning-brief'&&(note.brief_day||(note.created_at&&dayOf(new Date(note.created_at),zone)));
@@ -79,6 +84,10 @@ export function asksForTodaysBrief(text){
  }
  return false;
 }
+
+// Today's saved briefing when the message only asks for it, else null. Every chat answers such a
+// message with this note and asks no AI, so no check of the AI stands in front of it (#1039).
+export function savedBriefAnswer(store,message){return asksForTodaysBrief(message)?savedBriefToday(store).note:null;}
 
 export async function briefing(job,{store,query,provider,now=new Date(),notices}){
  if(job.rehearsal){
@@ -125,7 +134,7 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
  const leftOut=[];
  const watch=visibleRows(query,'watch_topics').filter(t=>!t.paused&&t.include_in_brief);
  if(watch.length)await procedure({id:job.id+'-sources',kind:'watch',topic_ids:watch.map(t=>t.id)},{store,query,provider});
- const rehearsals=visibleRows(query,'job_receipts').filter(r=>r.kind==='brief-rehearsal').slice(-2);
+ const rehearsals=briefRehearsals(visibleRows(query,'job_receipts'));
  const previousNotes=visibleRows(query,'notes').filter(n=>n.source_app==='morning-brief').slice(-3);
  const zone=installationZone(store),today=dayOf(now,zone),dayNotes=notesAboutDay(visibleRows(query,'notes'),today,now.getTime());
  const currentDecision=visibleRows(query,'decisions').filter(d=>dayOf(new Date(d.created_at),zone)===today&&(d.state==null||d.state==='selected')).at(-1)||null;

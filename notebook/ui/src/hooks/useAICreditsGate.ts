@@ -1,13 +1,12 @@
 import { useCallback } from "react";
+import { showDate } from "@/lib/local-date";
 import { useAICredits, type AICredits } from "./useAICredits";
 import { showToast } from "@/lib/toast";
 
-/** "15 October 2026", or null when the period end is missing or unreadable. */
+/** "Nov 21, 2026", or null when the period end is missing. */
 function formatReset(periodEnd: string | null | undefined): string | null {
   if (!periodEnd) return null;
-  const date = new Date(periodEnd);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+  return showDate(periodEnd, "date");
 }
 
 /** The sentence a blocked AI action shows, so the click never does nothing. */
@@ -30,9 +29,8 @@ export function useAICreditsGate() {
     if (!credits) return true;
 
     // Zero-grant plans (free tier with 0 credits) and a spent balance both
-    // block. Callers simply return on false, and LowBalanceBanner hides itself
-    // for zero-grant plans, so the reason has to be said here or the AI button
-    // looks broken.
+    // block. Callers simply return on false, so the reason has to be said here
+    // or the AI button looks broken.
     if (credits.creditsGranted === 0 || credits.remainingCredits <= 0) {
       showToast.error(creditsBlockedMessage(credits));
       return false;

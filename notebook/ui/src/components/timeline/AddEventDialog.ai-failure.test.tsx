@@ -11,6 +11,7 @@ import { WAIT } from "@/test/wait-limits";
 const state = vi.hoisted(() => ({ providerConfigured: false, aiAvailability: undefined as string | undefined, inserted: [] as string[] }));
 const invoke = vi.hoisted(() => vi.fn(async (): Promise<{ data: unknown; error: unknown }> => ({ data: {}, error: null })));
 const toast = vi.hoisted(() => vi.fn());
+const refetch = vi.hoisted(() => vi.fn(async (): Promise<{ data?: unknown }> => ({})));
 
 vi.mock("@/integrations/supabase/client", () => {
   const from = (table: string) => {
@@ -32,7 +33,7 @@ vi.mock("@/integrations/supabase/client", () => {
 });
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "owner" }, session: { access_token: "token" } }) }));
 vi.mock("@/hooks/useAICreditsGate", () => ({
-  useAICreditsGate: () => ({ checkCredits: () => true, providerConfigured: state.providerConfigured, aiAvailability: state.aiAvailability }),
+  useAICreditsGate: () => ({ checkCredits: () => true, providerConfigured: state.providerConfigured, aiAvailability: state.aiAvailability, refetch }),
 }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
 
@@ -59,6 +60,8 @@ describe("saving a moment while the AI fails", () => {
     invoke.mockReset();
     invoke.mockResolvedValue({ data: {}, error: null });
     toast.mockClear();
+    refetch.mockReset();
+    refetch.mockResolvedValue({});
     Object.assign(state, { providerConfigured: false, aiAvailability: undefined, inserted: [] });
   });
 
@@ -92,6 +95,19 @@ describe("saving a moment while the AI fails", () => {
       cleanup();toast.mockClear();
     }
     expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("names the refused key on the second save when the AI answered 500 first and 403 since", async () => {
+    state.aiAvailability = "unreachable";
+    await saveMoment();
+    expect(toast).toHaveBeenCalledWith({ title: "Moment created", description: UNREACHABLE_FACTS });
+    cleanup(); toast.mockClear(); state.inserted = [];
+    // The stand-in now answers 403: the tab's status check reports the refused key.
+    refetch.mockResolvedValue({ data: { runtimeConfigured: false, aiAvailability: "refused" } });
+    await saveMoment();
+    expect(refetch).toHaveBeenCalled();
+    expect(toast).toHaveBeenCalledWith({ title: "Moment created", description: REFUSED_FACTS });
+    expect(toast).not.toHaveBeenCalledWith({ title: "Moment created", description: UNREACHABLE_FACTS });
   });
 
   it("keeps the plain confirmation when the extraction worked", async () => {

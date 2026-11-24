@@ -4,8 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { UserCircle, ArrowRight, Heart } from "lucide-react";
+import { UserCircle, ArrowRight } from "lucide-react";
 import { personLabel, personNames } from "@/components/timeline/people";
+import { showDate } from "@/lib/local-date";
 
 type RecentPerson = { id: string; name: string; aliases: unknown; relationship: string | null; updated_at: string | null };
 
@@ -45,8 +46,8 @@ export function RecentPeopleCard() {
             onClick={() => navigate("/dashboard/people")}
             className="w-full rounded-md px-2 py-3 text-left text-sm text-muted-foreground transition-colors hover:bg-accent"
           >
-            <Heart className="mb-1 inline h-4 w-4 text-primary" /> No one here yet - add your first
-            person to start cherishing.
+            No one here yet. Add your first
+            person.
           </button>
         ) : (
           <div className="space-y-2">
@@ -63,7 +64,7 @@ export function RecentPeopleCard() {
                 )}
                 {person.updated_at && (
                   <span className="ml-auto whitespace-nowrap text-[10px] text-muted-foreground">
-                    {new Date(person.updated_at).toLocaleDateString()}
+                    {showDate(person.updated_at, "date")}
                   </span>
                 )}
               </button>

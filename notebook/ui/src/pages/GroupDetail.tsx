@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type MouseEvent, useEffect, useId, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
@@ -31,7 +31,8 @@ import { useArchiveGroup, useGroup, useRestoreGroup, useTrashGroup, useUpdateGro
 import { useGroupMemberships, useMoveMembershipStage } from "@/hooks/useGroupMemberships";
 import { toast } from "sonner";
 import { showToast } from "@/lib/toast";
-import { parseArray, pretty, relativeDate, shortDate } from "@/lib/group-utils";
+import { parseArray, pretty, relativeDate } from "@/lib/group-utils";
+import { showDate } from "@/lib/local-date";
 import { AddMemberDialog } from "@/components/groups/AddMemberDialog";
 import { BriefingTab } from "@/components/groups/BriefingTab";
 import { GoalsTab } from "@/components/groups/GoalsTab";
@@ -70,6 +71,10 @@ export default function GroupDetail() {
   const moveMembership = useMoveMembershipStage();
   const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(null);
   const [aboutForm, setAboutForm] = useState<AboutForm | null>(null);
+  const aboutId = useId();
+  const about = (field: string) => `${aboutId}-${field}`;
+  // A click on a list's label focuses its button without opening it, as a native select's label does.
+  const focusOnly = (id: string) => (e: MouseEvent) => { e.preventDefault(); document.getElementById(id)?.focus(); };
   const [activeTab, setActiveTab] = useState(() => window.matchMedia("(max-width: 767px)").matches ? "list" : "pipeline");
   const selectedMembership = memberships.find((m) => m.id === selectedMembershipId) || null;
   const stages = parseArray<GroupStage>(group?.stages ?? []);
@@ -142,10 +147,13 @@ export default function GroupDetail() {
       <SEOHead title={`${group.name} - Groups - Godspeed Mission Control`} noIndex />
       {/* On a phone the buttons would squeeze the name down to a letter, so below sm the button
           row drops under the name and the name wraps instead of truncating (#863). */}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* sm:flex-wrap drops the button row under the name when the whole name would not sit beside
+          it, so a long name wraps at whole words in the full row width instead of splitting words
+          inside the squeezed column beside the buttons (#878). */}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="min-w-0">
           <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/groups")} className="mb-3"><ArrowLeft className="mr-1 h-4 w-4" />Back to Groups</Button>
-          <div className="flex items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><GroupIcon icon={group.icon} /></div>{/* min-w-0 lets the h1 shrink below its longest word, so break-words can wrap a name that is one long word (#871). */}<h1 className="min-w-0 break-words text-2xl font-display font-bold">{group.name}</h1></div>
+          <div className="flex items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><GroupIcon icon={group.icon} /></div>{/* min-w-0 lets the h1 shrink below its longest word, so break-words can wrap a name that is one long word (#871). The name wraps at every width: truncating it left a long name ending in ellipsis with nothing else on the page showing the rest (#878). */}<h1 className="min-w-0 break-words text-2xl font-display font-bold">{group.name}</h1></div>
         </div>
         <div className="flex flex-wrap shrink-0 items-center gap-2">
           <AddMemberDialog group={group} existingPersonIds={existingPersonIds} />
@@ -182,7 +190,7 @@ export default function GroupDetail() {
           </AlertDialog>
         </div>
       </div>
-      <div className="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Badge variant="secondary">{pretty(group.type)}</Badge><span>{memberships.length} member{memberships.length === 1 ? "" : "s"}</span><span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" />Created on {new Date(group.created_at).toLocaleDateString()}</span></div>
+      <div className="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Badge variant="secondary">{pretty(group.type)}</Badge><span>{memberships.length} member{memberships.length === 1 ? "" : "s"}</span><span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" />Created on {showDate(group.created_at, "date")}</span></div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex h-auto flex-wrap">{hasPipeline && <TabsTrigger value="pipeline">Pipeline</TabsTrigger>}<TabsTrigger value="briefing">Briefing</TabsTrigger><TabsTrigger value="list">List</TabsTrigger><TabsTrigger value="goals">Goals</TabsTrigger><TabsTrigger value="about">About</TabsTrigger></TabsList>
@@ -200,13 +208,30 @@ export default function GroupDetail() {
           <BriefingTab groupId={group.id} />
         </TabsContent>
         <TabsContent value="list" className="mt-0">
-          <Card><Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Status</TableHead><TableHead>Priority</TableHead><TableHead>Joined</TableHead><TableHead>Last Movement</TableHead><TableHead>Reason</TableHead></TableRow></TableHeader><TableBody>{memberships.map((membership) => <TableRow key={membership.id} className="cursor-pointer" onClick={() => setSelectedMembershipId(membership.id)}><TableCell className="font-medium">{/* A button, so the row is reachable with Tab and opens with Enter. */}<button type="button" className="rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={(event) => { event.stopPropagation(); setSelectedMembershipId(membership.id); }}>{membership.contacts?.name || "Unknown"}</button></TableCell><TableCell>{stages.find((s) => s.id === membership.status)?.label || membership.status}</TableCell><TableCell><Badge variant="secondary" className="capitalize">{membership.priority}</Badge></TableCell><TableCell>{shortDate(membership.joined_at)}</TableCell><TableCell>{relativeDate(membership.last_movement_at)}</TableCell><TableCell className="max-w-48 truncate">{membership.reason || "—"}</TableCell></TableRow>)}</TableBody></Table></Card>
+
+          {/* A phone's card is 272 px wide and six columns are not, and the table's sideways scroller
+              draws no scrollbar, so the last headers read as cut off (#878). Below sm the four
+              narrower columns drop out (their values stay in the sheet a row opens, and the status
+              also shows in the pipeline), and the Name column keeps only 8 px of padding. It keeps
+              [overflow-wrap:anywhere] but with a 160 px floor (min-w-40): the floor stops the
+              table's layout squeezing it to a letter a line, and `anywhere` still lets a word
+              wider than the column ("Wolfeschlegelsteinhausen") break instead of pushing the last
+              header past the card.
+
+              The same applies below lg, not just below sm: the sidebar eats a fixed 256 px, so a
+              tablet's card with the sidebar open is 464 px wide at 768 px and down to 336 px at
+              640 px, phone-narrow, and the six columns pushed "Last Movement" and "Reason" past
+              the card with no scrollbar to find them by (#937). Below lg the four narrower columns
+              drop out the way a phone's do; Last Movement and Reason return at lg (a 1024 px card
+              of 720 px holds the other five), and Reason waits for xl, where the widest card a
+              1280 px window gives holds all six. */}
+          <Card><Table><TableHeader><TableRow><TableHead className="px-2 min-w-40 [overflow-wrap:anywhere] lg:min-w-0 lg:px-4 lg:[overflow-wrap:normal]">Name</TableHead><TableHead className="hidden px-2 lg:table-cell lg:px-4">Status</TableHead><TableHead className="hidden px-2 lg:table-cell lg:px-4">Priority</TableHead><TableHead className="px-2 lg:px-4">Joined</TableHead><TableHead className="hidden lg:table-cell">Last Movement</TableHead><TableHead className="hidden xl:table-cell">Reason</TableHead></TableRow></TableHeader><TableBody>{memberships.map((membership) => <TableRow key={membership.id} className="cursor-pointer" onClick={() => setSelectedMembershipId(membership.id)}><TableCell className="p-2 font-medium min-w-40 [overflow-wrap:anywhere] lg:min-w-0 lg:p-4 lg:[overflow-wrap:normal]">{/* A button, so the row is reachable with Tab and opens with Enter. */}<button type="button" className="rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={(event) => { event.stopPropagation(); setSelectedMembershipId(membership.id); }}>{membership.contacts?.name || "Unknown"}</button></TableCell><TableCell className="hidden p-2 lg:table-cell lg:p-4">{stages.find((s) => s.id === membership.status)?.label || membership.status}</TableCell><TableCell className="hidden p-2 lg:table-cell lg:p-4"><Badge variant="secondary" className="capitalize">{membership.priority}</Badge></TableCell><TableCell className="p-2 lg:p-4">{showDate(membership.joined_at, "date")}</TableCell><TableCell className="hidden p-2 lg:table-cell lg:p-4">{relativeDate(membership.last_movement_at)}</TableCell><TableCell className="hidden max-w-48 p-2 truncate xl:table-cell xl:p-4">{membership.reason || "—"}</TableCell></TableRow>)}</TableBody></Table></Card>
         </TabsContent>
         <TabsContent value="goals" className="mt-0">
           <GoalsTab group={group} />
         </TabsContent>
         <TabsContent value="about" className="mt-0">
-          <Card><CardHeader><div className="flex items-center justify-between gap-3"><CardTitle className="text-base">About</CardTitle></div></CardHeader><CardContent className="space-y-4"><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="group-name">Name</Label><Input id="group-name" value={form.name} onChange={(e) => setAboutForm({ ...form, name: e.target.value })} /></div><div className="space-y-2"><Label htmlFor="group-type">Type</Label><Select value={form.type} onValueChange={(value) => setAboutForm({ ...form, type: value })}><SelectTrigger id="group-type"><SelectValue /></SelectTrigger><SelectContent>{GROUP_TYPES.map((type) => <SelectItem key={type} value={type}>{pretty(type)}</SelectItem>)}</SelectContent></Select></div></div><div className="space-y-2"><Label htmlFor="group-description">Description</Label><Textarea id="group-description" value={form.description || ""} onChange={(e) => setAboutForm({ ...form, description: e.target.value || null })} /></div><div className="space-y-2"><Label htmlFor="group-purpose">Purpose</Label><Textarea id="group-purpose" value={form.purpose || ""} onChange={(e) => setAboutForm({ ...form, purpose: e.target.value || null })} /></div><div className="grid gap-4 sm:grid-cols-3"><div className="space-y-2"><Label htmlFor="group-sensitivity">Sensitivity</Label><Select value={form.sensitivity} onValueChange={(value) => setAboutForm({ ...form, sensitivity: value })}><SelectTrigger id="group-sensitivity"><SelectValue /></SelectTrigger><SelectContent>{SENSITIVITIES.map((value) => <SelectItem key={value} value={value}>{pretty(value)}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor="group-icon">Icon</Label><Select value={form.icon && form.icon in iconMap ? form.icon : "Users"} onValueChange={(value) => setAboutForm({ ...form, icon: value })}><SelectTrigger id="group-icon">{(() => { const Icon = iconMap[(form.icon && form.icon in iconMap ? form.icon : "Users") as keyof typeof iconMap]; return <span className="flex items-center gap-2"><Icon className="h-4 w-4" />{form.icon && form.icon in iconMap ? form.icon : "Users"}</span>; })()}</SelectTrigger><SelectContent>{ICON_OPTIONS.map(([name, Icon]) => <SelectItem key={name} value={name}><span className="flex items-center gap-2"><Icon className="h-4 w-4" />{name}</span></SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor="group-color">Color</Label><Input id="group-color" value={form.color || ""} onChange={(e) => setAboutForm({ ...form, color: e.target.value || null })} /></div></div><StagesEditor stages={form.stages} onChange={(next) => setAboutForm({ ...form, stages: next })} membershipCounts={membershipCounts} /><Button onClick={saveAbout} disabled={updateGroup.isPending}>{updateGroup.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}Save changes</Button></CardContent></Card>
+          <Card><CardHeader><div className="flex items-center justify-between gap-3"><CardTitle className="text-base">About</CardTitle></div></CardHeader><CardContent className="space-y-4"><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor={about("name")}>Name</Label><Input id={about("name")} value={form.name} onChange={(e) => setAboutForm({ ...form, name: e.target.value })} /></div><div className="space-y-2"><Label htmlFor={about("type")} onClick={focusOnly(about("type"))}>Type</Label><Select value={form.type} onValueChange={(value) => setAboutForm({ ...form, type: value })}><SelectTrigger id={about("type")}><SelectValue /></SelectTrigger><SelectContent>{GROUP_TYPES.map((type) => <SelectItem key={type} value={type}>{pretty(type)}</SelectItem>)}</SelectContent></Select></div></div><div className="space-y-2"><Label htmlFor={about("description")}>Description</Label><Textarea id={about("description")} value={form.description || ""} onChange={(e) => setAboutForm({ ...form, description: e.target.value || null })} /></div><div className="space-y-2"><Label htmlFor={about("purpose")}>Purpose</Label><Textarea id={about("purpose")} value={form.purpose || ""} onChange={(e) => setAboutForm({ ...form, purpose: e.target.value || null })} /></div><div className="grid gap-4 sm:grid-cols-3"><div className="space-y-2"><Label htmlFor={about("sensitivity")} onClick={focusOnly(about("sensitivity"))}>Sensitivity</Label><Select value={form.sensitivity} onValueChange={(value) => setAboutForm({ ...form, sensitivity: value })}><SelectTrigger id={about("sensitivity")}><SelectValue /></SelectTrigger><SelectContent>{SENSITIVITIES.map((value) => <SelectItem key={value} value={value}>{pretty(value)}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor={about("icon")} onClick={focusOnly(about("icon"))}>Icon</Label><Select value={form.icon && form.icon in iconMap ? form.icon : "Users"} onValueChange={(value) => setAboutForm({ ...form, icon: value })}><SelectTrigger id={about("icon")}>{(() => { const Icon = iconMap[(form.icon && form.icon in iconMap ? form.icon : "Users") as keyof typeof iconMap]; return <span className="flex items-center gap-2"><Icon className="h-4 w-4" />{form.icon && form.icon in iconMap ? form.icon : "Users"}</span>; })()}</SelectTrigger><SelectContent>{ICON_OPTIONS.map(([name, Icon]) => <SelectItem key={name} value={name}><span className="flex items-center gap-2"><Icon className="h-4 w-4" />{name}</span></SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor={about("color")}>Color</Label><Input id={about("color")} value={form.color || ""} onChange={(e) => setAboutForm({ ...form, color: e.target.value || null })} /></div></div><StagesEditor stages={form.stages} onChange={(next) => setAboutForm({ ...form, stages: next })} membershipCounts={membershipCounts} /><Button onClick={saveAbout} disabled={updateGroup.isPending}>{updateGroup.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}Save changes</Button></CardContent></Card>
         </TabsContent>
       </Tabs>
       {/* Keyed by membership so its unsaved text starts from that member. */}

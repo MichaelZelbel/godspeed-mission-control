@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { showDate } from "@/lib/local-date";
 import { FileText, ArrowRight } from "lucide-react";
 
 interface RecentNotesCardProps {
@@ -29,7 +30,7 @@ export function RecentNotesCard({ notes }: RecentNotesCardProps) {
               <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
               <span className="min-w-0 break-words font-medium">{note.title || "Untitled"}</span>
               <span className="ml-auto text-[10px] text-muted-foreground whitespace-nowrap">
-                {new Date(note.updated_at).toLocaleDateString()}
+                {showDate(note.updated_at, "date")}
               </span>
             </button>
           ))}

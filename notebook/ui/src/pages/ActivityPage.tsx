@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { dbErrorMessage } from "@/lib/function-error";
-import { parseDateOnly } from "@/lib/local-date";
+import { parseDateOnly, showDate } from "@/lib/local-date";
 import { showToast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -197,10 +197,10 @@ export default function ActivityPage() {
                   <Icon className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm text-foreground">{formatAction(ev.action, ev.item_type, ev.metadata)}</p>
+                  <p className="text-sm text-foreground">{formatAction(ev.action, ev.item_type, ev.metadata, ev.item_name)}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <p className="text-[11px] text-muted-foreground">
-                      {new Date(ev.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      {showDate(ev.created_at, "time")}
                     </p>
                     {ev.item_type && (
                       <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{ev.item_type}</span>

@@ -214,8 +214,11 @@ export default function People() {
   const mergeSource = findPerson(mergeTreeId);
   const deleteTarget = findPerson(deleteTargetId);
 
+  // The pane fills main's content height where the floating chat button shows, defined in
+  // DashboardLayout. "relative" makes the pane the containing block of the details' visually hidden
+  // (absolutely positioned) labels, so its overflow clips them and the page itself cannot scroll past it (#1033).
   return (
-    <div className="flex h-[calc(100dvh-104px)] overflow-hidden">
+    <div className="relative flex h-[var(--page-h)] overflow-hidden">
       <SEOHead title="People - Godspeed Mission Control" noIndex />
 
       {/* Left panel - tree + search */}
@@ -296,9 +299,11 @@ export default function People() {
           onMergePerson={(id) => setMergeTreeId(id)}
           onDeletePerson={handleDeletePerson}
         />
-        <div className="shrink-0 border-t p-2">
-          <Button className="w-full" variant="ghost" disabled={peopleQuery.isFetching} onClick={() => peopleQuery.refetch()}>Refresh people</Button>
-        </div>
+        {(people.length > 0 || searchQuery.trim() !== "") && (
+          <div className="shrink-0 border-t p-2">
+            <Button className="w-full" variant="ghost" disabled={peopleQuery.isFetching} onClick={() => peopleQuery.refetch()}>Refresh people</Button>
+          </div>
+        )}
       </div>
 
       {/* Right panel - detail */}

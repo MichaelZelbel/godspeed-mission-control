@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { usePanesTogether } from "@/hooks/use-mobile";
-import { format, formatDistanceToNow, isValid, parseISO } from "date-fns";
+import { localDateISO, localTimeHM, parseInstant, showDate } from "@/lib/local-date";
 import {
   ArrowDown,
   ArrowUp,
@@ -457,19 +456,17 @@ function isLinkValue(value: unknown): value is LinkValue {
 
 function parseDate(value: unknown) {
   if (!value) return null;
-  const date =
-    typeof value === "string" ? parseISO(value) : new Date(String(value));
-  return isValid(date) ? date : null;
+  return parseInstant(value as string | number | Date);
 }
 
 function toDateInput(value: unknown) {
   const date = parseDate(value);
-  return date ? format(date, "yyyy-MM-dd") : "";
+  return date ? localDateISO(date) : "";
 }
 
 function toTimeInput(value: unknown) {
   const date = parseDate(value);
-  return date ? format(date, "HH:mm") : "";
+  return date ? localTimeHM(date) : "";
 }
 
 function renderDate(value: unknown) {
@@ -477,8 +474,8 @@ function renderDate(value: unknown) {
   if (!date) return "—";
   const age = Math.abs(Date.now() - date.getTime());
   return age <= 7 * 24 * 60 * 60 * 1000
-    ? formatDistanceToNow(date, { addSuffix: true })
-    : format(date, "MMM d, yyyy");
+    ? showDate(value as string | number | Date, "ago")
+    : showDate(value as string | number | Date, "date");
 }
 
 function optionClass(value: string) {
@@ -751,9 +748,9 @@ function CollectionItemsTree({
   onMoveItemToFolder,
   onDuplicateItem,
   onDeleteItem,
-  className,
+  pageFlow = false,
 }: {
-  className?: string;
+  pageFlow?: boolean;
   collection: Collection | null;
   folders: FolderLite[];
   treeItems: ItemLite[];
@@ -772,11 +769,14 @@ function CollectionItemsTree({
   onDuplicateItem: (itemId: string) => void;
   onDeleteItem: (itemId: string) => void;
 }) {
-  // The same breakpoint the page itself reads below: the tree's own stacked/full classes must
-  // move with the pane pair, not with a second declaration of the width (Tailwind's lg).
-  const stackedTree = !usePanesTogether();
   return (
-    <aside className={cn("flex w-full shrink-0 flex-col border-b bg-background", !stackedTree && "h-full w-80 border-b-0 border-r", className)}>
+    <aside
+      className={cn(
+        "flex w-full shrink-0 flex-col border-b bg-background lg:h-full lg:w-80 lg:border-b-0 lg:border-r",
+        // No item open on a phone: the list is a 16rem strip so the table below stays reachable.
+        pageFlow && "max-lg:max-h-64",
+      )}
+    >
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <CollectionIcon icon={collection?.icon} className="h-4 w-4" />
         <div className="min-w-0 flex-1">
@@ -917,12 +917,14 @@ function validateItemValues(fields: SchemaField[], values: FormValues) {
 }
 
 function LinkPicker({
+  id,
   field,
   value,
   onChange,
   collections,
   currentCollection,
 }: {
+  id?: string;
   field: SchemaField;
   value: LinkValue | null;
   onChange: (value: FormValue) => void;
@@ -1056,6 +1058,7 @@ function LinkPicker({
       <Popover>
         <PopoverTrigger asChild>
           <Button
+            id={id}
             type="button"
             variant="outline"
             className={cn(
@@ -1179,11 +1182,16 @@ export function FieldInput({
   currentCollection: Collection | null;
 }) {
   const selectedDate = parseDate(value);
-  const switchId = useId();
+  // A picker label focuses its control without opening it, like a native select's label.
+  const id = useId();
   const switchRef = useRef<HTMLButtonElement>(null);
+  const focusOnly = (event: MouseEvent) => {
+    event.preventDefault();
+    document.getElementById(id)?.focus();
+  };
   const label = (
     <div className="mb-2 flex items-center gap-2">
-      <Label>{field.label}</Label>
+      <Label htmlFor={id} onClick={focusOnly}>{field.label}</Label>
       {field.primary && (
         <Badge variant="secondary" className="text-[10px]">
           primary
@@ -1202,7 +1210,7 @@ export function FieldInput({
           <div className="flex items-center gap-2">
             {/* Like a checkbox's label: a click toggles the switch and focuses it. */}
             <Label
-              htmlFor={switchId}
+              htmlFor={id}
               className="cursor-pointer"
               onClick={(event) => {
                 event.preventDefault();
@@ -1218,7 +1226,7 @@ export function FieldInput({
               </Badge>
             )}
           </div>
-          <Switch id={switchId} ref={switchRef} checked={Boolean(value)} onCheckedChange={onChange} />
+          <Switch id={id} ref={switchRef} checked={Boolean(value)} onCheckedChange={onChange} />
         </div>
         {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
       </div>
@@ -1232,6 +1240,7 @@ export function FieldInput({
       <div>
         {label}
         <LinkPicker
+          id={id}
           field={field}
           value={isLinkValue(value) ? value : null}
           onChange={onChange}
@@ -1246,7 +1255,8 @@ export function FieldInput({
   if (["note", "person", "collection"].includes(field.type))
     return (
       <div>
-        {label}
+        {/* Nothing to name here yet, so a caption, not a label. */}
+        <p className="mb-2 text-sm font-medium leading-none">{field.label}</p>
         <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
           Link picker coming soon
         </div>
@@ -1259,6 +1269,7 @@ export function FieldInput({
       {label}
       {field.type === "longtext" ? (
         <Textarea
+          id={id}
           value={toInputString(value)}
           rows={3}
           className={cn("max-h-72 min-h-24 resize-none", inputClass)}
@@ -1270,6 +1281,7 @@ export function FieldInput({
         />
       ) : field.type === "number" ? (
         <Input
+          id={id}
           type="number"
           value={toInputString(value)}
           className={inputClass}
@@ -1280,6 +1292,7 @@ export function FieldInput({
           <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="number"
+            id={id}
             step="0.01"
             value={toInputString(value)}
             className={cn("pl-9", inputClass)}
@@ -1288,18 +1301,20 @@ export function FieldInput({
         </div>
       ) : field.type === "date" ? (
         <SmartDatePicker
+          id={id}
           value={selectedDate ?? null}
-          onChange={(date) => onChange(date ? format(date, "yyyy-MM-dd") : "")}
+          onChange={(date) => onChange(date ? localDateISO(date) : "")}
           className={inputClass}
         />
       ) : field.type === "datetime" ? (
         <div className="grid grid-cols-[1fr_120px] gap-2">
           <SmartDatePicker
+            id={id}
             value={selectedDate ?? null}
             onChange={(date) => {
               const currentTime = toTimeInput(value) || "09:00";
               onChange(
-                date ? `${format(date, "yyyy-MM-dd")}T${currentTime}` : "",
+                date ? `${localDateISO(date)}T${currentTime}` : "",
               );
             }}
             className={inputClass}
@@ -1308,11 +1323,12 @@ export function FieldInput({
             <Clock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="time"
+              aria-label={`${field.label} time`}
               value={toTimeInput(value)}
               className="pl-9"
               onChange={(event) => {
                 const datePart =
-                  toDateInput(value) || format(new Date(), "yyyy-MM-dd");
+                  toDateInput(value) || localDateISO(new Date());
                 onChange(`${datePart}T${event.target.value}`);
               }}
             />
@@ -1320,7 +1336,7 @@ export function FieldInput({
         </div>
       ) : field.type === "select" ? (
         <Select value={toInputString(value)} onValueChange={onChange}>
-          <SelectTrigger className={inputClass}>
+          <SelectTrigger id={id} className={inputClass}>
             <SelectValue placeholder="Select option" />
           </SelectTrigger>
           <SelectContent>
@@ -1336,6 +1352,7 @@ export function FieldInput({
           <Popover>
             <PopoverTrigger asChild>
               <Button
+                id={id}
                 type="button"
                 variant="outline"
                 className="w-full justify-start"
@@ -1387,6 +1404,7 @@ export function FieldInput({
           <div className="relative min-w-0 flex-1">
             <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              id={id}
               type="url"
               value={toInputString(value)}
               className={cn("pl-9", inputClass)}
@@ -1412,6 +1430,7 @@ export function FieldInput({
         <div className="relative">
           <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            id={id}
             type="email"
             value={toInputString(value)}
             className={cn("pl-9", inputClass)}
@@ -1422,6 +1441,7 @@ export function FieldInput({
         <div className="relative">
           <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            id={id}
             type="tel"
             value={toInputString(value)}
             className="pl-9"
@@ -1430,6 +1450,7 @@ export function FieldInput({
         </div>
       ) : (
         <Input
+          id={id}
           value={toInputString(value)}
           className={inputClass}
           onChange={(event) => onChange(event.target.value)}
@@ -1705,7 +1726,7 @@ function ItemNotesPanel({
                         {note.title || "Untitled"}
                       </div>
                       <div className="truncate text-xs text-muted-foreground">
-                        {formatDistanceToNow(parseISO(note.updated_at), { addSuffix: true })}
+                        {showDate(note.updated_at, "ago")}
                       </div>
                     </button>
                   ))
@@ -1750,7 +1771,7 @@ function ItemNotesPanel({
                     {note.content
                       ? note.content.replace(/[#*_`>-]+/g, "").slice(0, 80)
                       : "Empty note"}{" "}
-                    · {formatDistanceToNow(parseISO(note.updated_at), { addSuffix: true })}
+                    · {showDate(note.updated_at, "ago")}
                   </div>
                 </button>
                 <DropdownMenu>
@@ -1875,6 +1896,7 @@ function ItemSheet({
 
   const save = useCallback(async () => {
     if (!collection || !userId || savingRef.current) return;
+    if (isCreate && fields.length === 0) return;
     const validated = validateItemValues(fields, values);
     setErrors(validated.errors);
     if (Object.keys(validated.errors).length > 0) return;
@@ -1992,6 +2014,20 @@ function ItemSheet({
   const body = (
     <>
       <div className={cn("flex-1 overflow-y-auto", inline ? "px-6 py-6" : "-mx-6 px-6 py-4")}>
+        {isCreate && fields.length === 0 && (
+          <div
+            role="status"
+            className={cn("space-y-2 text-sm", inline && "mx-auto max-w-2xl")}
+          >
+            <p>This collection has no fields yet, so there is nothing to fill in.</p>
+            <Link
+              to={`/collections/${collection?.slug}/schema`}
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              Add fields on the Schema page
+            </Link>
+          </div>
+        )}
         <form
           className={cn("space-y-5", inline && "mx-auto max-w-2xl")}
           onSubmit={(event) => {
@@ -2055,7 +2091,11 @@ function ItemSheet({
           <Button type="button" variant="ghost" onClick={close}>
             {inline ? "Back" : "Cancel"}
           </Button>
-          <Button type="button" onClick={save} disabled={isSaving}>
+          <Button
+            type="button"
+            onClick={save}
+            disabled={isSaving || (isCreate && fields.length === 0)}
+          >
             {isSaving ? "Saving…" : "Save"}
           </Button>
         </div>
@@ -2089,7 +2129,7 @@ function ItemSheet({
       <div className="flex h-full min-h-0 flex-col bg-background">
         <div className="flex items-start justify-between gap-4 border-b px-6 py-4">
           <div className="min-w-0">
-            <h2 className="break-words text-xl font-semibold font-display">{title}</h2>
+            <h2 className="text-xl font-semibold font-display [overflow-wrap:anywhere]">{title}</h2>
             <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
           </div>
           {!isCreate && item && onDuplicate && (
@@ -2151,6 +2191,7 @@ function EditCollectionDialog({
     Partial<Record<keyof typeof values, string>>
   >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const fieldId = useId();
 
   useEffect(() => {
     if (!collection || !open) return;
@@ -2207,8 +2248,9 @@ function EditCollectionDialog({
         </DialogHeader>
         <form className="space-y-5" onSubmit={submit}>
           <div className="space-y-2">
-            <Label>Name</Label>
+            <Label htmlFor={`${fieldId}-name`}>Name</Label>
             <Input
+              id={`${fieldId}-name`}
               value={values.name}
               maxLength={60}
               onChange={(event) =>
@@ -2223,7 +2265,7 @@ function EditCollectionDialog({
             )}
           </div>
           <div className="space-y-2">
-            <Label>Icon</Label>
+            <Label htmlFor={`${fieldId}-icon`}>Icon</Label>
             <div className="flex flex-wrap gap-2">
               {emojiOptions.map((emoji) => (
                 <button
@@ -2242,6 +2284,7 @@ function EditCollectionDialog({
               ))}
             </div>
             <Input
+              id={`${fieldId}-icon`}
               value={values.icon}
               maxLength={4}
               onChange={(event) =>
@@ -2257,8 +2300,9 @@ function EditCollectionDialog({
             )}
           </div>
           <div className="space-y-2">
-            <Label>Description</Label>
+            <Label htmlFor={`${fieldId}-description`}>Description</Label>
             <Textarea
+              id={`${fieldId}-description`}
               value={values.description}
               maxLength={200}
               onChange={(event) =>
@@ -2273,6 +2317,7 @@ function EditCollectionDialog({
             )}
           </div>
           <RadioGroup
+            aria-label="Visibility"
             value={values.visibility}
             onValueChange={(value) =>
               setValues((current) => ({
@@ -2340,7 +2385,7 @@ function FilterRow({
                 max: filter.max,
               })
             }
-            className="h-8"
+            className="h-8 min-w-0"
           />
           <Input
             type="number"
@@ -2353,7 +2398,7 @@ function FilterRow({
                 max: e.target.value === "" ? null : Number(e.target.value),
               })
             }
-            className="h-8"
+            className="h-8 min-w-0"
           />
         </div>
       )}
@@ -2369,7 +2414,7 @@ function FilterRow({
                 to: filter.to,
               })
             }
-            className="h-8"
+            className="h-8 min-w-0"
           />
           <Input
             type="date"
@@ -2381,7 +2426,7 @@ function FilterRow({
                 to: e.target.value || null,
               })
             }
-            className="h-8"
+            className="h-8 min-w-0"
           />
         </div>
       )}
@@ -2496,9 +2541,6 @@ export default function CollectionDetail() {
 
 function CollectionDetailPage() {
   const { slug, itemId: routeItemId } = useParams<{ slug: string; itemId?: string }>();
-  // The tree beside the detail pane needs a wide window; below PANE_BREAKPOINT an open item takes
-  // the whole pane, as on a phone, where the tree left it unreadably narrow (#887).
-  const stackedTree = !usePanesTogether();
   const { user } = useAuth();
   // Loads depend on the id, not the user object: a token refresh must not
   // reload the page under an open editor.
@@ -3364,13 +3406,23 @@ function CollectionDetailPage() {
       </div>
     );
 
+  // The pane fills main's content height where the floating chat button shows, defined in
+  // DashboardLayout.
   return (
-    <div className={cn("flex h-[calc(100dvh-104px)] w-full overflow-hidden rounded-md border bg-background", stackedTree ? "flex-col" : "flex-row")}>
+    <div
+      data-testid="collection-page"
+      className={cn(
+        "flex h-[var(--page-h)] w-full flex-col overflow-hidden rounded-md border bg-background lg:flex-row",
+        // No item open on a phone: the page itself scrolls instead of squeezing the table into a strip.
+        !routeItemId && "max-lg:h-auto max-lg:overflow-visible",
+      )}
+    >
       <SEOHead
         title={`${collection?.name ?? "Collection"} - Godspeed Mission Control`}
         noIndex
       />
       <CollectionItemsTree
+        pageFlow={!routeItemId}
         collection={collection}
         folders={folders}
         treeItems={treeItems}
@@ -3388,16 +3440,16 @@ function CollectionDetailPage() {
         onMoveItemToFolder={handleMoveItemToFolder}
         onDuplicateItem={handleDuplicateItemFromTree}
         onDeleteItem={handleDeleteItemFromTree}
-        // The tree beside the detail needs a wide window; below PANE_BREAKPOINT an open item takes
-        // the whole pane, as on a phone, and the breadcrumb's collection link leads back (#887).
-        // With no item open the tree stacks above the collection view, which keeps every header
-        // control reachable on a phone.
-        className={stackedTree && routeItemId ? "hidden" : undefined}
       />
-      <section className="min-w-0 flex-1 overflow-y-auto p-6">
+      <section
+        className={cn(
+          "min-w-0 flex-1 overflow-y-auto p-6",
+          !routeItemId && "max-lg:overflow-visible",
+        )}
+      >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="break-words text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
             <Link to="/collections" className="hover:text-foreground">
               Collections
             </Link>{" "}
@@ -3436,7 +3488,7 @@ function CollectionDetailPage() {
           )}
         </div>
         {!selectedItem && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2" data-testid="collection-actions">
             <Button onClick={() => openNewItem()}>
               <Plus className="mr-2 h-4 w-4" />
               New Item
@@ -3612,7 +3664,7 @@ function CollectionDetailPage() {
                     )}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-[22rem] max-h-[70vh] overflow-y-auto">
+                <PopoverContent align="end" collisionPadding={8} className="w-[22rem] max-w-[calc(100vw-1rem)] max-h-[min(70vh,var(--radix-popover-content-available-height))] overflow-y-auto">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">Filters</span>
@@ -3793,9 +3845,7 @@ function CollectionDetailPage() {
                           </TableCell>
                         ))}
                         <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                          {formatDistanceToNow(new Date(item.updated_at), {
-                            addSuffix: true,
-                          })}
+                          {showDate(item.updated_at, "ago")}
                         </TableCell>
                         <TableCell onClick={(event) => event.stopPropagation()}>
                           <DropdownMenu>

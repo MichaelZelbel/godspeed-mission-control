@@ -108,6 +108,7 @@ function fixturesFor(seeded){
     '/api/functions/note-chat':()=>[{note_id:note.id,message:'Hello'}],
     '/api/functions/collection-chat':()=>[{message:'Hello'}],
     '/api/functions/draft-event':()=>[{message:'Lunch with Ada yesterday'}],
+    '/api/functions/draft-chat-moments':()=>[{month:'2025-03',person:{name:'Ada'},lines:['2025-03-02 Ada: I got the job in Lisbon!']}],
     '/api/functions/process-note':()=>[{note_id:note.id,reason:'manual'}],
     '/api/functions/generate-profile-suggestions':()=>[{}],
     '/api/functions/enrich-people':()=>[{}],

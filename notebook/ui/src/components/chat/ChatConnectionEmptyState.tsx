@@ -1,8 +1,8 @@
-import {useEffect,useRef} from 'react';
+import {useEffect,useRef,useSyncExternalStore} from 'react';
 import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 import {CHAT_AVAILABILITIES} from '../../../../core/chat-availability.mjs';
-import {AI_REFUSED_STATUS,AI_STALLED_STATUS,AI_UNREACHABLE_STATUS,NO_AI_STATUS,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../../../../core/no-ai.mjs';
+import {AI_CONNECTION_UNREADABLE_STATUS,AI_REFUSED_STATUS,AI_STALLED_STATUS,AI_UNREACHABLE_STATUS,NO_AI_STATUS,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../../../../core/no-ai.mjs';
 import {listenForChatOptions} from '@/local/chat-options.mjs';
 export type ChatAvailability=(typeof CHAT_AVAILABILITIES)[number];
 type ChatOptions={connected?:boolean;usable?:boolean;availability?:ChatAvailability};
@@ -12,7 +12,7 @@ export function chatAIState(options?:ChatOptions):ChatAIState{
   if(!options)return 'checking';
   if(options.connected===false)return 'none';
   if(options.usable!==false)return 'ready';
-  return options.availability==='refused'||options.availability==='stalled'||options.availability==='settings-only'?options.availability:'unreachable';
+  return options.availability==='refused'||options.availability==='stalled'||options.availability==='settings-only'||options.availability==='unreadable'?options.availability:'unreachable';
 }
 
 // Open pickers read their own model list; they refresh as soon as the shared state changes, so a
@@ -30,8 +30,41 @@ async function chatOptions({check}:{check?:boolean}={}){
 
 // A chat surface's read is the evidence that a chat has used the shared state since the Dashboard
 // last confirmed the AI (#822): only then does the next confirming arrival ask for a check, so a
-// Dashboard reached with no chat asks for none, exactly as it did before.
-let chatReadSinceConfirm=false;
+// Dashboard reached with no chat asks for none, exactly as it did before. The flag lives in
+// localStorage so it crosses the notebook's tabs and windows (#963): a chat in one tab must still
+// let the Dashboard's arrival in another tab confirm afresh.
+const CHAT_READ_SINCE_CONFIRM='godspeed:chat-read-since-confirm';
+// In-memory copy beside the stored flag: when storage is denied, the same tab still behaves as before.
+let chatReadInMemory=false;
+function markChatRead(){
+  chatReadInMemory=true;
+  try{if(localStorage.getItem(CHAT_READ_SINCE_CONFIRM)!=='1')localStorage.setItem(CHAT_READ_SINCE_CONFIRM,'1');}
+  catch{/* no storage: the in-memory copy carries this tab */}
+}
+function chatReadSinceConfirm(){
+  if(chatReadInMemory)return true;
+  try{return localStorage.getItem(CHAT_READ_SINCE_CONFIRM)==='1';}
+  catch{return false;}
+}
+function clearChatRead(){
+  chatReadInMemory=false;
+  try{localStorage.removeItem(CHAT_READ_SINCE_CONFIRM);}
+  catch{/* no storage: nothing to clear */}
+}
+
+// The first Dashboard read of this page load; a reload starts it again (#918).
+let pageLoadRead=false;
+// The card's Check again asks the next read to run the check, one read per press (#918).
+let checkAsked=false;
+// A check that asks the server to confirm the AI (page load or Check again) is in flight: the Home
+// card keeps its last known text during it instead of showing an in-between state (#1053).
+let checksRunning=0;
+const checkListeners=new Set<()=>void>();
+function setCheckRunning(delta:number){checksRunning+=delta;checkListeners.forEach(l=>l());}
+export function useChatCheckRunning(){
+  return useSyncExternalStore(l=>{checkListeners.add(l);return()=>{checkListeners.delete(l);};},()=>checksRunning>0);
+}
+export function askChatCheck(){checkAsked=true;}
 
 export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}={}){
   const queryClient=useQueryClient();
@@ -45,14 +78,26 @@ export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}=
   // from that check, so reading each second costs no AI request and keeps a change inside about five
   // seconds of that check (#590).
   const options=useQuery<ChatOptions>({queryKey:['chat-options'],queryFn:async()=>{
-    if(!confirmOnMount)chatReadSinceConfirm=true;
-    const check=confirm.current&&chatReadSinceConfirm;
+    if(!confirmOnMount)markChatRead();
+    const asked=checkAsked;
+    checkAsked=false;
+    const check=asked||(confirm.current&&chatReadSinceConfirm());
     confirm.current=false;
+    const running=check||(confirmOnMount&&!pageLoadRead);
+    if(running)setCheckRunning(1);
     try{
-      const read=await chatOptions(check?{check:true}:{});
-      if(check)chatReadSinceConfirm=false;
+      let read=await chatOptions(check?{check:true}:{});
+      if(check)clearChatRead();
+      // A page load that finds the AI unreachable checks it once, so a recovered AI shows as ready (#918).
+      if(confirmOnMount&&!pageLoadRead){
+        pageLoadRead=true;
+        if(!check&&chatAIState(read)==='unreachable'){
+          try{read=await chatOptions({check:true});clearChatRead();}catch{/* the plain read stands */}
+        }
+      }
       return read;
     }catch(error){confirm.current=check;throw error;}
+    finally{if(running)setCheckRunning(-1);}
   },refetchInterval:1000,refetchIntervalInBackground:true});
   useEffect(()=>listenForChatOptions((next:ChatOptions)=>queryClient.setQueryData(['chat-options'],next)),[queryClient]);
   // A picker that just read a newer state asks the shared query to read it too (#667).
@@ -68,6 +113,7 @@ export function stateSaid(message?:string|null):ChatAIState|null{
   if(/Your AI could not be reached/.test(text))return 'unreachable';
   if(/Your AI is not answering/.test(text))return 'stalled';
   if(/connected only to the notebook/.test(text))return 'settings-only';
+  if(text.startsWith(AI_CONNECTION_UNREADABLE_STATUS))return 'unreadable';
   return null;
 }
 
@@ -84,8 +130,8 @@ export function ChatConnectionEmptyState({ready,said}:{ready:React.ReactNode;sai
   if(state==='checking')return underConversation?null:<div className="text-center text-muted-foreground text-sm py-8" role="status">Checking AI connection…</div>;
   if(underConversation&&(state==='none'||stateSaid(said)===state))return null;
   return <div className={'text-center text-muted-foreground text-sm space-y-2 '+(underConversation?'py-2':'py-8')} data-chat-ai-state={state}>
-    <p className="font-semibold text-foreground">{state==='none'?NO_AI_STATUS:state==='refused'?AI_REFUSED_STATUS:state==='stalled'?AI_STALLED_STATUS:state==='settings-only'?SETTINGS_ONLY_AI_STATUS:AI_UNREACHABLE_STATUS}</p>
-    <p>{state==='none'?'Connect an AI before you type.':state==='refused'?'Check its key or sign-in before you type.':state==='stalled'?'It took a request and has not answered yet. Wait a moment, or check it before you type.':state==='settings-only'?SETTINGS_ONLY_AI_HELP:'Check its connection before you type.'}</p>
+    <p className="font-semibold text-foreground">{state==='none'?NO_AI_STATUS:state==='refused'?AI_REFUSED_STATUS:state==='stalled'?AI_STALLED_STATUS:state==='settings-only'?SETTINGS_ONLY_AI_STATUS:state==='unreadable'?AI_CONNECTION_UNREADABLE_STATUS:AI_UNREACHABLE_STATUS}</p>
+    <p>{state==='none'?'Connect an AI before you type.':state==='refused'?'Check its key or sign-in before you type.':state==='stalled'?'It took a request and has not answered yet. Wait a moment, or check it before you type.':state==='settings-only'?SETTINGS_ONLY_AI_HELP:state==='unreadable'?'Remove it in Settings, Your AI, to connect one again.':'Check its connection before you type.'}</p>
     <Link className="underline text-primary" to="/dashboard/settings#connect-ai">Open Settings, Your AI</Link>
   </div>;
 }

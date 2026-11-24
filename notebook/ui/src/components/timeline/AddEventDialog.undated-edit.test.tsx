@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import "@testing-library/jest-dom/vitest";
 import { createFakeSupabase } from "@/test/fake-supabase";
 import AddEventDialog, { type EditMomentData, type TimelineContact } from "./AddEventDialog";
+import { impactLabels } from "./ImportanceSlider";
 import { WAIT } from "@/test/wait-limits";
 
 const { fake } = vi.hoisted(() => ({ fake: { current: null as any } }));
@@ -47,6 +48,12 @@ function openEdit(editEvent: EditMomentData) {
   return { dialog: screen.getByRole("dialog", { name: "Edit Moment" }), onCreated };
 }
 
+function expectScore(dialog: HTMLElement, name: string, value: string) {
+  const label = within(dialog).getByText(name, { selector: "label", exact: true });
+  expect(label.parentElement).toHaveTextContent(`${name}: ${value}`);
+  expect(within(dialog).getByRole("slider", { name })).toHaveAttribute("aria-valuetext", value);
+}
+
 // The one moments row the save wrote, with the values it gave the moment.
 async function savedPayload(editEvent: EditMomentData, onCreated: ReturnType<typeof vi.fn>) {
   await waitFor(() => expect(onCreated).toHaveBeenCalledOnce(), WAIT);
@@ -67,14 +74,15 @@ describe("editing an undated, scoreless moment", () => {
 
     // Nothing is chosen for the person: the Start Date is empty and the
     // three scores read Not set, the way the drawer showed them.
-    const dateInput = within(dialog).getByLabelText("Start Date *") as HTMLInputElement;
+    const dateInput = within(dialog).getByLabelText("Start Date", { exact: true }) as HTMLInputElement;
     expect(dateInput.value).toBe("");
-    expect(within(dialog).getByText("Impact: Not set")).toBeInTheDocument();
-    expect(within(dialog).getByText("Confidence (Date): Not set")).toBeInTheDocument();
-    expect(within(dialog).getByText("Confidence (Truth): Not set")).toBeInTheDocument();
+    expect(dateInput).not.toBeRequired();
+    expectScore(dialog, "Impact", "Not set");
+    expectScore(dialog, "Confidence (Date)", "Not set");
+    expectScore(dialog, "Confidence (Truth)", "Not set");
 
     // The person fixes only the title and saves.
-    const title = within(dialog).getByLabelText("Title *") as HTMLInputElement;
+    const title = within(dialog).getByLabelText("Title", { exact: true });
     fireEvent.change(title, { target: { value: "Renamed by hand" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }));
 
@@ -91,8 +99,10 @@ describe("editing an undated, scoreless moment", () => {
   it("keeps the saved scores Not set on a dated moment too, while its own day stays", async () => {
     fake.current = createFakeSupabase();
     const { dialog, onCreated } = openEdit(scoreless);
-    expect((within(dialog).getByLabelText("Start Date *") as HTMLInputElement).value).toBe("2026-01-05");
-    expect(within(dialog).getByText("Impact: Not set")).toBeInTheDocument();
+    const dateInput = within(dialog).getByLabelText("Start Date", { exact: true });
+    expect(dateInput).toHaveValue("2026-01-05");
+    expect(dateInput).toBeRequired();
+    expectScore(dialog, "Impact", "Not set");
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }));
     const payload = await savedPayload(scoreless, onCreated);
@@ -106,7 +116,7 @@ describe("editing an undated, scoreless moment", () => {
     fake.current = createFakeSupabase();
     const { dialog, onCreated } = openEdit(undated);
 
-    fireEvent.change(within(dialog).getByLabelText("Start Date *"), { target: { value: "2026-03-01" } });
+    fireEvent.change(within(dialog).getByLabelText("Start Date", { exact: true }), { target: { value: "2026-03-01" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }));
 
     const payload = await savedPayload(undated, onCreated);
@@ -119,10 +129,9 @@ describe("editing an undated, scoreless moment", () => {
     fake.current = createFakeSupabase();
     const { dialog, onCreated } = openEdit(undated);
 
-    const impact = within(dialog).getByRole("slider", { name: /Impact/ });
+    const impact = within(dialog).getByRole("slider", { name: "Impact" });
     fireEvent.keyDown(impact, { key: "ArrowRight" });
-    // The label now names the chosen value instead of Not set.
-    expect(within(dialog).getByText(/Impact: 2 - /)).toBeInTheDocument();
+    expectScore(dialog, "Impact", `2 - ${impactLabels[2]}`);
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }));
     const payload = await savedPayload(undated, onCreated);

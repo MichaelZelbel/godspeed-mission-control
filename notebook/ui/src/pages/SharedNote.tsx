@@ -4,7 +4,7 @@ import { useParams, Link } from "react-router-dom";
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { format } from "date-fns";
+import { showDate } from "@/lib/local-date";
 import { SEOHead } from "@/components/SEOHead";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -109,7 +109,7 @@ export default function SharedNote() {
         <header className="mb-8">
           <h1 className="break-words text-3xl font-bold mb-2">{displayTitle}</h1>
           <p className="text-sm text-muted-foreground">
-            Last updated {format(new Date(note.updated_at), "PPP")}
+            Last updated {showDate(note.updated_at, "date")}
           </p>
           {note.tags && note.tags.length > 0 && (
             <div className="flex gap-1.5 mt-3 flex-wrap">

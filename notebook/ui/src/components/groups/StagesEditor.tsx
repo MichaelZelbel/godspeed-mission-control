@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import type { GroupStage } from "@/components/groups/PipelineColumn";
 import { useConfirmDialog } from "@/components/common/ConfirmDialog";
 
@@ -66,8 +67,7 @@ export function StagesEditor({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        {/* A section title, not a Label: it names no field, and a label that names no field is a fault the layout check reports (#887). */}
-        <h3 className="text-sm font-medium">Pipeline Stages</h3>
+        <p className="text-sm font-medium leading-none">Pipeline Stages</p>
         <span className="text-xs text-muted-foreground">Rename, reorder, add, or remove stages. Members in a deleted stage move to {firstStageLabel}.</span>
       </div>
       <div className="space-y-2 rounded-md border border-border p-3">

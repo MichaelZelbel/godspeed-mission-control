@@ -54,4 +54,9 @@ it('names the box in the New Folder dialog "Folder name"',async()=>{
   const box=within(dialog).getByLabelText('Folder name',{exact:true});
   expect(box.tagName).toBe('INPUT');
   expect(within(dialog).getByRole('textbox',{name:'Folder name'})).toBe(box);
+  const labels=(box as HTMLInputElement).labels!;
+  expect(labels).toHaveLength(1);
+  expect(labels[0]).toHaveTextContent(/^Folder name$/);
+  clickLabel(labels[0]);
+  expect(document.activeElement).toBe(box);
 });

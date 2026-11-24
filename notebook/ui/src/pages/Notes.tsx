@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { OFFLINE_CORE } from "@/lib/flags";
+import { parseInstant } from "@/lib/local-date";
 import { localNoteUpdatedAt, upsertNotesLocal } from "@/sync/local-replica";
 
 import { SEOHead } from "@/components/SEOHead";
@@ -84,7 +85,7 @@ import {
   LayoutGrid,
   Loader2,
 } from "lucide-react";
-import { useIsMobile, usePanesTogether } from "@/hooks/use-mobile";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { showToast } from "@/lib/toast";
 import { dbErrorMessage, functionErrorMessage } from "@/lib/function-error";
@@ -125,10 +126,7 @@ export default function Notes() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
-  // The list beside the editor needs a wide window; below PANE_BREAKPOINT an open note takes the
-  // whole pane, as on a phone, and the editor's back button leads back to the list (#887).
-  const stacked = !usePanesTogether();
-  const {setOpen:setMenuOpen}=useSidebar();
+  const {open:menuIsOpen,setOpen:setMenuOpen}=useSidebar();
   const [chatOpen,setChatOpen]=useState(false);
   const [treeCollapsed,setTreeCollapsed]=useState(()=>window.localStorage.getItem("godspeed:notes-tree-collapsed")==="true");
   const toggleTree=()=>setTreeCollapsed(v=>{window.localStorage.setItem("godspeed:notes-tree-collapsed",String(!v));return !v;});
@@ -136,6 +134,9 @@ export default function Notes() {
 
   
   const [selectedId, setSelectedId] = useState<string | null>(urlNoteId || null);
+  // At tablet widths an open sidebar left the note 176 px and cut its toolbar (#1017); close it like chatVisibility does.
+  const menuOpenRef=useRef(setMenuOpen);menuOpenRef.current=setMenuOpen;
+  useEffect(()=>{if(selectedId&&!isMobile&&window.innerWidth<1024)menuOpenRef.current(false);},[selectedId,isMobile]);
   const [searchMode, setSearchMode] = useState(false);
   const [showLocalGraph, setShowLocalGraph] = useState(false);
 
@@ -715,8 +716,8 @@ export default function Notes() {
       }
       const aRaw = (a as unknown as Record<string, unknown>)[sortField];
       const bRaw = (b as unknown as Record<string, unknown>)[sortField];
-      const aTs = typeof aRaw === "string" ? new Date(aRaw).getTime() : 0;
-      const bTs = typeof bRaw === "string" ? new Date(bRaw).getTime() : 0;
+      const aTs = typeof aRaw === "string" ? parseInstant(aRaw)?.getTime() ?? 0 : 0;
+      const bTs = typeof bRaw === "string" ? parseInstant(bRaw)?.getTime() ?? 0 : 0;
       return dir * (aTs - bTs);
     });
     return sorted;
@@ -745,8 +746,8 @@ export default function Notes() {
     if (!fallback) return selectedNoteRow;
     // Prefer whichever copy is newer so a stale list entry can never clobber
     // the freshly saved row (and vice-versa).
-    const rowTs = new Date(selectedNoteRow.updated_at || 0).getTime();
-    const fallbackTs = new Date(fallback.updated_at || 0).getTime();
+    const rowTs = parseInstant(selectedNoteRow.updated_at || 0)?.getTime() ?? 0;
+    const fallbackTs = parseInstant(fallback.updated_at || 0)?.getTime() ?? 0;
     return rowTs >= fallbackTs ? selectedNoteRow : fallback;
   }, [selectedId, selectedNoteRow, allNotes, trashNotes, favNotes, searchResults]);
 
@@ -761,8 +762,8 @@ export default function Notes() {
       try {
         const localTs = await localNoteUpdatedAt(selectedNoteRow.id);
         if (cancelled) return;
-        const serverTs = new Date(selectedNoteRow.updated_at || 0).getTime();
-        if (localTs && new Date(localTs).getTime() >= serverTs) return;
+        const serverTs = parseInstant(selectedNoteRow.updated_at || 0)?.getTime() ?? 0;
+        if (localTs && (parseInstant(localTs)?.getTime() ?? 0) >= serverTs) return;
         await upsertNotesLocal([selectedNoteRow]);
       } catch (error) {
         console.warn("Local replica self-heal failed", error);
@@ -835,17 +836,19 @@ export default function Notes() {
       <SEOHead title="Notes - Godspeed Mission Control" noIndex />
 
 
-      {!stacked&&treeCollapsed&&<div className="w-11 shrink-0 border-r border-border"><Button variant="ghost" size="icon" className="h-11 w-11" aria-label="Expand notes tree" title="Expand notes tree" onClick={toggleTree}><ChevronRight className="h-4 w-4"/></Button></div>}
+      {!isMobile&&treeCollapsed&&<div className="w-11 shrink-0 border-r border-border"><Button variant="ghost" size="icon" className="h-11 w-11" aria-label="Expand notes tree" title="Expand notes tree" onClick={toggleTree}><ChevronRight className="h-4 w-4"/></Button></div>}
       {/* Note list panel */}
       <div className={cn(
         "shrink-0 border-r border-border flex-col bg-background min-w-0",
-        stacked ? "w-full" : "w-72",
-        (stacked && (selectedId||chatOpen)) || (!stacked&&treeCollapsed) ? "hidden" : "flex"
+        isMobile ? "w-full" : "w-72",
+        // Sidebar reopened by hand beside an open note at tablet width: the list steps aside so the note keeps its toolbar (#1017).
+        !isMobile && menuIsOpen && selectedId && "max-lg:!hidden",
+        (isMobile && (selectedId||chatOpen)) || (!isMobile&&treeCollapsed) ? "hidden" : "flex"
       )}>
 
         {/* Header */}
         <div className="flex flex-nowrap items-center gap-0.5 px-2 py-1 border-b border-border shrink-0" aria-label="Notes navigation">
-          {!stacked && <Button variant="ghost" size="icon" className="h-8 w-6 shrink-0" aria-label="Collapse notes tree" title="Collapse notes tree" onClick={toggleTree}><ChevronLeft className="h-4 w-4" /></Button>}
+          {!isMobile && <Button variant="ghost" size="icon" className="h-8 w-6 shrink-0" aria-label="Collapse notes tree" title="Collapse notes tree" onClick={toggleTree}><ChevronLeft className="h-4 w-4" /></Button>}
           <div className="flex shrink-0 items-center gap-1 px-1 text-xs font-medium tabular-nums text-muted-foreground" title={`${searchMode ? "Search notes" : "Notes"}: ${counts.all}`}>
             <FileText className="h-3.5 w-3.5" aria-hidden="true" />
             <span aria-label={`${counts.all} notes`}>{counts.all}</span>
@@ -1281,11 +1284,11 @@ export default function Notes() {
       <div className={cn(
         "flex-1 min-h-0 min-w-0 flex-col",
         isMobile&&chatOpen&&"h-[60dvh] min-h-[420px] shrink-0 flex-none",
-        stacked && !selectedId ? "hidden" : "flex"
+        isMobile && !selectedId ? "hidden" : "flex"
       )}>
         {selectedNote ? (
           <>
-            {stacked && (
+            {isMobile && (
               <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border shrink-0">
                 <Button
                   variant="ghost"
@@ -1366,7 +1369,9 @@ export default function Notes() {
             <AlertDialogDescription>{promptState.description}</AlertDialogDescription>
           )}
         </AlertDialogHeader>
+        <label htmlFor="notes-prompt-folder-name" className="block text-xs font-medium text-muted-foreground">Folder name</label>
         <Input
+          id="notes-prompt-folder-name"
           autoFocus
           value={promptValue}
           onChange={(e) => setPromptValue(e.target.value)}
@@ -1379,8 +1384,6 @@ export default function Notes() {
               if (action && value) void action(value);
             }
           }}
-          placeholder="Folder name"
-          aria-label="Folder name"
         />
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>

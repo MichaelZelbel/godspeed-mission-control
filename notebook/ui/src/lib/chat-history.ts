@@ -1,3 +1,4 @@
+import { AI_UNREADABLE, AI_REFUSED, AI_UNREACHABLE, AI_STALLED, AI_CONNECTION_UNREADABLE_STATUS, NO_AI_CHAT, SETTINGS_ONLY_AI_STATUS, SETTINGS_ONLY_AI_HELP } from '../../../core/no-ai.mjs';
 import { loadFileChat, saveFileChat, clearFileChat } from '@/local/file-chat';
 /**
  * Persistent chat history helpers.
@@ -29,8 +30,52 @@ export interface PersistedChatMessage {
     title: string;
     folder_path: string;
   }>;
+  /**
+   * On a user message whose latest send got no answer because no AI was connected, the AI refused
+   * it, could not be reached, or answered with something that could not be used: the reason the person
+   * was shown. It is removed when that message receives an answer.
+   */
+  lastFailure?: string;
 }
 
+/** What an unanswered message says once the AI reads ready, for a reason that is not an unusable answer. */
+export const NO_ANSWER_AI_WORKS = "Your AI works now. Send it again to get an answer.";
+
+export function unusableAnswer(reason?: string | null): boolean {
+  return String(reason ?? "").startsWith(AI_UNREADABLE);
+}
+
+/** What an unanswered message says for the AI's state now, whatever state its stored reason came from. */
+const REASON_BY_STATE: Record<string, string> = {
+  none: NO_AI_CHAT,
+  ready: NO_ANSWER_AI_WORKS,
+  refused: AI_REFUSED,
+  unreachable: AI_UNREACHABLE,
+  stalled: AI_STALLED,
+  "settings-only": `${SETTINGS_ONLY_AI_STATUS}. ${SETTINGS_ONLY_AI_HELP}`,
+  unreadable: AI_CONNECTION_UNREADABLE_STATUS,
+};
+
+/**
+ * Why the message at `index` got no answer, else null. A user message with a stored reason is
+ * unanswered until the message right after it is the assistant's: through later sends, and whatever
+ * the AI's state (`aiState`, shared by every chat surface). The state decides the wording, so a kept
+ * note never names a state other than the AI's current one; an unusable answer (which says the AI
+ * did work) keeps its own text. `plain` is true while no AI is connected: the reply is then the
+ * plain no-AI sentence, with no "No answer." and no Send again.
+ */
+export function unansweredNote(messages: PersistedChatMessage[], index: number, aiState: string): { text: string; plain: boolean } | null {
+  const message = messages[index];
+  if (message?.role !== "user" || !message.lastFailure) return null;
+  if (messages[index + 1]?.role === "assistant") return null;
+  if (unusableAnswer(message.lastFailure)) return { text: message.lastFailure, plain: false };
+  const text = REASON_BY_STATE[aiState] ?? message.lastFailure;
+  return { text, plain: aiState === "none" };
+}
+
+export function unansweredReason(messages: PersistedChatMessage[], index: number, aiState: string): string | null {
+  return unansweredNote(messages, index, aiState)?.text ?? null;
+}
 
 export interface PersistedChatState {
   session_id?: string;

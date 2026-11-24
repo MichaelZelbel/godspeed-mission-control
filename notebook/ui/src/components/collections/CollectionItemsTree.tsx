@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { parseInstant } from "@/lib/local-date";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -485,8 +486,8 @@ export function CollectionItemsTree({
         .slice()
         .sort(
           (a, b) =>
-            new Date(b.last_viewed_at!).getTime() -
-            new Date(a.last_viewed_at!).getTime(),
+            (parseInstant(b.last_viewed_at!)?.getTime() ?? 0) -
+            (parseInstant(a.last_viewed_at!)?.getTime() ?? 0),
         )
         .slice(0, 15),
     [items],

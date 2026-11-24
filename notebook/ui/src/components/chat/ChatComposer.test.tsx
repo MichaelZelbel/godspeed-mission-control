@@ -75,6 +75,15 @@ it('with no AI connected the model picker says so and both pickers are off',asyn
  expect(screen.queryByText('Connected model')).not.toBeInTheDocument();
 });
 
+it('labels the disabled picker when the saved AI connection is unreadable',async()=>{
+ answer({connected:true,usable:false,availability:'unreadable',current:'',models:[{id:'',efforts:[]}]});show();
+ const model=screen.getByRole('combobox',{name:'Model'});
+ await waitFor(()=>expect(model).toHaveDisplayValue('Connection unreadable'), WAIT);
+ expect(model).toHaveAttribute('title','Connection unreadable');
+ expect(model).toBeDisabled();
+ expect(screen.queryByText('Connected model')).not.toBeInTheDocument();
+});
+
 it('a connected AI without a model list still shows the connected model',async()=>{
  answer({current:'Connected model',models:[{id:'',efforts:[]}]});show();
  const model=screen.getByRole('combobox',{name:'Model'});
@@ -160,4 +169,14 @@ it('keeps model selection and Enter submission behavior with the responsive tool
  expect(onModel).toHaveBeenLastCalledWith('other-model');
  fireEvent.keyDown(screen.getByRole('textbox',{name:'Message'}),{key:'Enter',shiftKey:false});
  expect(onSend).toHaveBeenCalledOnce();
+});
+
+it('keeps the composer border whole while the message box has focus: no ring offset paints over it, and the composer shows the focus ring',()=>{
+  const {container}=render(<ChatComposer value="" onChange={()=>{}} onSend={()=>{}} onStop={()=>{}} busy={false} files={[]} onFiles={()=>{}} model="" effort="" onModel={()=>{}} onEffort={()=>{}} reply="" onError={()=>{}}/>);
+  const box=screen.getByLabelText('Message');
+  expect(box.className).toContain('focus-visible:ring-offset-0');
+  expect(box.className).not.toMatch(/(^|\s)focus-visible:ring-offset-2/);
+  const composer=container.querySelector('.chat-composer')!;
+  expect(composer.className).toContain('border');
+  expect(composer.className).toContain('focus-within:ring-2');
 });

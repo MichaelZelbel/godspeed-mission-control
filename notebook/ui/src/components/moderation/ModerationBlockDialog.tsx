@@ -8,7 +8,6 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { ShieldAlert } from "lucide-react";
-import { Link } from "react-router-dom";
 
 interface ModerationBlockDialogProps {
   isOpen: boolean;
@@ -35,7 +34,7 @@ export function ModerationBlockDialog({
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-3">
-              <p>{reason || "This content violates our Community Guidelines and cannot be shared publicly."}</p>
+              <p>{reason || "This content breaks the sharing rules and cannot be shared publicly."}</p>
               {category && (
                 <p className="text-xs text-muted-foreground">
                   Category: <span className="font-medium capitalize">{category}</span>
@@ -44,20 +43,6 @@ export function ModerationBlockDialog({
               {supportHint && (
                 <p className="text-xs text-muted-foreground">{supportHint}</p>
               )}
-              <p className="text-xs text-muted-foreground">
-                Please review our{" "}
-                {/* The guidelines page itself (this pointed at the Terms of
-                    Service), in a new tab so the note being edited stays open. */}
-                <Link
-                  to="/community-guidelines"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline text-primary"
-                >
-                  Community Guidelines
-                </Link>{" "}
-                for more information.
-              </p>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>

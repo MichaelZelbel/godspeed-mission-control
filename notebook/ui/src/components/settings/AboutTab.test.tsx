@@ -39,6 +39,12 @@ describe("AboutTab", () => {
     show(computer);
     expect(await screen.findByText("2.0.0-beta.1", undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByText("69967129e488417d8d5acb42340363239427092a")).toBeInTheDocument();
+    // The release date and the food table's download are full instants, so they read as the
+    // viewer's local day, not the day the instant's UTC clock says (a +02:00 instant at
+    // 00:49 is already the next day in UTC).
+    const localDay = (v: string) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(v));
+    expect(screen.getByText(new RegExp(`from ${localDay(computer.release.date)}`))).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`downloaded on ${localDay(food.downloaded_at!)}`))).toBeInTheDocument();
     for (const folder of Object.values(computer.folders)) expect(screen.getByText(folder)).toBeInTheDocument();
     expect(screen.getByText("Your mission control folder")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "CC BY 4.0" })).toHaveAttribute("href", "https://creativecommons.org/licenses/by/4.0/");

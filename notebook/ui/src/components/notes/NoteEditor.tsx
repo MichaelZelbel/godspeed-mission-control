@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, createRef } from "react";
+import { type MouseEvent, useState, useEffect, useCallback, useRef, useId, createRef, useLayoutEffect } from "react";
 import { useEditor, useEditorState, EditorContent } from "@tiptap/react";
 import { Markdown } from "tiptap-markdown";
 import StarterKit from "@tiptap/starter-kit";
@@ -33,7 +33,7 @@ import { useGitHubConnection, useGitHubSyncExport, useSyncLogForNote } from "@/h
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import { ExternalNotePanel } from "./ExternalNotePanel";
 import { WebClipPreview } from "./WebClipPreview";
-import { ForwardToAppDialog } from "./ForwardToAppDialog";
+import { ForwardToAppDialog, useActiveConnectedApps } from "./ForwardToAppDialog";
 import { WikilinkAutocomplete } from "./WikilinkAutocomplete";
 import { EditorBubbleMenu } from "./EditorBubbleMenu";
 import { Separator } from "@/components/ui/separator";
@@ -110,7 +110,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { VersionHistoryPanel } from "./VersionHistoryPanel";
-import { formatDistanceToNow, format } from "date-fns";
+import { localDateISO, parseInstant, showDate } from "@/lib/local-date";
 import { showToast } from "@/lib/toast";
 import { openExternalUrl } from "@/lib/safe-url";
 import { normalizeNoteContent, stripLeadingH1, coalesceTaskList, looksLikeHtml } from "@/lib/note-content";
@@ -431,6 +431,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: connectedApps = [] } = useActiveConnectedApps();
   const { data: ghConn } = useGitHubConnection();
   const ghSync = useGitHubSyncExport();
   const { data: syncLog } = useSyncLogForNote(note.id);
@@ -490,6 +491,10 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const [duplicateTarget, setDuplicateTarget] = useState<Note | null>(null);
   const [pendingDuplicateTitle, setPendingDuplicateTitle] = useState("");
   const [interactionGroupId, setInteractionGroupId] = useState<string | null>(null);
+  const interactionFieldId = useId();
+  const titleFieldId = useId();
+  const textLabelId = useId();
+  const sourceFieldId = useId();
   const [interactionType, setInteractionType] = useState("meeting");
   const [interactionSummary, setInteractionSummary] = useState(note.title);
   // Wikilink autocomplete state
@@ -503,7 +508,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
 
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
-  const titleInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const lastLocalContentRef = useRef(restored.content ?? note.content ?? "");
   const pendingSaveContentRef = useRef<string | null>(restored.content ?? null);
   const lastLocalTitleRef = useRef(restored.title ?? note.title ?? "");
@@ -550,7 +555,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const queuedContentRef = useRef<string | null>(null);
   const lastSavedContentRef = useRef<string | null>(null);
   const lastSavedUpdatedAtRef = useRef<number>(
-    note.updated_at ? new Date(note.updated_at).getTime() : 0,
+    note.updated_at ? parseInstant(note.updated_at)?.getTime() ?? 0 : 0,
   );
 
   const saveContentNow = useCallback(
@@ -567,7 +572,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           onSuccess: (saved) => {
             savingRef.current = false;
             lastSavedContentRef.current = md;
-            const ts = saved?.updated_at ? new Date(saved.updated_at).getTime() : Date.now();
+            const ts = saved?.updated_at ? parseInstant(saved.updated_at)?.getTime() ?? Date.now() : Date.now();
             if (ts > lastSavedUpdatedAtRef.current) lastSavedUpdatedAtRef.current = ts;
             if (pendingSaveContentRef.current === md) pendingSaveContentRef.current = null;
             setSaveStatus("saved");
@@ -753,7 +758,8 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       TaskListShortcut,
     ],
     editorProps: {
-      attributes: { "aria-label": "Note text" },
+      // The note's text box is named, like its title box (#742).
+      attributes: { role: "textbox", "aria-multiline": "true", "aria-labelledby": textLabelId },
       handleClick: (_view, _pos, event) => {
         const target = event.target as HTMLElement;
         const wikilinkEl = target.closest?.(".wikilink-node") as HTMLElement | null;
@@ -953,7 +959,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     // pre-edit text back into the editor, and the next autosave would then
     // persist it - silently losing the user's work. Ignore anything older than
     // the newest version this editor successfully wrote.
-    const incomingTs = note.updated_at ? new Date(note.updated_at).getTime() : 0;
+    const incomingTs = note.updated_at ? parseInstant(note.updated_at)?.getTime() ?? 0 : 0;
     if (noteChanged) {
       lastSavedUpdatedAtRef.current = incomingTs;
       lastSavedContentRef.current = null;
@@ -1027,11 +1033,11 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             lastSavedContentRef.current = pending;
             queuedContentRef.current = null;
             if (pendingSaveContentRef.current === pending) pendingSaveContentRef.current = null;
-            const ts = saved?.updated_at ? new Date(saved.updated_at).getTime() : Date.now();
+            const ts = saved?.updated_at ? parseInstant(saved.updated_at)?.getTime() ?? Date.now() : Date.now();
             if (ts > lastSavedUpdatedAtRef.current) lastSavedUpdatedAtRef.current = ts;
             setSaveStatus("saved");
             respond(
-              saved?.updated_at ?? new Date(lastSavedUpdatedAtRef.current).toISOString(),
+              saved?.updated_at ?? parseInstant(lastSavedUpdatedAtRef.current)!.toISOString(),
               pending,
             );
             return;
@@ -1040,7 +1046,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           }
         }
         const latest = lastSavedUpdatedAtRef.current
-          ? new Date(lastSavedUpdatedAtRef.current).toISOString()
+          ? parseInstant(lastSavedUpdatedAtRef.current)!.toISOString()
           : (note.updated_at ?? null);
         respond(latest, lastSavedContentRef.current ?? note.content ?? null);
       } catch {
@@ -1104,7 +1110,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           lastLocalContentRef.current = content;
           lastSavedContentRef.current = content;
           if (updatedAt) {
-            const ts = new Date(updatedAt).getTime();
+            const ts = parseInstant(updatedAt)?.getTime() ?? NaN;
             if (ts > lastSavedUpdatedAtRef.current) lastSavedUpdatedAtRef.current = ts;
           }
           if (wasFocused) {
@@ -1186,6 +1192,25 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     return data as unknown as Note | null;
   };
 
+  // Size the title field to its wrapped text (also when the value is set from
+  // outside, or the panel is resized), so no line of the title is hidden.
+  const fitTitleHeight = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+  useLayoutEffect(() => {
+    fitTitleHeight(titleInputRef.current);
+    const el = titleInputRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let width = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth !== width) { width = el.clientWidth; fitTitleHeight(el); }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [title]);
+
   const handleTitleChange = (val: string) => {
     setTitle(val);
     lastLocalTitleRef.current = val;
@@ -1218,7 +1243,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const mergeDuplicate = async () => {
     if (!duplicateTarget) return;
     const currentContent = pendingSaveContentRef.current ?? (editor ? editorToMarkdown(editor) : note.content ?? "");
-    const mergedContent = `${duplicateTarget.content || ""}\n\n---\n\n## Merged on ${format(new Date(), "yyyy-MM-dd")}\n\n${currentContent}`.trimEnd();
+    const mergedContent = `${duplicateTarget.content || ""}\n\n---\n\n## Merged on ${localDateISO(new Date())}\n\n${currentContent}`.trimEnd();
     const tags = [...new Set([...(duplicateTarget.tags || []), ...(note.tags || [])])];
     await updateNote.mutateAsync({ id: duplicateTarget.id, content: mergedContent, tags });
     await updateNote.mutateAsync({ id: note.id, is_trashed: true, trashed_at: new Date().toISOString() });
@@ -1288,7 +1313,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           if (queuedContentRef.current === content) queuedContentRef.current = null;
         }
         if (pendingSaveTitleRef.current === pendingTitle) pendingSaveTitleRef.current = null;
-        if (saved?.updated_at) lastSavedUpdatedAtRef.current = Math.max(lastSavedUpdatedAtRef.current, new Date(saved.updated_at).getTime());
+        if (saved?.updated_at) lastSavedUpdatedAtRef.current = Math.max(lastSavedUpdatedAtRef.current, parseInstant(saved.updated_at)?.getTime() ?? NaN);
         setSaveStatus("saved");
       }
       // Says why it failed: no AI, a refused key or an outage (#779). It said nothing before.
@@ -1579,8 +1604,8 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       {/* Info panel */}
       {showInfo && (
         <div className="px-4 py-3 border-b border-border bg-muted/30 text-xs text-muted-foreground space-y-1 shrink-0">
-          <p>Created: {format(new Date(note.created_at), "PPp")}</p>
-          <p>Updated: {format(new Date(note.updated_at), "PPp")}</p>
+          <p>Created: {showDate(note.created_at, "time")}</p>
+          <p>Updated: {showDate(note.updated_at, "time")}</p>
           <p>{wordsLabel} · {charsLabel}</p>
           {metadata?.type && <p>Type: {String(metadata.type)}</p>}
           {metadata?.summary && <p>Summary: {String(metadata.summary)}</p>}
@@ -1741,9 +1766,11 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                     <Share2 className="mr-2 h-4 w-4" /> Share publicly
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => setShowForwardDialog(true)}>
-                  <Send className="mr-2 h-4 w-4" /> Send to app
-                </DropdownMenuItem>
+                {connectedApps.length > 0 && (
+                  <DropdownMenuItem onClick={() => setShowForwardDialog(true)}>
+                    <Send className="mr-2 h-4 w-4" /> Send to app
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           }
@@ -1829,10 +1856,15 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             beside the title it took the room the title needed, so on a narrow
             window the end of the title scrolled out of sight behind it. */}
         <div className="mb-4">
-          <input aria-label="Note title"
+          <label htmlFor={titleFieldId} className="block text-xs font-medium text-muted-foreground">Note title</label>
+          <textarea id={titleFieldId}
             ref={titleInputRef}
+            rows={1}
             value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
+            // A long title wraps onto further lines and the field grows to
+            // show all of it, instead of cutting it off at the panel's edge.
+            onInput={(e) => fitTitleHeight(e.currentTarget)}
+            onChange={(e) => handleTitleChange(e.target.value.replace(/[\r\n]+/g, " "))}
             onKeyDown={(e) => {
               // Enter ends the title and goes on in the note's text, as a
               // person expects; without this the next words joined the title
@@ -1848,7 +1880,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
               ed.view.focus();
             }}
             placeholder="Untitled"
-            className="w-full min-w-0 text-2xl font-bold font-display bg-transparent border-none outline-none placeholder:text-muted-foreground/40"
+            className="block w-full min-w-0 resize-none overflow-hidden break-words [overflow-wrap:anywhere] text-2xl font-bold font-display bg-transparent border-none outline-none placeholder:text-muted-foreground/40"
             disabled={note.is_trashed || note.is_external}
           />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 empty:hidden">
@@ -1888,7 +1920,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </div>
           )}
         {sourceMode ? (
-          <textarea aria-label="Markdown source"
+          <>
+          <label htmlFor={sourceFieldId} className="block text-xs font-medium text-muted-foreground">Markdown source</label>
+          <textarea id={sourceFieldId}
             value={sourceText}
             onChange={(e) => {
               setSourceText(e.target.value);
@@ -1905,8 +1939,10 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             placeholder="Markdown source…"
             disabled={note.is_trashed || note.is_external}
           />
+          </>
         ) : (
           <>
+            <label id={textLabelId} className="block text-xs font-medium text-muted-foreground" onClick={() => editor?.view.dom.focus()}>Note text</label>
             <EditorContent editor={editor} className="tiptap-editor" />
             {editor && !isMobile && !note.is_trashed && !note.is_external && (
               <EditorBubbleMenu
@@ -1999,7 +2035,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       <div className="flex items-center justify-between px-4 py-1.5 border-t border-border bg-muted/30 text-[10px] text-muted-foreground shrink-0">
         <div className="flex items-center gap-2">
           <span>
-            {updateNote.isPending ? "Saving…" : `Saved ${formatDistanceToNow(new Date(note.updated_at), { addSuffix: true })}`}
+            {updateNote.isPending ? "Saving…" : `Saved ${showDate(note.updated_at, "ago")}`}
           </span>
           {ghConn?.sync_enabled && (
             <span className="flex items-center gap-1">
@@ -2016,7 +2052,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                   type="button"
                   className="flex items-center gap-1 text-warning hover:underline"
                   title="This note changed on GitHub and here. Saves to GitHub wait until you choose a version."
-                  onClick={() => navigate("/dashboard/settings?tab=github")}
+                  onClick={() => navigate("/dashboard/settings#review-conflicts")}
                 >
                   <AlertCircle className="h-2.5 w-2.5" />
                   Sync conflict
@@ -2104,9 +2140,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Type</Label>
+            <Label htmlFor={`${interactionFieldId}-type`} onClick={(event: MouseEvent) => { event.preventDefault(); document.getElementById(`${interactionFieldId}-type`)?.focus(); }}>Type</Label>
             <Select value={interactionType} onValueChange={setInteractionType}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id={`${interactionFieldId}-type`}><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="chat">Chat</SelectItem>
                 <SelectItem value="meeting">Meeting</SelectItem>
@@ -2115,8 +2151,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Summary</Label>
+            <Label htmlFor={`${interactionFieldId}-summary`}>Summary</Label>
             <input
+              id={`${interactionFieldId}-summary`}
               value={interactionSummary}
               onChange={(event) => setInteractionSummary(event.target.value)}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"

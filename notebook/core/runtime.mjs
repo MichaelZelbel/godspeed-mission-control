@@ -4,6 +4,7 @@ import { fileContext } from './context.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
+import {runRememberWhatYouSaid} from './jobs/remember-job.mjs';
 import {procedure,procedureKinds} from './procedures.mjs';
 import {providerService} from './provider-service.mjs';
 import {visibleRows,knowledgeContext} from './visibility.mjs';
@@ -211,6 +212,11 @@ export const RETRY_WAITS=[2000,5000];
 // often answers one chat at a time, so a second chat would wait behind the answer it is meant to
 // vouch for, while the list is answered at once. A remote service is still asked a chat, since its
 // list is often served apart from the models and would vouch for one that stopped answering.
+// A SEND WHOSE REQUEST WAS LOST IN A STALL IS SENT AGAIN ONCE (#782). A send waits for any billed
+// connection check already in flight, so recovery during that check cannot swallow it, while a busy
+// one-chat-at-a-time local AI still receives it only once. Otherwise, when a probe answers after a
+// missed check around this send, the swallowed request is stopped and one fresh copy is sent with
+// the remaining budget. A slow AI whose checks all answer is never stopped or sent twice.
 export const STALL_WATCH={afterMs:20000,timeoutMs:15000,everyMs:60000};
 const LOOPBACK=['127.0.0.1','localhost'];
 export function stalledAI(url,cause){
@@ -225,7 +231,9 @@ export const BILLED_CHECK_EVERY_MS=600000;
 export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = RETRY_WAITS, stallWatch = STALL_WATCH } = {}) {
   if(!url || !key || !model)return null;
   const parsed=new URL(url),local=LOOPBACK.includes(parsed.hostname);if(parsed.protocol!=='https:' && !local)throw new Error('Model provider requires HTTPS');
-  let chatFailed=false,chatPassedAt=0,keyChecked,billedCheck=null;
+  let chatFailed=false,chatPassedAt=0,keyChecked,billedCheck=null,missed=0,unanswered=false;
+  const answered=()=>{unanswered=false;};
+  const missedCheck=()=>{missed++;unanswered=true;};
   const isRefusal=status=>status===401||status===403,isSuccess=status=>status>=200&&status<300;
   const headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'};
   const requestBody=(textInput,attachments,answerBudget)=>{
@@ -234,26 +242,32 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
   };
   const base=url.replace(/\/chat\/completions\/?$/,''),keyUrl=base===url?url:providerService(url)==='openrouter'?base+'/key':base+'/models';
   const probeRequest=local?{url:base+'/models',init:{headers}}:{url,init:{method:'POST',headers,body:requestBody({kind:CONNECTION_CHECK.kind,contract:CONNECTION_CHECK.contract},[],CONNECTION_CHECK.max_tokens)}};
-  const watchForStall=()=>{
-    const controller=new AbortController();let timer,stalled=false;
+  const watchForStall=suspect=>{
+    const controller=new AbortController();let timer,stalled=false,lost=false;
     const schedule=wait=>{if(controller.signal.aborted)return;timer=setTimeout(probe,wait);timer.unref?.();};
     const probe=()=>fetch(probeRequest.url,{...probeRequest.init,signal:AbortSignal.any([controller.signal,AbortSignal.timeout(stallWatch.timeoutMs)])}).then(
-      response=>{response.body?.cancel().catch(()=>{});schedule(stallWatch.everyMs);},
-      error=>{if(controller.signal.aborted||(error.name!=='TimeoutError'&&error.message!=='fetch failed'))return;stalled=true;controller.abort();});
+      response=>{response.body?.cancel().catch(()=>{});answered();if(controller.signal.aborted)return;if(suspect()){lost=true;controller.abort();}else schedule(stallWatch.everyMs);},
+      error=>{if(controller.signal.aborted||(error.name!=='TimeoutError'&&error.message!=='fetch failed'))return;missedCheck();stalled=true;controller.abort();});
     schedule(stallWatch.afterMs);
-    return {signal:controller.signal,get stalled(){return stalled;},stop(){clearTimeout(timer);controller.abort();}};
+    return {signal:controller.signal,get stalled(){return stalled;},get lost(){return lost;},stop(){clearTimeout(timer);controller.abort();}};
   };
   const run=async input=>{
     const timeoutMs=providerTimeBudget(input),{attachments=[],signal,timeout_ms:ignoredBudget,max_tokens:answerBudget,...textInput}=input;
-    const request=requestBody(textInput,attachments,answerBudget);
-    const watch=timeoutMs===600000?watchForStall():null,stopping=[signal,watch?.signal].filter(Boolean);
-    try{
+    const request=requestBody(textInput,attachments,answerBudget),isCheck=textInput.kind==='connection-check';
+    // This is a gate, not a retry: no request has been sent yet. Its failed result merely says the
+    // waiting chat should now make its own watched attempt.
+    if(!isCheck&&timeoutMs===600000&&billedCheck)await billedCheck.catch(()=>{});
+    const started=Date.now(),missedBefore=missed,unansweredAtStart=unanswered;
+    let watch=timeoutMs===600000?watchForStall(()=>unansweredAtStart||missed>missedBefore):null;
+    const send=async budgetMs=>{
+      const stopping=[signal,watch?.signal].filter(Boolean);
       let response;
       for(let attempt=0;;attempt++){
-        try{response=await fetch(url,{method:'POST',headers,body:request,signal:AbortSignal.any([...stopping,AbortSignal.timeout(timeoutMs)])});}
+        try{response=await fetch(url,{method:'POST',headers,body:request,signal:AbortSignal.any([...stopping,AbortSignal.timeout(budgetMs)])});}
         // A timeout keeps its own sentence when the kind has one of its own (the suggestion's 20
         // seconds); otherwise it is an outage, said by the route's shared wording (#861).
-        catch(error){if(error.name==='TimeoutError')throw aiFailed(timeoutMs===DRAFT_BUDGET_MS?'stalled':'unavailable',providerTimeoutMessage(timeoutMs));if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
+        catch(error){if(error.name==='TimeoutError'){if(isCheck&&!local)missedCheck();throw aiFailed(timeoutMs===DRAFT_BUDGET_MS?'stalled':'unavailable',providerTimeoutMessage(timeoutMs));}if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
+        answered();
         if(response.ok||!RETRY_STATUS.has(response.status)||attempt>=retryWaits.length||signal?.aborted)break;
         await response.arrayBuffer().catch(()=>{});
         const waitStop=AbortSignal.any(stopping);
@@ -268,6 +282,16 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
       const text=result.choices?.[0]?.message?.content;if(typeof text!=='string')throw aiFailed('unusable','Model provider returned no text');
       chatFailed=false;chatPassedAt=Date.now();
       return text;
+    };
+    try{
+      try{return await send(timeoutMs);}
+      catch(error){
+        if(!watch?.lost||signal?.aborted)throw error;
+        watch.stop();
+        const leftMs=timeoutMs-(Date.now()-started);if(leftMs<=0)throw aiFailed('unavailable',providerTimeoutMessage(timeoutMs));
+        watch=watchForStall(()=>false);
+        return await send(leftMs);
+      }
     }catch(error){
       if(!signal?.aborted)chatFailed=true;
       if(watch?.stalled&&!signal?.aborted)throw stalledAI(url,error);
@@ -280,7 +304,7 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
   const askKeyEndpoint=async withKey=>{
     let response;
     try{response=await fetch(keyUrl,{headers:withKey?{Authorization:'Bearer '+key}:{},signal:AbortSignal.timeout(CONNECTION_CHECK.timeout_ms)});}
-    catch(error){if(error.name==='TimeoutError')throw aiFailed('stalled',`The AI did not answer the connection check within ${CONNECTION_CHECK.timeout_ms/1000} seconds.`);if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
+    catch(error){if(error.name==='TimeoutError'){missedCheck();throw aiFailed('stalled',`The AI did not answer the connection check within ${CONNECTION_CHECK.timeout_ms/1000} seconds.`);}if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
     response.body?.cancel().catch(()=>{});return response.status;
   };
   // Keep the configured identity available to the picker.
@@ -350,6 +374,7 @@ export function jobExecutor(configuredProvider,query) {
       const note=store.save('notes',{title:'Your '+area+' coaching conversation',content:question,talk_id:talk.id,source_app:'coaching'});
       return {verified:true,record_id:note.id,talk_id:talk.id,delivery:'notebook'};
     }
+    if(job.kind==='memory-daily')return runRememberWhatYouSaid({store});
     if(procedureKinds.includes(job.kind)||['audit','profiling','watch','review','memory-review'].includes(job.kind))return procedure(job,{store,query,provider});
     if(job.kind==='deadline-reminder') {
       const due=query.rows('deadlines').filter(d=>d.status!=='closed' && d.due_at && Date.parse(d.due_at)-Date.now()<3*86400000);
