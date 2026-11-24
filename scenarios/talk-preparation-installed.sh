@@ -35,7 +35,6 @@
 #   prep-check.txt       what the coach's gate said of it
 #   brief.txt            the coach's brief for the talk
 #   cleanup.txt          the processes this route started and whether any remains
-#   secret-scan.txt      whether the AI key appears in the evidence
 SCENARIO=talk-preparation-installed
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
@@ -135,11 +134,6 @@ act() {
     "$NODE" "$coach" brief "$area" --date "$day" --godspeed "$ROOT" >"$EVIDENCE/brief.txt" 2>&1 || true
   fi
   printf 'started-by-this-route=none\nrunning-after=none\n' >"$EVIDENCE/cleanup.txt"
-  if grep -RIlF --exclude=.install.log -- "$GODSPEED_SCENARIO_AI_KEY" "$EVIDENCE" >/dev/null 2>&1; then
-    printf 'key-in-evidence=yes\n' >"$EVIDENCE/secret-scan.txt"
-  else
-    printf 'key-in-evidence=no\n' >"$EVIDENCE/secret-scan.txt"
-  fi
   rm -f "$EVIDENCE"/.[a-z]*
 }
 
@@ -148,7 +142,7 @@ check() { # <evidence folder>
   local folder=$1 file id failed
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a prepared talk"
   kept_all "$folder" 'what Run now left' goal.txt run-requested.txt routine.json run-now.json routine-after.json \
-    cleanup.txt secret-scan.txt
+    cleanup.txt
   for file in routine-status.json summary.txt prep-path.txt prep.md prep-check.txt brief.txt; do
     [ -f "$folder/$file" ] || fail "$file is not in what the scenario kept: what the run or the coach left"
   done
@@ -201,9 +195,6 @@ process.exit(row.last_run_at&&Date.parse(row.last_run_at)/1000>=since?0:1);' "$f
   # 4. Nothing left behind, and nothing leaked.
   grep -qx 'started-by-this-route=none' "$folder/cleanup.txt" && grep -qx 'running-after=none' "$folder/cleanup.txt" ||
     fail "the cleanup record does not show that the route left no process of its own behind"
-  for file in secret-scan.txt; do
-    grep -qx 'key-in-evidence=no' "$folder/$file" || fail "the AI key was found in what the route kept"
-  done
   if [ -n "${GODSPEED_SCENARIO_AI_KEY:-}" ] && grep -RIlF --exclude=install.log -- "$GODSPEED_SCENARIO_AI_KEY" "$folder" >/dev/null 2>&1; then
     fail "the AI key leaked into retained evidence at $(grep -RIlF --exclude=install.log -- "$GODSPEED_SCENARIO_AI_KEY" "$folder" | head -n 1)"
   fi

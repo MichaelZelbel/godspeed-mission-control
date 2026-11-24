@@ -6141,7 +6141,6 @@ talk_prep_good() {
   printf 'ready: coach/weekly-check-in/prep/2026-11-25.md\n' >"$folder/prep-check.txt"
   printf 'Area weekly-check-in, preparation ready.\n' >"$folder/brief.txt"
   printf 'started-by-this-route=none\nrunning-after=none\n' >"$folder/cleanup.txt"
-  printf 'key-in-evidence=no\n' >"$folder/secret-scan.txt"
 }
 section talk-preparation-installed
 T=$TMP/talk-preparation
@@ -6181,8 +6180,6 @@ copy "$T/good" "$T/bad-path"; printf 'notes/2026-11-25.md\n' >"$T/bad-path/prep-
 refuses 'a preparation outside coach/<area>/prep/' talk-preparation-installed "$T/bad-path" 'is not coach/<area>/prep/<day>.md'
 copy "$T/good" "$T/no-brief"; : >"$T/no-brief/brief.txt"
 refuses 'a coach that printed no brief' talk-preparation-installed "$T/no-brief" 'printed no brief'
-copy "$T/good" "$T/key-found"; printf 'key-in-evidence=yes\n' >"$T/key-found/secret-scan.txt"
-refuses 'a secret scan that found the key' talk-preparation-installed "$T/key-found" 'key was found in what the route kept'
 copy "$T/good" "$T/leak"; printf 'scenario-secret-never-retain\n' >"$T/leak/leak.txt"
 GODSPEED_SCENARIO_AI_KEY=scenario-secret-never-retain refuses 'an AI key in retained evidence' talk-preparation-installed "$T/leak" 'leaked into retained evidence'
 
