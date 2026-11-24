@@ -74,15 +74,28 @@ const briefRequests=JSON.parse(fs.readFileSync(new URL('../assistant-files/godsp
 const BRIEF_REQUESTS=Object.fromEntries(Object.entries(briefRequests.asks).map(([language,asks])=>[language,new Set(asks)]));
 const BRIEF_REQUEST_FRAMES=Object.fromEntries(Object.entries(briefRequests.frames).map(([language,frames])=>[language,frames.map(frame=>new RegExp(frame))]));
 
-export function asksForTodaysBrief(text){
- if(typeof text!=='string'||[...text].length>80)return false;
+export function asksForTodaysBrief(text){return Boolean(briefRequestLanguage(text));}
+
+// The language ('en', 'de') of a message that only asks for today's brief, else null.
+export function briefRequestLanguage(text){
+ if(typeof text!=='string'||[...text].length>80)return null;
  const plain=text.toLowerCase().replaceAll('’',"'").replace(/[^\p{L}\p{N}_\s']/gu,' ').replace(/\s+/g,' ').trim();
  for(const language of Object.keys(BRIEF_REQUESTS)){
   const candidates=new Set([plain]);
   for(const frame of BRIEF_REQUEST_FRAMES[language])for(const candidate of [...candidates])candidates.add(candidate.replace(frame,'').trim());
-  if([...candidates].some(candidate=>BRIEF_REQUESTS[language].has(candidate)))return true;
+  if([...candidates].some(candidate=>BRIEF_REQUESTS[language].has(candidate)))return language;
  }
- return false;
+ return null;
+}
+
+// No brief saved yet this morning (#1070): the chat says so plainly and offers to make one. It writes
+// no brief of its own and saves none; a hidden brief is not "none saved", so it gets no such answer.
+const NO_BRIEF_YET={en:'No morning briefing has been saved yet this morning. Would you like me to make one? Just ask me to, and I will.',de:'Heute Morgen wurde noch kein Morgenbriefing gespeichert. Soll ich eines erstellen? Sag einfach Bescheid.'};
+export function missingBriefAnswer(store,message){
+ const language=briefRequestLanguage(message);
+ if(!language)return null;
+ const today=savedBriefToday(store);
+ return today.hidden||today.note?null:NO_BRIEF_YET[language];
 }
 
 // Today's saved briefing when the message only asks for it, else null. Every chat answers such a
@@ -237,8 +250,11 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
   const contribution=context.contribution;
   if(contribution&&([contribution.id,contribution.note_id,...contribution.source_ids].some(id=>id!=null&&rejectedIds.has(String(id)))))context.contribution=null;
   const required=[context.done_line,context.cycle_heads_up,context.charm_line].filter(Boolean);
-  const goal=context.goals.find(row=>!excluded(row)&&text(row.title)),anyGoal=context.goals.some(row=>!excluded(row));
-  addFirst(context.goals,row=>!excluded(row)&&text(row.title)?'One of your saved goals is '+text(row.title)+'.':null);
+  // A goal line states only the record's own title, which no refused draft sentence can make unsupported, so a rejected id never drops it (#1105).
+  const workedOn=new Set(context.work.filter(row=>row.state==='verified'&&row.kind!=='repair'&&row.goal_id!=null&&!excluded(row)).map(row=>row.goal_id));
+  const goals=[...context.goals].sort((a,b)=>Number(workedOn.has(b.id))-Number(workedOn.has(a.id)));
+  const goal=goals.find(row=>text(row.title)),anyGoal=goals.length>0;
+  addFirst(goals,row=>text(row.title)?'One of your saved goals is '+text(row.title)+'.':null);
   const verified=context.work.filter(row=>row.state==='verified'&&row.kind!=='repair'&&!excluded(row)).sort((a,b)=>String(b.verification?.at||b.updated_at||'').localeCompare(String(a.verification?.at||a.updated_at||'')));
   // Work the daily round filed in the work register reaches the notebook as a legacy row with its
   // fields as written, WHAT for its title (9 November 2026: a first day's verified playbook went

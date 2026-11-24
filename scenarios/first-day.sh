@@ -116,6 +116,7 @@ act() {
   first_day_phase 'installed morning brief and its Telegram delivery'
   server_scheduled_brief "$EVIDENCE/brief.txt" 1800
   server_telegram_mark scheduled-brief cron
+  server_table job_receipts "$EVIDENCE/job-receipts-after-brief.json"
   server_table notes "$EVIDENCE/notes-before-reply.json"
   server_telegram_say todays-brief "today's brief"
   server_telegram_snapshot
