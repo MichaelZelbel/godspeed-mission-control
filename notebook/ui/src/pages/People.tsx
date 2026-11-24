@@ -213,9 +213,10 @@ export default function People() {
   const deleteTarget = findPerson(deleteTargetId);
 
   // The pane fills main's content height where the floating chat button shows, defined in
-  // DashboardLayout.
+  // DashboardLayout. "relative" makes the pane the containing block of the details' visually hidden
+  // (absolutely positioned) labels, so its overflow clips them and the page itself cannot scroll past it (#1033).
   return (
-    <div className="flex h-[var(--page-h)] overflow-hidden">
+    <div className="relative flex h-[var(--page-h)] overflow-hidden">
       <SEOHead title="People - Godspeed Mission Control" noIndex />
 
       {/* Left panel - tree + search */}
