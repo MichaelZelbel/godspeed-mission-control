@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { UserCircle, ArrowRight, Heart } from "lucide-react";
+import { UserCircle, ArrowRight } from "lucide-react";
 import { personLabel, personNames } from "@/components/timeline/people";
 import { showDate } from "@/lib/local-date";
 
@@ -46,7 +46,7 @@ export function RecentPeopleCard() {
             onClick={() => navigate("/dashboard/people")}
             className="w-full rounded-md px-2 py-3 text-left text-sm text-muted-foreground transition-colors hover:bg-accent"
           >
-            <Heart className="mb-1 inline h-4 w-4 text-primary" /> No one here yet. Add your first
+            No one here yet. Add your first
             person.
           </button>
         ) : (
