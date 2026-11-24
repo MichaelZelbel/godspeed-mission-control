@@ -24,5 +24,7 @@ describe("Recent People with no people yet", () => {
     expect(await screen.findByText(/No one here yet\./, undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByText(/Add your first person\./)).toBeInTheDocument();
     expect(screen.queryByText(/cherishing/i)).toBeNull();
+    // The heart left from the old design is gone.
+    expect(document.querySelector("svg.lucide-heart")).toBeNull();
   });
 });

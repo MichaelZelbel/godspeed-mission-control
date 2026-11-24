@@ -994,6 +994,63 @@ describe("every page at a phone's and a desktop's width", () => {
     expect(failures, failures.join("\n")).toEqual([]);
   }, 60_000);
 
+  // A collection page at phone widths (#1045): the action row's buttons, main reaching the
+  // window's bottom (no empty band under the page) and every Filters field inside the window,
+  // also when the page was scrolled before Filters opened. On main the band is 96 px.
+  it("fits a collection page's actions, bottom and Filters inside the window at a phone's width", async () => {
+    const collection = await seededNotebook.query({ table: "collections", operation: "insert", values: { name: "Phone fit collection", slug: "phone-fit-collection" }, selection: "id,slug", single: true });
+    expect(collection?.slug ?? null).toBeTruthy();
+    // Filters and the search row show once the collection holds an item.
+    await seededNotebook.query({ table: "collection_items", operation: "insert", values: { collection_id: collection.id, data: { title: "One item" } }, selection: "id", single: true });
+    const failures: string[] = [];
+    for (const viewport of [{ width: 320, height: 640 }, { width: 375, height: 667 }, { width: 390, height: 844 }]) {
+      const context = await browser.newContext({ viewport });
+      try {
+        const page = await context.newPage();
+        await page.goto(`${seededNotebook.base}/collections/${collection.slug}`);
+        await settle(page);
+        const w = viewport.width;
+        const base = await page.evaluate(() => {
+          const main = document.querySelector("main");
+          const row = [...document.querySelectorAll("button")].find((b) => (b.textContent || "").trim() === "New Item")?.parentElement;
+          if (!main || !row) return { missing: true } as const;
+          const out: string[] = [];
+          if (Math.round(main.getBoundingClientRect().bottom) < window.innerHeight - 1) out.push(`main ends ${Math.round(window.innerHeight - main.getBoundingClientRect().bottom)} px above the window's bottom`);
+          for (const b of row.querySelectorAll("button")) {
+            const r = b.getBoundingClientRect();
+            if (r.left < 0 || r.right > window.innerWidth + 0.5) out.push(`action "${(b.textContent || "").trim()}" lies outside the window (${Math.round(r.left)}..${Math.round(r.right)})`);
+          }
+          return { missing: false, out } as const;
+        });
+        if (base.missing) { failures.push(`${w} px: main or the action row is missing`); continue; }
+        failures.push(...base.out.map((f) => `${w} px: ${f}`));
+        const trigger = page.getByRole("button", { name: /^Filters/ });
+        await trigger.scrollIntoViewIfNeeded();
+        await page.evaluate(() => { const m = document.querySelector("main"); if (m) m.scrollTop = 40; window.scrollBy(0, 40); });
+        await trigger.click();
+        await page.getByText("Filters", { exact: true }).last().waitFor({ timeout: 15_000 });
+        await settle(page);
+        const panel = await page.evaluate(() => {
+          const el = document.querySelector("[data-radix-popper-content-wrapper] > *") as HTMLElement | null;
+          if (!el) return null;
+          const out: string[] = [];
+          const r = el.getBoundingClientRect();
+          if (r.top < 0 || r.left < 0 || r.right > window.innerWidth + 0.5 || r.bottom > window.innerHeight + 0.5) out.push(`the Filters panel lies outside the window: top ${Math.round(r.top)}, left ${Math.round(r.left)}, right ${Math.round(r.right)}, bottom ${Math.round(r.bottom)}`);
+          for (const i of el.querySelectorAll("input, select, button")) {
+            const b = i.getBoundingClientRect();
+            if (b.width && (b.left < r.left - 0.5 || b.right > r.right + 0.5)) out.push(`a Filters control runs outside the panel sideways (${Math.round(b.left)}..${Math.round(b.right)})`);
+          }
+          return out;
+        });
+        if (!panel) failures.push(`${w} px: the Filters panel did not open`);
+        else failures.push(...panel.map((f) => `${w} px: ${f}`));
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 90_000);
+
   // A group member's sheet at a phone's width (#941): the List tab's row button opens it, so the
   // page-wide check meets it only behind the "group not found" page, and nothing audited it. On
   // main this fails at 320 px: the Next Steps row's two buttons do not wrap, so the sheet's
