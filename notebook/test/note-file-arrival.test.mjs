@@ -253,3 +253,30 @@ test('an adopted note is edited like any note, in the file it came from',async()
     assert.equal(await until(()=>store.get('notes',note.id).content==='second words'),true);
   }finally{store.unwatch();}
 });
+
+test('a note file overwritten from outside without frontmatter stays the same note and is found by its new text (#932)',async()=>{
+  const root=temporary(),service=await createService({root,port:0}),base='http://127.0.0.1:'+service.address.port;
+  try{
+    const made=await(await fetch(base+'/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'notes',operation:'insert',values:{title:'Rewritten',content:'oldword here'}})})).json();
+    assert.equal(made.error??null,null);
+    const [note]=await notes(base);
+    const file=path.join(root,'notebook',fs.readdirSync(path.join(root,'notebook')).find(n=>n.endsWith('.md')));
+    fs.writeFileSync(file+'.tmp','newword only\n');fs.renameSync(file+'.tmp',file);
+    assert.ok(await until(async()=>(await search(base,'newword')).length?true:null),'the new text is found without a verify');
+    assert.equal((await search(base,'newword')).length,1,'one hit');
+    assert.equal((await search(base,'oldword')).length,0,'the old text is gone');
+    const rows=await notes(base);
+    assert.equal(rows.length,1);assert.equal(rows[0].id,note.id);assert.equal(rows[0].content,'newword only\n');
+    assert.match(fs.readFileSync(file,'utf8'),new RegExp('^---[\\s\\S]+uid: '+note.uid+'[\\s\\S]+---\\nnewword only\\n$'));
+  }finally{await service.close();fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('a contact file that lost its frontmatter is still reported as lost and not made a note (#932)',async()=>{
+  const root=temporary(),writer=new Store(root),person=writer.save('contacts',{name:'Anna'}),file=writer.file(person),store=new Store(root,{watch:true});
+  try{
+    fs.writeFileSync(file+'.tmp','plain words\n');fs.renameSync(file+'.tmp',file);
+    assert.equal(await until(()=>{store.scan();return store.problems.some(p=>p.file===file);}),true);
+    assert.equal(store.list('notes').length,0);
+    assert.equal(store.problems.some(p=>p.file===file),true);
+  }finally{store.unwatch();}
+});
