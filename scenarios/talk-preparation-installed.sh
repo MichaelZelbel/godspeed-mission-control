@@ -171,6 +171,8 @@ process.exit(row.last_run_at&&Date.parse(row.last_run_at)/1000>=since?0:1);' "$f
     fail "the routine records no run that began after Run now was pressed"
   [ "$(json_value "$folder/routine-after.json" last_status)" = ok ] ||
     fail "the routine ended its run as \"$(json_value "$folder/routine-after.json" last_status)\": $(json_value "$folder/routine-after.json" last_error)"
+  [ -n "$(json_value "$folder/routine-status.json" coach-prep.at 2>/dev/null || true)" ] ||
+    fail "the assistant's record has no coach-prep entry, so whether the routine failed is unknown"
   failed=$(json_value "$folder/routine-status.json" coach-prep.failed 2>/dev/null || true)
   case $failed in
     '' | null) ;;
