@@ -119,10 +119,10 @@ export async function runDomainWatches({store,fetcher}){
       const at=new Date().toISOString();
       const current=store.get('domain_watches',snapshot.id);
       if(!current||current.removed_at){outcomes.push({domain:snapshot.domain,ok:false,removed:true});continue;}
-      const changed=!!current.state&&current.state!==read.state,transition=changed?hash([current.id,current.state,read.state,current._hash]):null;
+      const changed=!!current.state&&current.state!==read.state,first=!current.state&&read.state==='available',transition=changed?hash([current.id,current.state,read.state,current._hash]):first?hash([current.id,'first',read.state,current._hash]):null;
       const observation=store.prepare('domain_watch_observations',{watch_id:current.id,domain:current.domain,state:read.state,observed_at:at,endpoint:read.endpoint,http_status:read.http_status,statuses:read.statuses,changed});
       records.push(observation,store.prepare('domain_watches',{state:read.state,checked_at:at,last_observation_id:observation.id,...(current.last_lookup_error?{last_lookup_error:null}:{})},current));
-      if(changed)transitions.push({id:'domain-watch-'+transition,domain:current.domain,watch_id:current.id,observation_id:observation.id,body:current.domain+' is now '+phrase[read.state]+': '+advice[read.state]+'.'});
+      if(changed||first)transitions.push({id:'domain-watch-'+transition,domain:current.domain,watch_id:current.id,observation_id:observation.id,body:first?current.domain+' is free now: '+advice.available+'.':current.domain+' is now '+phrase[read.state]+': '+advice[read.state]+'.'});
       outcomes.push({domain:current.domain,ok:true,state:read.state,changed});
     }
     if(transitions.length){
