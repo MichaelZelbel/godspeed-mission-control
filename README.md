@@ -30,6 +30,18 @@ Version 2 is the current edition. The install lines on this page install the cur
 
 Godspeed carries the Workouts add-on. With Hevy Pro, open **Settings** > **Workouts from Hevy**, make a Hevy developer key, and connect it there. The key stays in the add-on's private state; Settings shows the imported-row count and last run, and the one hourly **Workouts from Hevy** routine appears under **Settings** > **Routines**. When taking over a standalone add-on schedule, Godspeed first proves the carried routine can import; if setup fails, Settings names the safe reason and retry time while the existing schedule stays in place. If retiring that schedule fails after the proof, the carried routine keeps running and Settings reports the removal retry. Disconnect stops that routine while keeping the tracker and its rows.
 
+## New in 2.0.0-beta.31
+
+Unstuck.
+
+- **When the AI fails or comes back, Godspeed says what really happened and recovers by itself.**
+- **A note's chat and its pop-out window keep each other's messages**, with no repeated "history was not saved" warnings.
+- **"Today's brief" asked in the chat is the same brief the morning saved**, every sentence that passed the check included, however often it is asked.
+- **A notebook on your own computer has a Sign Out that works**, instead of a server setup screen asking for a code.
+- **The video add-on installs on a server whose package list is a few days old.**
+- **Small things you see:** long names wrap instead of being cut off, every form field is named for screen readers, and Settings > Routines lists "Remember what you said" so it can be run from there.
+- **New: your chat history with someone becomes moments on your timeline.**
+
 ## New in 2.0.0-beta.30
 
 Nothing to waive.

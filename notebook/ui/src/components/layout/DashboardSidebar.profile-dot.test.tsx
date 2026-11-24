@@ -30,12 +30,18 @@ async function renderSidebar() {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("The My Profile dot", () => {
-  it("says the real completeness, keeping its colour", async () => {
+  it.each([0, 20, 50, 100])("says the real completeness at %i%% and is never red", async (value) => {
+    completeness = value;
+    await renderSidebar();
+    const dot = screen.getByRole("img", { name: `Profile ${value}% complete` });
+    expect(dot).toHaveAttribute("title", `Profile ${value}% complete`);
+    expect(dot.className).not.toMatch(/red|destructive/);
+  });
+
+  it("uses a blue dot for an empty profile", async () => {
     completeness = 20;
     await renderSidebar();
-    const dot = screen.getByRole("img", { name: "Profile 20% complete" });
-    expect(dot).toHaveAttribute("title", "Profile 20% complete");
-    expect(dot).toHaveClass("bg-destructive");
+    expect(screen.getByRole("img", { name: "Profile 20% complete" })).toHaveClass("bg-blue-400");
   });
 
   it("follows the figure", async () => {

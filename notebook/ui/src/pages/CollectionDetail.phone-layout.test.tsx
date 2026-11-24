@@ -153,3 +153,17 @@ describe("a collection page at phone width", () => {
     }, WAIT);
   });
 });
+
+// #1045: jsdom has no layout, so the classes that keep these inside a 320 px window are asserted.
+describe("collection page phone fit (#1045)", () => {
+  afterEach(cleanup);
+  it("lets the action row wrap so '…' is not cut off", async () => {
+    render(
+      <MemoryRouter initialEntries={["/collections/books"]}>
+        <Routes><Route path="/collections/:slug" element={<CollectionDetail />} /></Routes>
+      </MemoryRouter>,
+    );
+    const row = await screen.findByTestId("collection-actions", {}, WAIT);
+    expect(row.className).toContain("flex-wrap");
+  });
+});
