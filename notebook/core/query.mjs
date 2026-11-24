@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { slug, readableSlug, hash, identityIds } from './records/store.mjs';
+import { slug, readableSlug, hash, identityIds, envelopeFields } from './records/store.mjs';
 import {nativeRows} from './native-personal.mjs';
 import {dueRows} from './native-due.mjs';
 import {assertAssistantRecord,assertAssistantLinks} from './assistant-mutations.mjs';
@@ -20,6 +20,16 @@ import {personNames} from './person-names.mjs';
 // A correction's patch replaces the one before it key by key; the write check judges the same merge.
 const applyCorrections=(original,corrections)=>corrections.slice().sort((a,b)=>a.sequence-b.sequence||String(a.id).localeCompare(String(b.id))).reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original);
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
+// The columns each kind has in the app's schema (the screens were written
+// against notebook/ui/src/integrations/supabase/types.ts), parsed rather than
+// kept as a second list that would drift, for the write-filter check below
+// (issue 950). Kinds the schema does not know are judged by their rows instead.
+const schemaColumns = new Map();
+{
+  const text = fs.readFileSync(fileURLToPath(new URL('../ui/src/integrations/supabase/types.ts', import.meta.url)), 'utf8');
+  for (const kind of text.slice(0, text.indexOf('\n    Functions: {')).matchAll(/\n      ([a-z_0-9]+): \{\n        Row: \{\n([\s\S]*?)\n        \}/g))
+    schemaColumns.set(kind[1], new Set([...kind[2].matchAll(/^          ([a-z_0-9]+)\??:/gm)].map(column => column[1])));
+}
 // Tables of the unreachable pages Menerio shipped, whose files are gone from the tree but whose records stay.
 const deleted = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../data/deleted-source-inventory.json', import.meta.url)), 'utf8'));
 export const tables = new Set([...inventory.dependencies.flatMap(d => d.tables), ...deleted.tables].filter(t => t !== 'note-attachments'));
@@ -71,9 +81,11 @@ function splitFilters(text){let depth=0,quoted=false,part='',items=[];for(let i=
 const unquote=value=>value.length>1&&value.startsWith('"')&&value.endsWith('"')?value.slice(1,-1).replace(/\\([\s\S])/g,'$1'):value;
 const list=value=>Array.isArray(value)?value:splitFilters(String(value).replace(/^\(([\s\S]*)\)$/,'$1')).map(unquote);
 const negate=result=>result===null?null:!result;
+const partPattern=/^(.+?)\.(not\.)?(eq|neq|is|in|like|ilike|gt|gte|lt|lte)\.([\s\S]*)$/;
+const nestedOps=['and','or','not.and','not.or'];
 function filterExpression(row,text){
-  for(const op of ['and','or','not.and','not.or'])if(text.startsWith(op+'(')&&text.endsWith(')')){const result=condition(row,[op.replace('not.',''),'',text.slice(op.length+1,-1)]);return op.startsWith('not.')?negate(result):result;}
-  const match=text.match(/^(.+?)\.(not\.)?(eq|neq|is|in|like|ilike|gt|gte|lt|lte)\.([\s\S]*)$/);if(!match)throw new Error('Invalid filter expression');
+  for(const op of nestedOps)if(text.startsWith(op+'(')&&text.endsWith(')')){const result=condition(row,[op.replace('not.',''),'',text.slice(op.length+1,-1)]);return op.startsWith('not.')?negate(result):result;}
+  const match=text.match(partPattern);if(!match)throw new Error('Invalid filter expression');
   const [,key,not,op,raw]=match,value=op==='in'?list(raw):/^(null|true|false)$/.test(raw)?JSON.parse(raw):unquote(raw);
   const result=condition(row,[op,key,value]);return not?negate(result):result;
 }
@@ -127,6 +139,82 @@ export function checkFilters(filters){
     if(!Array.isArray(f)||f.length<2||typeof f[0]!=='string'||typeof f[1]!=='string')throw new Error(filterHelp+'; got '+String(JSON.stringify(f)).slice(0,120)+'.');
     if(!['or','and','not','is'].includes(f[0])&&!comparisons.has(f[0]))throw new Error('Unsupported filter '+f[0]+'. '+filterHelp+'.');
     if(f[0]==='not'&&(!Array.isArray(f[2])||typeof f[2][0]!=='string'))throw new Error('A "not" filter is ["not","<column>",["<operator>",<value>]].');
+  }
+}
+// Issue 950: an update or delete whose filter could never pick a record used to
+// answer 200 with nothing changed, so a typo in a field name looked the same as
+// "no record matched". Refused here, before anything is read or written, the
+// way the no-filter refusal in execute() is: a clause with no value or an empty
+// or null one (null is the value "is" is for), or a field the kind does not
+// have. A field every stored record carries (records/store.mjs, envelopeFields)
+// needs no kind judgment, and a well-formed filter that simply matches nothing
+// still answers 200, and reads keep every filter they accept.
+const head=key=>key.replaceAll('->>','.').replaceAll('->','.').split('.')[0];
+const short=f=>String(JSON.stringify(f)).slice(0,120);
+// Kinds outside the old UI schema still have fields of their own. Keep these
+// beside the write check and derive them from the code that creates each kind,
+// so an empty kind is judged the same way as one that already has records.
+// Notes also expose two computed list fields and document skip_processing for
+// add-ons, although none of the three has to be stored on a fresh notebook.
+const declaredFields=new Map(Object.entries({
+  comments:['note_id','content','author'],
+  goals:['title','own_words','status','areas','progress','measure','lead','changes','kind','area','deadline','serves','depends_on','protected','importance','legacy_fields','legacy_log','legacy_source','legacy_content'],
+  note_conversations:['context_key','state','completed_request_ids'],
+  notes:['skip_processing','content_preview','content_length'],
+}).map(([kind,fields])=>[kind,new Set(fields)]));
+export function checkWriteFilters(table,filters,rows){
+  const columns=schemaColumns.get(table),declared=declaredFields.get(table),judged=!!columns||!!declared||rows.length>0;
+  // hasOwn, not `in`: the fallback would make every Object.prototype name
+  // (toString, constructor, ...) a "known" field on every kind.
+  const known=field=>envelopeFields.has(field)||Object.hasOwn(defaults[table]||{},field)||columns?.has(field)||declared?.has(field)||rows.some(r=>r&&Object.hasOwn(r,field));
+  // The fields an or() or and() text names, nested parts included. A part the
+  // PostgREST grammar does not read is refused here, and so is an empty and()
+  // or not.or(), which is true for every row: both are otherwise left to
+  // filterExpression and condition, which run per row, so on a kind with no
+  // records nothing would refuse them (issue 950).
+  const empty=f=>new Error('The filter '+short(f)+' has an empty value, so it cannot pick any record. '+filterHelp+'.');
+  // negated: inside a not, every empty nested part is refused, since the not
+  // turns the ones that match nothing into ones true for every row.
+  const walk=(f,text,negated,keys)=>{for(const part of splitFilters(String(text))){
+    const nested=nestedOps.find(op=>part.startsWith(op+'(')&&part.endsWith(')'));
+    if(nested){
+      const inner=part.slice(nested.length+1,-1);
+      if(!inner.trim()&&(negated||nested==='and'||nested==='not.or'))throw empty(f);
+      walk(f,inner,negated,keys);
+    }
+    else{const match=part.match(partPattern);if(!match)throw new Error('Invalid filter expression');
+      // An empty in-list matches nothing; negated, by not. or inside a not, it is true for every row.
+      if(match[3]==='in'&&(match[2]||negated)&&!list(match[4]).length)throw empty(f);
+      keys.add(match[1]);}}};
+  const keysOf=f=>{
+    if(f[0]!=='or'&&f[0]!=='and')return [f[1]];
+    const keys=new Set();walk(f,f[2],false,keys);return [...keys];
+  };
+  for(const f of filters){
+    if(f.length<3)throw new Error('The filter '+short(f)+' is missing its value. '+filterHelp+'.');
+    let keys;
+    if(f[0]==='not'){
+      keys=[f[1]];
+      // The clause is read per row by condition(); on a kind with no records
+      // nothing would read it, so it is judged here like condition judges it.
+      // A not inside the not is followed down: ["not",["eq","Ana"]].
+      let inner=f[2];
+      for(;;){
+        if(inner.length<2)throw new Error('The filter '+short(f)+' is missing its value. '+filterHelp+'.');
+        if(!['is','or','and','not'].includes(inner[0])&&!comparisons.has(inner[0]))throw new Error('Unsupported filter '+inner[0]+'. '+filterHelp+'.');
+        if(inner[0]!=='not')break;
+        if(!Array.isArray(inner[1])||typeof inner[1][0]!=='string')throw new Error('A "not" filter is ["not","<column>",["<operator>",<value>]].');
+        inner=inner[1];
+      }
+      if(inner[0]!=='is'&&(inner[1]===''||inner[1]===null))throw empty(f);
+      // A not over an empty in-list is true for every row.
+      if(inner[0]==='in'&&!list(inner[1]).length)throw empty(f);
+      // The text of an or/and inside a not gets the walk top-level text gets.
+      if(inner[0]==='or'||inner[0]==='and'){const set=new Set();walk(f,inner[1],true,set);keys.push(...set);}
+    }
+    else if(f[0]!=='is'&&(f[2]===''||f[2]===null))throw new Error('The filter '+short(f)+' has an empty value, so it cannot pick any record. '+filterHelp+'.');
+    if(!keys)keys=keysOf(f);
+    if(judged)for(const key of keys)if(!known(head(key)))throw new Error(table+' has no field "'+head(key)+'", so this filter cannot pick any record. '+filterHelp+'.');
   }
 }
 function condition(row, [op, key, value]) {
@@ -386,7 +474,12 @@ export class QueryService {
     // the join. Until 6 October 2026 it was checked against the row itself,
     // where that column never is, so a person's Groups tab was always empty.
     const embeds=embedsOf(selection),names=new Set(embeds.map(e=>e.alias)),embedded=f=>{const key=String(f[1]??''),dot=key.indexOf('.');return dot>0&&names.has(key.slice(0,dot));};
-    let rows = this.rows(table).filter(row => filters.every(f => embedded(f) || condition(row, f) === true));
+    // An update or delete whose filter cannot pick any record is refused before
+    // anything is read or written (issue 950); embedded-column filters are left
+    // to the embedded-records refusal below.
+    const all = this.rows(table);
+    if (operation === 'update' || operation === 'delete') checkWriteFilters(table, filters.filter(f => !embedded(f)), all);
+    let rows = all.filter(row => filters.every(f => embedded(f) || condition(row, f) === true));
     if (operation !== 'select') {
       if(filters.some(embedded))throw new Error('Filters on embedded records narrow reads only');
       // A delete stamped with the version the screen saw, matched against no
