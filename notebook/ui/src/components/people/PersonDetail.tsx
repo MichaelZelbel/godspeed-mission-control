@@ -194,7 +194,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
           {!isEditing && (
             <div
               data-testid="person-pinned-bar"
-              className="sticky top-0 z-10 -mx-4 -mt-4 mb-2 hidden items-center gap-2 border-b border-border bg-background px-4 py-1.5 [@media(max-width:639px),(max-height:599px)]:flex"
+              className="sticky top-0 z-10 -mx-4 -mt-4 mb-2 hidden items-center gap-2 border-b border-border bg-background px-4 py-1.5 max-sm:flex [@media(max-height:599px)]:flex"
             >
               <p className="min-w-0 flex-1 truncate text-sm font-semibold">{shownName}</p>
               <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" aria-label="Edit person" onClick={startEditing}>

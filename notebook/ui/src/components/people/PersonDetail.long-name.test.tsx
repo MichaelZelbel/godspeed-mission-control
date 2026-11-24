@@ -62,7 +62,15 @@ describe("a person page with a 200-character name", () => {
     await heading(words);
     const bar = screen.getByTestId("person-pinned-bar");
     expect(bar.className).toMatch(/(^|\s)sticky/);
-    expect(bar.className).toContain("max-width:639px");
+    expect(bar.className).toContain("max-sm:flex");
+    expect(bar.className).toContain("[@media(max-height:599px)]:flex");
+    // The classes must generate CSS (a comma-joined media variant emitted nothing).
+    const postcss = (await import("postcss")).default;
+    const tailwind = (await import("tailwindcss")).default;
+    const cfg = (await import("../../../tailwind.config")).default;
+    const out = await postcss([tailwind({ ...cfg, content: [{ raw: bar.className }] })]).process("@tailwind utilities;", { from: undefined });
+    expect(out.css).toMatch(/max-sm\\:flex\s*\{\s*display:\s*flex/);
+    expect(out.css).toMatch(/max-height:\s*599px[\s\S]*display:\s*flex/);
     expect(bar).toHaveTextContent(words.slice(0, 20));
     expect(bar.querySelector('[aria-label="Edit person"]')).not.toBeNull();
     expect(bar.querySelector('[aria-label="Merge person"]')).not.toBeNull();
