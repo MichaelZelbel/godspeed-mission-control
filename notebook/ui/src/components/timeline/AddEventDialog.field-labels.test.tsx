@@ -40,6 +40,8 @@ const fields: ExpectedField[] = [
   { name: "Title", is: (el) => el.getAttribute("placeholder") === "Short title for this moment" },
   { name: "Start Date", is: isInputOfType("date") },
   { name: "End Date", is: isInputOfType("date") },
+  { name: "Start Time", is: isInputOfType("time") },
+  { name: "End Time", is: isInputOfType("time") },
   { name: "Status", is: isListButton },
   { name: "Confidence (Date)", is: (el) => isSlider(el) && el.getAttribute("aria-valuemax") === "10" },
   { name: "Impact", is: (el) => isSlider(el) && el.getAttribute("aria-valuemax") === "4" },
@@ -47,12 +49,13 @@ const fields: ExpectedField[] = [
   { name: "People", is: (el) => el.getAttribute("role") === "combobox" && el.textContent!.includes("Add") },
 ];
 
-function checkEveryLabel(dialog: HTMLElement) {
+// A new moment has no End Date yet, so its End Time waits for one.
+function checkEveryLabel(dialog: HTMLElement, disabledNames: string[] = []) {
   // Every field a person sees has its label (the description box has only a placeholder, so it carries the name itself).
   expect(dialog.querySelectorAll("label")).toHaveLength(fields.length - 1);
-  expectFieldsNamed(dialog, fields);
+  expectFieldsNamed(dialog, fields.map((f) => (disabledNames.includes(f.name) ? { ...f, disabled: true } : f)));
   // Each field is one a person can fill in.
-  for (const field of fields) expect(within(dialog).getByLabelText(field.name, { exact: true }), `"${field.name}" is enabled`).toBeEnabled();
+  for (const field of fields) if (!disabledNames.includes(field.name)) expect(within(dialog).getByLabelText(field.name, { exact: true }), `"${field.name}" is enabled`).toBeEnabled();
   expect(screen.queryByPlaceholderText("Search or type a new name…")).toBeNull();
   // The required star is beside the label, not in the name; the field says it is required.
   expect(within(dialog).getByLabelText("Title")).toHaveAttribute("aria-required", "true");
@@ -75,7 +78,7 @@ describe("the Add Moment dialog's labels name their fields", () => {
     render(<AddEventDialog people={[ada]} onCreated={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Add Moment" }));
     const dialog = screen.getByRole("dialog", { name: "Add Moment" });
-    checkEveryLabel(dialog);
+    checkEveryLabel(dialog, ["End Time"]);
     expect(within(dialog).getByLabelText("Title")).toHaveValue("");
   });
 
