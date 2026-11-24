@@ -65,7 +65,7 @@ export KB_SELF_URL
 # kit-bootstrap main as merged for it (#3 and #4), the same commit its Windows setup is built with;
 # 2.0.0-beta.15 pins main as merged for #5 (the old Windows folder names move; it changes only
 # Windows files, so a server runs the same code as before), again the same as its Windows setup.
-KB_PIN="7ae7d664c0a3864216190c6c06aa7d895bcec0fc"
+KB_PIN="2988dc9a93bf6a3c918894fa430ed5ee262a900e"
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
 
 # The agent cage (see "The agent cage" in phase 1): one file from kit-bootstrap at its
