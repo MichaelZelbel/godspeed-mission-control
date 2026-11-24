@@ -8,7 +8,7 @@ import {now as clockNow,localParts} from '../../third-party/addons/godspeed-coac
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
 import {loadSettings as coachSettings} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 import {latestPerDayMetric} from './health-inputs.mjs';
-import {foodTable,foodById,searchFoods} from './food-table.mjs';
+import {foodTable,foodById,searchFoods,installFoodTable,foodTableWanted} from './food-table.mjs';
 import {lookupBarcode,searchProducts,productById,cachedProducts} from './food-products.mjs';
 import {MEALS,MEAL_SAID,lang,foodSchema,foodCard,resolveItems,portionsFrom,rowOf,totalsOf,nutrients,foodIdOf,sourceOf,unitKey,targetFor,currentTarget,weightsFrom,
  setupQuestion,questionText,trackReply,leftWords,targetHint,readyReply,edReply,todayReply,targetQuestion,targetReply,noTargetReply,adaptLine,dateWords,fmt,ACTIVITY,GOALS} from './food.mjs';
@@ -21,7 +21,7 @@ const stateOf=store=>store.state||path.join(store.root,'.godspeed');
 const expectedOf=(input,table,id)=>{const v=input.expected?.[table+'/'+id]??input.expected?.[id];return typeof v==='string'?{[id]:v}:{};};
 const talkOf=value=>{if(value===undefined||value===null||value===''||value===false)return null;if(typeof value!=='string'||!/^[a-z][a-z0-9-]{0,39}$/.test(value))throw Error('Name the coaching talk by its area, such as health, or none');return value;};
 export const foodTracker=store=>trackers(store).find(c=>c.tracker.specialist==='food')||null;
-export const TABLE_MISSING='The food table is not on this computer yet. It downloads by itself once, when the notebook starts with internet access, and works offline after that. Until then I can only track packaged food by its barcode.';
+export const TABLE_MISSING='The food table is not on this computer yet. It downloads the first time you track food or name a food, needs internet access for that once, and works offline after that. Until then I can only track packaged food by its barcode.';
 // A food by its id: the BLS code from a search, or "off:<barcode>" for a product looked up before.
 export function foodLookup(store){
  const state=stateOf(store);let table;
@@ -59,7 +59,19 @@ function lastMeal(rows){
 const presetKey=name=>{const n=norm(name).replace(/(?<!\p{L})(?:my|usual|the|übliche[snrm]?|mein[e]?|wie immer|as always)(?!\p{L})/giu,' ').replace(/\s+/g,' ').trim();for(const m of ['breakfast','lunch','dinner','snack'])if(n===m||norm(MEAL_SAID.de[m])===n)return m;return n;};
 const presetSaid=(l,key)=>MEAL_SAID[l][key]||key;
 
+// The food table downloads the first time food is used (never at a notebook's start): a search or a
+// track with no table here waits for it, and says plainly when it could not be fetched. One download
+// at a time, however many lookups wait for it.
+const TABLE_ACTIONS=['search','track','answer','correct'];
+const installing=new Map();
+function withTable(domains,raw){
+ const state=stateOf(domains.store);
+ if(!TABLE_ACTIONS.includes(raw.action||'track')||domains.noFoodDownload||foodTable(state)||!foodTableWanted(state,domains.foodEnv||process.env))return null;
+ if(!installing.has(state))installing.set(state,installFoodTable(state,{fetcher:domains.foodFetcher,sha256:domains.foodSha256}).finally(()=>installing.delete(state)));
+ return installing.get(state).then(()=>foodOperation(domains,raw),error=>{throw Error('The food table could not be fetched, so I cannot look up foods right now ('+error.message+'). Check the internet connection and try again.');});
+}
 export function foodOperation(domains,raw){
+ const waiting=withTable(domains,raw);if(waiting)return waiting;
  const {store,query}=domains,now=clockNow(),zone=tz(store),today=dayOf(now,zone);
  // Their day words ("yesterday", "on Friday") are worked out in code (trackers.mjs entryOn).
  const action=raw.action||'track',input={...raw,on:entryOn(raw,today,{entry:action==='track'})};

@@ -1,6 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {foodTableWanted,BLS} from '../core/food-table.mjs';
 import {about} from '../core/about.mjs';
+import {createHash} from 'node:crypto';
+import {foodOperation} from '../core/food-operations.mjs';
 import {withTable} from './food-fixture.mjs';
 
 // The food table at setup (D-321 step 5): the installer fetches it after init and never fails over it;
@@ -23,7 +25,23 @@ test('a starting notebook fetches the table only when it is missing, outside tes
  assert.equal(foodTableWanted(state,{NODE_TEST_CONTEXT:'child'}),false);
  await withTable(root);
  assert.equal(foodTableWanted(state,{}),false,'installed');
- assert.match(read('../server/main.mjs'),/if \(foodTableWanted\(store\.state\)\) \{ const foodTableTimer = setTimeout\(/);
+});
+
+test('a notebook never fetches the table at its start; the first food lookup does, and says plainly when it cannot',async()=>{
+ assert.doesNotMatch(read('../server/main.mjs'),/installFoodTable|foodTableWanted/,'nothing at start');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-food-first-')),state=path.join(root,'.godspeed');
+ const store={root,state,get:()=>null,list:()=>[]},calls=[];
+ const zip=fs.readFileSync(new URL('./fixtures/bls-4.0/BLS_4_0_2025_DE.zip',import.meta.url)),sha256=createHash('sha256').update(zip).digest('hex');
+ assert.equal(foodOperation({store,query:{},foodEnv:{}},{action:'status'}).table,false);
+ assert.deepEqual(calls,[],'a status read fetches nothing');
+ const offline=async()=>{calls.push('offline');throw new Error('getaddrinfo ENOTFOUND www.blsdb.de');};
+ await assert.rejects(foodOperation({store,query:{},foodEnv:{},foodFetcher:offline},{action:'search',queries:['Apfel']}),/food table could not be fetched/);
+ assert.equal(calls.length,1);
+ const online=async url=>{calls.push(String(url));return new Response(zip);};
+ const found=await foodOperation({store,query:{},foodEnv:{},foodFetcher:online,foodSha256:sha256},{action:'search',queries:['Apfel']});
+ assert.equal(found.table,'BLS 4.0');assert.ok(found.results[0].foods.length>0,'the first lookup answers');
+ await foodOperation({store,query:{},foodEnv:{},foodFetcher:online,foodSha256:sha256},{action:'search',queries:['Apfel']});
+ assert.equal(calls.length,2,'downloaded once');
 });
 
 // Settings, About: since 18 October 2026 on the Settings page every address opens (local/Control.tsx);
