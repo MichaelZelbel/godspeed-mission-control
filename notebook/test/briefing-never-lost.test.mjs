@@ -394,7 +394,7 @@ for(const [kind,save,claim,reason] of [
 });
 
 for(const workFirst of [true,false])test('a refused goal is still named, and the goal with verified work is named first ('+(workFirst?'work goal saved first':'work goal saved last')+')',async()=>{
- const {store,query}=fixture([]),titles=workFirst?['Plant the fictional garden','Prepare a fictional guide']:['Prepare a fictional guide','Plant the fictional garden'];
+ const {store,query}=fixture([]),titles=['Plant the fictional garden','Prepare a fictional guide'];
  const [first,second]=titles.map(title=>store.save('goals',{title,status:'adopted'})),worked=workFirst?first:second,idle=workFirst?second:first;
  store.save('work_items',{kind:'draft',title:'Checked fictional outline',state:'verified',goal_id:worked.id});
  const provider=async input=>input.kind==='brief-verification'?sourceRejects(input,idle.title+' is unsupported',[idle.id]):'Unsupported draft.';
