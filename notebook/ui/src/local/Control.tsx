@@ -5,8 +5,6 @@ import {AISuggestionPreferences} from '@/components/settings/AISuggestionPrefere
 import {AiVisibilitySettings} from '@/components/settings/AiVisibilitySettings';
 import {Notifications} from './Notifications';
 import {Link,useLocation} from 'react-router-dom';
-import {Button} from '@/components/ui/button';
-import {Download} from 'lucide-react';
 import {showDate} from '@/lib/local-date';
 import {PersonalControl} from './PersonalControl';
 import {ConflictReview} from './ConflictReview';
@@ -84,8 +82,8 @@ export default function Control(){
   },[location.hash]);
   return <div className="max-w-4xl space-y-6"><h1 className="text-2xl font-bold">Settings</h1><p>Manage your notebook, assistant and connected devices.</p>
     <p role="alert" className="text-red-400">{error}</p>
-    <Button asChild className="min-h-11 gap-2"><Link to="/dashboard/settings/import"><Download className="h-4 w-4" aria-hidden="true"/>Import from Menerio</Link></Button>
     <ConnectAI/>
+    <p className="text-sm text-muted-foreground">Bring in notes from elsewhere: <Link className="underline" to="/dashboard/settings/import">Import from Menerio</Link></p>
     <NewRulesSetting/>
     {data?.assistantUpdate&&<section id="assistant-update" className="border rounded p-4 space-y-2"><h2 className="text-xl">Assistant updates</h2><label className="flex gap-2 items-center"><input type="checkbox" checked={data.assistantUpdate.enabled!==false} onChange={e=>action('hermes-update',{enabled:e.target.checked})}/>Keep the assistant program up to date</label><p>The notebook checks eligible stable Hermes releases nightly at 04:15, after seven days. Major releases wait for you. It updates only a clean checkout it owns and checks the program, routines, plugins, gateway, and one connected AI question.</p>{data.assistantUpdate.reason&&<p className="text-sm text-muted-foreground">{data.assistantUpdate.reason}</p>}{data.assistantUpdate.last&&<p className="text-sm text-muted-foreground">Last check: {data.assistantUpdate.last.result}{data.assistantUpdate.last.version?' ('+data.assistantUpdate.last.version+')':''}{data.assistantUpdate.last.reason?': '+data.assistantUpdate.last.reason:''}.</p>}</section>}
     <TelegramSettings/>
