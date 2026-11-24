@@ -1337,3 +1337,9 @@ export class Store {
     });
   }
 }
+// The fields every stored record carries (prepare, above), plus the tombstone's
+// removed_at (purgeRecord): the write-filter check judges a filter field by them
+// (query.mjs, issue 950). Built from a real prepare output so the list cannot
+// drift from what records actually carry; purged is the tombstone's own marker,
+// not a field a filter names.
+export const envelopeFields = new Set([...Object.keys(Store.prototype.prepare.call({ device: '' }, 'contacts', {})), 'removed_at']);
