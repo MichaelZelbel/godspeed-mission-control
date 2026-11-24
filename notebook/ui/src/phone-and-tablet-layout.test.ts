@@ -254,6 +254,8 @@ describe("chat and search at phone and tablet widths", () => {
       // The area ends where main's own 24 px of padding does: it fills the height below the back bar.
       if (nested !== null && bottom < window.innerHeight - 24 - 1) wrong.push("the details sit in a nested scroll area " + nested + " px tall on a " + window.innerHeight + " px window");
       if (window.innerHeight - mainRect.bottom > 1) wrong.push("an empty band of " + Math.round(window.innerHeight - mainRect.bottom) + " px lies below the page");
+      const doc = document.documentElement.scrollHeight;
+      if (doc > window.innerHeight + 1) wrong.push("the page itself also scrolls (" + doc + " px on a " + window.innerHeight + " px window), past the details");
       return wrong;
     })()`);
 
