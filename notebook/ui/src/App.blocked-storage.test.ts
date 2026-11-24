@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser } from "playwright-core";
+import { WAIT_MS } from "@/test/wait-limits";
 import { startNotebook, type RealNotebook } from "@/test/real-notebook";
 
 // With the browser refusing site data, reading localStorage and sessionStorage throws a
@@ -72,7 +73,7 @@ describe("the notebook with the browser's site data blocked", () => {
       await page.goto(notebook.base + "/dashboard");
 
       const banner = page.getByTestId("tab-only-storage");
-      await banner.waitFor();
+      await banner.waitFor({ timeout: WAIT_MS });
       const header = page.getByRole("banner").filter({ has: page.locator('[data-sidebar="trigger"]') });
       const headerBox = (await header.boundingBox())!;
       const bannerBox = (await banner.boundingBox())!;
@@ -95,7 +96,7 @@ describe("the notebook with the browser's site data blocked", () => {
       } else {
         await banner.getByRole("button", { name: "Dismiss" }).click();
       }
-      await banner.waitFor({ state: "detached" });
+      await banner.waitFor({ state: "detached", timeout: WAIT_MS });
     } finally {
       await page.close();
     }
