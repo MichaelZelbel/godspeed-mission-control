@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Send, Globe, Brain, Plus } from "lucide-react";
+import { Send, Brain, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/brand";
 import { telegramStatus, telegramUnavailable, telegramSwitchedOff } from "@/local/ConnectTelegram";
@@ -26,14 +26,7 @@ const OPTIONS: CaptureOption[] = [
     title: "Telegram",
     description: "Send messages to your bot to capture ideas on the go.",
     icon: Send,
-    to: "/dashboard/settings?tab=telegram",
-  },
-  {
-    key: "singlefile",
-    title: "Web Clipper",
-    description: "Save any web page as a Markdown note in one click.",
-    icon: Globe,
-    to: "/dashboard/settings?tab=singlefile",
+    to: "/dashboard/settings#telegram",
   },
   {
     key: "mcp",

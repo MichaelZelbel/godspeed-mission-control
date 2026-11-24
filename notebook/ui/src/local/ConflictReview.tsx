@@ -13,5 +13,5 @@ function Review({conflict:c,resolve}:{conflict:any,resolve:(body:any)=>Promise<v
   </article>;
 }
 export function ConflictReview({conflicts,resolve}:{conflicts:any[],resolve:(body:any)=>Promise<void>}){
-  return <section><h2 className="text-xl">Review conflicting edits</h2>{conflicts.map(c=><Review key={c.id} conflict={c} resolve={resolve}/>)}</section>;
+  return <section id="review-conflicts"><h2 className="text-xl">Review conflicting edits</h2>{conflicts.map(c=><Review key={c.id} conflict={c} resolve={resolve}/>)}</section>;
 }

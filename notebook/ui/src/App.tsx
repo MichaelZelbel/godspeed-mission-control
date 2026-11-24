@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { toast } from 'sonner';
+import { onThisComputer } from '@/lib/on-this-computer';
 import { tabOnlyStorage } from '@/lib/tab-storage';
 import { BrowserRouter, Routes, Route, Navigate, Link, Outlet, useLocation } from 'react-router-dom';
 import { BRAIN_PAGE } from '@/lib/brain-page';
@@ -45,27 +45,45 @@ function ShortAddress(){
   if(!(SHORT_ADDRESSES as readonly string[]).includes(name))return <Unavailable/>;
   return <Navigate to={['/dashboard',name,...rest].join('/')+search+hash} replace/>;
 }
+function Reconnect({error,refreshSession}:{error:string;refreshSession:()=>Promise<void>}){
+  return <AuthShell><h2>Let’s reconnect</h2><p className="auth-intro" role="alert">{error}</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
+}
 const TAB_ONLY_NOTICE="This browser blocks site data for this page. What you type and choose is kept only until you close or reload this tab. To keep it, allow site data (cookies and site data) for this address in your browser's settings.";
-let noticeShown=false;
+let noticeDismissed=false;
+// An inline banner at the top of the page: it pushes the page down, covers no control, and stays until closed.
 function TabOnlyStorageNotice(){
+  const [open,setOpen]=useState(tabOnlyStorage&&!noticeDismissed);
+  const close=()=>{noticeDismissed=true;setOpen(false);};
   useEffect(()=>{
-    if(!tabOnlyStorage)return;
-    if(!noticeShown){noticeShown=true;toast.info(TAB_ONLY_NOTICE,{id:'tab-only-storage',duration:12000,closeButton:true,position:'bottom-center',style:{pointerEvents:'none'},classNames:{closeButton:'!pointer-events-auto'}});}
-    const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape')toast.dismiss('tab-only-storage');};
+    if(!open)return;
+    const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape'){noticeDismissed=true;setOpen(false);}};
     window.addEventListener('keydown',onKey);
     return()=>window.removeEventListener('keydown',onKey);
-  },[]);
-  return null;
+  },[open]);
+  if(!open)return null;
+  return <div role="status" data-testid="tab-only-storage" className="flex items-start gap-3 border-b bg-muted px-4 py-2 text-sm"><p className="flex-1">{TAB_ONLY_NOTICE}</p><button type="button" aria-label="Dismiss" onClick={close} className="shrink-0 rounded px-2 text-lg leading-none hover:bg-background">×</button></div>;
 }
 function Layout(){
-  const {user,loading,authError,refreshSession}=useAuth();
+  const {user,loading,authError,refreshSession,local}=useAuth();
   if(loading)return <AuthShell><h2>Opening Godspeed Mission Control</h2><p role="status">Checking your sign-in…</p></AuthShell>;
-  if(!user&&authError)return <AuthShell><h2>Let’s reconnect</h2><p className="auth-intro" role="alert">{authError}</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
+  if(!user&&authError)return <Reconnect error={authError} refreshSession={refreshSession}/>;
+  // A notebook on this computer needs no sign-in (the server always answers signed in there), so it
+  // never lands on the server's sign-in, invite or setup screens, even if a read comes back oddly.
+  if(!user&&local)return <AuthShell><h2>Reconnecting to your notebook</h2><p className="auth-intro" role="status">Your notebook is on this computer and needs no sign-in.</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
   if(!user)return <AuthScreen/>;
   return <><KeepUnsavedNotes/><TabOnlyStorageNotice/><DashboardLayout/></>;
 }
+// A setup link only means something on a server install. A local notebook's server always answers
+// signed in, so its stale setup link goes back to the dashboard; a read that fails cannot say
+// whether the server is local, so the reconnect shell keeps the server's screens away until it answers.
+function SetupRoute(){
+  const {user,local,authError,refreshSession}=useAuth();
+  if(local)return <Navigate to="/dashboard" replace/>;
+  if(!user&&authError&&onThisComputer())return <Reconnect error={authError} refreshSession={refreshSession}/>;
+  return <AuthScreen/>;
+}
 // The notebook's addresses; App puts them in the browser's router, the tests in a memory router.
-export function AppRoutes(){return <Routes><Route path="/setup" element={<AuthScreen/>}/><Route path="/shared/:token" element={<Suspense fallback={<p>Opening...</p>}><SharedNote/></Suspense>}/><Route element={<Layout/>}>
+export function AppRoutes(){return <Routes><Route path="/setup" element={<SetupRoute/>}/><Route path="/shared/:token" element={<Suspense fallback={<p>Opening...</p>}><SharedNote/></Suspense>}/><Route element={<Layout/>}>
   <Route path="/" element={<Navigate to="/dashboard" replace/>}/><Route path="/dashboard" element={<Home/>}/>
   <Route path="/dashboard/chat" element={<GlobalAIChatFAB page/>}/><Route path="/dashboard/control" element={<Navigate to="/dashboard" replace/>}/><Route path="/dashboard/notes/*" element={<Notes/>}/>
   <Route path="/dashboard/goals" element={<Goals/>}/>

@@ -126,7 +126,7 @@ export default function Notes() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
-  const {setOpen:setMenuOpen}=useSidebar();
+  const {open:menuIsOpen,setOpen:setMenuOpen}=useSidebar();
   const [chatOpen,setChatOpen]=useState(false);
   const [treeCollapsed,setTreeCollapsed]=useState(()=>window.localStorage.getItem("godspeed:notes-tree-collapsed")==="true");
   const toggleTree=()=>setTreeCollapsed(v=>{window.localStorage.setItem("godspeed:notes-tree-collapsed",String(!v));return !v;});
@@ -134,6 +134,9 @@ export default function Notes() {
 
   
   const [selectedId, setSelectedId] = useState<string | null>(urlNoteId || null);
+  // At tablet widths an open sidebar left the note 176 px and cut its toolbar (#1017); close it like chatVisibility does.
+  const menuOpenRef=useRef(setMenuOpen);menuOpenRef.current=setMenuOpen;
+  useEffect(()=>{if(selectedId&&!isMobile&&window.innerWidth<1024)menuOpenRef.current(false);},[selectedId,isMobile]);
   const [searchMode, setSearchMode] = useState(false);
   const [showLocalGraph, setShowLocalGraph] = useState(false);
 
@@ -838,6 +841,8 @@ export default function Notes() {
       <div className={cn(
         "shrink-0 border-r border-border flex-col bg-background min-w-0",
         isMobile ? "w-full" : "w-72",
+        // Sidebar reopened by hand beside an open note at tablet width: the list steps aside so the note keeps its toolbar (#1017).
+        !isMobile && menuIsOpen && selectedId && "max-lg:!hidden",
         (isMobile && (selectedId||chatOpen)) || (!isMobile&&treeCollapsed) ? "hidden" : "flex"
       )}>
 
@@ -1364,7 +1369,9 @@ export default function Notes() {
             <AlertDialogDescription>{promptState.description}</AlertDialogDescription>
           )}
         </AlertDialogHeader>
+        <label htmlFor="notes-prompt-folder-name" className="block text-xs font-medium text-muted-foreground">Folder name</label>
         <Input
+          id="notes-prompt-folder-name"
           autoFocus
           value={promptValue}
           onChange={(e) => setPromptValue(e.target.value)}
@@ -1377,8 +1384,6 @@ export default function Notes() {
               if (action && value) void action(value);
             }
           }}
-          placeholder="Folder name"
-          aria-label="Folder name"
         />
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
