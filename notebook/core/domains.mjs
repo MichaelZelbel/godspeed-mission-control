@@ -4,11 +4,12 @@ import {momentDraft} from './moment-draft.mjs';
 import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
 import {startCharmJudgement} from './charm-judgement.mjs';
 import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
-import {asksForTodaysBrief,savedBriefToday} from './briefing.mjs';
+import {savedBriefAnswer} from './briefing.mjs';
 import {NOTEBOOK_CHAT_FUNCTIONS} from './notebook-chat.mjs';
 
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
 import {draftEvent} from './draft-event.mjs';
+import {draftChatMoments} from './chat-moments.mjs';
 import {momentDates} from './timestamps.mjs';
 import {NOTE_TYPES,processNote} from './proposals.mjs';
 import {NoteProcessing,PIPELINE,contentFingerprint,skipsProcessing} from './processing.mjs';
@@ -158,7 +159,7 @@ export function weekNotes(notes){
 // test (test/ai-provider-outcomes.test.mjs) drives every declared name — the true ones through
 // every outcome, the false ones against the counting stub, which they must never reach.
 export const AI_DISPATCH=Object.freeze({
-  'conversation-chat':true,'note-chat':true,'collection-chat':true,'draft-event':true,
+  'conversation-chat':true,'note-chat':true,'collection-chat':true,'draft-event':true,'draft-chat-moments':true,
   'process-note':true,'generate-profile-suggestions':true,'enrich-people':true,
   'extract-moment-profile':true,'analyze-media':true,'analyze-pdf':true,
   'classify-profile-fact':true,'generate_collection_schema':true,'weekly-review':true,
@@ -335,6 +336,7 @@ export class Domains {
     // the AI is asked (#861).
     if(!(name in AI_DISPATCH))throw new Error('Processing function has not been ported: ' + name);
     if(name==='draft-event')return draftEvent(this.provider,input);
+    if(name==='draft-chat-moments')return draftChatMoments(this.provider,input);
     if(name==='retrieve-memory')return retrieveNoteWindows(this.query,input.query||input.message||'');
     // A message from the page that shows who the assistant is carries that page's numbered parts,
     // and its answer says whether any of them changed, so the page shows the change (16 October 2026).
@@ -353,8 +355,8 @@ export class Domains {
       input={...input,conversation_id:conversationRuntimeId(input)};
       if(!input.message)input={...input,message:input.messages?.filter(m=>m.role==='user').at(-1)?.content||''};
     }
-    if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode!=='summarize'&&asksForTodaysBrief(input.message)){
-      const saved=savedBriefToday(this.store).note;
+    if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode!=='summarize'){
+      const saved=savedBriefAnswer(this.store,input.message);
       if(saved){
         const reply=String(saved.content||'');
         await this.store.saveAsync('conversation_messages',{role:'assistant',content:reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'morning-brief'},undefined,{signal:input.signal});

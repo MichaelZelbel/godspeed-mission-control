@@ -291,3 +291,23 @@ test('a not.in over an empty list in or/and text is refused',async()=>{
     }
   }finally{await service.close();}
 });
+
+// Issue 956: an operation name the door does not know fell into the write
+// branch and rewrote every record of the kind.
+test('an unknown or wrong-case operation is refused with 400 naming the supported ones and changes nothing',async()=>{
+  const service=await createService({root:root(),port:0}),base='http://127.0.0.1:'+service.address.port;
+  try{
+    await post(base,{table:'contacts',operation:'insert',values:[{name:'Ana'},{name:'Bo'}]});
+    const before=JSON.stringify(await people(base));
+    for(const body of [
+      {table:'contacts',operation:'remove',values:{name:'X'}},
+      {table:'contacts',operation:'Update',values:{name:'X'}},
+      {table:'contacts',operation:'patch',values:{name:'X'},filters:[['eq','name','Ana']]},
+    ]){
+      const res=await post(base,body);
+      assert.equal(res.status,400,body.operation);
+      assert.match((await res.json()).error,/select, insert, upsert, update, delete/);
+    }
+    assert.equal(JSON.stringify(await people(base)),before,'no record, revision or history changed');
+  }finally{await service.close();}
+});

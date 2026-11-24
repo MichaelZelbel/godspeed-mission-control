@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { NOTE_MODIFYING_TOOLS, aiWorkedAt, recordAIWorked, unansweredReason, withSummary } from "./chat-history";
-import { hydrateFilePreferences } from "@/local/file-preferences";
+import { AI_REFUSED, AI_UNREACHABLE, NO_AI_CHAT } from "../../../core/no-ai.mjs";
+import { NOTE_MODIFYING_TOOLS, NO_ANSWER_AI_WORKS, unansweredNote, unansweredReason, withSummary } from "./chat-history";
+import { AI_UNREADABLE } from "../../../core/no-ai.mjs";
 
 // The note chat reports what it did by tool name (domains.mjs): update_note
 // for a text change, update_note_metadata, trash_note. A name missing here
@@ -19,57 +20,38 @@ it("a summary from an earlier session cannot return after Clear, even when the n
   expect(withSummary(state, "Earlier conversation summary", 8, 20, "old-session")).toBe(state);
 });
 
-it("a message that got no answer keeps its reason only while the AI still fails and no later message is answered", () => {
-  const failed = {role: "user" as const, content: "Fictional question", lastFailure: "Your AI could not be reached.", failedAt: 2000};
+it("a message that got no answer keeps its reason until the next message is the AI's answer, whatever the AI's state", () => {
+  const failed = {role: "user" as const, content: "Fictional question", lastFailure: "Your AI could not be reached."};
   const reply = {role: "assistant" as const, content: "Fictional answer"};
   const followUp = {role: "user" as const, content: "Fictional follow-up"};
-  expect(unansweredReason([failed], 0, "unreachable")).toBe("Your AI could not be reached.");
-  expect(unansweredReason([failed], 0, "refused")).toBe("Your AI could not be reached.");
-  expect(unansweredReason([failed, followUp], 0, "unreachable")).toBe("Your AI could not be reached.");
+  expect(unansweredReason([failed], 0, "unreachable")).toBe(AI_UNREACHABLE);
+  expect(unansweredReason([failed], 0, "checking")).toBe("Your AI could not be reached.");
+  expect(unansweredReason([failed], 0, "ready")).toBe(NO_ANSWER_AI_WORKS);
+  expect(unansweredReason([failed, followUp], 0, "unreachable")).toBe(AI_UNREACHABLE);
+  expect(unansweredReason([failed, followUp, reply], 0, "unreachable")).toBe(AI_UNREACHABLE);
   expect(unansweredReason([failed, reply], 0, "unreachable")).toBeNull();
-  expect(unansweredReason([failed, followUp, reply], 0, "unreachable")).toBeNull();
-  for (const state of ["ready", "none", "settings-only", "checking"]) expect(unansweredReason([failed], 0, state)).toBeNull();
   expect(unansweredReason([{role: "user", content: "Fictional question"}], 0, "unreachable")).toBeNull();
-  // A note belongs to its failure: once the AI has worked after it, a later outage does not bring it back (#821).
-  expect(unansweredReason([failed], 0, "unreachable", 1999)).toBe("Your AI could not be reached.");
-  expect(unansweredReason([failed], 0, "unreachable", 2000)).toBeNull();
-  expect(unansweredReason([failed], 0, "refused", 5000)).toBeNull();
+  expect(unansweredReason([reply], 0, "unreachable")).toBeNull();
 });
 
-it("records when the AI last worked, and never moves it back", () => {
-  localStorage.clear();
-  expect(aiWorkedAt()).toBe(0);
-  recordAIWorked(3000);
-  recordAIWorked(1000);
-  expect(aiWorkedAt()).toBe(3000);
-  localStorage.clear();
+it("a kept note names the AI's current state, never the state its stored reason came from", () => {
+  const stored = (lastFailure: string) => ({role: "user" as const, content: "Fictional question", lastFailure});
+  const reasons = [NO_AI_CHAT, AI_REFUSED, AI_UNREACHABLE];
+  for (const reason of reasons) {
+    const m = [stored(reason)];
+    expect(unansweredNote(m, 0, "none")).toEqual({text: NO_AI_CHAT, plain: true});
+    expect(unansweredNote(m, 0, "refused")).toEqual({text: AI_REFUSED, plain: false});
+    expect(unansweredNote(m, 0, "unreachable")).toEqual({text: AI_UNREACHABLE, plain: false});
+    expect(unansweredNote(m, 0, "ready")).toEqual({text: NO_ANSWER_AI_WORKS, plain: false});
+  }
 });
 
-// The durable-preferences patch (file-preferences.ts) syncs every changed key
-// matching its pattern to the server's ui-preferences record. The worked-at
-// time is written about once a second by every open chat surface, so a key
-// name the patch catches made concurrent tabs conflict and kept raising the
-// "preference change could not be saved" toast (PR #795's review, D1).
-it("recording when the AI last worked never saves a preference", async () => {
-  localStorage.clear();
-  const calls: string[] = [];
-  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
-    calls.push(url);
-    if (url.startsWith("/api/query")) {
-      return Promise.resolve(new Response(JSON.stringify({ data: [{ _hash: "test-hash" }] }), { status: 200 }));
-    }
-    return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
-  });
-  await hydrateFilePreferences();
-  calls.length = 0;
-  recordAIWorked(Date.now());
-  recordAIWorked(Date.now() + 1000);
-  // The patch saves through a 150 ms debounce; give it the chance to fire.
-  await new Promise((resolve) => setTimeout(resolve, 300));
-  expect(calls).toEqual([]);
-  vi.unstubAllGlobals();
-  localStorage.clear();
+it("a message whose answer could not be used keeps its reason in every state, until answered", () => {
+  const reason = AI_UNREADABLE;
+  const failed = {role: "user" as const, content: "Fictional question", lastFailure: reason};
+  const reply = {role: "assistant" as const, content: "Fictional answer"};
+  for (const state of ["ready", "refused", "unreachable", "settings-only", "none", "checking"]) expect(unansweredNote([failed], 0, state)).toEqual({text: reason, plain: false});
+  expect(unansweredReason([failed, reply], 0, "ready")).toBeNull();
 });
 
 afterEach(() => {

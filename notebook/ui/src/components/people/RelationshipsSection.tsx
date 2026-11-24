@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { type ReactNode, useId, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, ChevronRight, Plus, Pencil, Trash2, Users, Briefcase } from "lucide-react";
 import { ProfileRow } from "@/components/profile/ProfileRow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
@@ -57,12 +58,30 @@ interface RelationshipsSectionProps {
   milestones?: RelationshipMilestone[];
 }
 
+// A small caption above a form field. The click focuses the field without
+// opening a list, as the note editor's "Log as interaction" labels do.
+function FormField({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <Label
+        htmlFor={id}
+        className="block text-xs font-medium text-muted-foreground"
+        onClick={(event) => { event.preventDefault(); document.getElementById(id)?.focus(); }}
+      >
+        {label}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
 export function RelationshipsSection({ contactId, contactName, milestones = [] }: RelationshipsSectionProps) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const { relationships, isLoading, upsertRelationship, deleteRelationship } =
     useContactRelationships(contactId);
 
+  const fieldId = useId();
   const [adding, setAdding] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const [proExpanded, setProExpanded] = useState(false);
@@ -459,8 +478,9 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
       {adding && (
         <div className="px-3 pb-3 space-y-2 border-t border-border pt-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <FormField id={`${fieldId}-label`} label="Relationship">
             <Select value={formLabel} onValueChange={setFormLabel}>
-              <SelectTrigger className="text-sm h-8">
+              <SelectTrigger id={`${fieldId}-label`} className="text-sm h-8">
                 <SelectValue placeholder="Select label…" />
               </SelectTrigger>
               <SelectContent>
@@ -469,18 +489,22 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
                 ))}
               </SelectContent>
             </Select>
+            </FormField>
 
+            <FormField id={`${fieldId}-custom`} label="Custom label (optional)">
             <Input
-              placeholder="Custom label (optional)"
+              id={`${fieldId}-custom`}
               value={formCustomLabel}
               onChange={(e) => setFormCustomLabel(e.target.value)}
               className="text-sm h-8"
             />
+            </FormField>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <FormField id={`${fieldId}-target-type`} label="Related to">
             <Select value={formTargetType} onValueChange={(v) => { setFormTargetType(v as "contact" | "self"); setFormTargetId(""); }}>
-              <SelectTrigger className="text-sm h-8">
+              <SelectTrigger id={`${fieldId}-target-type`} className="text-sm h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -488,10 +512,12 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
                 {contactId !== null && <SelectItem value="self">Me ({myName})</SelectItem>}
               </SelectContent>
             </Select>
+            </FormField>
 
             {formTargetType === "contact" && (
+              <FormField id={`${fieldId}-person`} label="Person">
               <Select value={formTargetId} onValueChange={setFormTargetId}>
-                <SelectTrigger className="text-sm h-8">
+                <SelectTrigger id={`${fieldId}-person`} className="text-sm h-8">
                   <SelectValue placeholder="Select person…" />
                 </SelectTrigger>
                 <SelectContent>
@@ -500,6 +526,7 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
                   ))}
                 </SelectContent>
               </Select>
+              </FormField>
             )}
           </div>
 

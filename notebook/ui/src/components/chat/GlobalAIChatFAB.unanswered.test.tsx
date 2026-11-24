@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
-// A message the AI refused or could not be reached for says why under it, keeps saying so after a
-// reload while the AI still fails, shows once, and can be sent again in place; once the AI works
-// again the note goes from every open chat and stays gone, even when the AI fails again later
-// (#821), and with no AI connected the no-AI sentence shows alone (#790). Saves go through the
-// notebook's own conversation merge.
+// A message that got no answer (no AI connected, refused, unreachable, an unusable answer) says so
+// under it, with Send again, until the message right after it is the AI's answer: after a reload,
+// after later sends, and when an AI is connected or removed (#1043). Send again asks it in place.
+// Saves go through the notebook's own conversation merge.
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
@@ -11,9 +10,10 @@ import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import '@testing-library/jest-dom/vitest';
 import {WAIT} from '@/test/wait-limits';
 import {GlobalAIChatFAB} from './GlobalAIChatFAB';
+import {NO_ANSWER_AI_WORKS} from '@/lib/chat-history';
 import {clearFileChat,hydrateFileChats} from '@/local/file-chat';
-import {saveConversationState} from '../../../../core/conversation-state.mjs';
-import {NO_AI_CHAT} from '../../../../core/no-ai.mjs';
+import {retainCompletedConversation,saveConversationState} from '../../../../core/conversation-state.mjs';
+import {AI_UNREADABLE as UNREADABLE,NO_AI_CHAT} from '../../../../core/no-ai.mjs';
 
 vi.mock('sonner',()=>({toast:{error:vi.fn(),warning:vi.fn()}}));
 vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:{id:'owner'},session:{user:{id:'owner'}}})}));
@@ -92,7 +92,7 @@ const typeAndFail=async(kind:keyof typeof failures,text:string)=>{
  invoke.mockImplementationOnce(async()=>{ai=failure.state;return failure.answer();});
  fireEvent.change(await screen.findByLabelText('Message',{},WAIT),{target:{value:text}});
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
- expect(await screen.findByText(failure.reason,{},{timeout:3000})).toBeInTheDocument();
+ expect((await screen.findAllByText(failure.reason,{},{timeout:3000})).length).toBeGreaterThan(0);
 };
 const sendFailing=async(surface:keyof typeof surfaces,kind:keyof typeof failures)=>{
  surfaces[surface].show();
@@ -113,6 +113,7 @@ it.each([
 
  await reload(surface);
  expect(await screen.findByText(reason,{},WAIT)).toBeInTheDocument();
+ expect(savedMessages(surfaces[surface].key)[0].lastFailure).toBe(reason);
  expect(screen.getAllByText(QUESTION)).toHaveLength(1);
  expect(screen.getByText('No answer.')).toBeInTheDocument();
  expect(screen.getByLabelText('Message')).toHaveValue('');
@@ -126,6 +127,7 @@ it.each([
  expect(follows(screen.getByText(QUESTION),answer)).toBe(true);
  expect(screen.queryByText('No answer.')).toBeNull();
  await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,ANSWER]),WAIT);
+ expect(savedMessages(surfaces[surface].key)[0].lastFailure).toBeUndefined();
 
  await reload(surface);
  const reloaded=await screen.findByText(ANSWER,{},WAIT);
@@ -137,87 +139,144 @@ it.each([
  expect(conflicts).toEqual([]);
 });
 
-it.each([
- ['the chat page','refused','its key is accepted again'],
- ["a note's chat",'unreachable','it can be reached again'],
- ["a note's chat",'refused','its key is accepted again'],
-] as const)('in %s, the note of a %s send goes from every open chat once %s, and stays gone after a reload',async(surface,kind,_recovery)=>{
- await sendFailing(surface,kind);
- // The same conversation open in its own window says the same.
- render(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={[surface==='the chat page'?'/dashboard/chat':'/dashboard/chat?note=note-1']}><GlobalAIChatFAB page/></MemoryRouter></QueryClientProvider>);
- await waitFor(()=>expect(screen.getAllByText('No answer.')).toHaveLength(2),{timeout:3000});
- expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(2);
+const SECOND='Fictional later question',SECOND_ANSWER='Fictional answer to the later question';
+const noAiError=()=>({data:null,error:{message:NO_AI_CHAT,context:new Response(JSON.stringify({error:NO_AI_CHAT}),{status:400})}});
+const settle=()=>new Promise(r=>setTimeout(r,1200));
 
- ai=AI.ready;
- await waitFor(()=>expect(screen.queryAllByText('No answer.')).toHaveLength(0),{timeout:3000});
- expect(screen.queryAllByRole('button',{name:'Send again'})).toHaveLength(0);
- expect(screen.queryByText(failures[kind].reason)).toBeNull();
-
- await reload(surface);
- await waitFor(()=>expect(screen.getAllByText(QUESTION)).toHaveLength(1),WAIT);
- await new Promise(r=>setTimeout(r,1200));
- expect(screen.queryByText('No answer.')).toBeNull();
- expect(screen.queryByText(failures[kind].reason)).toBeNull();
-});
-
-const SECOND='Fictional later question';
-it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, a note that cleared once the AI worked stays cleared when a later send fails, also after a reload',async(surface)=>{
- await sendFailing(surface,'unreachable');
- ai=AI.ready;
- await waitFor(()=>expect(screen.queryAllByText('No answer.')).toHaveLength(0),{timeout:3000});
-
- // A second outage: only the message sent after the AI last worked gets a note.
- await typeAndFail('refused',SECOND);
- await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,SECOND]),WAIT);
- const check=()=>{
-  expect(screen.getAllByText('No answer.')).toHaveLength(1);
-  expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(1);
-  expect(follows(screen.getByText(SECOND),screen.getByText('No answer.'))).toBe(true);
-  expect(screen.queryByText(UNREACHABLE)).toBeNull();
- };
- check();
- await reload(surface);
- expect(await screen.findByText(REFUSED,{},{timeout:3000})).toBeInTheDocument();
- check();
-});
-
-it('a note in a chat that was closed while the AI worked again stays cleared in a later outage',async()=>{
- await sendFailing("a note's chat",'unreachable');
- cleanup();
- // The AI works again while only the chat page is open.
- ai=AI.ready;
- surfaces['the chat page'].show();
- await waitFor(()=>expect(localStorage.getItem('ai-worked-at')).not.toBeNull(),{timeout:3000});
- cleanup();
-
- ai=AI.unreachable;
- await reload("a note's chat");
- await waitFor(()=>expect(document.querySelector('[data-chat-ai-state="unreachable"]')).not.toBeNull(),{timeout:3000});
- expect(screen.getAllByText(QUESTION)).toHaveLength(1);
- expect(screen.queryByText('No answer.')).toBeNull();
- expect(screen.queryByRole('button',{name:'Send again'})).toBeNull();
-});
-
-it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, a send with no AI connected says the no-AI sentence alone, and sending it again keeps one copy',async(surface)=>{
+it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, a send with no AI connected gets the plain no-AI sentence, also after a reload, and Send again once an AI works',async(surface)=>{
  ai=AI.none;
- invoke.mockResolvedValueOnce({data:null,error:{message:NO_AI_CHAT,context:new Response(JSON.stringify({error:NO_AI_CHAT}),{status:400})}});
+ invoke.mockResolvedValueOnce(noAiError());
  surfaces[surface].show();
  fireEvent.change(await screen.findByLabelText('Message',{},WAIT),{target:{value:QUESTION}});
  fireEvent.click(screen.getByRole('button',{name:'Send'}));
  expect(await screen.findByText(NO_AI_CHAT,{},{timeout:1500})).toBeInTheDocument();
  expect(screen.queryByText('No answer.')).toBeNull();
  expect(screen.queryByRole('button',{name:'Send again'})).toBeNull();
- expect(screen.getByLabelText('Message')).toHaveValue(QUESTION);
+ expect(screen.getByLabelText('Message')).toHaveValue('');
+ await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION]),WAIT);
 
- // An AI is connected, and the words left in the composer are sent: the question shows once.
+ await reload(surface);
+ expect(await screen.findByText(NO_AI_CHAT,{},WAIT)).toBeInTheDocument();
+ expect(screen.getAllByText(QUESTION)).toHaveLength(1);
+ expect(screen.queryByText('No answer.')).toBeNull();
+ expect(screen.queryByRole('button',{name:'Send again'})).toBeNull();
+
  ai=AI.ready;
+ expect(await screen.findByText(NO_ANSWER_AI_WORKS,{},{timeout:3000})).toBeInTheDocument();
  invoke.mockResolvedValueOnce({data:{reply:ANSWER},error:null});
- fireEvent.click(screen.getByRole('button',{name:'Send'}));
- await screen.findByText(ANSWER,{},{timeout:1500});
+ fireEvent.click(screen.getByRole('button',{name:'Send again'}));
+ const answer=await screen.findByText(ANSWER,{},{timeout:1500});
+ expect(follows(screen.getByText(QUESTION),answer)).toBe(true);
+ expect(screen.queryByText('No answer.')).toBeNull();
  await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,ANSWER]),WAIT);
+
  await reload(surface);
  await screen.findByText(ANSWER,{},WAIT);
  expect(screen.getAllByText(QUESTION)).toHaveLength(1);
+ expect(screen.getAllByText(ANSWER)).toHaveLength(1);
+ expect(screen.queryByText('No answer.')).toBeNull();
+ expect(conflicts).toEqual([]);
+});
+
+// The invoke mock answers the way the server does: the reply lands right after its own question.
+const answering=(reply:string)=>async(_fn:string,{body}:any)=>{
+ ai=AI.ready;
+ retainCompletedConversation(store,{...body,conversation_id:body.conversation_id},{reply});
+ return {data:{reply},error:null};
+};
+
+it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, an earlier message that got no answer keeps its note and Send again when a later send is answered, also after a reload, and is answered in place',async(surface)=>{
+ await sendFailing(surface,'unreachable');
+ invoke.mockImplementationOnce(answering(SECOND_ANSWER));
+ fireEvent.change(screen.getByLabelText('Message'),{target:{value:SECOND}});
+ fireEvent.click(screen.getByRole('button',{name:'Send'}));
+ await screen.findByText(SECOND_ANSWER,{},{timeout:1500});
+ await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,SECOND,SECOND_ANSWER]),WAIT);
+ const check=()=>{
+  expect(screen.getAllByText('No answer.')).toHaveLength(1);
+  expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(1);
+  expect(follows(screen.getByText(QUESTION),screen.getByText('No answer.'))).toBe(true);
+  expect(follows(screen.getByText('No answer.'),screen.getByText(SECOND))).toBe(true);
+ };
+ await settle();
+ check();
+ await reload(surface);
+ await screen.findByText(SECOND_ANSWER,{},WAIT);
+ check();
+
+ invoke.mockImplementationOnce(answering('Fictional answer to the first question'));
+ fireEvent.click(screen.getByRole('button',{name:'Send again'}));
+ const answer=await screen.findByText('Fictional answer to the first question',{},{timeout:1500});
+ const sent=(invoke.mock.calls.at(-1) as any)[1].body;
+ expect(sent.message).toBe(QUESTION);
+ expect(sent.messages.at(-1)).toEqual({role:'user',content:QUESTION});
+ expect(sent.messages.filter((m:any)=>m.content===QUESTION)).toHaveLength(1);
+ expect(follows(screen.getByText(QUESTION),answer)).toBe(true);
+ expect(follows(answer,screen.getByText(SECOND))).toBe(true);
+ expect(screen.queryByText('No answer.')).toBeNull();
+ await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,'Fictional answer to the first question',SECOND,SECOND_ANSWER]),WAIT);
+ await reload(surface);
+ await screen.findByText(SECOND_ANSWER,{},WAIT);
+ expect(screen.queryByText('No answer.')).toBeNull();
+ expect(saved(surfaces[surface].key)).toEqual([QUESTION,'Fictional answer to the first question',SECOND,SECOND_ANSWER]);
+});
+
+it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, two messages that got no answer each keep a note and Send again',async(surface)=>{
+ await sendFailing(surface,'unreachable');
+ await typeAndFail('refused',SECOND);
+ await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,SECOND]),WAIT);
+ const check=()=>{
+  expect(screen.getAllByText('No answer.')).toHaveLength(2);
+  expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(2);
+ };
+ check();
+ await reload(surface);
+ await waitFor(()=>expect(screen.getAllByText(REFUSED)).toHaveLength(2),{timeout:3000});
+ check();
+});
+
+it("a note stays in a note's chat and its pop-out when a later send is answered in one of them",async()=>{
+ await sendFailing("a note's chat",'unreachable');
+ render(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={['/dashboard/chat?note=note-1']}><GlobalAIChatFAB page/></MemoryRouter></QueryClientProvider>);
+ await waitFor(()=>expect(screen.getAllByText('No answer.')).toHaveLength(2),{timeout:3000});
+ invoke.mockImplementationOnce(answering(SECOND_ANSWER));
+ fireEvent.change(screen.getAllByLabelText('Message')[0],{target:{value:SECOND}});
+ fireEvent.click(screen.getAllByRole('button',{name:'Send'})[0]);
+ await waitFor(()=>expect(screen.getAllByText(SECOND_ANSWER).length).toBeGreaterThan(0),{timeout:3000});
+ await waitFor(()=>expect(saved('note:note-1')).toEqual([QUESTION,SECOND,SECOND_ANSWER]),WAIT);
+ await settle();
+ expect(screen.getAllByText('No answer.')).toHaveLength(2);
+ expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(2);
+});
+
+it.each([
+ ['the chat page','refused'],
+ ["a note's chat",'unreachable'],
+ ["a note's chat",'refused'],
+] as const)('in %s, a %s send keeps its note and Send again in every open chat when an AI is connected or removed, also after a reload',async(surface,kind)=>{
+ await sendFailing(surface,kind);
+ render(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={[surface==='the chat page'?'/dashboard/chat':'/dashboard/chat?note=note-1']}><GlobalAIChatFAB page/></MemoryRouter></QueryClientProvider>);
+ await waitFor(()=>expect(screen.getAllByText('No answer.')).toHaveLength(2),{timeout:3000});
+ expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(2);
+
+ ai=AI.ready;
+ await waitFor(()=>expect(screen.getAllByText(NO_ANSWER_AI_WORKS)).toHaveLength(2),{timeout:3000});
+ await settle();
+ expect(screen.getAllByText('No answer.')).toHaveLength(2);
+ expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(2);
+
+ await reload(surface);
+ expect(await screen.findByText(NO_ANSWER_AI_WORKS,{},WAIT)).toBeInTheDocument();
+ expect(screen.getAllByText(QUESTION)).toHaveLength(1);
+ expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(1);
+
+ ai=AI.none;
+ expect(await screen.findByText(NO_AI_CHAT,{},{timeout:3000})).toBeInTheDocument();
+ expect(screen.queryByText('No answer.')).toBeNull();
+ expect(screen.queryByRole('button',{name:'Send again'})).toBeNull();
+ await reload(surface);
+ expect(await screen.findByText(NO_AI_CHAT,{},WAIT)).toBeInTheDocument();
+ expect(screen.queryByRole('button',{name:'Send again'})).toBeNull();
 });
 
 const savedMessages=(key:string)=>[...rows.values()].find(r=>r.context_key===key)?.state.messages;
@@ -277,4 +336,60 @@ it('does not write a conversation cleared in another window back when its send f
  expect(screen.getByText(REFUSED)).toBeInTheDocument();
  expect(screen.queryByText('No answer.')).toBeNull();
  expect(saved('general')).toEqual([]);
+});
+
+// The AI answered, but with something the notebook cannot read: it still reads as working.
+it.each(Object.keys(surfaces) as (keyof typeof surfaces)[])('in %s, a send whose answer could not be used says so after a reload, shows once and can be sent again',async(surface)=>{
+ surfaces[surface].show();
+ invoke.mockImplementationOnce(async()=>({data:null,error:{message:UNREADABLE,context:new Response(JSON.stringify({error:UNREADABLE}),{status:400})}}));
+ fireEvent.change(await screen.findByLabelText('Message',{},WAIT),{target:{value:QUESTION}});
+ fireEvent.click(screen.getByRole('button',{name:'Send'}));
+ const check=()=>{
+  expect(screen.getByText(UNREADABLE)).toBeInTheDocument();
+  expect(screen.getByText('No answer.')).toBeInTheDocument();
+  expect(screen.getAllByRole('button',{name:'Send again'})).toHaveLength(1);
+  expect(screen.getAllByText(QUESTION)).toHaveLength(1);
+  expect(screen.getByLabelText('Message')).toHaveValue('');
+ };
+ expect(await screen.findByText(UNREADABLE,{},{timeout:3000})).toBeInTheDocument();
+ check();
+ await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION]),WAIT);
+ // The AI reads as working, which must not clear the note.
+ await settle();
+ check();
+
+ await reload(surface);
+ expect(await screen.findByText(UNREADABLE,{},WAIT)).toBeInTheDocument();
+ check();
+
+ invoke.mockImplementationOnce(async()=>({data:{reply:ANSWER},error:null}));
+ fireEvent.click(screen.getByRole('button',{name:'Send again'}));
+ const answer=await screen.findByText(ANSWER,{},{timeout:1500});
+ const sent=(invoke.mock.calls.at(-1) as any)[1].body;
+ expect(sent.message).toBe(QUESTION);
+ expect(sent.messages.filter((m:any)=>m.role==='user').map((m:any)=>m.content)).toEqual([QUESTION]);
+ expect(follows(screen.getByText(QUESTION),answer)).toBe(true);
+ expect(screen.queryByText('No answer.')).toBeNull();
+ await waitFor(()=>expect(saved(surfaces[surface].key)).toEqual([QUESTION,ANSWER]),WAIT);
+
+ await reload(surface);
+ await screen.findByText(ANSWER,{},WAIT);
+ expect(screen.getAllByText(QUESTION)).toHaveLength(1);
+ expect(screen.queryByText('No answer.')).toBeNull();
+ expect(screen.queryByText(UNREADABLE)).toBeNull();
+ expect(conflicts).toEqual([]);
+});
+
+it('sends a summarized chat the summary and exactly the messages it does not cover when an earlier message is sent again',async()=>{
+ const messages=Array.from({length:18},(_,i)=>({role:i%2?'assistant':'user',content:`Fictional message ${i}`}));
+ messages[2]={role:'user',content:QUESTION,lastFailure:UNREACHABLE} as any;
+ messages[3]={role:'user',content:'Fictional message 3'};
+ rows.set('seeded',{id:'seeded',context_key:'general',state:{messages,summary:'Fictional summary',summarizedUpTo:6}});
+ await reload('the chat page');
+ invoke.mockImplementationOnce(async()=>({data:{reply:ANSWER},error:null}));
+ fireEvent.click(await screen.findByRole('button',{name:'Send again'},WAIT));
+ await screen.findByText(ANSWER,{},{timeout:1500});
+ const sent=(invoke.mock.calls.at(-1) as any)[1].body.messages;
+ const uncovered=messages.filter((_,i)=>i!==2).slice(5).map(({role,content})=>({role,content}));
+ expect(sent).toEqual([{role:'system',content:'Conversation summary so far:\nFictional summary'},...uncovered,{role:'user',content:QUESTION}]);
 });

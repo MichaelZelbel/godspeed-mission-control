@@ -11,11 +11,14 @@ import {isTalkGate,talkArea,talkCalendar} from './routine-times.mjs';
 // The weekly check-in's own day and time, for Settings > Routine times (routine-times.mjs).
 const talkRow=(job,root)=>{if(!isTalkGate(job))return {};const calendar=talkCalendar(talkArea(root));return calendar?{calendar,talk:true}:{};};
 import {nativeCardRows} from './card-commands.mjs';
-import {momentDates} from './timestamps.mjs';
+import {momentDates,endsBeforeStart,END_BEFORE_START} from './timestamps.mjs';
 // A record with no name and no nickname (only written before 2.0.0-beta.14, issue 266) is not listed
 // among the people, though it stays on disk with whatever links to it.
 import {personNames} from './person-names.mjs';
 
+// A moment as read: the stored original with every correction laid over it by sequence, then id.
+// A correction's patch replaces the one before it key by key; the write check judges the same merge.
+const applyCorrections=(original,corrections)=>corrections.slice().sort((a,b)=>a.sequence-b.sequence||String(a.id).localeCompare(String(b.id))).reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original);
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
 // The columns each kind has in the app's schema (the screens were written
 // against notebook/ui/src/integrations/supabase/types.ts), parsed rather than
@@ -128,6 +131,7 @@ const comparisons=new Set(['eq','neq','in','contains','overlaps','gt','gte','lt'
 // reached condition() and failed as "object is not iterable", which an assistant is shown only as
 // "Something went wrong on the server" (the book's capture run, Finding 5).
 const filterExample='["eq","id","<id>"]';
+const operations=['select','insert','upsert','update','delete'];
 const filterHelp='Each filter is a list of three: an operator, a column and a value, for example '+filterExample;
 export function checkFilters(filters){
   if(!Array.isArray(filters))throw new Error('filters is a list. '+filterHelp+'.');
@@ -321,7 +325,7 @@ export class QueryService {
       if(type!=='moments'){memo.set(type,values);return values;}
       const byMoment=new Map();for(const c of ofType('event_corrections')){let l=byMoment.get(c.moment_id);if(!l)byMoment.set(c.moment_id,l=[]);l.push(c);}
       // Dates as ISO 8601, the shape the Menerio screens read (timestamps.mjs).
-      const corrected=values.map(original=>{const corrections=(byMoment.get(original.id)||[]).slice().sort((a,b)=>a.sequence-b.sequence||a.id.localeCompare(b.id));return momentDates(corrections.reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original));}).filter(r=>!r.removed_at);
+      const corrected=values.map(original=>momentDates(applyCorrections(original,byMoment.get(original.id)||[]))).filter(r=>!r.removed_at);
       memo.set(type,corrected);return corrected;
     };
     const get=(type,id)=>this.store.records.get(type+'/'+id)||ofType(type).find(r=>(r.former_ids||[]).includes(id))||ofType(type).find(r=>(r.aliases||[]).includes(id));
@@ -350,7 +354,9 @@ export class QueryService {
       const tracked=new Set(['notes','contacts','claims','entities','collections','collection_items','moments','contact_groups','contact_group_memberships','action_items','contact_topics','profile_categories','fact_slots']);
       const label={notes:'note',contacts:'person',claims:'fact',entities:'world entity',collections:'collection',collection_items:'collection item',moments:'event',contact_groups:'group',contact_group_memberships:'group membership',action_items:'action',contact_topics:'discussion topic',profile_categories:'profile category',fact_slots:'fact setting'};
       const current=all().filter(r=>tracked.has(r.type)),prior=list('record_history').filter(r=>tracked.has(r.source_type)).map(r=>r.snapshot),versions=[...prior,...current];
-      const derived=versions.map(r=>({id:'activity-'+hash([r.uid,r.revision,r.updated_at]).slice(0,32),actor_id:'owner',user_id:'owner',item_id:r.id,item_type:label[r.type],action:r.removed_at?'delete':r.revision===1?'create':'update',created_at:r.updated_at,metadata:{source_uid:r.uid,revision:r.revision}}));
+      // The notebook writes the default profile categories itself when My Profile first opens, so their creation is not the person's action; a later edit or removal is. Templates and settings are not tracked. A tracked type that gains a seeder must be skipped here too.
+      const named=r=>[r.name,r.title,r.label].find(v=>typeof v==='string'&&v.trim())?.trim()??null;
+      const derived=versions.filter(r=>!(r.type==='profile_categories'&&r.revision===1&&r.is_default===true)).map(r=>({item_name:named(r),id:'activity-'+hash([r.uid,r.revision,r.updated_at]).slice(0,32),actor_id:'owner',user_id:'owner',item_id:r.id,item_type:label[r.type],action:r.removed_at?'delete':r.revision===1?'create':'update',created_at:r.updated_at,metadata:{source_uid:r.uid,revision:r.revision}}));
       for(const r of list('event_corrections'))derived.push({id:'activity-'+r.uid,actor_id:'owner',user_id:'owner',item_id:r.moment_id,item_type:'event',action:r.patch.removed_at?'delete':'update',created_at:r.created_at,metadata:{correction:true}});
       return [...new Map([...list(table),...derived].map(r=>[r.id,r])).values()];
     }
@@ -446,6 +452,9 @@ export class QueryService {
   execute(request) {
     const { table, operation = 'select', values, filters = [], orders = [], selection = '*', options = {}, single = false, maybeSingle = false, expected = {}, baselines = {} } = request;
     if (!tables.has(table)) throw new Error('Unknown record domain ' + table);
+    // Any other name used to fall into the write branch below and rewrite every
+    // record of the kind (issue 956); refuse it before anything is read.
+    if (!operations.includes(operation)) throw new Error('Unknown operation ' + JSON.stringify(operation) + '. The supported operations are ' + operations.join(', ') + '.');
     // A writer that sends its record under a misnamed field (the assistant's
     // "data" instead of "values") used to crash on the record itself and
     // answer the server's generic sentence, with no hint how to fix the
@@ -496,6 +505,7 @@ export class QueryService {
       rows = holding(() => {
         // ignoreDuplicates is ON CONFLICT DO NOTHING: an existing link keeps its metadata.
         const inputs = operation === 'insert' || operation === 'upsert' ? (Array.isArray(values) ? values : [values]).filter(value => !(operation === 'upsert' && options.ignoreDuplicates && existing(value))) : rows;
+        const batchSequence = new Map();
         const changed = inputs.map(value => {
           const old = operation === 'insert' ? null : operation === 'upsert' ? existing(value) : table==='moments'?value:this.store.get(table, value.id);
           if (operation === 'insert' && value.id && this.store.get(table, value.id)) throw new Error('Record already exists');
@@ -518,11 +528,31 @@ export class QueryService {
           const given = operation === 'delete' ? { removed_at: new Date().toISOString() } : operation === 'update' ? values : value;
           // A moment's dates are kept as ISO 8601 whoever writes them (timestamps.mjs).
           const payload = table === 'moments' ? momentDates(given) : given;
+          if(table==='moments'&&operation!=='delete'&&('happened_at' in payload||'happened_end' in payload)){
+            // #1032: a moment never ends before it starts; a change of one date is judged against the other as stored.
+            const current=operation==='upsert'&&old?(this.rows('moments').find(r=>r.id===old.id)||old):old;
+            const merged={...(current||defaults.moments),...payload};
+            if(endsBeforeStart(merged.happened_at,merged.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
+          }
           if(table==='moments'&&old){
-            const correction=this.store.prepare('event_corrections',{moment_id:old.id,patch:payload,sequence:this.store.list('event_corrections').filter(c=>c.moment_id===old.id).length+1,references:[{type:'moments',id:old.id,uid:old.uid}]});
+            // Above every correction already on the moment, removed ones too: the reader applies them all.
+            const sequence=Math.max(batchSequence.get(old.id)||0,...this.store.ofType('event_corrections').filter(c=>c.moment_id===old.id).map(c=>Number(c.sequence)||0))+1;
+            batchSequence.set(old.id,sequence);
+            const correction=this.store.prepare('event_corrections',{moment_id:old.id,patch:payload,sequence,references:[{type:'moments',id:old.id,uid:old.uid}]});
             return correction;
           }
           const record = this.store.prepare(table, { ...(defaults[table] || {}), ...old, ...payload }, old);
+          if(table==='event_corrections'&&operation!=='delete'){
+            // The same rule for a correction, judged under its real id on the set the reader merges (applyCorrections).
+            const dated=p=>p&&('happened_at' in p||'happened_end' in p);
+            const touches=dated(record.patch)||dated(old?.patch)||(old&&(old.moment_id!==record.moment_id||old.sequence!==record.sequence));
+            const original=touches&&this.store.get('moments',record.moment_id);
+            if(original&&!original.removed_at){
+              const others=this.store.ofType('event_corrections').filter(c=>c.moment_id===original.id&&c.id!==record.id);
+              const merged=momentDates(applyCorrections(original,[...others,record]));
+              if(endsBeforeStart(merged.happened_at,merged.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
+            }
+          }
           // Opening a person records when (last_viewed_at); that is not a change to them, and is
           // let through for a person saved without a name before the rule. Until issue 266 it was
           // refused, and the first open of such a person ended in this error.
@@ -541,6 +571,18 @@ export class QueryService {
           }
           record.references = this.references(table, record); return record;
         });
+        if((table==='moments'||table==='event_corrections')&&operation!=='delete'){
+          // The whole request is judged as the reader will merge it: stored corrections plus this batch's, a record of the same id replacing the stored one.
+          for(const id of new Set(changed.map(c=>c.moment_id))){
+            const original=this.store.get('moments',id);
+            if(!original||original.removed_at)continue;
+            const mine=changed.filter(c=>c.moment_id===id),mineIds=new Set(mine.map(c=>c.id));
+            if(!mine.some(c=>c.patch&&('happened_at' in c.patch||'happened_end' in c.patch)))continue;
+            const others=this.store.ofType('event_corrections').filter(c=>c.moment_id===id&&!mineIds.has(c.id));
+            const merged=momentDates(applyCorrections(original,[...others,...mine]));
+            if(endsBeforeStart(merged.happened_at,merged.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
+          }
+        }
         const gone=operation==='delete'&&table==='contacts'?this.personBelongings(changed.map(c=>c.id)):operation==='delete'&&table==='contact_group_memberships'?this.membershipTwins(changed):[];
         this.store.commit([...changed,...gone]); return table==='moments'?this.rows(table).filter(r=>changed.some(c=>c.id===r.id||c.moment_id===r.id)):changed;
       });

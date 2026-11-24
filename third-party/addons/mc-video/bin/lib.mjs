@@ -151,6 +151,19 @@ export function installCommand(platform = process.platform, has = () => false, {
   return null;
 }
 
+// An apt install that fails on a package list a few days old ("404 Not Found", "Failed to fetch")
+// is cured by `apt-get update`, so for apt setup refreshes the list once and retries once, and the
+// command it prints for the person includes the refresh. Other package managers: null / unchanged.
+export function aptRefreshCommand(install) {
+  return install && install.cmd === "sudo" && install.args[0] === "apt-get" ? { cmd: "sudo", args: ["apt-get", "update"] } : null;
+}
+
+export function installLine(install) {
+  const line = `${install.cmd} ${install.args.join(" ")}`;
+  const refresh = aptRefreshCommand(install);
+  return refresh ? `${refresh.cmd} ${refresh.args.join(" ")} && ${line}` : line;
+}
+
 export function uvCandidates(platform = process.platform, env = process.env, userHome = os.homedir()) {
   const exe = platform === "win32" ? "uv.exe" : "uv";
   const c = ["uv", path.join(userHome, ".local", "bin", exe), path.join(userHome, ".cargo", "bin", exe)];
