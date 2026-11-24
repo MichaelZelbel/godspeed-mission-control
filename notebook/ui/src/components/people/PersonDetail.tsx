@@ -21,7 +21,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Loader2, Merge, Plus, Star, Trash2, User, X } from "lucide-react";
+import { ChevronLeft, Loader2, Merge, Pencil, Plus, Star, Trash2, User, X } from "lucide-react";
 
 import { ContactProfileTab } from "@/components/people/ContactProfileTab";
 import { MergePersonDialog } from "@/components/people/MergePersonDialog";
@@ -190,6 +190,23 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl p-4 sm:p-6">
+          {/* Compact pinned bar: where the full header card scrolls with the page
+              (phones, and short landscape windows), the name and the Edit and Merge
+              actions stay in reach. The full card keeps the whole, wrapped name. */}
+          {!isEditing && (
+            <div
+              data-testid="person-pinned-bar"
+              className="sticky top-0 z-10 -mx-4 -mt-4 mb-2 hidden items-center gap-2 border-b border-border bg-background px-4 py-1.5 max-sm:flex [@media(max-height:599px)]:flex"
+            >
+              <p className="min-w-0 flex-1 truncate text-sm font-semibold">{shownName}</p>
+              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" aria-label="Edit person" onClick={startEditing}>
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" aria-label="Merge person" onClick={() => setMergeOpen(true)}>
+                <Merge className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
           {/* Persistent person header - visible across all tabs */}
           <div className="mb-4 space-y-4 bg-background pb-2 [@media(min-width:640px)_and_(min-height:600px)]:sticky [@media(min-width:640px)_and_(min-height:600px)]:top-0 [@media(min-width:640px)_and_(min-height:600px)]:z-10">
             <Card>
