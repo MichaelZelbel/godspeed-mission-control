@@ -71,7 +71,6 @@ import {NoteProcessing} from '../core/processing.mjs';
 import {mediaObjectName,mediaFileName} from '../core/media-names.mjs';
 import {CARRY_LIMIT,carriedRoot,carryMedia,findMedia,keepMedia,keptHere,keptElsewhere,mediaPresence,missingHere,removeCarried} from '../core/media-store.mjs';
 import {retireShares} from '../core/shares.mjs';
-import {installFoodTable,foodTableWanted} from '../core/food-table.mjs';
 import {repairTimelineAtStart} from '../core/due-copy.mjs';
 import {IdentityShelf} from '../core/identity-shelf.mjs';
 import {VERSION} from '../core/version.mjs';
@@ -937,7 +936,6 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // one-click image do not run install-native-notebook.sh) fetches it once, a minute after it starts,
   // in the background, checked against its pinned checksum. Never under the test runner, never with
   // GODSPEED_FOOD_TABLE=off; a failure is one line in the log and nothing else.
-  if (foodTableWanted(store.state)) { const foodTableTimer = setTimeout(() => { void installFoodTable(store.state).catch(error => console.error('Godspeed Mission Control: the food table was not downloaded: ' + error.message)); }, 60000); foodTableTimer.unref?.(); }
   // Deadlines finished before 2.0.0-beta.15 get their timeline status and scores when the notebook
   // starts after the update, not when the deadline copy next happens to run (core/due-copy.mjs,
   // repairTimelineAtStart; 2 November 2026). In the background, two seconds after the door opened,
