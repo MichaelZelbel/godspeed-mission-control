@@ -41,11 +41,11 @@ test('a factual fallback retains the Charm line and checked contribution after n
  assert.ok(saved.split(/\r?\n/).includes(line));assert.match(saved,/Fictional copy ready draft/);assert.match(saved,new RegExp('/dashboard/notes/'+note.id));
 });
 
-test('a source claim rejected by id is absent from the factual fallback',async()=>{
+test('a goal whose id a source check rejected is still named in the factual fallback',async()=>{
  const {store,query}=fixture([]);const goal=store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  const provider=async input=>input.kind==='brief-verification'?input.check==='source-facts'?{passed:false,reason:'This goal is not current.',rejection_scope:'source-claims',rejected_source_ids:[goal.id]}:{passed:false,reason:'The draft is not useful enough.',rejection_scope:'non-source',rejected_source_ids:[]}:'Rejected private model prose.';
  const result=await run(provider,query,store,'brief-factual-rejected-source'),saved=store.get('notes',result.record_id).content;
- assert.doesNotMatch(saved,/Prepare a fictional guide|goal step/);assert.match(saved,/Tell Godspeed one goal/);
+ assert.match(saved,/One of your saved goals is Prepare a fictional guide/);assert.doesNotMatch(saved,/Tell Godspeed one goal/);
  const receipt=query.rows('job_receipts').find(row=>row.kind==='brief-factual-fallback');assert.deepEqual(receipt.rejected_source_ids,[goal.id]);
 });
 
@@ -67,11 +67,11 @@ test('a source-rejected checked contribution is absent and remains ready',async(
  assert.equal(store.get('lead_entries',entry.id).status,'ready');
 });
 
-for(const check of ['source-facts','plain-words-and-delivery'])test('a '+check+' source-claim rejection excludes its record',async()=>{
+for(const check of ['source-facts','plain-words-and-delivery'])test('a '+check+' source-claim rejection still leaves the goal named',async()=>{
  const {store,query}=fixture([]);const goal=store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  const provider=async input=>input.kind==='brief-verification'?(input.check===check?{passed:false,reason:'This goal is not current.',rejection_scope:'source-claims',rejected_source_ids:[goal.id]}:{passed:true,reason:'Fictional review passed.'}):'Rejected private model prose.';
  const result=await run(provider,query,store,'brief-factual-'+check),saved=store.get('notes',result.record_id).content;
- assert.doesNotMatch(saved,/Prepare a fictional guide/);
+ assert.match(saved,/Prepare a fictional guide/);
 });
 
 for(const check of ['source-facts','plain-words-and-delivery'])test('a '+check+' non-source rejection permits a factual fallback',async()=>{
@@ -380,9 +380,8 @@ test('a required line that opens with a banned opener is left out and reported, 
 });
 
 // Archon R1: a claim the fact check rejected never comes back in the factual fallback, for every
-// kind of source the fallback can name (goal, verified work, dated obligation, health value).
+// kind of source the fallback can name (verified work, dated obligation, health value).
 for(const [kind,save,claim,reason] of [
- ['goal',store=>store.save('goals',{title:'Prepare a fictional guide',status:'adopted'}),/fictional guide/i,'Prepare a fictional guide is unsupported'],
  ['verified work',store=>store.save('work_items',{kind:'draft',title:'Checked fictional outline',state:'verified'}),/fictional outline/i,'The claim that the checked fictional outline was verified is unsupported'],
  ['obligation',store=>store.save('deadlines',{title:'Submit fictional application',status:'open',due_at:'2027-01-01T00:00:00Z'}),/fictional application/i,'Submit fictional application is not a current obligation'],
  ['health value',store=>store.save('health_observations',{metric:'Fictional energy',value:6,observed_at:new Date().toISOString()}),/Fictional energy/i,'Fictional energy: 6 is stale'],
@@ -404,7 +403,6 @@ test('a rejected goal is left out while another saved goal still gives the actio
 // A source rejection is retained across both attempts, so a first-attempt rejection still holds
 // when the rewrite fails for a different reason.
 for(const [kind,save,claim] of [
- ['goal',store=>store.save('goals',{title:'Prepare a fictional guide',status:'adopted'}),/fictional guide/i],
  ['verified work',store=>store.save('work_items',{kind:'draft',title:'Checked fictional outline',state:'verified'}),/fictional outline/i],
  ['obligation',store=>store.save('deadlines',{title:'Submit fictional application',status:'open',due_at:'2027-01-01T00:00:00Z'}),/fictional application/i],
  ['health value',store=>store.save('health_observations',{metric:'Fictional energy',value:6,observed_at:new Date().toISOString()}),/Fictional energy/i],
@@ -423,7 +421,7 @@ test('a first-attempt source rejection holds after a differently rejected rewrit
  const provider=async input=>{if(input.kind!=='brief-verification')return 'Unsupported draft.';checks++;
   return checks<=2?(input.check==='source-facts'?{passed:false,reason:'Prepare release notes is unsupported',rejection_scope:'source-claims',rejected_source_ids:[goal.id]}:{passed:false,reason:'The draft is not useful enough.',rejection_scope:'non-source',rejected_source_ids:[]}):(input.check==='source-facts'?{passed:true,reason:'Fictional facts checked.'}:{passed:false,reason:'The rewrite is too vague',rejection_scope:'non-source',rejected_source_ids:[]});};
  const result=await run(provider,query,store,'brief-first-attempt-reason'),content=store.get('notes',result.record_id).content;
- assert.equal(result.fallback,true);assert.doesNotMatch(content,/release notes/i);
+ assert.equal(result.fallback,true);assert.match(content,/release notes/i);
 });
 
 // A malformed source-claim review leaves no safe inventory for the factual fallback: the brief is the
