@@ -35,7 +35,10 @@ be a native Linux systemd service, with either a usable user systemd session or 
 `GODSPEED_SCENARIO_WORK=<kept folder>` to retain it somewhere durable.
 
 `talk-preparation-installed` is a maintained manual scenario. Run it on a throwaway native scenario
-machine with `bash scenarios/talk-preparation-installed.sh <stage ref>`. It files a first goal through
+machine with `bash scenarios/talk-preparation-installed.sh <stage ref>`. A full 40-character product
+commit is also supported: the route first makes the same commit-stage fixture as the scenarios
+workflow, so it installs that commit rather than the older frozen release named by the commit's
+checked-in `stage.json`. It files a first goal through
 the installed notebook, then presses Run now on the installed "Coaching talk preparation" routine
 (`POST /api/jobs/run` with the id Settings lists) and judges the ready preparation the run wrote and
 the coach's own gate accepts. Nothing in it writes a preparation or a seal. It needs a real model,

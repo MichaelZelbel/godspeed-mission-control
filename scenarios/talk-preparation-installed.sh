@@ -20,6 +20,7 @@
 # the ready preparation. The route starts no process of its own and sends nothing outward.
 #
 #   bash scenarios/talk-preparation-installed.sh candidate/2.0.0-beta.16
+#   bash scenarios/talk-preparation-installed.sh <full product commit>
 #   bash scenarios/talk-preparation-installed.sh --check <folder>
 #
 # What it keeps for its checking part:
@@ -72,6 +73,7 @@ act() {
   fresh_evidence
   install_paths
   need_the_ai_key "the installed assistant that writes the talk preparation"
+  use_commit_stage
   install_the_stage_line "$EVIDENCE/.install.log"
   need_node
   wait_for 180 "the notebook to answer after the install" notebook_answers ||
