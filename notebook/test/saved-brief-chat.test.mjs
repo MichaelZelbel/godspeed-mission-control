@@ -53,16 +53,22 @@ test('all chat surfaces preserve a saved brief without adding a Charm Challenge'
  assert.equal(calls,0);
 });
 
-test('a brief request without a saved briefing keeps ordinary chat behavior',async t=>{
+test('a brief request without a saved briefing says plainly none is saved and offers one',async t=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-new-brief-chat-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
  const calls=[],provider=async input=>{calls.push(input.kind);return {reply:'The ordinary chat answer'};};
  const domains=new Domains(query,{provider});
  for(const [name,input] of chatInputs(store)){
-  const result=await domains.invoke(name,{...input,request_id:'brief-first-'+name,message:"today's brief"});
-  assert.equal(result.reply,'The ordinary chat answer');
+  for(const message of ["today's brief",'show me my morning briefing please','brief']){
+   const reply=(await domains.invoke(name,{...input,request_id:'brief-first-'+name+message,message})).reply;
+   assert.match(reply,/No morning briefing has been saved yet this morning/);assert.match(reply,/make one/);
+  }
  }
+ assert.match((await domains.invoke('conversation-chat',{conversation_id:'notebook:de',message:'Zeig mir das heutige Briefing, bitte.'})).reply,/noch kein Morgenbriefing gespeichert/);
  assert.equal(store.list('notes').filter(note=>note.source_app==='morning-brief').length,0);
- assert.deepEqual(calls,CHAT_SURFACES);
+ assert.deepEqual(calls,[]);
+ // Other requests stay ordinary chat.
+ assert.equal((await domains.invoke('conversation-chat',{conversation_id:'notebook:other',message:'what is on my plate?'})).reply,'The ordinary chat answer');
+ assert.ok(calls.includes('conversation-chat'));
 });
 
 test('candidate Telegram reports a definitely incomplete long saved brief',async t=>{
