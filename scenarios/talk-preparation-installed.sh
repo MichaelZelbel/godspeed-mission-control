@@ -199,7 +199,9 @@ process.exit(row.last_run_at&&Date.parse(row.last_run_at)/1000>=since?0:1);' "$f
     fail "the AI key leaked into retained evidence at $(grep -RIlF --exclude=install.log -- "$GODSPEED_SCENARIO_AI_KEY" "$folder" | head -n 1)"
   fi
 
-  pass "Run now on the installed \"$ROUTINE\" routine (routine $id) ended ok after it was pressed and wrote a ready preparation at $(head -n 1 "$folder/prep-path.txt"), dated at the run, that the coach's own gate accepts; the route started no process of its own and the AI key is not in its evidence"
+  local leak_clause="; the AI key was not given to this check, so its evidence was not scanned for it"
+  [ -z "${GODSPEED_SCENARIO_AI_KEY:-}" ] || leak_clause="; the AI key is not in its evidence"
+  pass "Run now on the installed \"$ROUTINE\" routine (routine $id) ended ok after it was pressed and wrote a ready preparation at $(head -n 1 "$folder/prep-path.txt"), dated at the run, that the coach's own gate accepts; the route started no process of its own${leak_clause}"
 }
 
 if [ "$CHECK_ONLY" = yes ]; then

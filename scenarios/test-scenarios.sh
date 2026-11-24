@@ -6146,6 +6146,8 @@ section talk-preparation-installed
 T=$TMP/talk-preparation
 talk_prep_good "$T/good"
 passes 'a ready preparation written by the installed routine after a public Run now' talk-preparation-installed "$T/good" 'the coach'"'"'s own gate accepts'
+passes 'a re-judged folder without the AI key does not claim a leak scan' talk-preparation-installed "$T/good" 'was not scanned for it'
+GODSPEED_SCENARIO_AI_KEY=scenario-secret-never-retain passes 'a judged folder with the AI key claims the leak scan' talk-preparation-installed "$T/good" 'AI key is not in its evidence'
 copy "$T/good" "$T/no-run-now"; printf '{"error":"Choose an existing Hermes task"}\n' >"$T/no-run-now/run-now.json"
 refuses 'a Run now the notebook did not start' talk-preparation-installed "$T/no-run-now" 'did not answer Run now'
 copy "$T/good" "$T/other-routine"; printf '{"started":true,"id":"job9"}\n' >"$T/other-routine/run-now.json"
