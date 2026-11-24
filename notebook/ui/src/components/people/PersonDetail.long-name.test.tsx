@@ -57,4 +57,14 @@ describe("a person page with a 200-character name", () => {
     // Pinned only when the window is wide and tall enough (a phone held sideways is short).
     expect(header.className).toContain("min-height:600px)]:sticky");
   });
+
+  it("pins a compact bar with the name and the Edit and Merge actions on phones", async () => {
+    await heading(words);
+    const bar = screen.getByTestId("person-pinned-bar");
+    expect(bar.className).toMatch(/(^|\s)sticky/);
+    expect(bar.className).toContain("max-width:639px");
+    expect(bar).toHaveTextContent(words.slice(0, 20));
+    expect(bar.querySelector('[aria-label="Edit person"]')).not.toBeNull();
+    expect(bar.querySelector('[aria-label="Merge person"]')).not.toBeNull();
+  });
 });
