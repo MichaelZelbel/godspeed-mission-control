@@ -1,6 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense } from 'react';
 import { onThisComputer } from '@/lib/on-this-computer';
-import { tabOnlyStorage } from '@/lib/tab-storage';
 import { BrowserRouter, Routes, Route, Navigate, Link, Outlet, useLocation } from 'react-router-dom';
 import { BRAIN_PAGE } from '@/lib/brain-page';
 import { ThemeProvider } from 'next-themes';
@@ -48,21 +47,6 @@ function ShortAddress(){
 function Reconnect({error,refreshSession}:{error:string;refreshSession:()=>Promise<void>}){
   return <AuthShell><h2>Let’s reconnect</h2><p className="auth-intro" role="alert">{error}</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
 }
-const TAB_ONLY_NOTICE="This browser blocks site data for this page. What you type and choose is kept only until you close or reload this tab. To keep it, allow site data (cookies and site data) for this address in your browser's settings.";
-let noticeDismissed=false;
-// An inline banner at the top of the page: it pushes the page down, covers no control, and stays until closed.
-function TabOnlyStorageNotice(){
-  const [open,setOpen]=useState(tabOnlyStorage&&!noticeDismissed);
-  const close=()=>{noticeDismissed=true;setOpen(false);};
-  useEffect(()=>{
-    if(!open)return;
-    const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape'){noticeDismissed=true;setOpen(false);}};
-    window.addEventListener('keydown',onKey);
-    return()=>window.removeEventListener('keydown',onKey);
-  },[open]);
-  if(!open)return null;
-  return <div role="status" data-testid="tab-only-storage" className="flex items-start gap-3 border-b bg-muted px-4 py-2 text-sm"><p className="flex-1">{TAB_ONLY_NOTICE}</p><button type="button" aria-label="Dismiss" onClick={close} className="shrink-0 rounded px-2 text-lg leading-none hover:bg-background">×</button></div>;
-}
 function Layout(){
   const {user,loading,authError,refreshSession,local}=useAuth();
   if(loading)return <AuthShell><h2>Opening Godspeed Mission Control</h2><p role="status">Checking your sign-in…</p></AuthShell>;
@@ -71,7 +55,7 @@ function Layout(){
   // never lands on the server's sign-in, invite or setup screens, even if a read comes back oddly.
   if(!user&&local)return <AuthShell><h2>Reconnecting to your notebook</h2><p className="auth-intro" role="status">Your notebook is on this computer and needs no sign-in.</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
   if(!user)return <AuthScreen/>;
-  return <><KeepUnsavedNotes/><TabOnlyStorageNotice/><DashboardLayout/></>;
+  return <><KeepUnsavedNotes/><DashboardLayout/></>;
 }
 // A setup link only means something on a server install. A local notebook's server always answers
 // signed in, so its stale setup link goes back to the dashboard; a read that fails cannot say

@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { DashboardSidebar } from "./DashboardSidebar";
@@ -12,8 +12,35 @@ import { useProcessingSweep } from "@/hooks/useProcessingSweep";
 import { RouteErrorBoundary } from "@/components/ErrorBoundary";
 import { PageLoader } from "@/components/LoadingStates";
 import { BRAIN_PAGE } from "@/lib/brain-page";
+import { tabOnlyStorage } from "@/lib/tab-storage";
 
+let noticeDismissed = false;
 
+function TabOnlyStorageNotice() {
+  const [open, setOpen] = useState(tabOnlyStorage && !noticeDismissed);
+  const dismiss = useCallback(() => {
+    noticeDismissed = true;
+    setOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dismiss();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dismiss, open]);
+
+  if (!open) return null;
+  // Extend the banner to the column edges through main's padding.
+  return (
+    <div role="status" data-testid="tab-only-storage" className="-mx-6 -mt-6 mb-6 flex items-start gap-3 border-b bg-muted px-4 py-2 text-sm">
+      <p className="flex-1">This browser blocks site data for this page. What you type and choose is kept only until you close or reload this tab. To keep it, allow site data (cookies and site data) for this address in your browser's settings.</p>
+      <button type="button" aria-label="Dismiss" onClick={dismiss} className="shrink-0 rounded px-2 text-lg leading-none hover:bg-background">×</button>
+    </div>
+  );
+}
 
 export function DashboardLayout() {
   const pathname=useLocation().pathname;
@@ -49,6 +76,7 @@ export function DashboardLayout() {
               --page-h is main's content box (the cap minus main's own 3rem of vertical padding);
               pages that fill it use it, so their budget cannot drift from this cap. */}
           <main className={floatingChat?"flex-1 overflow-auto p-6 max-h-[calc(100dvh-9.5rem)] [--page-h:calc(100dvh-12.5rem)]":"flex-1 overflow-auto p-6"}>
+            <TabOnlyStorageNotice />
             {/* A crashing page no longer takes the sidebar with it, and the
                 boundary clears on the next navigation. Loading a page's code
                 keeps the sidebar and header on screen. */}

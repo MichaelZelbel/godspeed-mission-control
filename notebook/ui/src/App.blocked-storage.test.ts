@@ -65,6 +65,42 @@ describe("the notebook with the browser's site data blocked", () => {
     if (dist) rmSync(dist, { recursive: true, force: true });
   });
 
+  it.each([1280, 768, 390])("keeps the notice and header controls clear at %i pixels", async (width) => {
+    const page = await browser.newPage({ viewport: { width, height: width === 390 ? 844 : 900 } });
+    try {
+      await page.addInitScript(BLOCK_STORAGE);
+      await page.goto(notebook.base + "/dashboard");
+
+      const banner = page.getByTestId("tab-only-storage");
+      await banner.waitFor();
+      const header = page.getByRole("banner").filter({ has: page.locator('[data-sidebar="trigger"]') });
+      const headerBox = (await header.boundingBox())!;
+      const bannerBox = (await banner.boundingBox())!;
+      expect(bannerBox.x).toBeGreaterThanOrEqual(headerBox.x);
+      expect(bannerBox.x + bannerBox.width).toBeLessThanOrEqual(headerBox.x + headerBox.width);
+      expect(bannerBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height);
+
+      const visibleText = await banner.locator("p").evaluate((text) => {
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        const lines = Array.from(range.getClientRects());
+        return lines.length > 0 && lines.every(({ left, right, top, bottom }) =>
+          [left + 1, right - 1].every((x) => text.contains(document.elementFromPoint(x, (top + bottom) / 2))),
+        );
+      });
+      expect(visibleText).toBe(true);
+      await header.locator('[data-sidebar="trigger"]').click({ trial: true });
+      if (width === 390) {
+        await page.keyboard.press("Escape");
+      } else {
+        await banner.getByRole("button", { name: "Dismiss" }).click();
+      }
+      await banner.waitFor({ state: "detached" });
+    } finally {
+      await page.close();
+    }
+  });
+
   it("opens, reads and writes notes and people, opens the chat, and says what it cannot keep", async () => {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     try {
