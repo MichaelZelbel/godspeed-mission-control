@@ -55,7 +55,8 @@ case "${FAKE_MODE:-ok}" in
               [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; { for i in $(seq 1 80); do printf 'word%s ' "$i"; done; echo; } > "$P"; }
             else [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; echo "too short" > "$P"; }; fi
             echo "RESULT: wrote $P" > "$OUT"; exit 0 ;;
-  short)    [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; echo "too short" > "$P"; }; echo "RESULT: wrote $P" > "$OUT"; exit 0 ;;
+  short)    [ -n "${FAKE_BEFORE:-}" ] && printf '%s\n' "$FAKE_BEFORE" > "$(dirname "$OUT")/before.txt"
+            [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; echo "too short" > "$P"; }; echo "RESULT: wrote $P" > "$OUT"; exit 0 ;;
   repair)   KEPT="$KEEP$FAKE_FAULT"; mkdir -p "$(dirname "$KEPT")"; cp "$FAKE_FAULT" "$KEPT"
             if [ "${FAKE_FIX:-works}" = works ]; then printf 'upgrade: runs\n' > "$FAKE_FAULT"; else printf 'upgrade: still broken\n' > "$FAKE_FAULT"; fi
             echo "RESULT: put the fixed setting in place; it now says: $(cat "$FAKE_FAULT")" ;;
@@ -454,6 +455,16 @@ AP="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=
 hw unblock "$AP" --why "test" --approved-by "yes, do it" >/dev/null
 FAKE_MODE=short run --only "$AP" >/dev/null 2>&1
 check "an approved item the check refuses is not run a second time" "$([ -e "$TMP/routines/work/2026-09-15/$AP/prompt-repair.txt" ] && echo repaired || echo once)" "once"
+hw file --what "Write the standing note" --done-when "research/standing-note.md has fifty words" --goal five-friends --outward yes --may circle-replies --check "test \$(wc -w < research/standing-note.md) -ge 50" --goes-out 2026-09-15T18:00 --key standing-short --source test >/dev/null
+SS="$(grep -l 'KEY: standing-short$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+hw announce "$SS" >/dev/null 2>&1
+GODSPEED_NOW=2026-09-15T18:03:00.000Z FAKE_BEFORE="as it was" FAKE_MODE=short run --only "$SS" >/dev/null 2>&1
+check "the standing step ran and its check refused it" "$(status_of "$SS")" "attempted"
+check "a standing-permission step the check refuses is not run a second time" "$([ -e "$TMP/routines/work/2026-09-15/$SS/prompt-repair.txt" ] && echo repaired || echo once)" "once"
+hw file --what "Mend the short note" --done-when "research/repair-short.md has fifty words" --check "test \$(wc -w < research/repair-short.md) -ge 50" --kind repair --key repair-short --source test >/dev/null
+RS="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="repair-short").id))')"
+FAKE_MODE=short run --only "$RS" >/dev/null 2>&1
+check "a repair item the check refuses is not run a second time" "$([ -e "$TMP/routines/work/2026-09-15/$RS/prompt-repair.txt" ] && echo repaired || echo once)" "once"
 hw file --what "Decide the venue" --done-when "the venue is chosen and said in the answer" --key no-check-nofile --source test >/dev/null
 NC="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="no-check-nofile").id))')"
 FAKE_MODE=ok run --only "$NC" >/dev/null 2>&1
