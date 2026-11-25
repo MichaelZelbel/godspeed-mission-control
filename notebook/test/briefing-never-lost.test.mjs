@@ -326,6 +326,22 @@ test('a draft where every sentence breaks a rule sends the short fallback and op
  assert.ok(items[0].refusals.some(e=>/voice check failed: realm/.test(e)));
 });
 
+test('a goal title with an em dash does not stop the cut fallback from going out',async()=>{
+ const {store,query}=fixture(['BANNED-WORD: realm']);store.save('goals',{title:'Ship v1 \u2014 launch',status:'adopted'});
+ const provider=async input=>verifies(input)||'The realm is here.';
+ const result=await run(provider,query,store,'brief-dash-goal');
+ const saved=store.get('notes',result.record_id);
+ assert.ok(saved.content.length);assert.doesNotMatch(saved.content,/\u2014/);assert.doesNotMatch(saved.content,/Ship v1/);
+});
+
+test('the cut fallback gives a next action for the saved goal',async()=>{
+ const {store,query}=fixture(['BANNED-WORD: realm']);store.save('goals',{title:'Plan the fictional trip',status:'adopted'});
+ const provider=async input=>verifies(input)||'The realm is here.';
+ const result=await run(provider,query,store,'brief-cut-next'),saved=store.get('notes',result.record_id);
+ assert.match(saved.content,/One of your saved goals is Plan the fictional trip\./);
+ assert.match(saved.content,/^Next: Ask Godspeed to work on Plan the fictional trip and show you one concrete result today\.$/m);
+});
+
 test('the existing cut fallback is not sent when its explanation breaks a voice rule',async()=>{
  const {store,query}=fixture(['BANNED-WORD: realm','BANNED-WORD: briefing']);
  const provider=async input=>verifies(input)||'The realm is here.';
@@ -450,7 +466,7 @@ for(const [name,verdict] of [
  const provider=async input=>input.kind==='brief-verification'?(input.check==='source-facts'?verdict:{passed:false,reason:'Unclear',rejection_scope:'non-source',rejected_source_ids:[]}):'Unsupported private draft.';
  const result=await run(provider,query,store,'brief-unidentified-'+name.replaceAll(' ','-')),saved=store.get('notes',result.record_id);
  assert.equal(result.fallback,true);assert.match(saved.content,/^Your full morning briefing for \d{4}-\d{2}-\d{2} could not be written today/);
- assert.doesNotMatch(saved.content,/fictional contract|Unsupported private draft/);
+ assert.match(saved.content,/One of your saved goals is Cancel the fictional contract\./);assert.doesNotMatch(saved.content,/Unsupported private draft/);assert.match(saved.content,/^Next: Ask Godspeed to work on Cancel the fictional contract and/m);
  const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');
  assert.equal(receipt.state,'verified');assert.equal(receipt.honest_note,true);assert.match(receipt.fallback_error,/Could not make a checked factual fallback/);
  assert.equal(receipt.rejected_draft,'Unsupported private draft.');assert.ok(receipt.reasons.includes(verdict.reason));
