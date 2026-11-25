@@ -262,6 +262,18 @@ mkdir -p "$TMP/research"; printf '## Answer\nAbout forty percent of readers reac
 printf '%s\n' '{"passed":true,"reason":"the answer and its evidence are in the promised file","missing":[]}' > "$TMP/ch5-review.json"
 OUT="$(hw verify $CH5 --content-review "$TMP/ch5-review.json" 2>&1)"; contains "  once the answer is written and independently reviewed, it verifies" "$OUT" "verified by its check and content review"
 
+# --- #748: evidence alone never verifies a Godspeed-owned file result -------------------------------------
+hw file --learn "How many readers reach chapter 6" --path research/chapter-6.md --key ch6 --source test >/dev/null
+CH6="$(idof ch6)"
+printf '## Answer\nAbout half of readers reach chapter 6.\n' > "$TMP/research/chapter-6.md"
+hw take "$CH6" --runner claude-laptop >/dev/null
+hw attempt "$CH6" --runner claude-laptop --ok --result "wrote the chapter 6 answer" >/dev/null
+OUT="$(hw verify $CH6 --evidence "opened research/chapter-6.md, the answer is there" 2>&1)"; check "evidence alone does not verify a Godspeed-owned file result" "$?" "2"
+contains "  and says the content review is required" "$OUT" "needs the content review against DONE WHEN"
+check "  and it stays attempted" "$(grep -c '^STATUS: attempted' "$TMP/work/$CH6.md")" "1"
+printf '%s\n' '{"passed":true,"reason":"the answer is in the promised file","missing":[]}' > "$TMP/ch6-review.json"
+OUT="$(hw verify $CH6 --evidence "opened research/chapter-6.md" --content-review "$TMP/ch6-review.json" 2>&1)"; contains "  a passing content review verifies it, with evidence" "$OUT" "verified by content review"
+
 # --- one list of result extensions for filing and finding (#914) -------------------------------------------
 # The filing gate and the file-finding side share one list, so a learn item whose DONE WHEN
 # names an .html result is filed (and its file found) instead of refused at filing.

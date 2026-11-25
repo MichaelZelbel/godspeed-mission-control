@@ -713,7 +713,7 @@ cmds.verify = (a) => {
   const d = a.date || today();
   const ev = oneLine(a.evidence);
   const resultFile = fileNamed(c.f['DONE WHEN']);
-  const needsContentReview = c.f.OWNER === 'godspeed' && !!resultFile && !ev;
+  const needsContentReview = c.f.OWNER === 'godspeed' && !!resultFile;
   const reviewPath = a['content-review'] === true ? '' : oneLine(a['content-review']);
   const contentReview = () => {
     if (!reviewPath) return { passed: false, reason: 'the independent content review is missing', missing: ['a review of the result against DONE WHEN'] };
@@ -756,6 +756,20 @@ cmds.verify = (a) => {
       say(`${c.id}: the runner said done, the check says not; stays attempted`);
       process.exit(2);
     }
+  }
+  if (needsContentReview) {
+    const review = contentReview();
+    if (!review.passed) {
+      L.logLine(c, d, 'UNVERIFIED', `content review required: ${review.reason}; missing: ${review.missing.join('; ')}`);
+      S.write(c);
+      say(`${c.id}: a Godspeed-owned file result needs the content review against DONE WHEN (--content-review <json-file>); evidence alone does not verify it: ${review.missing.join('; ')}; stays ${c.f.STATUS}`);
+      process.exit(2);
+    }
+    c.f.STATUS = 'verified'; c.f.LEASE = '';
+    L.logLine(c, d, 'VERIFIED', `content review passed: ${review.reason}` + (ev ? `; ${ev}` : ''));
+    S.write(c);
+    say(`${c.id}: verified by content review`);
+    return;
   }
   if (!ev) die(`${c.id} has ${c.f.CHECK ? 'a failing check' : 'no check'}; verify with --evidence "<what a person observed, where>" or add a CHECK`);
   if (c.f.OWNER === 'godspeed' && !c.f.CHECK && !/\b(saw|read|opened|screenshot|observed|https?:)/i.test(ev)) die('evidence for mc-owned work names what was observed or a link; "done" is not evidence');
@@ -1080,7 +1094,7 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
   attempt <id> --runner <name> --ok --result "..." | --failed "why"   failed: retry in 1, 2, 4 days, never outward
   verify <id> [--content-review <json-file> | --evidence "..."]
                                      runs CHECK; a Godspeed-owned file result also needs an independent
-                                     content review against DONE WHEN; person-observed evidence stays available
+                                     content review against DONE WHEN; person-observed evidence alone verifies only results that are not Godspeed-owned files
   block <id> --needs ... | unblock <id> --why ... [--approved-by "..."] | cancel <id> --why ...
   sweep --card <id> --reason "..."   your answer on a card cancels the work under it (or --stale)
   sweep --goal <id> [--cancel|--stale] --reason "..."   a goal changed; its work is re-planned
