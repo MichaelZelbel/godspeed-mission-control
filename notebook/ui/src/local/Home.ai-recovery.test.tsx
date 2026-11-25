@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import { WAIT } from "@/test/wait-limits";
+import { retryDelay } from "./chat-options.mjs";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "owner" }, session: { user: { id: "owner" } } }) }));
@@ -137,4 +138,10 @@ describe("a model list that cannot load (#1124)", () => {
     await idle(30000);
     expect(asked).toBeLessThanOrEqual(4);
   }, 40000);
+});
+
+describe("the pace of a failing model list (#1124)", () => {
+  it("waits 5 s, 15 s, 60 s, then a minute after every further failure", () => {
+    expect([1, 2, 3, 4, 5, 6].map(retryDelay)).toEqual([5000, 15000, 60000, 60000, 60000, 60000]);
+  });
 });

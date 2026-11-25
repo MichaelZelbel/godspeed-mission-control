@@ -8,7 +8,7 @@ import {parseInstant,showDate} from '@/lib/local-date';
 import {providerService} from '../../../core/provider-service.mjs';
 import {AI_CONNECTION_UNREADABLE_STATUS} from '../../../core/no-ai.mjs';
 import {modelListUnavailable,useChatOptions} from '@/components/chat/ChatConnectionEmptyState';
-import {MODEL_LIST_UNAVAILABLE} from './chat-options.mjs';
+import {MODEL_LIST_RETRY,MODEL_LIST_UNAVAILABLE} from './chat-options.mjs';
 
 // Settings > Your AI (18 October 2026). What the person connects here powers the notebook and, unless
 // they untick it, the daily routines and the chat too (notebook/core/routine-ai.mjs): every installer
@@ -176,7 +176,7 @@ export function ConnectAI(){
     good data, so "configured" alone would keep saying a connected AI answers the chat while the
     notice below says the file cannot be read. The two must agree. */}
     {status.isLoading?<p role="status">Reading which AI your routines use…</p>:<RoutineAIState status={data} checking={checking} onCheck={check} connected={!saved.error&&!!saved.data?.configured}/>}
-    {modelListUnavailable(modelList)&&<p role="status" data-chat-ai-state="models-unavailable">{MODEL_LIST_UNAVAILABLE} It will try again shortly.</p>}
+    {modelListUnavailable(modelList)&&<p role="status" data-chat-ai-state="models-unavailable">{MODEL_LIST_UNAVAILABLE} {MODEL_LIST_RETRY}</p>}
     {saved.error?<div className="space-y-3"><p role="alert" className="text-red-500">{AI_CONNECTION_UNREADABLE_STATUS} The form is unavailable so it cannot be overwritten. Remove it to connect one again.</p>{removeControl}{error&&<p role="alert" className="text-red-500">{error}</p>}</div>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
       <p>Connect the AI account you pay for. The key stays on this device and never goes into your notes.</p>
       <div><label className="block" htmlFor={id+'service'}>Your AI service</label>

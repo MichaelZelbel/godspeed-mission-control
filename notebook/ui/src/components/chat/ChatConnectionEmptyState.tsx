@@ -3,7 +3,7 @@ import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 import {CHAT_AVAILABILITIES} from '../../../../core/chat-availability.mjs';
 import {AI_CONNECTION_UNREADABLE_STATUS,AI_REFUSED_STATUS,AI_STALLED_STATUS,AI_UNREACHABLE_STATUS,NO_AI_STATUS,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../../../../core/no-ai.mjs';
-import {listenForChatOptions,MODEL_LIST_UNAVAILABLE,retryDelay,sharedFailureCount,sharedReadFailed,sharedReadSucceeded} from '@/local/chat-options.mjs';
+import {listenForChatOptions,MODEL_LIST_RETRY,MODEL_LIST_UNAVAILABLE,retryDelay,sharedFailureCount,sharedReadFailed,sharedReadSucceeded} from '@/local/chat-options.mjs';
 export type ChatAvailability=(typeof CHAT_AVAILABILITIES)[number];
 type ChatOptions={connected?:boolean;usable?:boolean;availability?:ChatAvailability};
 export type ChatAIState='checking'|ChatAvailability;
@@ -131,7 +131,7 @@ export function ChatConnectionEmptyState({ready,said}:{ready:React.ReactNode;sai
   const options=useChatOptions();
   const state=chatAIState(options.data);
   const underConversation=ready===null;
-  if(!underConversation&&modelListUnavailable(options))return <div className="text-center text-muted-foreground text-sm py-8" role="alert" data-chat-ai-state="models-unavailable"><p className="font-semibold text-foreground">{MODEL_LIST_UNAVAILABLE}</p><p>It will try again shortly.</p></div>;
+  if(!underConversation&&modelListUnavailable(options))return <div className="text-center text-muted-foreground text-sm py-8" role="alert" data-chat-ai-state="models-unavailable"><p className="font-semibold text-foreground">{MODEL_LIST_UNAVAILABLE}</p><p>{MODEL_LIST_RETRY}</p></div>;
   if(state==='ready')return <>{ready}</>;
   // Under an open conversation the first read stays quiet; only a known state shows.
   if(state==='checking')return underConversation?null:<div className="text-center text-muted-foreground text-sm py-8" role="status">Checking AI connection…</div>;

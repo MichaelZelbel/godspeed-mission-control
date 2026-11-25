@@ -15,6 +15,7 @@ export function listenForChatOptions(listener){
 
 // Said by every surface that shows the shared state; it claims nothing about the connection, which a failed read cannot tell.
 export const MODEL_LIST_UNAVAILABLE='The list of AI models could not be loaded.';
+export const MODEL_LIST_RETRY='It will try again shortly.';
 
 // A failed model list is asked again after 5 s, 15 s and 60 s, then once a minute (#1124).
 const RETRY_DELAYS=[5000,15000,60000];
