@@ -28,7 +28,7 @@ test('a delivery review rejection after the rewrite saves a checked factual brie
  assert.equal(result.fallback,true);assert.equal(query.rows('notes').filter(note=>note.source_app==='morning-brief').length,1);
  assert.match(saved.content,/Prepare a fictional guide/);assert.doesNotMatch(saved.content,/Rejected private model prose/);
  const receipt=query.rows('job_receipts').find(row=>row.kind==='brief-factual-fallback');
- assert.equal(receipt.state,'verified');assert.equal(receipt.rejected_draft,'Rejected private model prose.');
+ assert.equal(receipt.state,'verified');assert.match(receipt.rejected_draft,/^Rejected private model prose\.\n\nNext: /);
  assert.equal(repairs(query).filter(row=>row.note_id===saved.id).length,1);
 });
 
@@ -469,7 +469,7 @@ for(const [name,verdict] of [
  assert.match(saved.content,/One of your saved goals is Cancel the fictional contract\./);assert.doesNotMatch(saved.content,/Unsupported private draft/);assert.match(saved.content,/^Next: Ask Godspeed to work on Cancel the fictional contract and/m);
  const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');
  assert.equal(receipt.state,'verified');assert.equal(receipt.honest_note,true);assert.match(receipt.fallback_error,/Could not make a checked factual fallback/);
- assert.equal(receipt.rejected_draft,'Unsupported private draft.');assert.ok(receipt.reasons.includes(verdict.reason));
+ assert.match(receipt.rejected_draft,/^Unsupported private draft\.\n\nNext: /);assert.ok(receipt.reasons.includes(verdict.reason));
  assert.equal(query.rows('notifications').filter(n=>n.status==='ready').length,1);assert.equal(repairs(query).filter(row=>row.note_id===saved.id).length,1);
 });
 
