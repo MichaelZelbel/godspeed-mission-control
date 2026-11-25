@@ -83,6 +83,7 @@ describe("the timeline with moments whose stored date cannot be read", () => {
     expect(screen.queryByText("Feb 14, 2025")).toBeNull();
     // The readable cards keep their dates.
     expect(screen.getByText("May 1, 2024")).toBeInTheDocument();
-    expect(screen.getByText("Nov 2, 2023")).toBeInTheDocument();
+    // A clock time on a stored day shows beside it (#1059).
+    expect(screen.getByText("Nov 2, 2023, 10:00")).toBeInTheDocument();
   });
 });

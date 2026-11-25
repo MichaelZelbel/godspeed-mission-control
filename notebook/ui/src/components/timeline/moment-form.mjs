@@ -14,6 +14,25 @@ function formDay(value) {
   return match ? match[1] : '';
 }
 
+const CLOCK = /^\d{4}-\d{2}-\d{2}[T ](\d{2}):(\d{2})/;
+
+// The clock time a value carries as written, "HH:mm", or "" for an all-day
+// value. Existing all-day moments are stored as T00:00:00Z, so a midnight
+// reads as all day. The digits are the person's wall clock and are never
+// converted through a zone, so the day (the first ten characters) stays put.
+export function momentTime(value) {
+  const match = CLOCK.exec(String(value ?? '').trim());
+  if (!match) return '';
+  const time = match[1] + ':' + match[2];
+  return time === '00:00' ? '' : time;
+}
+
+// A day and an optional time as the value a moment stores: the bare day for
+// all day, else yyyy-MM-ddTHH:mm:00Z.
+export function joinMoment(day, time) {
+  return day && time ? day + 'T' + time + ':00Z' : day;
+}
+
 /**
  * Which fields count as filled when the dialog opens. The dialog sets a
  * field's flag when the person changes it; a value a suggestion put there is
