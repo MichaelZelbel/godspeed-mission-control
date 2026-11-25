@@ -37,6 +37,8 @@ if [ "$SKILL" = "work-result-review" ]; then
   cp "$PF" "$(dirname "$OUT")/review-prompt-seen.txt"
   case "${FAKE_REVIEW:-pass}" in
     fail) printf '%s\n' '{"passed":false,"reason":"the draft omits a required candidate","missing":["the third named candidate"]}' ;;
+    prose) printf 'I read the file. {not this} Verdict: {"passed":true,"reason":"%s","missing":[]} Done.\n' "$(head -c 700 /dev/zero | tr '\0' x)" ;;
+    proseno) printf 'The file lacks it: {"passed":false,"reason":"no third candidate","missing":[]}\n' ;;
     malformed) printf '%s\n' 'not json' ;;
     malformedonce) if [ -e "$(dirname "$OUT")/review-asked" ]; then printf '%s\n' '{"passed":true,"reason":"meets DONE WHEN","missing":[]}'; else touch "$(dirname "$OUT")/review-asked"; echo 'not json'; fi ;;
     *) printf '%s\n' '{"passed":true,"reason":"the file meets every content requirement in DONE WHEN","missing":[]}' ;;
@@ -448,6 +450,14 @@ RV="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=
 OUT="$(FAKE_REVIEW=malformedonce run --only "$RV" 2>&1)"
 check "a reviewer that answered in no valid shape is asked once more" "$(status_of "$RV")" "verified"
 missing "  without re-running the work" "$OUT" "one repair try"
+hw file --what "Write the prose-verdict note" --done-when "research/prose-note.md exists" --check "test -s research/prose-note.md" --key review-prose --source test >/dev/null
+RP="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="review-prose").id))')"
+FAKE_REVIEW=prose run --only "$RP" >/dev/null 2>&1
+check "a verdict said after some words, with a long reason, is still the reader's verdict" "$(status_of "$RP")" "verified"
+hw file --what "Write the refused prose note" --done-when "research/prose-no.md exists" --check "test -s research/prose-no.md" --key review-proseno --source test >/dev/null
+RN="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="review-proseno").id))')"
+FAKE_REVIEW=proseno run --only "$RN" >/dev/null 2>&1
+check "  and a refusing verdict said that way still refuses" "$(status_of "$RN")" "attempted"
 
 # a refusal is repaired only for a plain item: never an approved one, never one with no check (exit 1), never past the budget
 hw file --what "Write the approved note" --done-when "research/approved-note.md has fifty words" --check "test \$(wc -w < research/approved-note.md) -ge 50" --key approved-short --source test --outward yes >/dev/null

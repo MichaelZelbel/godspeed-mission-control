@@ -227,7 +227,14 @@ content_review() {
     else
       "$NODE" -e '
 const fs=require("fs"),input=process.argv[1],output=process.argv[2];
-let text="";try{text=fs.readFileSync(input,"utf8").trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"");const v=JSON.parse(text);if(!v||typeof v!=="object"||typeof v.passed!=="boolean"||typeof v.reason!=="string"||!v.reason.trim()||v.reason.length>500||!Array.isArray(v.missing)||v.missing.length>20||v.missing.some(x=>typeof x!=="string"||!x.trim()||x.length>300)||(v.passed&&v.missing.length)||(!v.passed&&!v.missing.length))throw Error("shape");fs.writeFileSync(output,JSON.stringify(v)+"\n");}
+let text="";try{text=fs.readFileSync(input,"utf8").trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"");
+// A reader that says its one JSON object after some words, or writes a reason longer than the register keeps, gave a verdict all the same (#1104): take the last object that has one, and cut long text to the limit. The verdict itself (passed, and what is missing) is never changed.
+let v;try{v=JSON.parse(text)}catch{for(let i=text.lastIndexOf("{");i>=0&&!v;i=text.lastIndexOf("{",i-1)){for(let j=text.indexOf("}",i);j>=0&&!v;j=text.indexOf("}",j+1)){try{const o=JSON.parse(text.slice(i,j+1));if(o&&typeof o.passed==="boolean")v=o}catch{}}}}
+if(!v||typeof v!=="object"||typeof v.passed!=="boolean"||typeof v.reason!=="string"||!v.reason.trim()||!Array.isArray(v.missing)||v.missing.some(x=>typeof x!=="string"||!x.trim()))throw Error("shape");
+v.reason=v.reason.slice(0,500);v.missing=v.missing.slice(0,20).map(x=>x.slice(0,300));
+if(!v.passed&&!v.missing.length)v.missing=[v.reason.slice(0,300)];
+if(v.passed&&v.missing.length)throw Error("shape");
+fs.writeFileSync(output,JSON.stringify({passed:v.passed,reason:v.reason,missing:v.missing})+"\n");}
 catch{fs.writeFileSync(output,JSON.stringify({passed:false,reason:"the independent content reviewer returned no valid verdict",missing:["a valid review of the result against DONE WHEN"],invalid:true})+"\n");}' "$ITEMDIR/review-answer.txt" "$ITEMDIR/review.json"
     fi
     grep -q '"invalid":true' "$ITEMDIR/review.json" || break
