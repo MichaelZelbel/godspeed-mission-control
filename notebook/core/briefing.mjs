@@ -249,6 +249,9 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
  // Every fallback names an active goal by its record title alone, which no refused sentence can make unsupported (#1104).
  const goalSentence=title=>'One of your saved goals is '+title+'.';
  const goalLine=()=>{const row=goalsWorkedFirst().find(r=>text(r.title));return row?goalSentence(text(row.title)):null;};
+ // The one action a fallback can always offer for a saved goal; the first-day brief is judged on having a concrete next action.
+ const goalNext=()=>{const row=goalsWorkedFirst().find(r=>text(r.title));return row?'Next: Ask Godspeed to work on '+text(row.title)+' and show you one concrete result today.':null;};
+ const passes=(head,line)=>line&&!codeGate([head,line].join('\n\n')).length&&!ruleRefusals(line,voice).length?line:null;
  const factualFallback=rejectedIds=>{
   const parts=[],excluded=row=>row?.id!=null&&rejectedIds.has(String(row.id));
   const add=line=>{if(!line)return false;const candidate=[...parts,line].join('\n\n');if(codeGate(candidate).some(error=>!error.startsWith('Include ')))return false;parts.push(line);return true;};
@@ -300,8 +303,8 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
   const due=context.deadlines.filter(row=>deadlineLive(row,now.getTime())&&row.due_at&&Number.isFinite(Date.parse(row.due_at))&&Date.parse(row.due_at)>=now.getTime()&&clean(row.title)).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at))[0];
   const next=goal&&due?'Next: open '+clean(due.title)+' and choose the first step to finish before '+(due.native_file?String(due.due_at).slice(0,10):dayOf(new Date(due.due_at),due.timezone||zone))+'.':null;
   for(const opening of ['Your full morning briefing for '+today+' could not be written today, because the checks refused what was drafted. A repair item has been opened for it.','The full note for '+today+' could not be written. A repair item is open.']){
-   const action=next&&!codeGate([opening,next].join('\n\n')).length&&!ruleRefusals(next,voice).length?next:null;
-   const named=goalLine(),goalPart=named&&!codeGate([opening,named].join('\n\n')).length&&!ruleRefusals(named,voice).length?named:null;
+   const action=passes(opening,next)||passes(opening,goalNext());
+   const goalPart=passes(opening,goalLine());
    const text=[opening,...(goalPart?[goalPart]:[]),...own,...(action?[action]:[])].join('\n\n');
    if(!codeGate(text).length&&!ruleRefusals(text,voice).length)return text;
   }
@@ -416,8 +419,8 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
    const day=new Date().toISOString().slice(0,10),own_lines=[...required,...(c?[c.content,c.link]:[])];
    const refusals=[...code,...remaining.filter(e=>!code.includes(e))];
    const fallbackHead='Your full morning briefing for '+day+' could not be written today, because what was drafted broke your writing rules. A repair item has been opened for it.';
-   const named=goalLine(),fallbackGoal=named&&!codeGate([fallbackHead,named].join('\n\n')).length&&!ruleRefusals(named,voice).length?named:null;
-   const fallbackText=[fallbackHead,...(fallbackGoal?[fallbackGoal]:[]),...own_lines].join('\n\n');
+   const fallbackGoal=passes(fallbackHead,goalLine()),fallbackNext=passes(fallbackHead,goalNext());
+   const fallbackText=[fallbackHead,...(fallbackGoal?[fallbackGoal]:[]),...own_lines,...(fallbackNext?[fallbackNext]:[])].join('\n\n');
    const fallbackErrors=codeGate(fallbackText);
    if(fallbackErrors.length){
     await store.saveAsync('job_receipts',{kind:'brief-cut',job_id:job.id,state:'failed',errors:code,cut:cut.cut,restored:missing,draft_hash:hash(draft),fallback_errors:fallbackErrors,finished_at:new Date().toISOString()});
