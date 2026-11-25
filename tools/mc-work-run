@@ -423,7 +423,7 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   # ONE REPAIR OF A REFUSED DRAFT (#1104). A free model's first answer is often a draft the check or
   # the content reader refuses. It is shown the refusal and tries once more in the same run, as one
   # attempt, so a person's first day does not end on it. Approved outward moves are never run twice.
-  if [ "$VRC" -eq 2 ] && [ -z "$APPROVED" ] && [ -z "$MAY_KIND" ] && [ "$KIND" != "repair" ] \
+  if [ "$VRC" -eq 2 ] && [ -z "$APPROVED" ] && [ "$KIND" != "repair" ] \
      && [ $(( $(date +%s) - START )) -lt "$BUDGET" ]; then
     log "$ID refused (verify exit $VRC); one repair try"
     {
