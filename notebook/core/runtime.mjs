@@ -4,7 +4,9 @@ import { fileContext } from './context.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {runRememberWhatYouSaid} from './jobs/remember-job.mjs';
+import {runRememberWhatYouSaid,hasAI} from './jobs/remember-job.mjs';
+import {aiProcedureKinds} from './jobs/kinds.mjs';
+import {NO_AI_CONNECT} from './no-ai.mjs';
 import {procedure,procedureKinds} from './procedures.mjs';
 import {providerService} from './provider-service.mjs';
 import {visibleRows,knowledgeContext} from './visibility.mjs';
@@ -335,6 +337,9 @@ export function commandProvider({ command, args = [], cwd, timeoutMs = 120000 } 
 }
 export function jobExecutor(configuredProvider,query) {
   return async (job,{settings,store})=>{
+    // The one place that refuses a routine needing an AI when none is connected (#1093). The
+    // Remember routine runs its own program from the notebook's AI files, so those say whether one is.
+    if(aiProcedureKinds.includes(job.kind)&&!(job.kind==='memory-daily'?hasAI(store.root):configuredProvider))throw new Error(NO_AI_CONNECT);
     let provider=configuredProvider?(input=>configuredProvider({...input,timeout_ms:300000})):null;
     if(configuredProvider?.options){
       let choice;
