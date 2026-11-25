@@ -205,6 +205,53 @@ publish_hold() {
   [ -n "$(field "$1" APPROVED)" ] || echo "no yes from you is on it (APPROVED is empty)"
 }
 
+# The independent content reader's verdict on one result, in $ITEMDIR/review.json. A reader that
+# ended or answered in no valid shape is asked once more before the item is refused for it (#1104):
+# that is the reader failing, not the work.
+content_review() {
+  local try REVIEW_RC
+  {
+    echo "Compare this exact result with the work item's DONE WHEN."
+    echo
+    printf '%s\n' "$SHOW"
+    echo
+    echo "RESULT FILE: $RESULT_FILE"
+    echo "RUNNER RESULT: $RESULT"
+  } > "$ITEMDIR/review-prompt.txt"
+  for try in 1 2; do
+    bash "$RUNNER" work-result-review --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt-file "$ITEMDIR/review-prompt.txt" \
+      --timeout "$ITEM_TIMEOUT" --out "$ITEMDIR/review-answer.txt" --allowed-tools "Read Grep Glob" >/dev/null 2>&1
+    REVIEW_RC=$?
+    if [ "$REVIEW_RC" -ne 0 ]; then
+      printf '{"passed":false,"reason":"the independent content reviewer ended before returning a verdict","missing":["a review of the result against DONE WHEN"],"invalid":true}\n' > "$ITEMDIR/review.json"
+    else
+      "$NODE" -e '
+const fs=require("fs"),input=process.argv[1],output=process.argv[2];
+let text="";try{text=fs.readFileSync(input,"utf8").trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"");const v=JSON.parse(text);if(!v||typeof v!=="object"||typeof v.passed!=="boolean"||typeof v.reason!=="string"||!v.reason.trim()||v.reason.length>500||!Array.isArray(v.missing)||v.missing.length>20||v.missing.some(x=>typeof x!=="string"||!x.trim()||x.length>300)||(v.passed&&v.missing.length)||(!v.passed&&!v.missing.length))throw Error("shape");fs.writeFileSync(output,JSON.stringify(v)+"\n");}
+catch{fs.writeFileSync(output,JSON.stringify({passed:false,reason:"the independent content reviewer returned no valid verdict",missing:["a valid review of the result against DONE WHEN"],invalid:true})+"\n");}' "$ITEMDIR/review-answer.txt" "$ITEMDIR/review.json"
+    fi
+    grep -q '"invalid":true' "$ITEMDIR/review.json" || break
+  done
+  sed -i 's/,"invalid":true//' "$ITEMDIR/review.json"
+}
+
+# The register's verdict on the item as it stands: reads the content reviewer first where the
+# item is Godspeed's own and has a file. Sets VOUT and VRC.
+verify_item() {
+  local REVIEW_ARG=""
+  RESULT_FILE="$(reg work files "$ID" 2>/dev/null | head -1)"
+  if [ "$OWNER" = "godspeed" ] && [ -n "$RESULT_FILE" ]; then
+    content_review
+    REVIEW_ARG="$ITEMDIR/review.json"
+  fi
+  # THE CHECK AND CONTENT READER, NOT THE RUNNER, SAY DONE. Exit 0 verifies. Exit 2 means the runner said done and
+  # the check says not: it stays attempted, on the record. Exit 1 means there is no check, and a
+  # person or the decision run verifies it by observation.
+  if [ -n "$REVIEW_ARG" ]; then VOUT="$(reg work verify "$ID" --content-review "$REVIEW_ARG" 2>&1)"; VRC=$?
+  else VOUT="$(reg work verify "$ID" 2>&1)"; VRC=$?; fi
+  printf '%s\n' "$VOUT" | sed 's/^/  /'
+}
+
 START="$(date +%s)"
 N=0; DONE=0; VERIFIED=0; UNFINISHED=0
 while IFS=$'\t' read -r ID KIND WHAT; do
@@ -372,37 +419,33 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   reg work attempt "$ID" --runner "$RUNNER_NAME" --ok --result "$RESULT" 2>&1 | sed 's/^/  /'
   DONE=$((DONE + 1))
 
-  REVIEW_ARG=""
-  RESULT_FILE="$(reg work files "$ID" 2>/dev/null | head -1)"
-  if [ "$OWNER" = "godspeed" ] && [ -n "$RESULT_FILE" ]; then
+  verify_item
+  # ONE REPAIR OF A REFUSED DRAFT (#1104). A free model's first answer is often a draft the check or
+  # the content reader refuses. It is shown the refusal and tries once more in the same run, as one
+  # attempt, so a person's first day does not end on it. Approved outward moves are never run twice.
+  if [ "$VRC" -ne 0 ] && [ -z "$APPROVED" ] && [ -z "$MAY_KIND" ] && [ "$KIND" != "repair" ] \
+     && [ $(( $(date +%s) - START )) -lt "$BUDGET" ]; then
+    log "$ID refused (verify exit $VRC); one repair try"
     {
-      echo "Compare this exact result with the work item's DONE WHEN."
+      cat "$ITEMDIR/prompt.txt"
       echo
-      printf '%s\n' "$SHOW"
-      echo
-      echo "RESULT FILE: $RESULT_FILE"
-      echo "RUNNER RESULT: $RESULT"
-    } > "$ITEMDIR/review-prompt.txt"
-    bash "$RUNNER" work-result-review --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt-file "$ITEMDIR/review-prompt.txt" \
-      --timeout "$ITEM_TIMEOUT" --out "$ITEMDIR/review-answer.txt" --allowed-tools "Read Grep Glob" >/dev/null 2>&1
-    REVIEW_RC=$?
-    if [ "$REVIEW_RC" -ne 0 ]; then
-      printf '{"passed":false,"reason":"the independent content reviewer ended before returning a verdict","missing":["a review of the result against DONE WHEN"]}\n' > "$ITEMDIR/review.json"
-    else
-      "$NODE" -e '
-const fs=require("fs"),input=process.argv[1],output=process.argv[2];
-let text="";try{text=fs.readFileSync(input,"utf8").trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"");const v=JSON.parse(text);if(!v||typeof v!=="object"||typeof v.passed!=="boolean"||typeof v.reason!=="string"||!v.reason.trim()||v.reason.length>500||!Array.isArray(v.missing)||v.missing.length>20||v.missing.some(x=>typeof x!=="string"||!x.trim()||x.length>300)||(v.passed&&v.missing.length)||(!v.passed&&!v.missing.length))throw Error("shape");fs.writeFileSync(output,JSON.stringify(v)+"\n");}
-catch{fs.writeFileSync(output,JSON.stringify({passed:false,reason:"the independent content reviewer returned no valid verdict",missing:["a valid review of the result against DONE WHEN"]})+"\n");}' "$ITEMDIR/review-answer.txt" "$ITEMDIR/review.json"
-    fi
-    REVIEW_ARG="$ITEMDIR/review.json"
+      echo "## Your first answer did not verify"
+      echo "You ended with a RESULT line, and then the item was checked and refused:"
+      printf '%s\n' "$VOUT"
+      echo "Correct the work so the CHECK passes and the result file matches DONE WHEN, then answer again with the same final lines. Do not change the check."
+    } > "$ITEMDIR/prompt-repair.txt"
+    bash "$RUNNER" work-item --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt-file "$ITEMDIR/prompt-repair.txt" \
+      --timeout "$ITEM_TIMEOUT" --out "$ITEMDIR/answer-repair.txt" \
+      --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch${ITEM_TOOLS:+ $ITEM_TOOLS}"
+    REPAIR_RESULT="$(grep -a '^RESULT:' "$ITEMDIR/answer-repair.txt" 2>/dev/null | tail -1 | tr -d '\r')"
+    case "$REPAIR_RESULT" in
+      ""|"RESULT: FAILED:"*) log "$ID repair try gave no result" ;;
+      *)
+        RESULT="$(printf '%s' "$REPAIR_RESULT" | sed 's/^RESULT: *//' | cut -c1-300)"
+        SAY="$(grep -a '^SAY:' "$ITEMDIR/answer-repair.txt" 2>/dev/null | tail -1 | tr -d '\r' | sed 's/^SAY: *//' | cut -c1-300)"
+        verify_item ;;
+    esac
   fi
-
-  # THE CHECK AND CONTENT READER, NOT THE RUNNER, SAY DONE. Exit 0 verifies. Exit 2 means the runner said done and
-  # the check says not: it stays attempted, on the record, for the next decision to re-plan. Exit
-  # 1 means there is no check, and a person or the decision run verifies it by observation.
-  if [ -n "$REVIEW_ARG" ]; then VOUT="$(reg work verify "$ID" --content-review "$REVIEW_ARG" 2>&1)"; VRC=$?
-  else VOUT="$(reg work verify "$ID" 2>&1)"; VRC=$?; fi
-  printf '%s\n' "$VOUT" | sed 's/^/  /'
   if [ "$VRC" -ne 0 ]; then
     log "$ID attempted, not verified (verify exit $VRC)"
     continue

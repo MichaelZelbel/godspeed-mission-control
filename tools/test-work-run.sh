@@ -38,6 +38,7 @@ if [ "$SKILL" = "work-result-review" ]; then
   case "${FAKE_REVIEW:-pass}" in
     fail) printf '%s\n' '{"passed":false,"reason":"the draft omits a required candidate","missing":["the third named candidate"]}' ;;
     malformed) printf '%s\n' 'not json' ;;
+    malformedonce) if [ -e "$(dirname "$OUT")/review-asked" ]; then printf '%s\n' '{"passed":true,"reason":"meets DONE WHEN","missing":[]}'; else touch "$(dirname "$OUT")/review-asked"; echo 'not json'; fi ;;
     *) printf '%s\n' '{"passed":true,"reason":"the file meets every content requirement in DONE WHEN","missing":[]}' ;;
   esac > "$OUT"
   exit 0
@@ -50,6 +51,10 @@ case "${FAKE_MODE:-ok}" in
   exit1)    echo "boom" > "$OUT"; exit 1 ;;
   noresult) echo "I did things but never said so" > "$OUT"; exit 0 ;;
   failed)   echo "RESULT: FAILED: the shop needs a login this machine does not have" > "$OUT"; exit 0 ;;
+  shortonce) if grep -q "did not verify" "$PF"; then
+              [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; { for i in $(seq 1 80); do printf 'word%s ' "$i"; done; echo; } > "$P"; }
+            else [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; echo "too short" > "$P"; }; fi
+            echo "RESULT: wrote $P" > "$OUT"; exit 0 ;;
   short)    [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; echo "too short" > "$P"; }; echo "RESULT: wrote $P" > "$OUT"; exit 0 ;;
   repair)   KEPT="$KEEP$FAKE_FAULT"; mkdir -p "$(dirname "$KEPT")"; cp "$FAKE_FAULT" "$KEPT"
             if [ "${FAKE_FIX:-works}" = works ]; then printf 'upgrade: runs\n' > "$FAKE_FAULT"; else printf 'upgrade: still broken\n' > "$FAKE_FAULT"; fi
@@ -429,6 +434,19 @@ check "  the shape-only draft stays attempted" "$(status_of "$GAP")" "attempted"
 contains "  the missing requirement is named to the run" "$OUT" "the third named candidate"
 contains "  and retained on the card" "$(cat "$TMP/work/$GAP.md")" "UNVERIFIED content review"
 contains "  the reviewer read the exact result file" "$(cat "$TMP/routines/work/2026-09-15/$GAP/review-prompt-seen.txt")" "RESULT FILE: research/review-gap.md"
+
+# --- a refused draft is repaired once, in the same run (#1104) -------------------------------------------------
+hw file --what "Write the repair note" --done-when "research/repair-note.md has fifty words" --check "test \$(wc -w < research/repair-note.md) -ge 50" --key repair-once --source test >/dev/null
+RO="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="repair-once").id))')"
+OUT="$(FAKE_MODE=shortonce run --only "$RO" 2>&1)"
+check "a draft the check refuses is repaired in the same run" "$(status_of "$RO")" "verified"
+contains "  and the repair try was shown the refusal" "$(cat "$TMP/routines/work/2026-09-15/$RO/prompt-repair.txt")" "Your first answer did not verify"
+check "  and counts as one attempt" "$(grep -m1 '^ATTEMPTS:' "$TMP/work/$RO.md")" "ATTEMPTS: 1"
+hw file --what "Write the reviewed note" --done-when "research/reviewed-note.md exists" --check "test -s research/reviewed-note.md" --key review-once --source test >/dev/null
+RV="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="review-once").id))')"
+OUT="$(FAKE_REVIEW=malformedonce run --only "$RV" 2>&1)"
+check "a reviewer that answered in no valid shape is asked once more" "$(status_of "$RV")" "verified"
+missing "  without re-running the work" "$OUT" "one repair try"
 
 echo
 echo "$PASS passed, $FAIL failed"

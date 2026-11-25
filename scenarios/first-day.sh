@@ -21,6 +21,11 @@ CURRENT_STEP='fresh Docker server installation'
 fail() {
   if [ "${CHECK_ONLY:-no}" = no ] && [ -n "${EVIDENCE:-}" ]; then
     printf 'FAIL %s: %s: %s\n' "$SCENARIO" "$CURRENT_STEP" "$*" | tee -a "$EVIDENCE/steps.tsv" >&2
+    # A refused item's own log and verdict live in the workspace; keep them so the cause is read, not guessed (#1104).
+    if type server_copy_evidence_if_there >/dev/null 2>&1; then
+      server_copy_evidence_if_there /opt/data/full-candidate/workspace/work "$EVIDENCE" 2>/dev/null || true
+      server_copy_evidence_if_there /opt/data/full-candidate/workspace/routines/work "$EVIDENCE" 2>/dev/null || true
+    fi
   fi
   verdict "FAIL $SCENARIO: $*"
   exit 1

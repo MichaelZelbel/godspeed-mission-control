@@ -450,7 +450,7 @@ for(const [name,verdict] of [
  const provider=async input=>input.kind==='brief-verification'?(input.check==='source-facts'?verdict:{passed:false,reason:'Unclear',rejection_scope:'non-source',rejected_source_ids:[]}):'Unsupported private draft.';
  const result=await run(provider,query,store,'brief-unidentified-'+name.replaceAll(' ','-')),saved=store.get('notes',result.record_id);
  assert.equal(result.fallback,true);assert.match(saved.content,/^Your full morning briefing for \d{4}-\d{2}-\d{2} could not be written today/);
- assert.doesNotMatch(saved.content,/fictional contract|Unsupported private draft/);
+ assert.match(saved.content,/One of your saved goals is Cancel the fictional contract\./);assert.doesNotMatch(saved.content,/Unsupported private draft/);
  const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');
  assert.equal(receipt.state,'verified');assert.equal(receipt.honest_note,true);assert.match(receipt.fallback_error,/Could not make a checked factual fallback/);
  assert.equal(receipt.rejected_draft,'Unsupported private draft.');assert.ok(receipt.reasons.includes(verdict.reason));
