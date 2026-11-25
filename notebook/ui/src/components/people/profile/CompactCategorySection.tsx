@@ -138,8 +138,10 @@ export function CompactCategorySection({
   const suggestedLabels = section.slug ? CATEGORY_SUGGESTED_LABELS[section.slug] ?? [] : [];
   const existingLabels = section.slots.map((s) => s.label);
 
-  const handleAdd = (data: EntryFormData) => {
-    actions.add({
+  // The form stays open until the server has the fact, so a reload cannot drop a save still on its way,
+  // and a failed save is shown in the form instead of looking saved.
+  const handleAdd = async (data: EntryFormData) => {
+    await actions.add({
       label: data.label,
       value: data.value,
       category_slug: data.category_slug,
