@@ -928,6 +928,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   let firstQueryTraced=false;
   const listen = (server, port, host) => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   const server = http.createServer(handle(remote, auth));
+  // An older notebook gains its missing routines before the server answers, so Settings lists them at once.
+  try{await scheduler.ensureStartingJobs?.();}catch{}
   await listen(server, port, host);
   console.error(startupTrace('main-door-listening'));
   // The link an assistant gives when asked for the notebook (get_notebook_link), with the port this door really has.
@@ -986,7 +988,6 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const processingTimer=setInterval(()=>{if(!menerioImport.mutating)void processing.tick().catch(()=>{});},60000);processingTimer.unref?.();
   const backupSchedule=new BackupSchedule({store,runner:backupRunner,device}),backupTimer=setInterval(()=>{if(!menerioImport.mutating)void backupSchedule.tick().catch(()=>{});},600000);backupTimer.unref?.();
   const automaticTimer=setInterval(()=>{if(!menerioImport.mutating)void automaticUpdate.tick().catch(()=>{});},60000);automaticTimer.unref?.();
-  void scheduler.ensureStartingJobs?.().catch(()=>{});
   const factTimer=setInterval(()=>{if(!menerioImport.mutating)void factClosing.tick().catch(()=>{});},600000);factTimer.unref?.();
   // Finished journal tasks become moments (core/journal-moments.mjs).
   const journalMoments=new JournalMoments({store,query,device}),journalMomentsTimer=setInterval(()=>{if(!menerioImport.mutating)void journalMoments.tick().catch(()=>{});},60000);journalMomentsTimer.unref?.();
