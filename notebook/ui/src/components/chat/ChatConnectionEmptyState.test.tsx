@@ -154,3 +154,19 @@ it('still asks for a check on a Dashboard arrival after a chat read in the same 
   await waitFor(()=>expect(calls.length).toBeGreaterThan(1),WAIT);
   expect(calls[calls.length-1]).toContain('check=1');
 });
+
+describe('a model list that cannot load (#1124)',()=>{
+  const fail=()=>vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({error:'no'}),{status:500,headers:{'Content-Type':'application/json'}})));
+  const mount=(ready:React.ReactNode)=>render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter><ChatConnectionEmptyState ready={ready}/></MemoryRouter></QueryClientProvider>);
+  it('says so in the chat notice without claiming a connection',async()=>{
+    fail();mount(<p>Ordinary ready state</p>);
+    expect(await screen.findByText('The list of AI models could not be loaded.',undefined,WAIT)).toBeInTheDocument();
+    expect(document.querySelector('[data-chat-ai-state="models-unavailable"]')).not.toBeNull();
+  });
+  it('keeps an open conversation quiet, as before',async()=>{
+    fail();mount(null);
+    await new Promise(r=>setTimeout(r,200));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText('The list of AI models could not be loaded.')).toBeNull();
+  });
+});

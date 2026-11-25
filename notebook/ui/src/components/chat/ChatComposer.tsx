@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {Plus,ArrowUp,Square,Mic,Volume2,VolumeX,X,FileText,Loader2} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
-import {listenForChatOptions,loadChatOptions,retryDelay} from '@/local/chat-options.mjs';
+import {listenForChatOptions,loadChatOptions,retryDelay,sharedReadRetrying} from '@/local/chat-options.mjs';
 import {CHAT_AVAILABILITY_CHANGED,type ChatAvailability} from './ChatConnectionEmptyState';
 
 export type ChatFile={path:string;name:string;type:string;text?:string};
@@ -15,8 +15,10 @@ export default function ChatComposer(p:Props){
   const [modelError,setModelError]=useState(''),[modelAttempt,setModelAttempt]=useState(0);
   const canRecord=!!navigator.mediaDevices?.getUserMedia&&typeof MediaRecorder!=='undefined';
   useEffect(()=>{let alive=true,request:AbortController|undefined,timer:number|undefined,failures=0;
+    // A failed read is retried on the shared pace; while the shared read is itself retrying, this one waits for it (#1124).
+    const wait=()=>{window.clearTimeout(timer);timer=window.setTimeout(()=>{if(failures&&sharedReadRetrying())wait();else refresh();},failures?retryDelay(failures):5000);};
     const refresh=()=>{window.clearTimeout(timer);request?.abort();const currentRequest=request=new AbortController();setModelError('');
-      loadChatOptions({signal:currentRequest.signal}).then(data=>{failures=0;if(alive){setOptions(data);p.onModel(data.usable===false?'':data.current);if(data.usable===false)p.onEffort('');}}).catch(e=>{if(currentRequest.signal.aborted)return;failures++;if(alive)setModelError(e.message||'Model choices could not be loaded. Try again.');}).finally(()=>{if(alive&&!currentRequest.signal.aborted){window.clearTimeout(timer);timer=window.setTimeout(refresh,failures?retryDelay(failures):5000);}});};
+      loadChatOptions({signal:currentRequest.signal}).then(data=>{failures=0;if(alive){setOptions(data);p.onModel(data.usable===false?'':data.current);if(data.usable===false)p.onEffort('');}}).catch(e=>{if(currentRequest.signal.aborted)return;failures++;if(alive)setModelError(e.message||'Model choices could not be loaded. Try again.');}).finally(()=>{if(alive&&!currentRequest.signal.aborted)wait();});};
     refresh();window.addEventListener(CHAT_AVAILABILITY_CHANGED,refresh);
     return()=>{alive=false;window.clearTimeout(timer);window.removeEventListener(CHAT_AVAILABILITY_CHANGED,refresh);request?.abort();};
   },[modelAttempt]);

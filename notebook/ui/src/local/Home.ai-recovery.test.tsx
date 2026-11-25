@@ -132,7 +132,7 @@ describe("a model list that cannot load (#1124)", () => {
       return new Response(JSON.stringify({ runtimeConfigured: true, aiAvailability: "ready", show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
     }));
     await load(true);
-    expect(await screen.findByText("Your AI is connected, but its model choices could not be loaded.", undefined, WAIT)).toBeInTheDocument();
+    expect(await screen.findByText("The list of AI models could not be loaded.", undefined, WAIT)).toBeInTheDocument();
     expect(screen.queryByText("AI unavailable")).toBeNull();
     await idle(30000);
     expect(asked).toBeLessThanOrEqual(4);
