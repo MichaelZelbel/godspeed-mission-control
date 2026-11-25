@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {filledOnOpen, mergeSuggestion, newPersonOffer, newPeopleToCreate} from '../ui/src/components/timeline/moment-form.mjs';
+import {filledOnOpen, joinMoment, mergeSuggestion, momentTime, newPersonOffer, newPeopleToCreate} from '../ui/src/components/timeline/moment-form.mjs';
 
 const people = [{id: 'p-ana', name: 'Fictional Ana'}, {id: 'p-ben', name: 'Fictional Ben'}];
 const blank = {title: '', dateStart: '2026-10-10', dateEnd: '', status: 'unknown', impactLevel: 2, confDate: 5, confTruth: 5, matchedPeople: []};
@@ -161,4 +161,16 @@ test('the extraction\'s no-AI answer becomes the shared no-AI sentence, anything
   assert.equal(NO_AI_FACTS, NO_AI_STATUS + ', so no facts about its people were pulled out. Connect your AI service in Settings, Your AI.');
   assert.ok(NO_AI_FACTS.includes('Settings, Your AI'));
   for (const other of [AI_REFUSED_STATUS + '. Check it in Settings, Your AI, then try again.', 'Source note missing', '', null, undefined]) assert.equal(noAiFacts(other), null);
+});
+
+test('momentTime reads the clock digits as written and treats midnight as all day', () => {
+  assert.equal(momentTime('2025-06-01T13:00:00Z'), '13:00');
+  assert.equal(momentTime('2025-06-01T13:05:00+02:00'), '13:05');
+  assert.equal(momentTime('2025-06-01 13:00:00+00'), '13:00');
+  assert.equal(momentTime('2025-06-01T00:00:00Z'), '');
+  assert.equal(momentTime('2025-06-01'), '');
+  assert.equal(momentTime(null), '');
+  assert.equal(joinMoment('2025-06-01', '13:00'), '2025-06-01T13:00:00Z');
+  assert.equal(joinMoment('2025-06-01', ''), '2025-06-01');
+  assert.equal(joinMoment('', '13:00'), '');
 });

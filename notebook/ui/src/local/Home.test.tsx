@@ -249,6 +249,21 @@ describe("the Godspeed card", () => {
     await waitFor(() => expect(chatUrls.length).toBeGreaterThan(readsBeforeReopen), WAIT);
     expect(chatUrls.filter(url => url.includes("check=1"))).toHaveLength(1);
   });
+  it("does not count Settings' watching of the model list as a chat that used it", async () => {
+    const chatUrls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).startsWith("/api/chat/options")) chatUrls.push(String(url));
+      return new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url).startsWith("/api/chat/options") ? { connected: true, usable: true, availability: "ready" } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function SettingsProbe() { useChatOptions({ readsAsChat: false }); return null; }
+    const settings = render(<QueryClientProvider client={client}><SettingsProbe /></QueryClientProvider>);
+    await waitFor(() => expect(chatUrls.length).toBeGreaterThan(0), WAIT);
+    settings.unmount();
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("Ready to chat", undefined, WAIT)).toBeInTheDocument();
+    expect(chatUrls.filter(url => url.includes("check=1"))).toHaveLength(0);
+  });
   it("distinguishes an unreachable configured AI from refused credentials", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : String(url).startsWith("/api/chat/options") ? { connected: true, usable: false, availability: "unreachable" } : { show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);

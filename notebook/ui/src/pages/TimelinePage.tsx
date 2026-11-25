@@ -19,6 +19,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 import { showDate } from "@/lib/local-date";
+import { momentTime } from "@/components/timeline/moment-form.mjs";
 import { fetchAllPages } from "@/lib/postgrest";
 import { dbErrorMessage, isNetworkError } from "@/lib/function-error";
 import { displayPeople } from "@/components/timeline/people";
@@ -94,10 +95,14 @@ const formatMomentDay = (m: Pick<TimelineMoment, "happened_at" | "moment_date">)
 // The day text of a moment, with " – end" only when the end is a different day:
 // a moment that ends the day it starts shows one date.
 const formatMomentRange = (m: Pick<TimelineMoment, "happened_at" | "moment_date" | "happened_end">) => {
-  const start = formatMomentDay(m);
+  const startDay = formatMomentDay(m);
+  const startTime = momentTime(m.happened_at);
+  const start = startDay && startTime ? `${startDay}, ${startTime}` : startDay;
   if (!m.happened_end) return start ?? "";
-  const end = showDate(m.happened_end, "day");
-  return start === end ? end : `${start ?? UNDATED} – ${end}`;
+  const endDay = showDate(m.happened_end, "day");
+  const endTime = momentTime(m.happened_end);
+  if (startDay === endDay) return startTime || endTime ? `${start} – ${endTime || endDay}` : endDay;
+  return `${start ?? UNDATED} – ${endTime ? `${endDay}, ${endTime}` : endDay}`;
 };
 
 // A score the writer left out reads as "Not set", never as a blank tile; 0 is

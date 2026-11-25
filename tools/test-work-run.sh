@@ -161,8 +161,8 @@ contains "an item another runner holds is not runnable and is not taken" "$OUT" 
 missing "  and the held one was left alone" "$OUT" "W-20260915-04 taken"
 contains "  its lease is still the other runner's" "$(cat "$TMP/work/W-20260915-04.md")" "LEASE: hermes-server until"
 
-# --- no check at all: attempted, for a person to verify ----------------------------------------------------------
-check "an item with no check stays attempted after the assistant's word" "$(status_of W-20260915-05)" "attempted"
+# --- no check at all: a Godspeed-owned file result is verified by its content review (#748) --------------------------
+check "an item with no check and a passing content review is verified" "$(status_of W-20260915-05)" "verified"
 
 # --- a finished piece with no sentence for the person is recorded, not announced ----------------------------------
 hw file --learn "Does housekeeping stay quiet?" --path research/quiet.md --check "$NODE $TMP/bin/check-written.js research/quiet.md --min-words 50" --key quiet --publish yes --source test >/dev/null
