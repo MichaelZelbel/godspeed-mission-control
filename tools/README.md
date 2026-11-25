@@ -100,6 +100,17 @@ else and there is one thing nagging you rather than two that disagree.
 It needs no Google account and no calendar, and nothing in the program can reach
 one.
 
+- **`contracts.js`** keeps your running contracts (first version: German electricity, car
+  insurance and statutory health insurance) from costing more than they need to. It holds the
+  list in `contracts/` in your mission control, and `mc-contracts watch` says what is due now
+  and has not been said yet: a yearly window opening, a price rise that opened a short right to
+  leave, a year without a switch confirmation. It never contacts a provider and never submits,
+  cancels or signs anything; `prepare` writes one page with your own facts for you to finish.
+  How each kind of contract works is a dated file in `tools/playbooks/<country>/`, replaced
+  with the tools on an update; one older than its `recheck_days` counts as none, and a contract
+  with no valid playbook gets no advice. **Whoever releases re-researches each playbook, then
+  sets its `checked` date and raises `version` where a rule changed.**
+
 The sixth you type when a fact changes, or your assistant types it for you.
 
 - **`check-built-on.js`** answers a question the notebook cannot: when a fact in

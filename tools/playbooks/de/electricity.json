@@ -1,0 +1,18 @@
+{
+  "id": "de-electricity",
+  "version": 1,
+  "pattern": 1,
+  "checked": "2026-11-12",
+  "recheck_days": 180,
+  "sources": [
+    { "url": null, "checked": "2026-11-12", "note": "Owner research in issue #379 (pattern 1): automatic switching services, compared by Stiftung Warentest in Finanztest 09/2025. No page was fetched for this file." }
+  ],
+  "dates": {},
+  "grace_days": 30,
+  "route": "Join an automatic switching service once; it takes the contract over and switches it every year, and the new provider handles the cancellation. Free services come before paid ones, and no service is named here for money.",
+  "services": [],
+  "person_does": [
+    "Pick a service from the Finanztest 09/2025 comparison, free ones first, and sign up on its own site.",
+    "Confirm the sign-up to your assistant, and later each yearly switch when its confirmation arrives."
+  ]
+}
