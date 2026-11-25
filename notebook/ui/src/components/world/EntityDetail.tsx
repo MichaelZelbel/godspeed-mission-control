@@ -101,7 +101,7 @@ export function EntityDetail({ entity, onDeleted }: EntityDetailProps) {
             </div>
           ) : (
             <>
-              <h1 className="truncate text-xl font-semibold">{entity.name}</h1>
+              <h1 className="break-words text-xl font-semibold">{entity.name}</h1>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary" className="capitalize">{entity.entity_type}</Badge>
                 {(entity.aliases || []).map((alias) => (
@@ -170,7 +170,7 @@ export function EntityDetail({ entity, onDeleted }: EntityDetailProps) {
         </CardHeader>
         <CardContent>
           {moments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No moments linked to {entity.name} yet.</p>
+            <p className="break-words text-sm text-muted-foreground">No moments linked to {entity.name} yet.</p>
           ) : (
             <ul className="space-y-1.5">
               {moments.map((m: any) => (
@@ -194,7 +194,7 @@ export function EntityDetail({ entity, onDeleted }: EntityDetailProps) {
         </CardHeader>
         <CardContent>
           {notes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No notes mention {entity.name} yet.</p>
+            <p className="break-words text-sm text-muted-foreground">No notes mention {entity.name} yet.</p>
           ) : (
             <ul className="space-y-1.5">
               {notes.map((n) => (

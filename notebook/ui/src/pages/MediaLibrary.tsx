@@ -777,7 +777,7 @@ export default function MediaLibrary() {
             <Input aria-label="Search media"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search descriptions, text, files…"
+              placeholder="Search media…"
               className="pl-8 h-8 text-sm"
             />
             {searchQuery && (
@@ -992,9 +992,9 @@ export default function MediaLibrary() {
 
                   {/* Info */}
                   <div className="p-2.5 space-y-1">
-                    <p className="text-xs text-foreground font-medium truncate">{noteTitle}</p>
+                    <p className="text-xs text-foreground font-medium break-words">{noteTitle}</p>
                     {group.original_filename && (
-                      <p className="text-[10px] text-muted-foreground truncate">
+                      <p className="text-[10px] text-muted-foreground break-words">
                         {group.original_filename}
                         {group.page_count > 1 && <span className="ml-1 opacity-70">· {group.page_count} pages</span>}
                         {group.duplicate_count > 0 && (

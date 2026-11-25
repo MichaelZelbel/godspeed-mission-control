@@ -257,7 +257,7 @@ export function FactsPanel({ subjectType, subjectId, subjectLabel }: FactsPanelP
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : current.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="break-words text-sm text-muted-foreground">
             No facts recorded for {subjectLabel} yet. Facts keep their dates, so you can see what
             changed over time.
           </p>

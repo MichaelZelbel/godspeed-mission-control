@@ -164,7 +164,9 @@ export function QuickAddFact({ contactId, onCommit }: QuickAddFactProps) {
             if (proposal) setProposal(null);
           }}
           onKeyDown={handleKeyDown}
-          placeholder={'Add a fact, like "loves hotpot"'}
+          // "loves hotpot" is an example the person asks for; the short placeholder is what fits
+          // the box beside its icons at 320 px (#887).
+          placeholder="Add a fact…"
           className="h-9 pl-8 pr-9 text-sm"
           aria-label="Add a fact"
           aria-busy={busy}

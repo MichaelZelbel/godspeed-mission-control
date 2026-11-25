@@ -28,7 +28,7 @@ export function RecentNotesCard({ notes }: RecentNotesCardProps) {
               className="w-full text-left flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent transition-colors"
             >
               <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="truncate font-medium">{note.title || "Untitled"}</span>
+              <span className="min-w-0 break-words font-medium">{note.title || "Untitled"}</span>
               <span className="ml-auto text-[10px] text-muted-foreground whitespace-nowrap">
                 {showDate(note.updated_at, "date")}
               </span>

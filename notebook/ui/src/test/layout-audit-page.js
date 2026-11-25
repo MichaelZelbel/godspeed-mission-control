@@ -41,8 +41,12 @@
   };
   // What a line draws: its glyphs, each run of them measured on its own, so the whitespace around them
   // is not. Chrome counts a wrapped line's trailing space in the line's rect and may end it one layout
-  // step (1/64 px) past the box (#746); that space draws nothing, and a glyph past the box by any amount
-  // is still found.
+  // step (1/64 px) past the box (#746); that space draws nothing. A glyph further than a pixel past a
+  // box is still found. Within a pixel, a box sized exactly to its text (a flex item squeezed to its
+  // longest word) reads that text up to a layout step past the edge under another font or browser
+  // build, though the layout put the text inside and nothing hides it (#887's CI runners), so an
+  // overshoot that close is the same fit measured twice, not a cut.
+  const FIT_NOISE = 1;
   const glyphRects = (el) => {
     const rects = [];
     for (const node of el.childNodes) {
@@ -83,13 +87,16 @@
   // with no part of a letter cut.
   const outside = (text, cut) => {
     const middle = (text.top + text.bottom) / 2;
-    return (cut.x && (text.left < cut.box.left || text.right > cut.box.right))
-      || (cut.y && (middle < cut.box.top || middle > cut.box.bottom));
+    return (cut.x && (text.left < cut.box.left - FIT_NOISE || text.right > cut.box.right + FIT_NOISE))
+      || (cut.y && (middle < cut.box.top - FIT_NOISE || middle > cut.box.bottom + FIT_NOISE));
   };
 
   const TEXT_INPUT = "input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=color])";
   const inputClipped = (input) => {
-    const shown = input.value || input.placeholder;
+    // An enabled input scrolls its own value, so a long value is not cut off; a placeholder sits
+    // in a box nothing has typed into, so there is nothing to scroll it into view with. A disabled
+    // input cannot take focus, so nothing scrolls its value: it is measured like a placeholder.
+    const shown = input.disabled ? (input.value || input.placeholder) : input.placeholder;
     if (!shown) return null;
     const style = getComputedStyle(input);
     const ruler = document.createElement("span");
@@ -104,7 +111,7 @@
     // Not input.clientWidth: on an input Chrome leaves the padding out of it.
     const room = input.getBoundingClientRect().width
       - ["borderLeftWidth", "borderRightWidth", "paddingLeft", "paddingRight"].reduce((sum, key) => sum + parseFloat(style[key]), 0);
-    return need > room ? `${describe(input)}: its text needs ${need.toFixed(1)} px, the box has ${room.toFixed(1)}` : null;
+    return need > room + FIT_NOISE ? `${describe(input)}: its text needs ${need.toFixed(1)} px, the box has ${room.toFixed(1)}` : null;
   };
 
   const elements = [...document.body.querySelectorAll("*")]

@@ -51,7 +51,7 @@ describe("a person's page, being edited", () => {
     expect(screen.getByRole("heading", { name: "Facts" })).toBeInTheDocument();
     const fact = screen.getByLabelText("Add a fact", { exact: true });
     expect(fact.tagName).toBe("INPUT");
-    expect(fact).toHaveAttribute("placeholder", 'Add a fact, like "loves hotpot"');
+    expect(fact).toHaveAttribute("placeholder", "Add a fact…");
   });
 
   it("puts the cursor in the New topic box when its visible label is clicked", () => {
