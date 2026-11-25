@@ -87,7 +87,7 @@ export function DashboardSidebar() {
   }, [collapsed]);
 
   const profileDotColor =
-    completeness < 30 ? "bg-destructive" : completeness < 70 ? "bg-yellow-500" : "bg-green-500";
+    completeness < 30 ? "bg-blue-400" : completeness < 70 ? "bg-yellow-500" : "bg-green-500";
 
   // Whole path segments: a bare prefix lit "Weekly Review" (/dashboard/review)
   // on the Review Queue (/dashboard/review-queue) as well.

@@ -391,7 +391,7 @@ export class Store {
     catch(error){
       // An owner's own page in the notebook folder is not a record. A file
       // that held a record a moment ago and lost its frontmatter is.
-      if(error.code==='NOT_RECORD'&&(previous?.record||previous?.lost))return {name,text,lost:true,problem:'This file held a record and lost its frontmatter'};
+      if(error.code==='NOT_RECORD'&&(previous?.record||previous?.lost))return {name,text,lost:true,was:previous.record||previous.was,reason:error.message,problem:'This file held a record and lost its frontmatter'};
       if(error.code==='NOT_RECORD')return {name,text,document:true,reason:error.message};
       return {name,text,problem:error.message};
     }
@@ -424,7 +424,9 @@ export class Store {
     // which never runs under the writer lock a save or a commit is holding.
     if(this.watching&&this.knownPages){
       const seen=new Set();
-      for(const [file,entry] of this.entries)if(entry.document){
+      for(const [file,entry] of this.entries){
+        if(entry.lost&&this.rewrittenNote(entry)&&entry.text.trim())this.pendingAdoption?.add(file);
+        if(!entry.document)continue;
         const relative=posix(path.relative(this.recordsRoot,file)),k=nameKey(relative);seen.add(k);
         if(this.knownPages.has(k))continue;
         if(this.adoptablePage(entry))this.pendingAdoption?.add(file);
@@ -503,6 +505,12 @@ export class Store {
     return entry.document&&entry.name.endsWith('.md')&&!entry.name.split('/').includes('_system')
       &&(entry.reason==='No frontmatter'||entry.reason==='Frontmatter without a record');
   }
+  // A note's file rewritten from outside as plain text: the text still belongs to the note that
+  // was in that file, so it is taken into that note (only notes; other types hold fields a
+  // plain text cannot carry).
+  rewrittenNote(entry){
+    return entry.was?.type==='notes'&&this.adoptablePage({document:true,name:entry.name,reason:entry.reason});
+  }
   // Runs after a read that may have found pages. Never under the writer lock and never twice
   // at once: a save's scan calls here while the lock is held and lets a later scan decide.
   settlePages(){
@@ -527,11 +535,16 @@ export class Store {
       this.withLock(()=>{
         for(const file of files){
           const entry=this.entries.get(file);
-          if(!entry||!entry.document)continue; // gone, or a record's file now
+          if(!entry||!(entry.document||(entry.lost&&this.rewrittenNote(entry))))continue; // gone, or a record's file now
           let text=null;try{text=fs.readFileSync(file,'utf8');}catch{continue;}
           let reason=null;try{decode(text,file);}catch(error){if(error.code==='NOT_RECORD')reason=error.message;}
-          if(!reason||!this.adoptablePage({document:true,name:entry.name,reason})){kept.set(file,entry);continue;}
-          const relative=posix(path.relative(this.recordsRoot,file)),parts=relative.split('/');
+          if(!reason||!this.adoptablePage({document:true,name:entry.name,reason})){if(!entry.lost)kept.set(file,entry);continue;}
+          const relative=posix(path.relative(this.recordsRoot,file));
+          if(entry.lost){
+            const record=this.prepare('notes',arrivingPage(text,reason),entry.was);
+            records.push(record);paths.set('notes/'+record.id,relative);continue;
+          }
+          const parts=relative.split('/');
           // A page in Trash/ was trashed where it was written; the rest of its folder is the
           // note's folder. Any other folder is the note's folder as it is spelled on disk.
           const folder=parts.slice(0,-1).join('/'),trashed=folder==='Trash'||folder.startsWith('Trash/');
@@ -551,7 +564,7 @@ export class Store {
     }catch(error){
       // The workspace was being written, or the write was refused: the pages stay queued for
       // the next read to try again, and no page is left half decided about.
-      for(const file of files)if(this.entries.get(file)?.document)this.pendingAdoption.add(file);
+      for(const file of files){const entry=this.entries.get(file);if(entry?.document||entry?.lost)this.pendingAdoption.add(file);}
       throw error;
     }finally{this.adopting=false;}
   }
@@ -1337,3 +1350,9 @@ export class Store {
     });
   }
 }
+// The fields every stored record carries (prepare, above), plus the tombstone's
+// removed_at (purgeRecord): the write-filter check judges a filter field by them
+// (query.mjs, issue 950). Built from a real prepare output so the list cannot
+// drift from what records actually carry; purged is the tombstone's own marker,
+// not a field a filter names.
+export const envelopeFields = new Set([...Object.keys(Store.prototype.prepare.call({ device: '' }, 'contacts', {})), 'removed_at']);

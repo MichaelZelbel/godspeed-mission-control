@@ -224,3 +224,10 @@ test('Settings operations add, list and remove a domain through the personal API
  assert.equal((await operation({type:'domain-watch-remove',domain:'settings.example'})).status,200);
  state=await (await fetch(base+'/api/domain-watches')).json();assert.deepEqual(state.domains,[]);
 });
+
+test('a newly watched domain that is already free sends one "free now" notice; other first readings stay silent',async()=>{
+ const {store,query}=setup();addDomainWatch(store,'free.com');addDomainWatch(store,'taken.com');
+ const fetcher=async url=>String(url).includes('free.com')?new Response(null,{status:404}):rdap(['active']);
+ await procedure({kind:'domain-watch'},{store,query,fetcher});await procedure({kind:'domain-watch'},{store,query,fetcher});
+ assert.deepEqual(store.list('notifications').map(n=>n.body),['free.com is free now: it can be registered now, at any registrar.']);
+});

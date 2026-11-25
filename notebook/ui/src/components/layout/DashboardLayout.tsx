@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { DashboardSidebar } from "./DashboardSidebar";
@@ -12,14 +12,51 @@ import { useProcessingSweep } from "@/hooks/useProcessingSweep";
 import { RouteErrorBoundary } from "@/components/ErrorBoundary";
 import { PageLoader } from "@/components/LoadingStates";
 import { BRAIN_PAGE } from "@/lib/brain-page";
+import { tabOnlyStorage } from "@/lib/tab-storage";
+import { isCollectionPage, isCollectionItemPage } from "./collection-route";
 
+let noticeDismissed = false;
 
+function TabOnlyStorageNotice() {
+  const [open, setOpen] = useState(tabOnlyStorage && !noticeDismissed);
+  const dismiss = useCallback(() => {
+    noticeDismissed = true;
+    setOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dismiss();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dismiss, open]);
+
+  if (!open) return null;
+  // Extend the banner to the column edges through main's padding.
+  return (
+    <div role="status" data-testid="tab-only-storage" className="-mx-6 -mt-6 mb-6 flex items-start gap-3 border-b bg-muted px-4 py-2 text-sm">
+      <p className="flex-1">This browser blocks site data for this page. What you type and choose is kept only until you close or reload this tab. To keep it, allow site data (cookies and site data) for this address in your browser's settings.</p>
+      <button type="button" aria-label="Dismiss" onClick={dismiss} className="shrink-0 rounded px-2 text-lg leading-none hover:bg-background">×</button>
+    </div>
+  );
+}
+
+// A phone held sideways is under 500 px tall: the 9.5rem kept for the chat button would leave the person's
+// details a short strip with an empty band below it (#1033), so the People pages take the whole height below
+// the header there (the button floats over the page's corner, as it does over any scrolled page).
+const SIDEWAYS_FULL=" [@media(max-height:500px)]:max-h-none [@media(max-height:500px)]:[--page-h:calc(100dvh-6.5rem)]";
 
 export function DashboardLayout() {
   const pathname=useLocation().pathname;
   // Godspeed's brain docks its own chat beside its content, as Notes does: no floating button
   // over the rule being changed.
   const isChat=pathname==="/dashboard/chat",isNotes=pathname.startsWith("/dashboard/notes"),isImport=pathname==="/dashboard/settings/import",isHabit=pathname.startsWith("/trackers/habits/"),isBrain=pathname===BRAIN_PAGE.path;
+  const isPeople=pathname.startsWith("/dashboard/people");
+  // A collection page (not templates or schema) reaches the window's bottom at phone widths: the
+  // button floats over it, and its own card leaves room (#1045). Other pages keep the reserve.
+  const isCollection=isCollectionPage(pathname),isCollectionItem=isCollectionItemPage(pathname);
   const floatingChat=!isChat&&!isNotes&&!isImport&&!isHabit&&!isBrain;
 
   return (
@@ -28,8 +65,9 @@ export function DashboardLayout() {
         <DashboardSidebar />
         <div className="flex-1 min-w-0 flex flex-col">
           {/* On a narrow phone the top bar's controls leave the search box so little room that its
-              own padding ate the rest (#868), so below sm the bar's edge padding is 12 px, not 16. */}
-          <header className="h-14 flex items-center gap-2 sm:gap-4 border-b bg-background px-3 sm:px-4">
+              own padding ate the rest (#868), so below sm the bar's edge padding is 12 px, not 16. Below sm the
+              search results anchor to this bar, so they span the screen (#1017). */}
+          <header className="relative h-14 flex items-center gap-2 sm:gap-4 border-b bg-background px-3 sm:px-4">
             <SidebarTrigger />
             <DashboardSearch />
             <GlobalCreateButton />
@@ -46,8 +84,10 @@ export function DashboardLayout() {
               pinned to the viewport's corner, so room kept only at the end of the content (issue
               #530's pb-24) still left a card under it at every scroll before the end (#878).
               --page-h is main's content box (the cap minus main's own 3rem of vertical padding);
-              pages that fill it use it, so their budget cannot drift from this cap. */}
-          <main className={floatingChat?"flex-1 overflow-auto p-6 max-h-[calc(100dvh-9.5rem)] [--page-h:calc(100dvh-12.5rem)]":"flex-1 overflow-auto p-6"}>
+              pages that fill it use it, so their budget cannot drift from this cap. At phone widths
+              the content reaches the window's bottom and the button floats over it (#1045). */}
+          <main data-collection-page={isCollection||undefined} className={floatingChat?"flex-1 overflow-auto p-6 max-h-[calc(100dvh-9.5rem)] [--page-h:calc(100dvh-12.5rem)]"+(isCollection||isCollectionItem?" max-sm:max-h-[calc(100dvh-3.5rem)] max-sm:[--page-h:calc(100dvh-6.5rem)] max-lg:max-h-none max-lg:overflow-visible":"")+(isPeople?SIDEWAYS_FULL:""):"flex-1 overflow-auto p-6"}>
+            <TabOnlyStorageNotice />
             {/* A crashing page no longer takes the sidebar with it, and the
                 boundary clears on the next navigation. Loading a page's code
                 keeps the sidebar and header on screen. */}

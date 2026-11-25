@@ -4,6 +4,7 @@ import { fileContext } from './context.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
+import {runRememberWhatYouSaid} from './jobs/remember-job.mjs';
 import {procedure,procedureKinds} from './procedures.mjs';
 import {providerService} from './provider-service.mjs';
 import {visibleRows,knowledgeContext} from './visibility.mjs';
@@ -373,6 +374,7 @@ export function jobExecutor(configuredProvider,query) {
       const note=store.save('notes',{title:'Your '+area+' coaching conversation',content:question,talk_id:talk.id,source_app:'coaching'});
       return {verified:true,record_id:note.id,talk_id:talk.id,delivery:'notebook'};
     }
+    if(job.kind==='memory-daily')return runRememberWhatYouSaid({store});
     if(procedureKinds.includes(job.kind)||['audit','profiling','watch','review','memory-review'].includes(job.kind))return procedure(job,{store,query,provider});
     if(job.kind==='deadline-reminder') {
       const due=query.rows('deadlines').filter(d=>d.status!=='closed' && d.due_at && Date.parse(d.due_at)-Date.now()<3*86400000);

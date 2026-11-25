@@ -91,6 +91,25 @@ scenario_arguments() {
   esac
 }
 
+# A full product commit is useful for a maintained manual scenario before a candidate tag exists.
+# It is not itself a stage ref: the stage.json committed at that revision may describe an older
+# frozen release. Make the same commit stage the scenarios workflow makes, then install from that
+# fixture. Named stages (beta, candidate/*) continue to be read from GitHub unchanged.
+use_commit_stage() {
+  [[ $STAGE_REF =~ ^[0-9a-f]{40}$ ]] || return 0
+  local commit=$STAGE_REF folder out ref raw
+  folder=${GODSPEED_SCENARIO_WORK:-${RUNNER_TEMP:-/tmp}}/$SCENARIO-stage
+  rm -rf "$folder"
+  out=$(GODSPEED_SCENARIO_ANCESTOR_OK=1 bash "$HERE/stage-for-run.sh" '' "$commit" "$folder") ||
+    fail "a stage for product commit $commit could not be made"
+  ref=$(printf '%s\n' "$out" | sed -n 's/^ref=//p')
+  raw=$(printf '%s\n' "$out" | sed -n 's/^raw=//p')
+  [ "$ref" = this-commit ] && [ -n "$raw" ] && [ "$(printf '%s\n' "$out" | wc -l)" -eq 2 ] ||
+    fail "the stage fixture for product commit $commit did not name its ref and address"
+  STAGE_REF=$ref
+  RAW=$raw
+}
+
 # The folder the acting part writes what it saw into, emptied first so a second run on the same
 # machine cannot be judged on what the first one left.
 fresh_evidence() {
