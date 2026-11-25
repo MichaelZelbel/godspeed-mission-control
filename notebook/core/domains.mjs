@@ -1,6 +1,7 @@
 import {NO_AI_CHAT,NO_AI_ANALYSIS,readReply,unreadableReply} from './no-ai.mjs';
 import {plainAIError,publishAIFunctions} from './ai-outcome.mjs';
 import {momentDraft} from './moment-draft.mjs';
+import {assertRealClaimDates} from './real-dates.mjs';
 import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
 import {startCharmJudgement} from './charm-judgement.mjs';
 import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
@@ -209,6 +210,7 @@ export class Domains {
     const fields=fieldList(this.store.root),given = input.attribute || slug(input.label).replaceAll('-', '_'),listed=!!given&&fields.listed(given);
     const attribute = listed?fields.canonical(given):given, value = String(input.value || '').trim();
     if (!attribute || !value) throw new Error('A fact needs a label and value');
+    assertRealClaimDates({attribute,value,valid_from:input.valid_from,valid_to:input.valid_to},name=>fields.canonical(name));
     if (factSuppressed(this.query,{subject_type,subject_id,attribute,value})) return { ok: true, facts: [{ attribute, outcome: 'suppressed', reason: 'Previously rejected by the user' }] };
     return this.store.withLock(() => {
       // The values of this fact: under this name and, for a listed kind, under
