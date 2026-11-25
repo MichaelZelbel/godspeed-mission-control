@@ -7,7 +7,7 @@ import {plainTitle,finishedWork,finishedLine,nextLineError,NEXT_VERBS} from '../
 // the goal "has a first draft"; a reader could not tell which work was done.
 const TITLE='Write a practical household emergency-kit checklist at work/emergency-kit-checklist.md';
 const REAL_DRAFT='Nothing new has come in on the news side, so there are no stories to pass on this morning.\n\nYour emergency-kit checklist goal, due Sunday, has a first draft. It is about 1,000 words in 15 sections, and it is written, not yet fitted to your home.\n\nI have no fresh health readings, so I can\'t say anything about your health today.\n\nWhat only you can do:\n\n1. Tell me the household basics: who lives with you and which prescriptions need a 7-day supply.';
-const card=(store,{id='W-000-first-day-emergency-kit',state='verified',verified='2026-11-11',what=TITLE}={})=>store.save('work_items',{id,kind:'legacy-work',state,legacy_fields:{ID:id,STATUS:state,WHAT:what},legacy_log:[{date:'2026-11-11',event:'FILED',rest:'by first-day-scenario'},...(state==='verified'?[{date:verified,event:'VERIFIED',rest:'check passed (test -s work/emergency-kit-checklist.md)'}]:[])]});
+const card=(store,{id='W-000-first-day-emergency-kit',state='verified',verified='2026-11-11',what=TITLE,verifiedEntry=state==='verified'}={})=>store.save('work_items',{id,kind:'legacy-work',state,legacy_fields:{ID:id,STATUS:state,WHAT:what},legacy_log:[{date:'2026-11-11',event:'FILED',rest:'by first-day-scenario'},...(verifiedEntry?[{date:verified,event:'VERIFIED',rest:'check passed (test -s work/emergency-kit-checklist.md)'}]:[])]});
 const setup=name=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-finished-'+name+'-'))),query=new QueryService(store);store.save('settings',{id:'installation',timezone:'UTC'});store.save('goals',{title:'Household emergency kit ready by Sunday',status:'adopted'});return {store,query};};
 const run=async({store,query},{now='2026-11-12T07:00:00Z',draft=REAL_DRAFT,id='brief-finished'}={})=>{
  const seen=[];const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fixture checked the sources and the reader.'};seen.push(input);return draft;};
@@ -52,8 +52,8 @@ test('a brief after a day with no verified work claims none',async()=>{
  assert.doesNotMatch(content,/Finished and checked/);assert.equal(seen[0].context.done_line,null);
 });
 
-test('a work card whose check failed is not named, and neither is a verified one that is a repair item',async()=>{
- const env=setup('failed');card(env.store,{state:'failed'});
+test('a work card that was verified once and then failed its check is not named',async()=>{
+ const env=setup('failed');card(env.store,{state:'failed',verifiedEntry:true});
  const {content,seen}=await run(env);
  assert.doesNotMatch(content,/Finished and checked/);assert.equal(seen[0].context.done_line,null);
 });
