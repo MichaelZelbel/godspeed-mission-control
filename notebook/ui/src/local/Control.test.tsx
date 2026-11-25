@@ -155,4 +155,19 @@ describe("Run now in Routines", () => {
     expect(queryByRole("button", { name: "Run hermes-task now" })).toBeTruthy();
     expect(queryByRole("button", { name: "Run spend-guard now" })).toBeNull();
   });
+
+  it("shows the refusal for a paused routine inside its own row, replacing it on a second press", async () => {
+    const paused = { id: "memory-daily", kind: "memory-daily", title: "Remember what you said", owner: "local", paused: true, state: "pending", next_run: "2030-01-02T02:40:00.000Z" };
+    const { findByRole, findByText } = settings("/dashboard/settings", { schedules: [paused] });
+    await findByText("Remember what you said", undefined, WAIT);
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => String(url).endsWith("/api/jobs/run")
+      ? new Response(JSON.stringify({ error: "This routine is paused. Resume it, then run it." }), { status: 409, headers: { "Content-Type": "application/json" } })
+      : new Response(JSON.stringify({ data: [], schedules: [paused], kinds: [], problems: [], conflicts: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    const button = await findByRole("button", { name: "Run Remember what you said now" }, WAIT);
+    fireEvent.click(button);
+    const msg = await findByText("This routine is paused. Resume it, then run it.", undefined, WAIT);
+    expect(msg.closest("li")).toBe(button.closest("li"));
+    fireEvent.click(button);
+    await waitFor(() => expect(document.querySelectorAll("li [role=alert]").length).toBe(1), WAIT);
+  });
 });
