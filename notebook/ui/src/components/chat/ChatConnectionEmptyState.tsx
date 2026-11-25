@@ -3,7 +3,7 @@ import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 import {CHAT_AVAILABILITIES} from '../../../../core/chat-availability.mjs';
 import {AI_CONNECTION_UNREADABLE_STATUS,AI_REFUSED_STATUS,AI_STALLED_STATUS,AI_UNREACHABLE_STATUS,NO_AI_STATUS,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../../../../core/no-ai.mjs';
-import {listenForChatOptions} from '@/local/chat-options.mjs';
+import {listenForChatOptions,MODEL_LIST_UNAVAILABLE,retryDelay} from '@/local/chat-options.mjs';
 export type ChatAvailability=(typeof CHAT_AVAILABILITIES)[number];
 type ChatOptions={connected?:boolean;usable?:boolean;availability?:ChatAvailability};
 export type ChatAIState='checking'|ChatAvailability;
@@ -54,6 +54,8 @@ function clearChatRead(){
 
 // The first Dashboard read of this page load; a reload starts it again (#918).
 let pageLoadRead=false;
+// Reads that failed one after another; the poll slows down while the model list cannot load (#1124).
+let failedReads=0;
 // The card's Check again asks the next read to run the check, one read per press (#918).
 let checkAsked=false;
 // A check that asks the server to confirm the AI (page load or Check again) is in flight: the Home
@@ -95,10 +97,11 @@ export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}=
           try{read=await chatOptions({check:true});clearChatRead();}catch{/* the plain read stands */}
         }
       }
+      failedReads=0;
       return read;
-    }catch(error){confirm.current=check;throw error;}
+    }catch(error){confirm.current=check;failedReads++;throw error;}
     finally{if(running)setCheckRunning(-1);}
-  },refetchInterval:1000,refetchIntervalInBackground:true});
+  },refetchInterval:query=>query.state.status==='error'?retryDelay(failedReads):1000,refetchIntervalInBackground:true});
   useEffect(()=>listenForChatOptions((next:ChatOptions)=>queryClient.setQueryData(['chat-options'],next)),[queryClient]);
   // A picker that just read a newer state asks the shared query to read it too (#667).
   useEffect(()=>{const refresh=()=>{void options.refetch();};window.addEventListener('chat-ai-options-changed',refresh);return()=>window.removeEventListener('chat-ai-options-changed',refresh);},[options.refetch]);
@@ -124,6 +127,7 @@ export function stateSaid(message?:string|null):ChatAIState|null{
 export function ChatConnectionEmptyState({ready,said}:{ready:React.ReactNode;said?:string|null}){
   const options=useChatOptions();
   const state=chatAIState(options.data);
+  if(options.isError&&!options.data)return <div className="text-center text-muted-foreground text-sm py-8" role="alert" data-chat-ai-state="models-unavailable"><p className="font-semibold text-foreground">{MODEL_LIST_UNAVAILABLE}</p><p>It will try again shortly.</p></div>;
   if(state==='ready')return <>{ready}</>;
   const underConversation=ready===null;
   // Under an open conversation the first read stays quiet; only a known state shows.

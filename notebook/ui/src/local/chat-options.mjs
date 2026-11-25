@@ -13,6 +13,12 @@ export function listenForChatOptions(listener){
  return()=>window.removeEventListener(CHAT_OPTIONS_EVENT,receive);
 }
 
+export const MODEL_LIST_UNAVAILABLE='Your AI is connected, but its model choices could not be loaded.';
+
+// A failed model list is asked again after 5 s, 15 s and 60 s, then once a minute (#1124).
+const RETRY_DELAYS=[5000,15000,60000];
+export function retryDelay(failures){return RETRY_DELAYS[Math.min(Math.max(failures,1),RETRY_DELAYS.length)-1];}
+
 export function isCurrentAIError(message){
  return /Your AI (?:key or sign-in was refused|could not be reached|is connected only to the notebook)/.test(String(message||''));
 }

@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {Plus,ArrowUp,Square,Mic,Volume2,VolumeX,X,FileText,Loader2} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
-import {listenForChatOptions,loadChatOptions} from '@/local/chat-options.mjs';
+import {listenForChatOptions,loadChatOptions,retryDelay} from '@/local/chat-options.mjs';
 import {CHAT_AVAILABILITY_CHANGED,type ChatAvailability} from './ChatConnectionEmptyState';
 
 export type ChatFile={path:string;name:string;type:string;text?:string};
@@ -14,10 +14,11 @@ export default function ChatComposer(p:Props){
   const [options,setOptions]=useState<{current:string;label?:string;connected?:boolean;usable?:boolean;availability?:ChatAvailability;models:Array<{id:string;efforts:string[]}>}>({current:'',models:[]});
   const [modelError,setModelError]=useState(''),[modelAttempt,setModelAttempt]=useState(0);
   const canRecord=!!navigator.mediaDevices?.getUserMedia&&typeof MediaRecorder!=='undefined';
-  useEffect(()=>{let alive=true,request:AbortController|undefined;
-    const refresh=()=>{request?.abort();const currentRequest=request=new AbortController();setModelError('');loadChatOptions({signal:currentRequest.signal}).then(data=>{if(alive){setOptions(data);p.onModel(data.usable===false?'':data.current);if(data.usable===false)p.onEffort('');}}).catch(e=>{if(alive&&!currentRequest.signal.aborted)setModelError(e.message||'Model choices could not be loaded. Try again.');});};
-    refresh();const interval=window.setInterval(refresh,5000);window.addEventListener(CHAT_AVAILABILITY_CHANGED,refresh);
-    return()=>{alive=false;window.clearInterval(interval);window.removeEventListener(CHAT_AVAILABILITY_CHANGED,refresh);request?.abort();};
+  useEffect(()=>{let alive=true,request:AbortController|undefined,timer:number|undefined,failures=0;
+    const refresh=()=>{window.clearTimeout(timer);request?.abort();const currentRequest=request=new AbortController();setModelError('');
+      loadChatOptions({signal:currentRequest.signal}).then(data=>{failures=0;if(alive){setOptions(data);p.onModel(data.usable===false?'':data.current);if(data.usable===false)p.onEffort('');}}).catch(e=>{if(currentRequest.signal.aborted)return;failures++;if(alive)setModelError(e.message||'Model choices could not be loaded. Try again.');}).finally(()=>{if(alive&&!currentRequest.signal.aborted){window.clearTimeout(timer);timer=window.setTimeout(refresh,failures?retryDelay(failures):5000);}});};
+    refresh();window.addEventListener(CHAT_AVAILABILITY_CHANGED,refresh);
+    return()=>{alive=false;window.clearTimeout(timer);window.removeEventListener(CHAT_AVAILABILITY_CHANGED,refresh);request?.abort();};
   },[modelAttempt]);
   useEffect(()=>listenForChatOptions(data=>{setOptions(data);p.onModel(data.usable===false?'':data.current);if(data.usable===false)p.onEffort('');}),[p.onModel,p.onEffort]);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;clearTimeout(recordingTimer.current);audioRequest.current?.abort();if(recorder.current?.state==='recording')recorder.current.stop();recorder.current?.stream.getTracks().forEach(t=>t.stop());window.speechSynthesis?.cancel();};},[]);
