@@ -326,6 +326,14 @@ test('a draft where every sentence breaks a rule sends the short fallback and op
  assert.ok(items[0].refusals.some(e=>/voice check failed: realm/.test(e)));
 });
 
+test('a goal title with an em dash does not stop the cut fallback from going out',async()=>{
+ const {store,query}=fixture(['BANNED-WORD: realm']);store.save('goals',{title:'Ship v1 \u2014 launch',status:'adopted'});
+ const provider=async input=>verifies(input)||'The realm is here.';
+ const result=await run(provider,query,store,'brief-dash-goal');
+ const saved=store.get('notes',result.record_id);
+ assert.ok(saved.content.length);assert.doesNotMatch(saved.content,/\u2014/);assert.doesNotMatch(saved.content,/Ship v1/);
+});
+
 test('the existing cut fallback is not sent when its explanation breaks a voice rule',async()=>{
  const {store,query}=fixture(['BANNED-WORD: realm','BANNED-WORD: briefing']);
  const provider=async input=>verifies(input)||'The realm is here.';

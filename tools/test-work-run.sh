@@ -448,6 +448,21 @@ OUT="$(FAKE_REVIEW=malformedonce run --only "$RV" 2>&1)"
 check "a reviewer that answered in no valid shape is asked once more" "$(status_of "$RV")" "verified"
 missing "  without re-running the work" "$OUT" "one repair try"
 
+# a refusal is repaired only for a plain item: never an approved one, never one with no check (exit 1), never past the budget
+hw file --what "Write the approved note" --done-when "research/approved-note.md has fifty words" --check "test \$(wc -w < research/approved-note.md) -ge 50" --key approved-short --source test --outward yes >/dev/null
+AP="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="approved-short").id))')"
+hw unblock "$AP" --why "test" --approved-by "yes, do it" >/dev/null
+FAKE_MODE=short run --only "$AP" >/dev/null 2>&1
+check "an approved item the check refuses is not run a second time" "$([ -e "$TMP/routines/work/2026-09-15/$AP/prompt-repair.txt" ] && echo repaired || echo once)" "once"
+hw file --what "Decide the venue" --done-when "the venue is chosen and said in the answer" --key no-check-nofile --source test >/dev/null
+NC="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="no-check-nofile").id))')"
+FAKE_MODE=ok run --only "$NC" >/dev/null 2>&1
+check "an item with no check, no file and no evidence (exit 1) is not repaired" "$([ -e "$TMP/routines/work/2026-09-15/$NC/prompt-repair.txt" ] && echo repaired || echo once)" "once"
+hw file --what "Write the late note" --done-when "research/late-note.md has fifty words" --check "test \$(wc -w < research/late-note.md) -ge 50" --key late-short --source test >/dev/null
+LT="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="late-short").id))')"
+FAKE_MODE=short run --only "$LT" --budget 0 >/dev/null 2>&1
+check "a refused item is not repaired once the budget is spent" "$([ -e "$TMP/routines/work/2026-09-15/$LT/prompt-repair.txt" ] && echo repaired || echo once)" "once"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

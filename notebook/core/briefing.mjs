@@ -414,7 +414,9 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
    // Nothing useful is left: the short note that says so, with the lines Godspeed owes word for word.
    const day=new Date().toISOString().slice(0,10),own_lines=[...required,...(c?[c.content,c.link]:[])];
    const refusals=[...code,...remaining.filter(e=>!code.includes(e))];
-   const fallbackText=['Your full morning briefing for '+day+' could not be written today, because what was drafted broke your writing rules. A repair item has been opened for it.',...(goalLine()?[goalLine()]:[]),...own_lines].join('\n\n');
+   const fallbackHead='Your full morning briefing for '+day+' could not be written today, because what was drafted broke your writing rules. A repair item has been opened for it.';
+   const named=goalLine(),fallbackGoal=named&&!codeGate([fallbackHead,named].join('\n\n')).length&&!ruleRefusals(named,voice).length?named:null;
+   const fallbackText=['Your full morning briefing for '+day+' could not be written today, because what was drafted broke your writing rules. A repair item has been opened for it.',...(fallbackGoal?[fallbackGoal]:[]),...own_lines].join('\n\n');
    const fallbackErrors=codeGate(fallbackText);
    if(fallbackErrors.length){
     await store.saveAsync('job_receipts',{kind:'brief-cut',job_id:job.id,state:'failed',errors:code,cut:cut.cut,restored:missing,draft_hash:hash(draft),fallback_errors:fallbackErrors,finished_at:new Date().toISOString()});
