@@ -55,6 +55,28 @@ test('an older notebook gains the routine when the server starts and keeps what 
  assert.equal(coaching.paused,true);assert.equal(coaching.next_run,'2031-01-01T00:00:00.000Z');
 }));
 
+test('an older notebook started at midday first runs the added routine at 03:40 the next morning',t=>withService(t,async({service,post})=>{
+ await setup(post);
+ service.store.commit([],{removeKeys:['jobs/memory-daily']});
+ const midday=Date.parse('2026-11-23T11:00:00Z');// 12:00 in Berlin, Monday
+ await service.scheduler.ensureStartingJobs(midday);
+ assert.equal(service.store.get('jobs','memory-daily').next_run,'2026-11-24T02:40:00.000Z');// Tuesday 03:40 Berlin
+}));
+
+test('an older notebook lists the added routine to the first request after start, with no reload',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-remember-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const first=await createService({root,device:'local',port:0});
+ try{
+  await fetch('http://127.0.0.1:'+first.address.port+'/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({goal:'Run a 10k by spring',timezone:'Europe/Berlin'})});
+  first.store.commit([],{removeKeys:['jobs/memory-daily']});
+ }finally{await first.close();}
+ const second=await createService({root,device:'local',port:0});
+ try{
+  const {schedules}=await (await fetch('http://127.0.0.1:'+second.address.port+'/api/status')).json();
+  assert.ok(schedules.some(j=>j.id==='memory-daily'));
+ }finally{await second.close();}
+});
+
 test('Run now refuses an unknown or paused routine in plain words',t=>withService(t,async({service,post})=>{
  await setup(post);
  const unknown=await post('/api/jobs/run',{id:'nope'});
