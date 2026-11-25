@@ -181,7 +181,9 @@ const PersonRow = memo(function PersonRow({
             }
           }}
           className={cn(
-            "group flex h-7 w-full items-center gap-1.5 rounded-md pr-2 text-sm transition-colors hover:bg-accent/60 cursor-grab active:cursor-grabbing",
+            // min-h, not h: a name longer than the row wraps into it, as a group's name does (#867,
+            // #887). break-words below keeps a name of one long word inside the row.
+            "group flex min-h-7 w-full items-center gap-1.5 rounded-md pr-2 text-sm transition-colors hover:bg-accent/60 cursor-grab active:cursor-grabbing",
             isSelected && !multiActive && "bg-accent text-accent-foreground",
             isChecked && "bg-primary/10 hover:bg-primary/15",
             draggingKey === `person:${person.id}` && "opacity-40",
@@ -217,7 +219,7 @@ const PersonRow = memo(function PersonRow({
               className={cn("h-3.5 w-3.5", multiActive ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100")}
             />
           </span>
-          <span className="min-w-0 flex-1 truncate">{personLabel(person)}</span>
+          <span className="min-w-0 flex-1 break-words">{personLabel(person)}</span>
           <button
             type="button"
             onClick={(event) => {

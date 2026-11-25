@@ -123,10 +123,12 @@ export default function Profile() {
 
 
         <Tabs defaultValue="profile">
-          <TabsList>
+          {/* The three names together do not fit a 320 px phone's row, so the list wraps instead of
+              clipping a name (#887). */}
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="instructions">Agent Instructions</TabsTrigger>
-            <TabsTrigger value="export">Export & Share</TabsTrigger>
+            <TabsTrigger value="export">Export &amp; Share</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="space-y-3 mt-4">

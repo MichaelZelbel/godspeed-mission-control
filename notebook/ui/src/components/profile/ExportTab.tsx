@@ -290,9 +290,9 @@ export function ExportTab({ categories, facts, instructions, views, onSaveView, 
           {/* Controls */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Profile view</Label>
+              <Label htmlFor="export-view" className="text-xs text-muted-foreground">Profile view</Label>
               <Select value={viewSlug} onValueChange={setViewSlug}>
-                <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="export-view" className="text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {DEFAULT_VIEWS.map((v) => (
                     <SelectItem key={v.slug} value={v.slug}>{v.name}</SelectItem>
@@ -304,9 +304,9 @@ export function ExportTab({ categories, facts, instructions, views, onSaveView, 
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Format</Label>
+              <Label htmlFor="export-format" className="text-xs text-muted-foreground">Format</Label>
               <Select value={format} onValueChange={(v) => setFormat(v as ExportFormat)}>
-                <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="export-format" className="text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="structured">Structured text</SelectItem>
                   <SelectItem value="markdown">Markdown</SelectItem>
@@ -336,7 +336,8 @@ export function ExportTab({ categories, facts, instructions, views, onSaveView, 
             </pre>
           </div>
 
-          <div className="flex gap-2">
+          {/* flex-wrap: at 320 px the two labels cannot share one row, and a clipped one is a fault (#887). */}
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={handleCopy} disabled={!exportText}>
               {copied ? <Check className="h-3.5 w-3.5 mr-1" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
               {copied ? "Copied!" : "Copy to clipboard"}

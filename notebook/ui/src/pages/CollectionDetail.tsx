@@ -778,12 +778,14 @@ function CollectionItemsTree({
         `${itemOpen ? "hidden lg:flex" : "flex"} w-full shrink-0 flex-col border-b bg-background lg:h-full lg:w-80 lg:border-b-0 lg:border-r`,
         // No item open on a phone: the list is a 16rem strip so the table below stays reachable.
         pageFlow && "max-lg:max-h-64",
+        // An item open on a phone takes the whole pane; the breadcrumb's collection link leads back (#887).
+        !pageFlow && "max-lg:hidden",
       )}
     >
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <CollectionIcon icon={collection?.icon} className="h-4 w-4" />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold font-display">
+          <div className="break-words text-sm font-semibold font-display">
             {collection?.name ?? "Collection"}
           </div>
           {/* The whole collection, not the table's current page (at most 50). */}
@@ -3498,7 +3500,7 @@ function CollectionDetailPage() {
           </p>
           {!selectedItem && (
             <>
-              <h1 className="mt-2 text-3xl font-bold font-display">
+              <h1 className="mt-2 break-words text-3xl font-bold font-display">
                 <CollectionIcon
                   icon={collection?.icon}
                   className="mr-2 inline-flex h-8 w-8 align-[-0.15em]"
@@ -3658,7 +3660,8 @@ function CollectionDetailPage() {
                   setSort(value as SortKey);
                 }}
               >
-                <SelectTrigger className="w-44">
+                {/* aria-label: the trigger shows the chosen sort, and without a name the check reads none (#887). */}
+                <SelectTrigger aria-label="Sort items" className="w-44">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

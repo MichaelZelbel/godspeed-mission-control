@@ -19,7 +19,7 @@ vi.mock("@/hooks/usePeople", () => ({
 }));
 vi.mock("@/hooks/useGroups", () => ({ useGroups: () => ({ data: [] }), useCreateGroup: mutation, useUpdateGroup: mutation, useArchiveGroup: mutation, useRestoreGroup: mutation }));
 vi.mock("@/hooks/useGroupMemberships", () => ({ useAllMemberships: () => ({ data: [] }), useAddMembership: mutation, useRemoveMembership: mutation }));
-vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => false }));
+vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => false, usePanesTogether: () => true }));
 vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
 vi.mock("@/components/people/PersonDetail", () => ({ PersonDetail: () => null }));
 vi.mock("@/components/people/MergePersonDialog", () => ({ MergePersonDialog: () => null }));

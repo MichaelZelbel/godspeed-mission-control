@@ -16,7 +16,7 @@ vi.mock("@/integrations/supabase/client", () => {
 });
 const { auth } = vi.hoisted(() => ({ auth: { user: { id: "owner" }, session: { access_token: "t", user: { id: "owner" } } } }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => auth }));
-vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => false }));
+vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => false, usePanesTogether: () => true }));
 vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
 vi.mock("@/hooks/usePeople", () => {
   const mutation = () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false });
