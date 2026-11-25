@@ -30,6 +30,16 @@ Version 2 is the current edition. The install lines on this page install the cur
 
 Godspeed carries the Workouts add-on. With Hevy Pro, open **Settings** > **Workouts from Hevy**, make a Hevy developer key, and connect it there. The key stays in the add-on's private state; Settings shows the imported-row count and last run, and the one hourly **Workouts from Hevy** routine appears under **Settings** > **Routines**. When taking over a standalone add-on schedule, Godspeed first proves the carried routine can import; if setup fails, Settings names the safe reason and retry time while the existing schedule stays in place. If retiring that schedule fails after the proof, the carried routine keeps running and Settings reports the removal retry. Disconnect stops that routine while keeping the tracker and its rows.
 
+## New in 2.0.0-beta.33
+
+Keeps what you add.
+
+- The "browser blocks site data" notice can be closed, reads plainly, and never covers a button you are trying to press.
+- The Home page's AI card says the same thing about the AI as the rest of the notebook, and stops asking for the model list every second.
+- A date that does not exist, like 30 February or "soon", is refused with a plain message instead of being saved and shown as Undated.
+- Pressing Run now on a paused routine shows the refusal next to that routine.
+- A "Remember what you said" routine added to an older notebook first runs the next night, and shows in Settings without a reload.
+
 ## New in 2.0.0-beta.32
 
 Clear first day.
