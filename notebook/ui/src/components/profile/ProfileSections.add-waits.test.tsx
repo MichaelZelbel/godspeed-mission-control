@@ -3,6 +3,7 @@
 // reload right after Save cannot drop it, and a failed save is said in the form (#1089).
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { WAIT } from "@/test/wait-limits";
 import "@testing-library/jest-dom/vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MemoryRouter } from "react-router-dom";
@@ -94,6 +95,6 @@ describe("plain Add form on My Profile", () => {
       />
       </TooltipProvider></MemoryRouter>,
     );
-    expect(await screen.findByText("Dune")).toBeInTheDocument();
+    expect(await screen.findByText("Dune", undefined, WAIT)).toBeInTheDocument();
   });
 });
