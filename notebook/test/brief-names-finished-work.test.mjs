@@ -52,6 +52,12 @@ test('a brief after a day with no verified work claims none',async()=>{
  assert.doesNotMatch(content,/Finished and checked/);assert.equal(seen[0].context.done_line,null);
 });
 
+test('a work card whose check failed is not named, and neither is a verified one that is a repair item',async()=>{
+ const env=setup('failed');card(env.store,{state:'failed'});
+ const {content,seen}=await run(env);
+ assert.doesNotMatch(content,/Finished and checked/);assert.equal(seen[0].context.done_line,null);
+});
+
 test('work the last brief already named, or verified before it, is not reported again',async()=>{
  const env=setup('again');card(env.store);
  env.store.save('notes',{title:'Your morning briefing',content:'Finished and checked: Write a practical household emergency-kit checklist.',source_app:'morning-brief',brief_day:'2026-11-11',created_at:'2026-11-11T20:00:00Z'});
