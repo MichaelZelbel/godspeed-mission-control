@@ -6,6 +6,7 @@ import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {MemoryRouter} from 'react-router-dom';
 import {ChatConnectionEmptyState,chatAIState,useChatOptions,stateSaid} from './ChatConnectionEmptyState';
 import {AI_CONNECTION_UNREADABLE_STATUS} from '../../../../core/no-ai.mjs';
+import {MODEL_LIST_RETRY,MODEL_LIST_UNAVAILABLE} from '../../local/chat-options.mjs';
 import { WAIT } from "@/test/wait-limits";
 
 afterEach(()=>{cleanup();vi.unstubAllGlobals();try{window.localStorage.clear();}catch{}});
@@ -160,7 +161,8 @@ describe('a model list that cannot load (#1124)',()=>{
   const mount=(ready:React.ReactNode)=>render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter><ChatConnectionEmptyState ready={ready}/></MemoryRouter></QueryClientProvider>);
   it('says so in the chat notice without claiming a connection',async()=>{
     fail();mount(<p>Ordinary ready state</p>);
-    expect(await screen.findByText('The list of AI models could not be loaded.',undefined,WAIT)).toBeInTheDocument();
+    expect(await screen.findByText(MODEL_LIST_UNAVAILABLE,undefined,WAIT)).toBeInTheDocument();
+    expect(screen.getByText(MODEL_LIST_RETRY)).toBeInTheDocument();
     expect(document.querySelector('[data-chat-ai-state="models-unavailable"]')).not.toBeNull();
   });
   it('keeps an open conversation quiet, as before',async()=>{

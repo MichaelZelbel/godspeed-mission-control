@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import { WAIT } from "@/test/wait-limits";
-import { retryDelay } from "./chat-options.mjs";
+import { MODEL_LIST_RETRY, MODEL_LIST_UNAVAILABLE, retryDelay } from "./chat-options.mjs";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "owner" }, session: { user: { id: "owner" } } }) }));
@@ -133,7 +133,8 @@ describe("a model list that cannot load (#1124)", () => {
       return new Response(JSON.stringify({ runtimeConfigured: true, aiAvailability: "ready", show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
     }));
     await load(true);
-    expect(await screen.findByText("The list of AI models could not be loaded.", undefined, WAIT)).toBeInTheDocument();
+    expect(await screen.findByText(MODEL_LIST_UNAVAILABLE, undefined, WAIT)).toBeInTheDocument();
+    expect(screen.getByText(MODEL_LIST_RETRY)).toBeInTheDocument();
     expect(screen.queryByText("AI unavailable")).toBeNull();
     await idle(30000);
     expect(asked).toBeLessThanOrEqual(4);
