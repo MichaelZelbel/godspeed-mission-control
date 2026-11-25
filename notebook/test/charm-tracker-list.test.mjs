@@ -62,8 +62,8 @@ test('a broken charm row or settings file does not break tracker-list: the track
  await domains.invoke('personal-operation',{type:'tracker-create',name:'Belly',unit:'cm'});
  process.env.GODSPEED_CHARM_NOW='2026-10-30T08:00:00Z';
  const tracker=findTracker(store.root);
- // A start whose day is not a day: the count cannot be worked out from it.
- query.execute({table:'collection_items',operation:'insert',values:{collection_id:tracker.id,data:{kind:'start',when:'2026-10-25T08:00:00Z',date:'not a day'}}});
+ // A start whose day is not a day, stored before the write path refused such dates: the count cannot be worked out from it.
+ store.save('collection_items',{collection_id:tracker.id,data:{kind:'start',when:'2026-10-25T08:00:00Z',date:'not a day'}});
  let result=await list(domains);
  assert.deepEqual(result.trackers.map(t=>t.name).sort(),['Belly','Charm Challenge']);
  let charm=charmOf(result);assert.equal(charm.charm,null);assert.equal(charm.brief,null);assert.equal(charm.id,tracker.id);
