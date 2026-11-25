@@ -19,7 +19,7 @@ import {waitingSteps} from './waiting-steps.mjs';
 import {localPath} from './local-path.mjs';
 import {currentHealth,healthSafeReply,unknownHealthColumns,PHONE_VIA} from './health-inputs.mjs';
 import {cycleOperation} from './cycle-operations.mjs';
-import {finishedWork,finishedLine,plainTitle,nextLineError} from './briefing-done.mjs';
+import {finishedWork,finishedLine,plainTitle,nextLineError,hasNextLine} from './briefing-done.mjs';
 import {addonCommand} from './native-personal.mjs';
 import {dayOf} from './trackers.mjs';
 import {linkFacts,worldFacts,ownerRelationships,newestOnly,fieldList} from './world-facts.mjs';
@@ -332,7 +332,7 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
  const doneFirst=text=>!text||!context.done_line||text.split(/\r?\n/).some(line=>line.trim()===context.done_line)?text:context.done_line+'\n\n'+text;
  // The writer is asked for a "Next:" line but a free model sometimes puts its step under another heading, and the first-day brief is judged on a concrete next action. A missing line is supplied here, before the checks, so their receipts hash the final text. It is never a gate: an existing line is kept whatever its verb (#449) and a refused line leaves the note as written.
  const withNext=text=>{
-  if(!text||text.split(/\r?\n/).some(line=>/^next(?:\s+(?:today|step|action))?\s*:/i.test(line.replace(/[*_`]/g,'').trim())))return text;
+  if(!text||hasNextLine(text))return text;
   const line=passes(text,goalNext());
   return line?text.trimEnd()+'\n\n'+line:text;
  };

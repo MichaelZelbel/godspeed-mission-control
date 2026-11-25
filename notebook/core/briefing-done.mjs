@@ -69,9 +69,11 @@ const NEXT_FILLER=new Set(['a','an','and','at','for','in','it','more','next','no
 // Null when every "Next:" line in the note opens with an action verb and says what it acts on,
 // otherwise the request the writer gets for its one rewrite. A note without a "Next:" line, and a
 // "Today:" line (often the weather or the day's plan, not an action), are not asked about here.
+const nextHead=line=>line.replace(/[*_`]/g,'').trim().match(/^next(?:\s+(?:today|step|action))?\s*:\s*(.*)$/i);
+export const hasNextLine=text=>String(text||'').split(/\r?\n/).some(line=>nextHead(line));
 export function nextLineError(text){
- for(const line of String(text||'').split(/\r?\n/).map(line=>line.replace(/[*_`]/g,'').trim())){
-  const head=line.match(/^next(?:\s+(?:today|step|action))?\s*:\s*(.*)$/i);
+ for(const line of String(text||'').split(/\r?\n/)){
+  const head=nextHead(line);
   if(!head)continue;
   const words=head[1].toLowerCase().match(/[a-z]+/g)||[];
   if(!NEXT_VERBS.includes(words[0])||!words.slice(1).some(word=>!NEXT_FILLER.has(word)))return 'Start the "Next:" line with an action the person can do, followed by what it acts on (for example "Next: walk 20 minutes after lunch." or "Next: email the landlord about the lease.")';
