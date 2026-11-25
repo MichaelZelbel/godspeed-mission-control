@@ -79,6 +79,20 @@ test('a moment stored with a bad date before the rule still takes a change that 
   assert.equal(query.rows('moments').find(m=>m.id==='old').title,'Renamed');
 });
 
+test('a collection item and a claim stored with a bad date before the rule take a change that leaves it alone, not a change to another bad date',async()=>{
+  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-real-dates-')),{device:'pc'});
+  store.save('collections',{id:'c1',name:'Things',field_schema:[{key:'name',label:'Name',type:'text',primary:true},{key:'on',label:'Day',type:'date'}]});
+  store.save('collection_items',{id:'i1',collection_id:'c1',data:{name:'a',on:'2026-02-30'}});
+  store.save('claims',{id:'k1',attribute:'favourite',value:'tea',valid_from:'2026-02-30'});
+  const query=new QueryService(store);
+  await query.executeAsync({table:'collection_items',operation:'update',values:{data:{name:'b',on:'2026-02-30'}},filters:[['eq','id','i1']]});
+  await query.executeAsync({table:'claims',operation:'update',values:{value:'coffee'},filters:[['eq','id','k1']]});
+  assert.equal(query.rows('collection_items').find(r=>r.id==='i1').data.on,'2026-02-30');
+  assert.equal(query.rows('claims').find(r=>r.id==='k1').value,'coffee');
+  await assert.rejects(query.executeAsync({table:'collection_items',operation:'update',values:{data:{name:'b',on:'2026-04-31'}},filters:[['eq','id','i1']]}),/2026-04-31/);
+  await assert.rejects(query.executeAsync({table:'claims',operation:'update',values:{valid_from:'2026-04-31'},filters:[['eq','id','k1']]}),/2026-04-31/);
+});
+
 test('writeFact refuses a date that does not exist',()=>{
   const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-real-dates-')),{device:'pc'});
   const domains=new Domains(new QueryService(store));
