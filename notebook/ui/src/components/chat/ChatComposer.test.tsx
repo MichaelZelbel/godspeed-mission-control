@@ -67,6 +67,21 @@ it('an open chat notice and its picker follow a refusal, an outage and recovery 
  }
 });
 
+// #1124: a model list that cannot load is asked again after 5 s, 15 s, 60 s, by the one shared read, with
+// the app's own client settings (retry once) and a composer open beside the notice.
+it('asks a failing model list at most four times in 30 seconds with a chat open, says why, and recovers',async()=>{
+ vi.useFakeTimers();let failing=true,asked=0;
+ vi.stubGlobal('fetch',vi.fn(async()=>{asked++;return failing?new Response(JSON.stringify({error:'Model choices could not be loaded'}),{status:500,headers:{'Content-Type':'application/json'}}):new Response(JSON.stringify({connected:true,usable:true,current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]}),{headers:{'Content-Type':'application/json'}});}));
+ const props={value:'',onChange(){},onSend(){},onStop(){},busy:false,files:[],onFiles(){},model:'',effort:'',onModel:vi.fn(),onEffort(){},reply:'',onError(){}};
+ render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:1,refetchOnWindowFocus:true}}})}><MemoryRouter><ChatConnectionEmptyState ready={<p>Ready notice</p>}/><ChatComposer {...props}/></MemoryRouter></QueryClientProvider>);
+ await act(()=>vi.advanceTimersByTimeAsync(30000));
+ expect(screen.getByText('The list of AI models could not be loaded.')).toBeInTheDocument();
+ expect(asked).toBeLessThanOrEqual(4);
+ failing=false;await act(()=>vi.advanceTimersByTimeAsync(60000));
+ expect(screen.getByText('Ready notice')).toBeInTheDocument();
+ expect(screen.getByRole('combobox',{name:'Model'})).toHaveDisplayValue('fictional-model');
+});
+
 it('with no AI connected the model picker says so and both pickers are off',async()=>{
  answer({connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]});show();
  const model=screen.getByRole('combobox',{name:'Model'});
