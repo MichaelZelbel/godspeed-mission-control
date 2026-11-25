@@ -30,6 +30,12 @@ Version 2 is the current edition. The install lines on this page install the cur
 
 Godspeed carries the Workouts add-on. With Hevy Pro, open **Settings** > **Workouts from Hevy**, make a Hevy developer key, and connect it there. The key stays in the add-on's private state; Settings shows the imported-row count and last run, and the one hourly **Workouts from Hevy** routine appears under **Settings** > **Routines**. When taking over a standalone add-on schedule, Godspeed first proves the carried routine can import; if setup fails, Settings names the safe reason and retry time while the existing schedule stays in place. If retiring that schedule fails after the proof, the carried routine keeps running and Settings reports the removal retry. Disconnect stops that routine while keeping the tracker and its rows.
 
+## New in 2.0.0-beta.35
+
+Finishes the first day.
+
+- The first-day helper only says the first piece of work is ready after it has actually checked it, and it keeps a usable next step even when the AI formats the brief differently.
+
 ## New in 2.0.0-beta.34
 
 First day follows through.
