@@ -18,6 +18,7 @@
  *                   [--old N --new N] [--effective D]   price-rise: yearly prices; contribution-rise: monthly extra
  *                                                       contribution in EUR, --effective the first day it applies
  *   mc-contracts list | playbooks | watch [--json]      watch: what is due and not yet said, never marks anything
+ *   mc-contracts settings --min-saving N                the yearly saving in EUR under which nothing is said (default 50)
  *   mc-contracts mark-notified <slug> <trigger>         the message went out: never again
  *   mc-contracts prepare <slug> <trigger>               only after the yes
  *   mc-contracts --godspeed PATH --date YYYY-MM-DD      (GODSPEED_ROOT, GODSPEED_TODAY)
@@ -37,7 +38,7 @@ const PLAYBOOKS = path.join(__dirname, "playbooks");
 const SOURCES = ["chat", "letter", "pay-slip", "mail", "notebook"];
 const EVENT_TYPES = ["price-rise", "contribution-rise", "switch-confirmed"];
 const LOOKED_AFTER = ["nobody", "switching-service", "broker"];
-const REQUIRED_PLAYBOOK = ["id", "version", "pattern", "checked", "recheck_days", "sources"];
+const REQUIRED_PLAYBOOK = ["id", "version", "pattern", "checked", "recheck_days", "sources", "route", "person_does"];
 const DEFAULT_MIN_SAVING = 50;
 
 class Refusal extends Error {}
@@ -60,16 +61,31 @@ const endOfMonth = (s) => { const t = new Date(parseDay(s)); return fmt(Date.UTC
 function validatePlaybook(p) {
   for (const k of REQUIRED_PLAYBOOK) if (p[k] === undefined || p[k] === null || p[k] === "") refuse(`playbook is missing ${k}`);
   if (!Array.isArray(p.sources) || !p.sources.length) refuse("playbook has no sources");
+  if (!Array.isArray(p.person_does) || !p.person_does.length) refuse("playbook has no person_does");
+  if (typeof p.route !== "string") refuse("playbook route is not text");
+  if (!Number.isFinite(p.recheck_days)) refuse("playbook recheck_days is not a number");
+  const sr = p.dates && p.dates.special_right;
+  if (sr && !EVENT_TYPES.includes(sr.event)) refuse(`playbook special_right.event "${sr.event}" is not one of ${EVENT_TYPES.join(", ")}`);
   parseDay(p.checked);
   return p;
 }
 function loadPlaybook(country, kind) {
   const file = path.join(PLAYBOOKS, String(country).toLowerCase(), kind + ".json");
   if (!/^[a-z-]+$/.test(kind) || !/^[a-zA-Z]+$/.test(country) || !fs.existsSync(file)) return null;
-  return validatePlaybook(JSON.parse(fs.readFileSync(file, "utf8")));
+  let raw;
+  try { raw = JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) { refuse(`playbook ${country}/${kind} is not readable JSON`); }
+  return validatePlaybook(raw);
 }
 const expiresOn = (p) => addDays(p.checked, p.recheck_days);
-const playbookFor = (c) => { const p = loadPlaybook(c.country, c.kind); return p && TODAY <= expiresOn(p) ? p : null; };
+// An expired, missing or broken playbook is none: the reason is returned for the notes.
+function playbookCheck(c) {
+  let p;
+  try { p = loadPlaybook(c.country, c.kind); } catch (e) { if (!(e instanceof Refusal)) throw e; return { p: null, why: e.message }; }
+  if (!p) return { p: null, why: "none exists" };
+  if (TODAY > expiresOn(p)) return { p: null, why: `expired ${expiresOn(p)}` };
+  return { p, why: null };
+}
+const playbookFor = (c) => playbookCheck(c).p;
 const ref = (p) => `${p.id}@${p.version}`;
 
 // ---- contract files: JSON frontmatter, then free text -----------------------------------------
@@ -77,23 +93,32 @@ const fileOf = (slug) => { if (!/^[a-z0-9][a-z0-9-]*$/.test(slug || "")) refuse(
 function readContract(slug) {
   const file = fileOf(slug);
   if (!fs.existsSync(file)) refuse(`no contract "${slug}"`);
-  const m = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(fs.readFileSync(file, "utf8"));
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(fs.readFileSync(file, "utf8"));
   if (!m) refuse(`${file} has no frontmatter`);
-  return { ...JSON.parse(m[1]), slug, body: m[2] };
+  let data;
+  try { data = JSON.parse(m[1]); } catch (e) { refuse(`${file} has frontmatter that is not JSON`); }
+  return { events: [], notified: {}, prepared: {}, ...data, slug, body: m[2] };
 }
 function writeContract(c) {
   const { body, slug, ...data } = c;
   fs.mkdirSync(DIR, { recursive: true });
   fs.writeFileSync(fileOf(slug), `---\n${JSON.stringify(data, null, 2)}\n---\n${body || ""}`);
 }
-function allContracts() {
+// One unreadable contract file never hides the others: it comes back in `bad`.
+function allContracts(bad) {
   if (!fs.existsSync(DIR)) return [];
-  return fs.readdirSync(DIR).filter((f) => f.endsWith(".md")).sort().map((f) => readContract(f.slice(0, -3)));
+  const out = [];
+  for (const f of fs.readdirSync(DIR).filter((f) => /^[a-z0-9][a-z0-9-]*\.md$/.test(f)).sort()) {
+    try { out.push(readContract(f.slice(0, -3))); } catch (e) { if (!(e instanceof Refusal) || !bad) throw e; bad.push({ slug: f.slice(0, -3), note: e.message }); }
+  }
+  return out;
 }
+function settingsFile() { return path.join(DIR, "settings.json"); }
 function minSaving() {
-  const f = path.join(DIR, "settings.json");
+  const f = settingsFile();
   if (!fs.existsSync(f)) return DEFAULT_MIN_SAVING;
-  const v = JSON.parse(fs.readFileSync(f, "utf8")).min_yearly_saving_eur;
+  let v;
+  try { v = JSON.parse(fs.readFileSync(f, "utf8")).min_yearly_saving_eur; } catch (e) { refuse(`${f} is not JSON: fix or delete it`); }
   return typeof v === "number" && v >= 0 ? v : DEFAULT_MIN_SAVING;
 }
 
@@ -153,9 +178,9 @@ function triggersFor(c, p, today, min) {
 
 function watch(today) {
   const triggers = [], notes = [], min = minSaving();
-  for (const c of allContracts()) {
-    const p = playbookFor(c);
-    if (!p) { notes.push({ slug: c.slug, note: `no valid playbook for ${c.country}/${c.kind}: say no good route is known yet` }); continue; }
+  for (const c of allContracts(notes)) {
+    const { p, why } = playbookCheck(c);
+    if (!p) { notes.push({ slug: c.slug, note: `no valid playbook for ${c.country}/${c.kind} (${why}): say no good route is known yet` }); continue; }
     const notified = c.notified || {};
     for (const t of triggersFor(c, p, today, min)) if (!notified[t.id]) triggers.push({ slug: c.slug, provider: c.provider, playbook: ref(p), route: p.route, ...t });
     for (const [id, n] of Object.entries(notified)) {
@@ -206,13 +231,17 @@ function cmdEvent(slug) {
   if ((e.old === undefined) !== (e.new === undefined)) refuse("--old and --new go together");
   if (opt("effective")) { parseDay(opt("effective")); e.effective = opt("effective"); }
   if (type === "contribution-rise" && !e.effective) refuse("a contribution-rise needs --effective, the first day it applies");
+  const { p: pb } = playbookCheck(c);
+  const want = pb && pb.dates && pb.dates.special_right && pb.dates.special_right.event;
+  if (pb && type !== "switch-confirmed" && want !== type) refuse(`for ${c.kind} (${c.country}) a ${type} opens nothing: ${want ? `the event that counts is ${want}` : "no event opens a right, only switch-confirmed is recorded"}`);
   if (c.events.some((x) => eventId(x) === eventId(e))) refuse(`${eventId(e)} is already recorded`);
   c.events.push(e);
   writeContract(c);
   console.log(`${slug}: ${eventId(e)} recorded`);
 }
 function cmdMark(slug, id) {
-  const c = readContract(slug), p = loadPlaybook(c.country, c.kind);
+  const c = readContract(slug), p = playbookFor(c);
+  if (!p) refuse(`no valid playbook for ${c.country}/${c.kind}`);
   const t = watch(TODAY).triggers.find((x) => x.slug === slug && x.id === id);
   if (!t) refuse(`${id} is not due for ${slug}`);
   c.notified = c.notified || {};
@@ -223,8 +252,8 @@ function cmdMark(slug, id) {
 function cmdPrepare(slug, id) {
   const c = readContract(slug), n = (c.notified || {})[id];
   if (!n) refuse(`${id} has not been put to the person yet: ask first, prepare after the yes`);
-  const p = loadPlaybook(c.country, c.kind);
-  if (!p) refuse(`no playbook for ${c.country}/${c.kind}`);
+  const p = playbookFor(c);
+  if (!p) refuse(`no valid playbook for ${c.country}/${c.kind}: no advice and no page`);
   const d = describe(c, p, id) || {};
   const facts = ["provider", "price_per_year", "min_term_end", "notice_period_days", "next_window", "looked_after", "service_since"]
     .filter((k) => c[k]).map((k) => `- ${k.replace(/_/g, " ")}: ${c[k].value} (${c[k].source}, ${c[k].seen})`);
@@ -244,13 +273,25 @@ function cmdPrepare(slug, id) {
   console.log(path.relative(ROOT, out));
 }
 function cmdList() {
-  for (const c of allContracts()) console.log(`${c.slug}: ${c.kind} ${c.country} ${(c.provider || {}).value || "-"}, ${playbookFor(c) ? "playbook ok" : "no valid playbook"}`);
+  const bad = [];
+  for (const c of allContracts(bad)) console.log(`${c.slug}: ${c.kind} ${c.country} ${(c.provider || {}).value || "-"}, ${playbookFor(c) ? "playbook ok" : "no valid playbook"}`);
+  for (const b of bad) console.log(`${b.slug}: unreadable (${b.note})`);
 }
 function cmdPlaybooks() {
-  for (const cc of fs.readdirSync(PLAYBOOKS)) for (const f of fs.readdirSync(path.join(PLAYBOOKS, cc)).sort()) {
-    const p = loadPlaybook(cc, f.replace(/\.json$/, ""));
-    console.log(`${cc}/${f.replace(/\.json$/, "")}: ${ref(p)} ${TODAY <= expiresOn(p) ? "valid" : "expired"} (checked ${p.checked}, until ${expiresOn(p)})`);
+  for (const cc of fs.readdirSync(PLAYBOOKS)) for (const f of fs.readdirSync(path.join(PLAYBOOKS, cc)).filter((f) => f.endsWith(".json")).sort()) {
+    const kind = f.replace(/\.json$/, "");
+    try {
+      const p = loadPlaybook(cc, kind);
+      console.log(`${cc}/${kind}: ${ref(p)} ${TODAY <= expiresOn(p) ? "valid" : "expired"} (checked ${p.checked}, until ${expiresOn(p)})`);
+    } catch (e) { if (!(e instanceof Refusal)) throw e; console.log(`${cc}/${kind}: invalid (${e.message})`); }
   }
+}
+function cmdSettings() {
+  const v = opt("min-saving");
+  if (v === undefined || !(Number(v) >= 0)) refuse("settings --min-saving N: the yearly saving in EUR below which nothing is said (0 or more)");
+  fs.mkdirSync(DIR, { recursive: true });
+  fs.writeFileSync(settingsFile(), JSON.stringify({ min_yearly_saving_eur: Number(v) }, null, 2) + "\n");
+  console.log(`silent below ${Number(v)} EUR a year`);
 }
 
 function main() {
@@ -262,6 +303,7 @@ function main() {
     case "event": return cmdEvent(a);
     case "list": return cmdList();
     case "playbooks": return cmdPlaybooks();
+    case "settings": return cmdSettings();
     case "mark-notified": return cmdMark(a, b);
     case "prepare": return cmdPrepare(a, b);
     case "watch": {

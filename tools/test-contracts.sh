@@ -103,4 +103,45 @@ out="$(on 2026-12-30 watch)"; has "follow-up after the grace days" "kfz follow-u
 c mark-notified kfz follow-up:window-open:2026 --date 2026-12-30 >/dev/null
 lacks "follow-up only once" "follow-up" "$(on 2026-12-31 watch)"
 c event kfz --type switch-confirmed --date 2026-11-20 --source mail >/dev/null
+
+# follow-up is suppressed when the switch was confirmed after the page was prepared
+c add kfz2 --kind car-insurance --country DE --price-per-year 600 --source letter --seen 2026-09-01 >/dev/null
+on 2026-11-04 mark-notified kfz2 window-open:2026 >/dev/null
+on 2026-11-04 prepare kfz2 window-open:2026 >/dev/null
+c event kfz2 --type switch-confirmed --date 2026-11-20 --source mail >/dev/null
+lacks "no follow-up when the switch was confirmed" "kfz2 follow-up" "$(on 2026-12-30 watch)"
+
+# prepare and mark refuse on an expired playbook
+has "prepare refuses on an expired playbook" "no valid playbook" "$(on 2027-12-01 prepare kfz window-open:2026 2>&1)"
+has "mark-notified refuses on an expired playbook" "no valid playbook" "$(on 2027-12-01 mark-notified kfz window-open:2026 2>&1)"
+
+# an event that opens nothing for that kind is refused
+has "a contribution-rise on a car contract is refused" "the event that counts is price-rise" "$(c event kfz --type contribution-rise --date 2026-11-01 --effective 2026-12-01 --source letter 2>&1)"
+has "a price-rise on electricity is refused" "no event opens a right" "$(c event strom --type price-rise --date 2026-11-01 --source letter 2>&1)"
+
+# one broken file does not hide the others
+printf 'not a contract' > "$G/contracts/broken.md"
+out="$(on 2026-11-03 watch)"
+has "a broken contract file is a note" "note: broken" "$out"
+has "…and the others still speak" "tk3 special-right" "$out"
+rm "$G/contracts/broken.md"
+printf '{nope' > "$G/contracts/settings.json"
+has "bad settings are refused in words" "is not JSON" "$(on 2026-11-03 watch 2>&1)"
+rm "$G/contracts/settings.json"
+
+# the person's threshold has a writer
+c add tk4 --kind health-insurance --country DE --source letter >/dev/null
+c event tk4 --type contribution-rise --date 2026-11-05 --effective 2026-12-01 --old 20 --new 22 --source letter >/dev/null
+lacks "24 EUR a year is silent at 50" "tk4 " "$(on 2026-11-06 watch)"
+c settings --min-saving 10 >/dev/null
+has "…and speaks at a threshold of 10" "tk4 special-right" "$(on 2026-11-06 watch)"
+rm "$G/contracts/settings.json"
+
+# every shipped playbook is valid and its event is one the tool knows
+bad=""
+for f in "$HERE"/playbooks/*/*.json; do
+  node -e 'const p=require(process.argv[1]);const E=["price-rise","contribution-rise","switch-confirmed"];const sr=p.dates&&p.dates.special_right;process.exit(typeof p.route==="string"&&Array.isArray(p.person_does)&&p.person_does.length&&(!sr||E.includes(sr.event))?0:1)' "$f" || bad="$bad $f"
+done
+if [ -z "$bad" ]; then ok "every shipped playbook has a route, steps and a known event"; else bad "every shipped playbook has a route, steps and a known event" "$bad"; fi
+has "playbooks lists every shipped one as valid" "de/car-insurance: de-car-insurance@" "$(on 2026-11-20 playbooks)"
 echo "$PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

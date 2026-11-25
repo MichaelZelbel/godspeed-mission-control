@@ -41,6 +41,8 @@ Run `mc-contracts watch --json`. For each trigger in `triggers`, one message, th
 
 Types: `offer-service` (a switching service is not set up yet; offer it once), `yearly-check` (a year without a switch confirmation: ask whether the service switched), `window-open` (the yearly comparison window), `special-right` (a price rise opened a short right to leave), `correction` (the playbook's rule changed: say what changed, from `was_deadline` to `deadline`), `follow-up` (what was prepared did not arrive: say so once, ask nothing).
 
+Nothing is said for a saving under the person's threshold (50 EUR a year until they say otherwise). When they name another amount ("only tell me if it is worth 100 euros"), run `mc-contracts settings --min-saving 100`.
+
 Right after the message goes out, run `mc-contracts mark-notified <name> <id>` so it is never said again. On a yes, run `mc-contracts prepare <name> <id>`, then tell the person which page it wrote and that it is theirs to read, finish and sign or send. On a no, do nothing more. `notes` list contracts with no valid playbook: add one line to the next brief's maintenance only if the person asked about them; send no message.
 
 When nothing is due, answer exactly `[SILENT]` and nothing else; any other answer never contains `[SILENT]`.

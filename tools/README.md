@@ -100,6 +100,8 @@ else and there is one thing nagging you rather than two that disagree.
 It needs no Google account and no calendar, and nothing in the program can reach
 one.
 
+The sixth watches your running contracts.
+
 - **`contracts.js`** keeps your running contracts (first version: German electricity, car
   insurance and statutory health insurance) from costing more than they need to. It holds the
   list in `contracts/` in your mission control, and `mc-contracts watch` says what is due now
@@ -111,7 +113,7 @@ one.
   with no valid playbook gets no advice. **Whoever releases re-researches each playbook, then
   sets its `checked` date and raises `version` where a rule changed.**
 
-The sixth you type when a fact changes, or your assistant types it for you.
+The seventh you type when a fact changes, or your assistant types it for you.
 
 - **`check-built-on.js`** answers a question the notebook cannot: when a fact in
   `world/` stopped being true, what did you write while it still held? It reads every
