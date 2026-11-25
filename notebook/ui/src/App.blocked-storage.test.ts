@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser } from "playwright-core";
+import { WAIT_MS } from "@/test/wait-limits";
 import { startNotebook, type RealNotebook } from "@/test/real-notebook";
 
 // With the browser refusing site data, reading localStorage and sessionStorage throws a
@@ -65,6 +66,42 @@ describe("the notebook with the browser's site data blocked", () => {
     if (dist) rmSync(dist, { recursive: true, force: true });
   });
 
+  it.each([1280, 768, 390])("keeps the notice and header controls clear at %i pixels", async (width) => {
+    const page = await browser.newPage({ viewport: { width, height: width === 390 ? 844 : 900 } });
+    try {
+      await page.addInitScript(BLOCK_STORAGE);
+      await page.goto(notebook.base + "/dashboard");
+
+      const banner = page.getByTestId("tab-only-storage");
+      await banner.waitFor({ timeout: WAIT_MS });
+      const header = page.getByRole("banner").filter({ has: page.locator('[data-sidebar="trigger"]') });
+      const headerBox = (await header.boundingBox())!;
+      const bannerBox = (await banner.boundingBox())!;
+      expect(bannerBox.x).toBeGreaterThanOrEqual(headerBox.x);
+      expect(bannerBox.x + bannerBox.width).toBeLessThanOrEqual(headerBox.x + headerBox.width);
+      expect(bannerBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height);
+
+      const visibleText = await banner.locator("p").evaluate((text) => {
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        const lines = Array.from(range.getClientRects());
+        return lines.length > 0 && lines.every(({ left, right, top, bottom }) =>
+          [left + 1, right - 1].every((x) => text.contains(document.elementFromPoint(x, (top + bottom) / 2))),
+        );
+      });
+      expect(visibleText).toBe(true);
+      await header.locator('[data-sidebar="trigger"]').click({ trial: true });
+      if (width === 390) {
+        await page.keyboard.press("Escape");
+      } else {
+        await banner.getByRole("button", { name: "Dismiss" }).click();
+      }
+      await banner.waitFor({ state: "detached", timeout: WAIT_MS });
+    } finally {
+      await page.close();
+    }
+  });
+
   it("opens, reads and writes notes and people, opens the chat, and says what it cannot keep", async () => {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     try {
@@ -76,7 +113,14 @@ describe("the notebook with the browser's site data blocked", () => {
 
       await page.goto(notebook.base + "/dashboard");
       await page.getByRole("heading", { name: "Your notebook" }).waitFor({ timeout: 15_000 });
-      await page.getByText(/allow site data/).waitFor({ timeout: 5000 });
+      await page.getByText(/allow site data \(cookies and site data\) for this address/).waitFor({ timeout: 5000 });
+      expect(await body()).toContain("kept only until you close or reload this tab");
+      expect(await body()).not.toContain("so text not saved yet");
+      // The notice is an inline banner: it pushes the page down and can be dismissed.
+      const banner = page.getByTestId("tab-only-storage");
+      expect(await banner.evaluate((e) => getComputedStyle(e).position)).toBe("static");
+      await page.getByRole("button", { name: "Dismiss" }).click();
+      await banner.waitFor({ state: "detached", timeout: 3000 });
       const text = await body();
       expect(text).not.toContain("Let’s reconnect");
       expect(text).not.toContain("denied");
