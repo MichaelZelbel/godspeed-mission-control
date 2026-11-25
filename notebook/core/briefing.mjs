@@ -19,7 +19,7 @@ import {waitingSteps} from './waiting-steps.mjs';
 import {localPath} from './local-path.mjs';
 import {currentHealth,healthSafeReply,unknownHealthColumns,PHONE_VIA} from './health-inputs.mjs';
 import {cycleOperation} from './cycle-operations.mjs';
-import {finishedWork,finishedLine,plainTitle,nextLineError} from './briefing-done.mjs';
+import {finishedWork,finishedLine,plainTitle,nextLineError,hasNextLine} from './briefing-done.mjs';
 import {addonCommand} from './native-personal.mjs';
 import {dayOf} from './trackers.mjs';
 import {linkFacts,worldFacts,ownerRelationships,newestOnly,fieldList} from './world-facts.mjs';
@@ -330,6 +330,12 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
  // The lines Godspeed requires word for word, and the text with any of them a cut lost put back.
  // The finished work line goes first in the model's note, once (#377).
  const doneFirst=text=>!text||!context.done_line||text.split(/\r?\n/).some(line=>line.trim()===context.done_line)?text:context.done_line+'\n\n'+text;
+ // The writer is asked for a "Next:" line but a free model sometimes puts its step under another heading, and the first-day brief is judged on a concrete next action. A missing line is supplied here, before the checks, so their receipts hash the final text. It is never a gate: an existing line is kept whatever its verb (#449) and a refused line leaves the note as written.
+ const withNext=text=>{
+  if(!text||hasNextLine(text))return text;
+  const line=passes(text,goalNext());
+  return line?text.trimEnd()+'\n\n'+line:text;
+ };
  const requiredLines=()=>[...healthSummaryLines,unknownWeekLine,context.done_line,context.cycle_heads_up,context.charm_line].filter(Boolean);
  const protectedLines=()=>{const c=context.contribution;return [...requiredLines(),...(c?[...c.content.split(/\r?\n/),c.link]:[])];};
  const restoreRequired=text=>{const c=context.contribution,missing=[...requiredLines().filter(line=>!text.split(/\r?\n/).some(l=>l.trim()===line)),...(c&&!text.includes(c.content)?[c.content]:[]),...(c&&!text.includes(c.link)?[c.link]:[])];return {text:missing.length?text.trimEnd()+'\n\n'+missing.join('\n\n'):text,missing};};
@@ -368,7 +374,7 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
   const raw=await provider({kind:'morning-brief',phase:attempt?'one-rewrite':'write',context:{...context,...(attempt?{rejected_draft:modelDraft,check_feedback:feedback}:{})},contract:writerContract+(attempt?' Correct the rejected note using these exact failure reasons. This is the single permitted rewrite. Keep every numbered item and the decision or fact it carries. Change only the sentences the reasons name. Leave an item out only when a reason says its core fact is unsupported.':'')});
   let healthError=null;
   try{modelDraft=healthSafeReply(raw,'text',health);}catch(error){healthError=error.message;modelDraft='';}
-  draft=[...healthSummaryLines,unknownWeekLine,doneFirst(modelDraft)].filter(Boolean).join('\n\n');
+  draft=[...healthSummaryLines,unknownWeekLine,doneFirst(withNext(modelDraft))].filter(Boolean).join('\n\n');
   const code=[...(healthError?[healthError]:[]),...codeGate(draft)],facts=await verify(draft,'source-facts'),reader=await verify(draft,'plain-words-and-delivery');
   // The "Next:" line's verb is a request on the first draft only (owner, PR #449, 12 November 2026):
   // it may ask for the one rewrite, and whatever the rewrite says is kept, never cut or replaced for it.
@@ -443,7 +449,7 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
   // The checked brief is already deliverable: a failure in this optional step leaves it as it was.
   try{
    const raw=await provider({kind:'morning-brief',phase:'thin-repair',context:{...context,thin_draft:draft,missing:{action_artifacts:thin.missing_actions,news:missingNews}},contract:writerContract+' The checked note in thin_draft gives the owner nothing to decide and too little fresh news. Write it again, keeping what it says, and add the decisions and news in missing.'});
-   const repaired=[...healthSummaryLines,unknownWeekLine,doneFirst(healthSafeReply(raw,'text',health))].filter(Boolean).join('\n\n');
+   const repaired=[...healthSummaryLines,unknownWeekLine,doneFirst(withNext(healthSafeReply(raw,'text',health)))].filter(Boolean).join('\n\n');
    if(!codeGate(repaired).length){
     const facts=await verify(repaired,'source-facts'),reader=await verify(repaired,'plain-words-and-delivery');
     if(facts.verdict.passed===true&&reader.verdict.passed===true){draft=repaired;check=facts.receipt;deliveryCheck=reader.receipt;thin=thinCheck(draft,context);thinRepair=thin.thin?'still-thin':'passed';}

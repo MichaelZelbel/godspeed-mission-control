@@ -172,6 +172,15 @@ test('a thin brief goes back once to add the decision that was waiting',async()=
  assert.equal(receipt('brief-final-check').thin_repair,'passed');
 });
 
+test('a thin repair that puts its step under another heading still ends with one Next line',async()=>{
+ const {store,query,thinText,artifact}=thinFixture('thin-repair-next');
+ store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const {note,writes}=await run(store,query,{now:new Date(),write:input=>input.phase==='thin-repair'?thinText+'\n\nWhat I need from you:\n1. Read the fictional supplier reply: '+artifact:thinText});
+ assert.ok(writes.some(w=>w.phase==='thin-repair'));
+ assert.ok(note.content.includes('What I need from you'));
+ assert.equal(note.content.split(/\r?\n/).filter(l=>/^Next: Ask Godspeed to work on Prepare a fictional guide/.test(l)).length,1,note.content);
+});
+
 test('a brief still thin after its repair says so and why',async()=>{
  const {store,query,thinText}=thinFixture('thin-told');
  const check=input=>input.check==='source-facts'&&/supplier/.test(input.context.draft)?{passed:false,reason:'Fictional unsupported claim.',rejection_scope:'non-source',rejected_source_ids:[]}:pass;
