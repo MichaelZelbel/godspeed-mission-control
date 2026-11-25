@@ -19,7 +19,7 @@ import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import ImportanceSlider from "./ImportanceSlider";
 import { UNNAMED_PERSON } from "./people";
-import { END_BEFORE_START, aiFailureKind, factsNotPulledOut, filledOnOpen, endsBeforeStart, mergeSuggestion, newPeopleToCreate, noAiFacts } from "./moment-form.mjs";
+import { END_BEFORE_START, aiFailureKind, factsNotPulledOut, filledOnOpen, endsBeforeStart, joinMoment, mergeSuggestion, momentTime, newPeopleToCreate, noAiFacts } from "./moment-form.mjs";
 
 export interface TimelineContact {
   id: string;
@@ -88,6 +88,11 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
   const [description, setDescription] = useState("");
   const [dateStart, setDateStart] = useState(today);
   const [dateEnd, setDateEnd] = useState("");
+  const [timeStart, setTimeStart] = useState("");
+  const [timeEnd, setTimeEnd] = useState("");
+  // The values an edit opened with, so an untouched timed value is written
+  // back as its writer saved it instead of relabelled to Z.
+  const [opened, setOpened] = useState<{ start: string; end: string } | null>(null);
   const [status, setStatus] = useState("unknown");
   // Null means the moment has no such score saved and the person has not set
   // one: the slider's label reads Not set, and saving writes null again.
@@ -113,7 +118,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
   const fieldId = useId();
   const peopleFieldId = `${fieldId}-people`;
   const ids = {
-    title: `${fieldId}-title`, dateStart: `${fieldId}-date-start`, dateEnd: `${fieldId}-date-end`, dateEndError: `${fieldId}-date-end-error`, status: `${fieldId}-status`,
+    title: `${fieldId}-title`, dateStart: `${fieldId}-date-start`, dateEnd: `${fieldId}-date-end`, timeStart: `${fieldId}-time-start`, timeEnd: `${fieldId}-time-end`, dateEndError: `${fieldId}-date-end-error`, status: `${fieldId}-status`,
     confDate: `${fieldId}-conf-date`, confDateLabel: `${fieldId}-conf-date-label`,
     confTruth: `${fieldId}-conf-truth`, confTruthLabel: `${fieldId}-conf-truth-label`,
     newPeopleLabel: `${fieldId}-new-people-label`,
@@ -137,6 +142,9 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
       // those gaps open to a suggestion, like any other empty field.
       setDateStart(editEvent.happened_at ? editEvent.happened_at.split("T")[0] : "");
       setDateEnd(editEvent.happened_end ? editEvent.happened_end.split("T")[0] : "");
+      setTimeStart(momentTime(editEvent.happened_at));
+      setTimeEnd(momentTime(editEvent.happened_end));
+      setOpened({ start: editEvent.happened_at ?? "", end: editEvent.happened_end ?? "" });
       setStatus(editEvent.status);
       setImpactLevel(editEvent.impact_level);
       setConfDate(editEvent.confidence_date);
@@ -147,6 +155,9 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
       setDescription("");
       setDateStart(today);
       setDateEnd("");
+      setTimeStart("");
+      setTimeEnd("");
+      setOpened(null);
       setStatus("unknown");
       setImpactLevel(1);
       setConfDate(5);
@@ -238,7 +249,12 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
     }
   };
 
-  const endBeforeStart = endsBeforeStart(dateStart, dateEnd);
+  const startValue = joinMoment(dateStart, timeStart);
+  const endValue = joinMoment(dateEnd, timeEnd);
+  const endBeforeStart = endsBeforeStart(startValue, endValue);
+  // A timed value the person did not change is written back as it came.
+  const toStore = (value: string, original: string | undefined) =>
+    original && momentTime(original) && value === joinMoment(original.slice(0, 10), momentTime(original)) ? original : value;
   const handleSave = async () => {
     if (!user || !title.trim() || (!dateStart && !dateOptional) || endBeforeStart) return;
     setSaving(true);
@@ -250,8 +266,8 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
         user_id: user.id,
         title: title.trim(),
         description: description.trim() || null,
-        happened_at: dateStart || null,
-        happened_end: dateEnd || null,
+        happened_at: toStore(startValue, opened?.start) || null,
+        happened_end: toStore(endValue, opened?.end) || null,
         status,
         impact_level: impactLevel,
         confidence_date: confDate,
@@ -394,8 +410,9 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
           <div className="space-y-2">
             <div><Label htmlFor={ids.dateStart} onClick={focusOnly(ids.dateStart)}>Start Date</Label>{!dateOptional && <> <RequiredMark /></>}</div>
             <Input id={ids.dateStart} aria-required={dateOptional ? undefined : true} type="date" value={dateStart} onChange={(e) => { setDateStart(e.target.value); markFilled("dateStart"); }} />
+            <div className="space-y-2"><Label htmlFor={ids.timeStart} onClick={focusOnly(ids.timeStart)}>Start Time</Label><Input id={ids.timeStart} type="time" value={timeStart} disabled={!dateStart} aria-invalid={endBeforeStart || undefined} onChange={(e) => setTimeStart(e.target.value)} /></div>
           </div>
-          <div className="space-y-2"><Label htmlFor={ids.dateEnd} onClick={focusOnly(ids.dateEnd)}>End Date</Label><Input id={ids.dateEnd} type="date" value={dateEnd} aria-invalid={endBeforeStart || undefined} aria-describedby={endBeforeStart ? ids.dateEndError : undefined} onChange={(e) => { setDateEnd(e.target.value); markFilled("dateEnd"); }} />{endBeforeStart && <p id={ids.dateEndError} className="text-xs text-destructive">{END_BEFORE_START}</p>}</div>
+          <div className="space-y-2"><Label htmlFor={ids.dateEnd} onClick={focusOnly(ids.dateEnd)}>End Date</Label><Input id={ids.dateEnd} type="date" value={dateEnd} aria-invalid={endBeforeStart || undefined} aria-describedby={endBeforeStart ? ids.dateEndError : undefined} onChange={(e) => { setDateEnd(e.target.value); if (!e.target.value) setTimeEnd(""); markFilled("dateEnd"); }} /><div className="space-y-2"><Label htmlFor={ids.timeEnd} onClick={focusOnly(ids.timeEnd)}>End Time</Label><Input id={ids.timeEnd} type="time" value={timeEnd} disabled={!dateEnd} aria-invalid={endBeforeStart || undefined} aria-describedby={endBeforeStart ? ids.dateEndError : undefined} onChange={(e) => setTimeEnd(e.target.value)} /></div>{endBeforeStart && <p id={ids.dateEndError} className="text-xs text-destructive">{END_BEFORE_START}</p>}</div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">

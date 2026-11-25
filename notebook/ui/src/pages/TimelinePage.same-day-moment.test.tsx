@@ -14,6 +14,8 @@ const base = { description: null, verified: false, is_potential_major: false, st
 const moments = [
   { ...base, id: "m-same", title: "Same day", happened_at: "2025-03-05", happened_end: "2025-03-05" },
   { ...base, id: "m-span", title: "Several days", happened_at: "2025-03-05", happened_end: "2025-03-08" },
+  { ...base, id: "m-timed", title: "Timed range", happened_at: "2025-06-01T13:00:00", happened_end: "2025-06-01T14:00:00" },
+  { ...base, id: "m-night", title: "Past midnight", happened_at: "2025-06-01T22:00:00", happened_end: "2025-06-02T01:00:00" },
   { ...base, id: "m-undated", title: "No start", happened_at: null, happened_end: "2025-03-08" },
 ];
 vi.mock("@/integrations/supabase/client", () => {
@@ -55,6 +57,13 @@ describe("a moment whose end is its start", () => {
     const dialog = await screen.findByRole("dialog", undefined, WAIT);
     const desc = dialog.querySelector("p")!;
     expect(desc).toHaveTextContent(/^Mar 5, 2025$/);
+  });
+
+  it("shows the times of a timed moment, and the end time only where it adds something", async () => {
+    render(<MemoryRouter><TimelinePage /></MemoryRouter>);
+    expect(await screen.findByText("Timed range", undefined, WAIT)).toBeInTheDocument();
+    expect(screen.getByText("Jun 1, 2025, 13:00 – 14:00")).toBeInTheDocument();
+    expect(screen.getByText("Jun 1, 2025, 22:00 – Jun 2, 2025, 01:00")).toBeInTheDocument();
   });
 
   it("reads \"Undated – <end>\" in the details of a moment with an end but no start", async () => {
