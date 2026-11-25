@@ -53,6 +53,12 @@ describe("the saved main AI in Settings", () => {
     "backup-ai": () => [200, { ...none, hermes: false }] as [number, unknown],
   };
 
+  it("says a model list that cannot load in the same words as the Dashboard and the chats (#1124)", async () => {
+    serve({ ...supportingRoutes, "chat/options": () => [500, { error: "no" }] });
+    settings();
+    expect(await screen.findByText("The list of AI models could not be loaded. It will try again shortly.", undefined, WAIT)).toBeInTheDocument();
+  });
+
   it("explains that an installation without an assistant program has no routines choice", async () => {
     serve(supportingRoutes);
     settings();

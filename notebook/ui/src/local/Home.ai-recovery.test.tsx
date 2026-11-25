@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import { WAIT } from "@/test/wait-limits";
+import { MODEL_LIST_RETRY, MODEL_LIST_UNAVAILABLE, retryDelay } from "./chat-options.mjs";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "owner" }, session: { user: { id: "owner" } } }) }));
@@ -121,5 +122,27 @@ describe("the Home AI card during the page-load check (#1053)", () => {
     expect(screen.queryByText("Your AI is not answering")).toBeNull();
     release(new Response(JSON.stringify({ connected: true, usable: true, availability: "ready" }), { status: 200, headers: { "Content-Type": "application/json" } }));
     expect(await screen.findByText("Ready to chat", undefined, WAIT)).toBeInTheDocument();
+  });
+});
+
+describe("a model list that cannot load (#1124)", () => {
+  it("is asked at most four times in 30 seconds, and the Home card says what is wrong", async () => {
+    let asked = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).startsWith("/api/chat/options")) { asked++; return new Response(JSON.stringify({ error: "Model choices could not be loaded" }), { status: 500, headers: { "Content-Type": "application/json" } }); }
+      return new Response(JSON.stringify({ runtimeConfigured: true, aiAvailability: "ready", show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+    await load(true);
+    expect(await screen.findByText(MODEL_LIST_UNAVAILABLE, undefined, WAIT)).toBeInTheDocument();
+    expect(screen.getByText(MODEL_LIST_RETRY)).toBeInTheDocument();
+    expect(screen.queryByText("AI unavailable")).toBeNull();
+    await idle(30000);
+    expect(asked).toBeLessThanOrEqual(4);
+  }, 40000);
+});
+
+describe("the pace of a failing model list (#1124)", () => {
+  it("waits 5 s, 15 s, 60 s, then a minute after every further failure", () => {
+    expect([1, 2, 3, 4, 5, 6].map(retryDelay)).toEqual([5000, 15000, 60000, 60000, 60000, 60000]);
   });
 });
