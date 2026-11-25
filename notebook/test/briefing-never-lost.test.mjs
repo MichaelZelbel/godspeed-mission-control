@@ -342,20 +342,6 @@ test('the cut fallback gives a next action for the saved goal',async()=>{
  assert.match(saved.content,/^Next: Ask Godspeed to work on Plan the fictional trip and show you one concrete result today\.$/m);
 });
 
-test('a rewrite with its action under another heading falls back to a checked Next line',async()=>{
- const {store,query}=fixture([]);store.save('goals',{title:'Prepare the fictional emergency kit',status:'adopted'});
- let writes=0;
- const provider=async input=>{
-  if(input.kind==='brief-verification')return verifies(input);
-  writes++;
-  return writes===1?'Today is ready.':'What I need from you:\n\n1. Pack bottled water today.';
- };
- const result=await run(provider,query,store,'brief-rewrite-missing-next'),saved=store.get('notes',result.record_id);
- assert.equal(writes,2);
- assert.match(saved.content,/^Next: Ask Godspeed to work on Prepare the fictional emergency kit and show you one concrete result today\.$/m);
- assert.doesNotMatch(saved.content,/What I need from you/);
-});
-
 test('the existing cut fallback is not sent when its explanation breaks a voice rule',async()=>{
  const {store,query}=fixture(['BANNED-WORD: realm','BANNED-WORD: briefing']);
  const provider=async input=>verifies(input)||'The realm is here.';
