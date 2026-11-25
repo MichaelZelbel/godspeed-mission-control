@@ -12,6 +12,8 @@ import {isTalkGate,talkArea,talkCalendar} from './routine-times.mjs';
 const talkRow=(job,root)=>{if(!isTalkGate(job))return {};const calendar=talkCalendar(talkArea(root));return calendar?{calendar,talk:true}:{};};
 import {nativeCardRows} from './card-commands.mjs';
 import {momentDates,endsBeforeStart,END_BEFORE_START} from './timestamps.mjs';
+import {assertRealDate,assertRealClaimDates} from './real-dates.mjs';
+import {fieldList} from './fields.mjs';
 import {activityRows,tracked} from './activity.mjs';
 // A record with no name and no nickname (only written before 2.0.0-beta.14, issue 266) is not listed
 // among the people, though it stays on disk with whatever links to it.
@@ -523,6 +525,9 @@ export class QueryService {
           const given = operation === 'delete' ? { removed_at: new Date().toISOString() } : operation === 'update' ? values : value;
           // A moment's dates are kept as ISO 8601 whoever writes them (timestamps.mjs).
           const payload = table === 'moments' ? momentDates(given) : given;
+          if(table==='moments'&&operation!=='delete')for(const key of ['happened_at','happened_end'])if(key in given)assertRealDate(key,given[key],'datetime');
+          if(table==='event_corrections'&&operation!=='delete')for(const key of ['happened_at','happened_end'])if(given.patch&&key in given.patch)assertRealDate(key,given.patch[key],'datetime');
+          if(table==='claims'&&operation!=='delete')assertRealClaimDates({...old,...payload},attribute=>fieldList(this.store.root).canonical(attribute),key=>key in payload&&(!old||payload[key]!==old[key]));
           if(table==='moments'&&operation!=='delete'&&('happened_at' in payload||'happened_end' in payload)){
             // #1032: a moment never ends before it starts; a change of one date is judged against the other as stored.
             const current=operation==='upsert'&&old?(this.rows('moments').find(r=>r.id===old.id)||old):old;
@@ -562,7 +567,7 @@ export class QueryService {
           if(table==='collection_items'){
             const collection=this.store.get('collections',record.collection_id);if(!collection)throw new Error('Collection missing');
             const primary=collection.field_schema?.find(f=>f.primary);record.title=primary?String(record.data?.[primary.key]??'Untitled'):record.title||'Untitled';
-            for(const field of collection.field_schema||[]){const value=record.data?.[field.key];if(value==null||value==='')continue;if(['number','currency'].includes(field.type)&&!Number.isFinite(Number(value)))throw new Error('Expected a number for '+field.label);if(field.type==='boolean'&&typeof value!=='boolean')throw new Error('Expected true or false for '+field.label);if(field.type==='select'&&field.options?.length&&!field.options.includes(value))throw new Error('Unknown choice for '+field.label);}
+            for(const field of collection.field_schema||[]){const value=record.data?.[field.key];if(value==null||value==='')continue;if(['number','currency'].includes(field.type)&&!Number.isFinite(Number(value)))throw new Error('Expected a number for '+field.label);if(field.type==='boolean'&&typeof value!=='boolean')throw new Error('Expected true or false for '+field.label);if(field.type==='select'&&field.options?.length&&!field.options.includes(value))throw new Error('Unknown choice for '+field.label);if((field.type==='date'||field.type==='datetime')&&value!==old?.data?.[field.key])assertRealDate(field.label===field.key?field.label:field.label+' ('+field.key+')',value,field.type);}
           }
           record.references = this.references(table, record); return record;
         });
