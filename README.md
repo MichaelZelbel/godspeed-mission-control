@@ -30,6 +30,19 @@ Version 2 is the current edition. The install lines on this page install the cur
 
 Godspeed carries the Workouts add-on. With Hevy Pro, open **Settings** > **Workouts from Hevy**, make a Hevy developer key, and connect it there. The key stays in the add-on's private state; Settings shows the imported-row count and last run, and the one hourly **Workouts from Hevy** routine appears under **Settings** > **Routines**. When taking over a standalone add-on schedule, Godspeed first proves the carried routine can import; if setup fails, Settings names the safe reason and retry time while the existing schedule stays in place. If retiring that schedule fails after the proof, the carried routine keeps running and Settings reports the removal retry. Disconnect stops that routine while keeping the tracker and its rows.
 
+## New in 2.0.0-beta.32
+
+Clear first day.
+
+- The factory can reliably check the talk-preparation and other previously unreachable journeys.
+- A person's details page is usable on a phone held sideways, with one properly sized scroll area.
+- A group can add somebody new without leaving the group first.
+- Asking for today's brief before one exists explains that and offers to make one.
+- The empty Recent People card no longer shows an old heart symbol.
+- My Profile does not use a red warning dot for an incomplete profile.
+- An expired sign-in link looks like the notebook's chosen theme.
+- A new person's first morning reliably produces checked work and a saved brief that names their goal.
+
 ## New in 2.0.0-beta.31
 
 Unstuck.
