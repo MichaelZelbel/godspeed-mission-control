@@ -4,8 +4,8 @@ import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
 import {fieldList,mergeFields,DEFAULT_FIELDS} from '../core/fields.mjs';
-import {closeFacts,supersededValues,endedRelationships,setValidTo,FactClosing} from '../core/fact-closing.mjs';
-import {frontMatter} from '../core/world-facts.mjs';
+import {closeFacts,supersededValues,endedRelationships,FactClosing} from '../core/fact-closing.mjs';
+import {copyOldWorld} from '../core/world-copy.mjs';
 import {visibleRows} from '../core/visibility.mjs';
 
 // One fixed name per kind of fact, for every notebook, not only the one whose
@@ -17,7 +17,7 @@ import {visibleRows} from '../core/visibility.mjs';
 
 const tmp=(t,prefix)=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),prefix));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;};
 const worldFile=(root,folder,name,fields,body='fixture',nl='\n')=>{const p=path.join(root,'world',folder,name);fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,['---',...Object.entries(fields).map(([k,v])=>k+': '+(Array.isArray(v)?'['+v.join(', ')+']':v)),'---','',body,''].join(nl));return p;};
-const meta=p=>frontMatter(fs.readFileSync(p,'utf8')).fields;
+const claimOf=(store,value)=>store.list('claims').find(c=>c.value===value&&!c.removed_at);
 const offline=(t,device='local')=>{const root=tmp(t,'godspeed-fields-');const store=new Store(root,{device}),query=new QueryService(store),domains=new Domains(query);store.save('settings',{id:'installation',owner:'local',timezone:'UTC'});return {root,store,query,domains};};
 const currentOf=(query,subject,kind)=>{const fields=fieldList(query.store.root),day=new Date().toISOString().slice(0,10);return query.rows('claims').filter(c=>c.subject_type===subject.type&&(c.subject_id||null)===(subject.id||null)&&fields.canonical(c.attribute)===kind&&!c.removed_at&&(!c.valid_to||c.valid_to>day)).map(c=>c.value).sort();};
 async function service(t){
@@ -107,21 +107,19 @@ test('imported values under old names: the newest is read at once, what an assis
   store.save('fact_slots',{subject_type:'self',subject_id:null,attribute:'home-city',label:'Home city',show_to_agent:true,cardinality:'many'});
   // And the same kind in a Mission Control world file, from the other store.
   worldFile(root,'entities','owner.md',{slug:'owner',name:'Fictional Owner',self:'true'});
-  const file=worldFile(root,'claims','owner--location--undated.md',{subject:'owner',attribute:'location',value:'Fictional File Town',origin:'menerio'},'Kept from the old import.','\r\n');
+  worldFile(root,'claims','owner--location--undated.md',{subject:'owner',attribute:'location',value:'Fictional File Town',origin:'menerio'},'Kept from the old import.','\r\n');
+  copyOldWorld(store);const file=claimOf(store,'Fictional File Town');
   const added=await call('add_claim',{subject_type:'self',attribute:'lives-in',value:'Fictional New Town',evidence_quote:'I live in Fictional New Town now.',valid_from:'2026-10-01'});
   assert.equal(added.outcome,'inserted','an imported value the assistant may not change does not stop the new one');
-  assert.equal(added.closed_earlier_values,1,'the one it may change ends at once');
+  assert.equal(added.closed_earlier_values,2,'the ones it may change end at once, the copied world claim among them');
   assert.equal(store.get('claims',shown.id).valid_to,'2026-10-01');
   assert.equal(store.get('claims',hidden.id).valid_to??null,null,'the one it may not see stays as it is');
   assert.deepEqual((await call('get_claims',{subject_type:'self',attribute:'location'})).claims.map(c=>c.value),['Fictional New Town'],'and is read as ended already');
   const result=await closeFacts({store,query});
   assert.equal(store.get('claims',hidden.id).valid_to,'2026-10-01','the daily closing ends it');
   assert.equal(store.get('claims',hidden.id).closure_evidence.source_type,'claim');
-  assert.equal(meta(file).valid_to,'2026-10-01','and the world file');
-  const text=fs.readFileSync(file,'utf8');
-  assert.match(text,/\r\nvalid_to: 2026-10-01\r\n/,'written in the file\'s own line endings');
-  assert.match(text,/Kept from the old import\./,'its text stays');
-  assert.deepEqual(result.files,['world/claims/owner--location--undated.md']);
+  assert.equal(store.get('claims',file.id).valid_to,'2026-10-01','and the copied world claim');
+  assert.match(store.get('claims',file.id).evidence_quote,/Kept from the old import\./,'its text stays');
   assert.deepEqual(currentOf(query,{type:'self'},'lives-in'),['Fictional New Town']);
   const again=await closeFacts({store,query});
   assert.equal(again.values.length+again.relationships.length,0,'a second run finds nothing');
@@ -218,32 +216,33 @@ test('note processing: the model is told the fixed names, and what it proposes i
 test('the daily closing ends the older of two current values across names and stores, and leaves a tie and a many-at-a-time kind alone',async t=>{
   const {root,store,query}=offline(t);
   worldFile(root,'entities','owner.md',{slug:'owner',name:'Fictional Owner',self:'true'});
-  const a=worldFile(root,'claims','owner--current-city--2026-03-01.md',{subject:'owner',attribute:'current-city',value:'Fictional A',valid_from:'2026-03-01'});
-  const b=worldFile(root,'claims','owner--city--undated.md',{subject:'owner',attribute:'City',value:'"Fictional B"'});
-  const h=worldFile(root,'claims','owner--hobby--2026-02-01.md',{subject:'owner',attribute:'hobby',value:'fictional chess',valid_from:'2026-02-01'});
+  worldFile(root,'claims','owner--current-city--2026-03-01.md',{subject:'owner',attribute:'current-city',value:'Fictional A',valid_from:'2026-03-01'});
+  worldFile(root,'claims','owner--city--undated.md',{subject:'owner',attribute:'City',value:'"Fictional B"'});
+  worldFile(root,'claims','owner--hobby--2026-02-01.md',{subject:'owner',attribute:'hobby',value:'fictional chess',valid_from:'2026-02-01'});
   worldFile(root,'claims','owner--hobbies--2026-09-01.md',{subject:'owner',attribute:'hobbies',value:'fictional go',valid_from:'2026-09-01'});
-  const garbled=worldFile(root,'claims','owner--location--garbled.md',{subject:'owner',attribute:'location',value:'Fictional G',valid_from:'sometime in 2027'});
+  worldFile(root,'claims','owner--location--garbled.md',{subject:'owner',attribute:'location',value:'Fictional G',valid_from:'sometime in 2027'});
+  copyOldWorld(store);const a=claimOf(store,'Fictional A'),b=claimOf(store,'Fictional B'),h=claimOf(store,'fictional chess'),garbled=claimOf(store,'Fictional G');
   const n1=store.save('claims',{subject_type:'self',subject_id:null,attribute:'Location',value:'Fictional C',valid_from:'2026-09-30'});
   const n2=store.save('claims',{subject_type:'contact',subject_id:'p1',attribute:'city',value:'Fictional D',valid_from:'2026-05-05'});
   const n3=store.save('claims',{subject_type:'contact',subject_id:'p1',attribute:'location',value:'Fictional E',valid_from:'2026-05-05'});
   const result=await closeFacts({store,query});
-  assert.equal(meta(a).valid_to,'2026-09-30','an older dated value under another name');
-  assert.equal(meta(b).valid_to,'2026-09-30','an undated one');
-  assert.equal(meta(garbled).valid_to,'2026-09-30','a date that is no day decides nothing and is older than any');
+  assert.equal(store.get('claims',a.id).valid_to,'2026-09-30','an older dated value under another name');
+  assert.equal(store.get('claims',b.id).valid_to,'2026-09-30','an undated one');
+  assert.equal(store.get('claims',garbled.id).valid_to,'2026-09-30','a date that is no day decides nothing and is older than any');
   assert.equal(store.get('claims',n1.id).valid_to??null,null,'the newest, in the notebook, stays');
   assert.ok(!store.get('claims',n2.id).valid_to&&!store.get('claims',n3.id).valid_to,'two values the same day are left to a person');
-  assert.equal(meta(h).valid_to,undefined,'a many-at-a-time kind is never touched');
+  assert.equal(store.get('claims',h.id).valid_to??null,null,'a many-at-a-time kind is never touched');
   assert.equal(result.values.length,3);
-  const before=fs.readFileSync(a,'utf8');
+  const before=JSON.stringify(store.get('claims',a.id));
   await closeFacts({store,query});
-  assert.equal(fs.readFileSync(a,'utf8'),before,'a second run changes nothing');
+  assert.equal(JSON.stringify(store.get('claims',a.id)),before,'a second run changes nothing');
   // A notebook value ends when a newer world value says otherwise; a value with a comma is one value.
   const m1=store.save('claims',{subject_type:'self',subject_id:null,attribute:'city',value:'Fictional F',valid_from:'2026-01-01'});
   worldFile(root,'claims','owner--lives-in--2026-10-05.md',{subject:'owner',attribute:'lives-in',value:'Fictional Krefeld, Fictional Land',valid_from:'2026-10-05'});
-  await closeFacts({store,query});
+  copyOldWorld(store);await closeFacts({store,query});
   assert.equal(store.get('claims',m1.id).valid_to,'2026-10-05');
   assert.equal(store.get('claims',n1.id).valid_to,'2026-10-05');
-  assert.equal(store.get('claims',n1.id).closure_evidence.source_id,'world/claims/owner--lives-in--2026-10-05.md');
+  assert.equal(store.get('claims',n1.id).closure_evidence.source_id,claimOf(store,'Fictional Krefeld, Fictional Land').id);
 });
 
 test('a world subject is a notebook person by the id the import kept, or by their one name; a name two people share stays its own',t=>{
@@ -256,6 +255,7 @@ test('a world subject is a notebook person by the id the import kept, or by thei
   store.save('claims',{subject_type:'contact',subject_id:lea.id,attribute:'current-city',value:'Fictional Ridge',valid_from:'2026-02-01'});
   worldFile(root,'claims','twin--location--2026-04-01.md',{subject:'twin',attribute:'location',value:'Fictional Mill',valid_from:'2026-04-01'});
   store.save('claims',{subject_type:'contact',subject_id:query.rows('contacts').find(c=>c.name==='Fictional Twin').id,attribute:'city',value:'Fictional Weir',valid_from:'2026-01-01'});
+  copyOldWorld(store);
   const steps=supersededValues(store,query);
   assert.deepEqual(steps.map(s=>[s.group,s.record.value]),[['contact:'+lea.id+'|lives-in','Fictional Ridge']]);
 });
@@ -271,29 +271,32 @@ test('a relationship that ended is ended everywhere it is recorded; agreeing wor
   }
   const link=(label,target,source='self')=>store.save('contact_relationships',source==='self'?{source_type:'self',target_type:'contact',target_id:target,label}:{source_type:'contact',source_id:source,target_type:'contact',target_id:target,label});
   const leaLink=link('partner',ids.lea),meiLink=link('spouse',ids.mei),rikLink=link('lover',ids.rik,ids.mei);
-  const old=worldFile(root,'claims','owner--relationship--undated.md',{subject:'owner',attribute:'relationship',value:'partner',object:'lea',origin:'menerio'},'Kept from the old import.');
+  worldFile(root,'claims','owner--relationship--undated.md',{subject:'owner',attribute:'relationship',value:'partner',object:'lea',origin:'menerio'},'Kept from the old import.');
   worldFile(root,'claims','lea--relationship-to-owner--2026-10-03.md',{subject:'lea',attribute:'relationship-to-owner',value:'ex-girlfriend',valid_from:'2026-10-03'});
-  const meiWife=worldFile(root,'claims','mei--relationship--2026-07-19.md',{subject:'mei',attribute:'relationship',value:'wife',valid_from:'2026-07-19'});
+  worldFile(root,'claims','mei--relationship--2026-07-19.md',{subject:'mei',attribute:'relationship',value:'wife',valid_from:'2026-07-19'});
   worldFile(root,'claims','mei--relationship-to-owner--2026-10-08.md',{subject:'mei',attribute:'relationship-to-owner',value:'wife and partner',valid_from:'2026-10-08'});
-  const rik=worldFile(root,'claims','rik--relationship-to-mei--2026-10-08.md',{subject:'rik',attribute:'relationship-to-mei',value:'lover',valid_from:'2026-10-08'});
-  const solEx=worldFile(root,'claims','sol--relationship-to-owner--2026-01-01.md',{subject:'sol',attribute:'relationship-to-owner',value:'ex-boyfriend',valid_from:'2026-01-01'});
+  worldFile(root,'claims','rik--relationship-to-mei--2026-10-08.md',{subject:'rik',attribute:'relationship-to-mei',value:'lover',valid_from:'2026-10-08'});
+  worldFile(root,'claims','sol--relationship-to-owner--2026-01-01.md',{subject:'sol',attribute:'relationship-to-owner',value:'ex-boyfriend',valid_from:'2026-01-01'});
   worldFile(root,'claims','sol--relationship-to-owner--2026-05-01.md',{subject:'sol',attribute:'relationship-to-owner',value:'boyfriend',valid_from:'2026-05-01'});
-  const annA=worldFile(root,'claims','ann--relationship-to-owner--2026-09-09.md',{subject:'ann',attribute:'relationship-to-owner',value:'girlfriend',valid_from:'2026-09-09'});
+  worldFile(root,'claims','ann--relationship-to-owner--2026-09-09.md',{subject:'ann',attribute:'relationship-to-owner',value:'girlfriend',valid_from:'2026-09-09'});
   worldFile(root,'claims','ann--relationship-to-owner--2026-09-09-2.md',{subject:'ann',attribute:'relationship-to-owner',value:'former girlfriend',valid_from:'2026-09-09'});
+  copyOldWorld(store);
+  const claim=(subject,attribute,value)=>store.list('claims').find(c=>c.attribute===attribute&&c.subject_id===subject&&(c.relationship||c.value)===value);
+  const old=store.list('claims').find(c=>c.subject_type==='self'&&c.relationship==='partner'),meiWife=claim(ids.mei,'relationship','wife'),rik=claim(ids.rik,'relationship-to-mei','lover'),solEx=claim(ids.sol,'relationship-to-owner','ex-boyfriend'),annA=claim(ids.ann,'relationship-to-owner','girlfriend');
+  const end=c=>store.get('claims',c.id).valid_to??null;
   const result=await closeFacts({store,query});
-  assert.equal(meta(old).valid_to,'2026-10-03','an undated partner claim ends on the day of the newer ex');
-  assert.equal(meta(old).value,'partner');assert.match(fs.readFileSync(old,'utf8'),/Kept from the old import\./);
+  assert.equal(end(old),'2026-10-03','an undated partner claim ends on the day of the newer ex');
+  assert.equal(store.get('claims',old.id).relationship,'partner');assert.match(store.get('claims',old.id).evidence_quote,/Kept from the old import\./);
   assert.equal(store.get('contact_relationships',leaLink.id).valid_to,'2026-10-03','the notebook\'s link ends that day too');
   assert.equal(store.get('contacts',ids.lea).relationship,'ex-girlfriend','her card says the newest word');
   assert.equal(store.get('contact_relationships',meiLink.id).valid_to??null,null,'spouse beside "wife and partner" is not ended');
-  assert.equal(meta(meiWife).valid_to,undefined,'nor the older "wife"');
-  assert.ok(!store.get('contact_relationships',rikLink.id).valid_to&&meta(rik).valid_to===undefined,'a lover of someone else is never the owner\'s');
-  assert.equal(meta(solEx).valid_to,'2026-05-01','together again: the old ex ends');
+  assert.equal(end(meiWife),null,'nor the older "wife"');
+  assert.ok(!store.get('contact_relationships',rikLink.id).valid_to&&end(rik)===null,'a lover of someone else is never the owner\'s');
+  assert.equal(end(solEx),'2026-05-01','together again: the old ex ends');
   assert.equal(store.get('contacts',ids.sol).relationship,'boyfriend','and the card that still said ex says the newest word');
-  assert.ok(meta(annA).valid_to===undefined&&store.get('contacts',ids.ann).relationship==='partner','one day saying both is left to a person');
-  assert.ok(result.files.includes('world/claims/owner--relationship--undated.md')&&result.files.includes('world/claims/sol--relationship-to-owner--2026-01-01.md'));
-  const before=fs.readFileSync(old,'utf8'),again=await closeFacts({store,query});
-  assert.equal(fs.readFileSync(old,'utf8'),before);assert.equal(again.relationships.length,0,'a second run changes nothing');
+  assert.ok(end(annA)===null&&store.get('contacts',ids.ann).relationship==='partner','one day saying both is left to a person');
+  const again=await closeFacts({store,query});
+  assert.equal(again.relationships.length,0,'a second run changes nothing');
 });
 
 test('without a self entity the owner is known by the profile\'s name; an older engine running first leaves nothing to do',async t=>{
@@ -303,14 +306,12 @@ test('without a self entity the owner is known by the profile\'s name; an older 
   worldFile(root,'entities','lea.md',{slug:'lea',name:'Fictional Lea',menerio_id:lea.id});
   const link=store.save('contact_relationships',{source_type:'self',target_type:'contact',target_id:lea.id,label:'partner'});
   worldFile(root,'claims','lea--relationship-to-fictional--2026-10-03.md',{subject:'lea',attribute:'relationship-to-fictional',value:'ex-girlfriend',valid_from:'2026-10-03'});
+  copyOldWorld(store);
   assert.deepEqual(endedRelationships(store,query).map(s=>[s.action,s.record.kind]),[['end','link']]);
   // The engine's world_relationships.py already ended it (same day, same line): nothing more happens.
   store.save('contact_relationships',{id:link.id,valid_to:'2026-10-03'},store.get('contact_relationships',link.id)._hash);
   const result=await closeFacts({store,query});
   assert.equal(result.relationships.length,0);assert.equal(store.get('contact_relationships',link.id).valid_to,'2026-10-03');
-  const p=worldFile(root,'claims','x--lives-in--undated.md',{subject:'x',attribute:'lives-in',value:'v'});
-  setValidTo(p,'2026-10-01');setValidTo(p,'2026-10-02');
-  assert.equal((fs.readFileSync(p,'utf8').match(/^valid_to:/gm)||[]).length,1,'one end line, the latest');
 });
 
 test('the closing runs once a day on the machine that runs the routines, and soon after a Menerio import',async t=>{

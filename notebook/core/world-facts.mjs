@@ -1,22 +1,17 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import {visibleRows} from './visibility.mjs';
 import {fieldList} from './fields.mjs';
 
 // Facts the notebook holds outside its own claims, as facts: the links between
-// people (contact_relationships) and Mission Control's own world files, one
-// small file per claim in world/claims/ (world/README.md). Until 8 October 2026
-// the notebook's search, its fact lookup and the owner's profile read neither:
-// "Priya, relationship: wife" was a world file and "you -> Priya: spouse" a
-// link, and asked for the owner's wife's name the chat was handed the four
-// contacts whose cards said "partner" and asked the owner back.
+// people (contact_relationships). Until 8 October 2026 the notebook's search,
+// its fact lookup and the owner's profile did not read them: "you -> Priya:
+// spouse" was a link, and asked for the owner's wife's name the chat was
+// handed the four contacts whose cards said "partner" and asked the owner back.
 
 const norm = s => String(s ?? '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
 const live = rows => rows.filter(r => !r.removed_at && !r.deleted_at);
 const isDay = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
-const humanize = attribute => { const t = String(attribute || '').replace(/[-_]+/g, ' ').trim(); return t ? t[0].toUpperCase() + t.slice(1) : t; };
 
-// world/ files are YAML front matter of plain `key: value` lines, a list as
+// Old world files (copied into records by core/world-copy.mjs) are YAML front matter of plain `key: value` lines, a list as
 // `[a, b]`, then a free text (world/README.md). Nothing else is read from them.
 function scalar(value) {
   const v = value.trim();
@@ -37,53 +32,6 @@ export function frontMatter(text) {
   return {fields, body: (m[2] || '').trim()};
 }
 
-// The files are read again only when one of them changed: the folder listing
-// and each file's time and size are the signature.
-const cache = new Map();
-function readFolder(dir) {
-  let names; try { names = fs.readdirSync(dir).filter(n => n.endsWith('.md')).sort(); } catch { return []; }
-  const stats = names.map(n => { try { const s = fs.statSync(path.join(dir, n)); return n + ':' + s.mtimeMs + ':' + s.size; } catch { return n; } });
-  const signature = stats.join('|'), held = cache.get(dir);
-  if (held?.signature === signature) return held.files;
-  const files = [];
-  for (const name of names) { let text; try { text = fs.readFileSync(path.join(dir, name), 'utf8'); } catch { continue; } const parsed = frontMatter(text); if (parsed) files.push({name, ...parsed}); }
-  cache.set(dir, {signature, files});
-  return files;
-}
-
-// Who a world file's subject is, in the notebook's own terms. An entity file
-// names its person's notebook id (menerio_id: the import kept Menerio's ids) and
-// nicknames; a person merged into another is that other person; a person or
-// thing hidden from assistants hides every fact about them.
-function resolver(query) {
-  const all = query.rows('contacts'), visible = new Set(visibleRows(query, 'contacts').map(c => c.id));
-  const byId = new Map(); for (const c of all) for (const id of [c.id, ...(c.former_ids || [])]) byId.set(id, c);
-  const follow = c => { for (let hops = 0; c?.merged_into && c.merged_into !== 'self' && hops < 6; hops++) c = byId.get(c.merged_into) || c; return c; };
-  const byName = new Map();
-  for (const c of all) if (!c.merged_into) for (const n of [c.name, ...(Array.isArray(c.aliases) ? c.aliases : [])]) if (typeof n === 'string' && n.trim()) byName.set(norm(n), [...(byName.get(norm(n)) || []), c]);
-  const things = live(visibleRows(query, 'entities')), thingByName = new Map(things.map(e => [norm(e.name), e]));
-  const shown = new Set(things.map(e => e.id)), hiddenThings = new Set(live(query.rows('entities')).filter(e => !shown.has(e.id)).map(e => norm(e.name)));
-  const entityFiles = new Map(readFolder(path.join(query.store.root, 'world', 'entities')).map(f => [f.fields.slug || f.name.replace(/\.md$/, ''), f.fields]));
-  const cached = new Map();
-  return slug => {
-    if (cached.has(slug)) return cached.get(slug);
-    const e = entityFiles.get(slug) || {name: String(slug).replace(/-/g, ' ')}, names = [e.name, ...(Array.isArray(e.aliases) ? e.aliases : [])].filter(Boolean).map(norm);
-    let result;
-    if (e.self === 'true' || e.self === true) result = {subject_type: 'self', subject_id: null, subject_name: e.name || null};
-    else {
-      let c = e.menerio_id ? follow(byId.get(e.menerio_id)) : null;
-      // Several cards with the name are one person kept twice more often than
-      // two people: the oldest visible one stands for them.
-      if (!c) { const found = [...new Set(names.flatMap(n => byName.get(n) || []))].sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || ''))); c = follow(found.find(x => visible.has(x.id)) || found[0]); }
-      if (c) result = visible.has(c.id) ? {subject_type: 'contact', subject_id: c.id, subject_name: c.name} : null;
-      else if (names.some(n => (byName.get(n) || []).some(x => !visible.has(x.id)) || hiddenThings.has(n))) result = null;
-      else { const thing = names.map(n => thingByName.get(n)).find(Boolean); result = thing ? {subject_type: 'entity', subject_id: thing.id, subject_name: thing.name} : {subject_type: 'entity', subject_id: null, subject_name: e.name || slug}; }
-    }
-    cached.set(slug, result);
-    return result;
-  };
-}
-
 // The links between people, as facts: "you -> Priya: spouse" reads as a fact
 // about you whose value is "spouse: Priya", with the person it points at.
 export function linkFacts(query) {
@@ -96,39 +44,6 @@ export function linkFacts(query) {
     out.push({id: r.id, claim_id: r.id, subject_type: from.subject_type, subject_id: from.subject_id, attribute: 'relationship', label: 'Relationship', value: word + ': ' + to.name,
       relationship: word, object_type: to.subject_type, object_id: to.subject_id, object_name: to.name, cardinality: 'many', valid_from: isDay(r.valid_from) ? r.valid_from : null,
       valid_to: isDay(r.valid_to || r.ended_at) ? (r.valid_to || r.ended_at) : null, confidence: r.confidence || 'likely', source_type: 'contact_relationship', source_id: r.id});
-  }
-  return out;
-}
-
-// Mission Control's world claims, as facts. One the notebook already holds is
-// left out: a copy of a Menerio claim the import brought over under the same
-// id, or the same value for the same subject and attribute.
-export function worldFacts(query, own = []) {
-  const files = readFolder(path.join(query.store.root, 'world', 'claims'));
-  if (!files.length) return [];
-  const subject = resolver(query), ids = new Set(own.map(f => f.id).concat(query.rows('claims').map(c => c.id)));
-  const key = (type, id, name, attribute, value) => [type, id || norm(name), norm(attribute).replace(/[\s_-]+/g, '-'), norm(value)].join('|');
-  const held = new Set(own.map(f => key(f.subject_type, f.subject_id, f.subject_name, f.attribute, f.value)));
-  const out = [];
-  for (const {name, fields: f, body} of files) {
-    if (!f.subject || !f.attribute || f.value === undefined || f.value === '') continue;
-    if (f.menerio_id && ids.has(f.menerio_id)) continue;
-    const who = subject(f.subject);
-    if (!who) continue;
-    // "relationship-to-priya" names its other person in the attribute. One
-    // that names a known person or thing other than the owner is about them;
-    // "relationship-to-owner" (the owner, or a name nothing else has) is the
-    // owner's.
-    const toward = !f.object && /^relationship-to-(.+)$/.exec(String(f.attribute)), named = toward ? subject(toward[1]) : null;
-    const other = f.object ? subject(f.object) : named?.subject_id && named.subject_type !== 'self' ? named : null;
-    if (f.object && !other) continue;
-    const value = other ? f.value + ': ' + (other.subject_type === 'self' ? 'you' : other.subject_name) : String(f.value);
-    if (held.has(key(who.subject_type, who.subject_id, who.subject_name, f.attribute, value)) || held.has(key(who.subject_type, who.subject_id, who.subject_name, f.attribute, f.value))) continue;
-    const relative = 'world/claims/' + name;
-    out.push({id: relative, claim_id: relative, ...who, attribute: f.attribute, label: humanize(f.attribute), value,
-      ...(other ? {relationship: String(f.value), object_type: other.subject_type, object_id: other.subject_id, object_name: other.subject_name} : {}),
-      cardinality: f.cardinality || 'many', valid_from: isDay(f.valid_from) ? f.valid_from : null, valid_to: isDay(f.valid_to) ? f.valid_to : null,
-      confidence: f.confidence || null, category_slug: f.category || null, evidence_quote: body ? body.slice(0, 600) : null, source_type: 'file', source_id: relative, origin: f.origin || null});
   }
   return out;
 }
@@ -211,8 +126,6 @@ export function ownerRelationships(query, facts, day, cardCounts = word => relat
 // workspace's own world/fields.json read over it (core/fields.mjs). "Where he lives" had been
 // written as `location`, `current-city` and `Current city`, each read as its own fact.
 export {fieldList};
-// The world files of one folder, as this module reads them (for core/fact-closing.mjs).
-export const worldFiles = dir => readFolder(dir);
 
 // The newest dated value of a one-at-a-time fact is its value: an older open value under any of
 // its names and from any store is read as ended that day. What is stored is ended by the

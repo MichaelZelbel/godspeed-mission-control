@@ -72,6 +72,7 @@ import {mediaObjectName,mediaFileName} from '../core/media-names.mjs';
 import {CARRY_LIMIT,carriedRoot,carryMedia,findMedia,keepMedia,keptHere,keptElsewhere,mediaPresence,missingHere,removeCarried} from '../core/media-store.mjs';
 import {retireShares} from '../core/shares.mjs';
 import {repairTimelineAtStart} from '../core/due-copy.mjs';
+import {takeInWorldAtStart} from '../core/world-retire.mjs';
 import {IdentityShelf} from '../core/identity-shelf.mjs';
 import {VERSION} from '../core/version.mjs';
 import {recordRunningNotebook} from '../core/running-notebook.mjs';
@@ -952,7 +953,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     timelineRepairDone = resolve;
     timelineRepairTimer = setTimeout(() => {
       timelineRepairTimer = null;
-      resolve(repairTimelineAtStart(store, { signal: timelineRepairStop.signal }).then(report => {
+      resolve(repairTimelineAtStart(store, { signal: timelineRepairStop.signal }).then(async report => {
+        // The old world files (#90): taken into the records and retired, the same quiet way.
+        await takeInWorldAtStart(store, { signal: timelineRepairStop.signal }).catch(error => { if (!timelineRepairStop.signal.aborted) console.error('Godspeed Mission Control: the old world files were not taken into the notebook this time (the next start does it): ' + error.message); });
         if (report?.corrected?.length) console.log('Godspeed Mission Control: ' + report.corrected.length + ' finished deadline(s) now show their status and scores in the timeline.');
         return report;
       }).catch(error => {

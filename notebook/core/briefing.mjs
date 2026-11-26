@@ -22,7 +22,7 @@ import {cycleOperation} from './cycle-operations.mjs';
 import {finishedWork,finishedLine,plainTitle,nextLineError,hasNextLine} from './briefing-done.mjs';
 import {addonCommand} from './native-personal.mjs';
 import {dayOf} from './trackers.mjs';
-import {linkFacts,worldFacts,ownerRelationships,newestOnly,fieldList} from './world-facts.mjs';
+import {linkFacts,ownerRelationships,newestOnly,fieldList} from './world-facts.mjs';
 const {checkPromises,promiseSayings}=createRequire(import.meta.url)('../../tools/promises.js');
 const BRIEFING_SOURCE_SELECTORS=Object.freeze({
  notes:({actionSources,previousNotes,dayNotes})=>[...new Map([...actionSources,...previousNotes,...dayNotes].map(note=>[note.id,note])).values()],
@@ -224,7 +224,7 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
  // owner's calendar is not read as the owner's own trip when a note or fact names someone else (#386).
  // Failing to read it costs this part, not the morning.
  const peopleAround=()=>{try{return query.withSnapshot(()=>{
-  const own=visibleRows(query,'profile_facts').filter(r=>!r.removed_at&&!r.deleted_at),facts=newestOnly([...own,...linkFacts(query),...worldFacts(query,own)],fieldList(store.root),today);
+  const own=visibleRows(query,'profile_facts').filter(r=>!r.removed_at&&!r.deleted_at),facts=newestOnly([...own,...linkFacts(query)],fieldList(store.root),today);
   const names=new Map(visibleRows(query,'contacts').map(c=>[c.id,c.name])),holds=f=>(!f.valid_from||f.valid_from<=today)&&(!f.valid_to||f.valid_to>today);
   return {relationships:ownerRelationships(query,facts,today).current,facts:facts.filter(f=>(f.valid_from||f.valid_to)&&holds(f)).slice(0,40).map(f=>({id:String(f.id),subject:f.subject_type==='self'?'you':f.subject_name||names.get(f.subject_id||f.contact_id)||null,attribute:f.attribute,value:f.value,valid_from:f.valid_from||null,valid_to:f.valid_to||null,evidence:f.evidence_quote||null}))};
  });}catch{return {relationships:[],facts:[],unavailable:true};}};

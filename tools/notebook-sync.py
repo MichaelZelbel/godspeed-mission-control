@@ -78,7 +78,7 @@ SKIP_DIRS = ("dev", ".git", "node_modules", "notebook")
 SKIP_PREFIXES = ("world/removed/",)
 
 # A file under world/ whose header says `origin: menerio` came DOWN from the notebook
-# (tools/world-pull.py writes them). Sending it back up would hand Menerio its own
+# (tools/world-pull.py, since removed, wrote them). Sending it back up would hand Menerio its own
 # records as new notes, and the next pull would bring those down again.
 WORLD_FOLDER = "world/"
 ORIGIN_MENERIO = re.compile(r"^origin:\s*menerio\s*$", re.IGNORECASE | re.MULTILINE)

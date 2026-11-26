@@ -10,14 +10,14 @@
 //
 // Exit 1 when something live is still built on a closed fact, 0 when clean.
 //
-// WHY. world/claims/ closes a fact that stopped being true with a valid_to
-// date and keeps the file, which is right. Nothing then looks at what was
+// WHY. The notebook closes a fact that stopped being true with a valid_to
+// date and keeps the claim, which is right. Nothing then looks at what was
 // written while the fact was true: the author's book changed its title and
 // his profile still carried the old one forty days later. The idea is Rich
 // Schefren's open-source Atlas (github.com/RichSchefren/atlas): when a fact
 // changes, walk to everything that depended on it, at the moment it changes,
 // not when someone next asks. His version is a graph database. This one is a
-// string search plus a declared line, because a mission control is text files.
+// string search plus a declared line, because a mission control is text files and records.
 //
 // TWO WAYS A RECORD CAN BE BUILT ON A FACT:
 //   value     the closed value appears, whole-word and case-insensitive, in a
@@ -41,11 +41,12 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { notebookCore } = require('./notebook-core.js');
 
 // Where the mission control keeps what it treats as CURRENT. History lives elsewhere and
 // is deliberately absent: observations/ and decisions.md are records of what
-// was thought at the time, prompts/ and archives/ are verbatim, world/ is the
-// claims themselves. decisions.md is read for rests_on lines only, never for
+// was thought at the time, prompts/ and archives/ are verbatim, and the claims
+// are the notebook's own. decisions.md is read for rests_on lines only, never for
 // values, because an old value inside an old decision is exactly right.
 const VALUE_SURFACES = ['profile', 'rules', 'lead', 'procedures.md', 'AGENTS.md', 'connections.md', 'where-things-live.md'];
 const RESTS_ON_SURFACES = VALUE_SURFACES.concat(['decisions.md']);
@@ -100,22 +101,21 @@ function listMarkdown(root, rel) {
   return out;
 }
 
+// The notebook's claims. A folder with no notebook to read them from has none to check.
 function readClaims(root) {
-  const dir = path.join(root, 'world', 'claims');
-  if (!fs.existsSync(dir)) return { claims: [], folder: false };
-  const claims = [];
-  for (const f of fs.readdirSync(dir).filter((f) => f.endsWith('.md'))) {
-    const { meta } = frontmatter(fs.readFileSync(path.join(dir, f), 'utf8'));
-    if (!meta || !meta.subject || !meta.attribute) continue;
-    claims.push({
-      file: 'world/claims/' + f,
-      subject: String(meta.subject).trim().toLowerCase(),
-      attribute: normalizeAttribute(meta.attribute),
-      key: claimKey(meta.subject, meta.attribute),
-      value: String(meta.value || ''),
-      valid_to: meta.valid_to || '',
-    });
-  }
+  const dir = notebookCore(root, 'world-records.mjs');
+  if (!dir) return { claims: [], folder: false };
+  const records = require(path.join(dir, 'world-records.mjs'));
+  const claims = records.claimRows(records.openWorld(root))
+    .filter((c) => c.subject && c.attribute)
+    .map((c) => ({
+      file: c.name,
+      subject: c.subject.trim().toLowerCase(),
+      attribute: normalizeAttribute(c.attribute),
+      key: claimKey(c.subject, c.attribute),
+      value: c.value,
+      valid_to: c.valid_to,
+    }));
   return { claims, folder: true };
 }
 
@@ -239,7 +239,7 @@ function report(result, asJson) {
   const tail = `(${r.closed_checked} closed fact(s) checked of ${r.total_claims} claims; ${r.records_with_rests_on} record(s) declare rests_on` +
     (r.short_values_skipped ? `; ${r.short_values_skipped} value(s) under ${MIN_VALUE_LENGTH} characters reached only through rests_on)` : ')');
   if (!r.claims_folder) {
-    console.log('no closed claims: there is no world/claims folder here.');
+    console.log('no closed claims: there is no notebook here to read them from.');
     return;
   }
   if (r.closed_checked === 0) {

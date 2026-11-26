@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The two sync arrows and their runner: what must stay quiet, and what must never happen.
 #
-# WHY THIS FILE IS HERE. tools/notebook-sync.py, tools/world-pull.py and mc-notebook-sync
+# WHY THIS FILE IS HERE. tools/notebook-sync.py and mc-notebook-sync
 # are how the notebook keeps itself current. They run unattended,
 # on a schedule, on machines whose owner never asked to see them, and that shape carries
 # two promises the rest of the kit does not:
@@ -28,8 +28,8 @@ trap 'rm -rf "$W" "$TEST_GUARD_HOME"' EXIT
 
 echo "== the notebook sync: quiet for most readers, honest for the rest =="
 
-# 1 + 2. Both programs are valid Python. A syntax error here ships to every reader.
-for f in notebook-sync.py world-pull.py; do
+# 1 + 2. The program is valid Python. A syntax error here ships to every reader.
+for f in notebook-sync.py; do
   if "$PY" -c "import ast,sys; ast.parse(open(sys.argv[1], encoding='utf-8').read())" "$HERE/$f" 2>"$W/err"; then
     ok "$f is valid Python"
   else
@@ -37,8 +37,8 @@ for f in notebook-sync.py world-pull.py; do
   fi
 done
 
-# 3 + 4. --help answers and exits 0, which is the smallest proof each program starts.
-for f in notebook-sync.py world-pull.py; do
+# 3 + 4. --help answers and exits 0, which is the smallest proof the program starts.
+for f in notebook-sync.py; do
   if "$PY" "$HERE/$f" --help >/dev/null 2>"$W/err"; then
     ok "$f --help answers"
   else
@@ -91,10 +91,8 @@ printf 'GODSPEED_DIR=%s
 cp "$HERE/mc-notebook-sync" "$W/bin-nomirror/mc-notebook-sync"
 printf 'print("UP RAN")
 ' > "$W/bin-nomirror/notebook-sync.py"
-printf 'print("DOWN RAN")
-' > "$W/bin-nomirror/world-pull.py"
 rc=0; out="$(HOME="$W/home-nomirror" USERPROFILE="$W/home-nomirror" GODSPEED_NOTEBOOK_MIRROR="" MENERIO_API_KEY="test-key" sh "$W/bin-nomirror/mc-notebook-sync" --verbose 2>&1)" || rc=$?
-if [ "$rc" = "0" ] && ! echo "$out" | grep -q "UP RAN" && ! echo "$out" | grep -q "DOWN RAN" && echo "$out" | grep -q "switched off on this computer, so nothing was sent or fetched"; then
+if [ "$rc" = "0" ] && ! echo "$out" | grep -q "UP RAN" && echo "$out" | grep -q "switched off on this computer, so nothing was sent or fetched"; then
   ok "the mission control copy is off unless the reader said yes: nothing was sent up, and the log says why"
 else
   bad "a mission control whose owner never said yes was sent up anyway (exit $rc)" "$out"
@@ -103,11 +101,11 @@ printf 'GODSPEED_DIR=%s
 GODSPEED_NOTEBOOK_MIRROR=1
 ' "$W/mc-nomirror" > "$W/home-nomirror/.godspeed/device.env"
 rc=0; out="$(HOME="$W/home-nomirror" USERPROFILE="$W/home-nomirror" GODSPEED_NOTEBOOK_MIRROR="" MENERIO_API_KEY="test-key" sh "$W/bin-nomirror/mc-notebook-sync" --verbose 2>&1)" || rc=$?
-echo "$out" | grep -q "UP RAN" && echo "$out" | grep -q "DOWN RAN" && ok "  and with GODSPEED_NOTEBOOK_MIRROR=1 in device.env both directions run" || bad "  the yes in device.env was not honoured" "$out"
+echo "$out" | grep -q "UP RAN" && ok "  and with GODSPEED_NOTEBOOK_MIRROR=1 in device.env it is sent up" || bad "  the yes in device.env was not honoured" "$out"
 # A mission control that runs Godspeed v2's notebook (it has a folder sync) needs no copy (6 October 2026).
 mkdir -p "$W/mc-nomirror/.godspeed" && printf '{"repository":"folder"}' > "$W/mc-nomirror/.godspeed/sync-config.json"
 rc=0; out="$(HOME="$W/home-nomirror" USERPROFILE="$W/home-nomirror" GODSPEED_NOTEBOOK_MIRROR="" MENERIO_API_KEY="test-key" sh "$W/bin-nomirror/mc-notebook-sync" --verbose 2>&1)" || rc=$?
-[ "$rc" = "0" ] && ! echo "$out" | grep -q "UP RAN" && ! echo "$out" | grep -q "DOWN RAN" && ok "  and where v2's notebook runs, nothing is copied either way" || bad "  a v2 mission control was still copied" "$out"
+[ "$rc" = "0" ] && ! echo "$out" | grep -q "UP RAN" && ok "  and where v2's notebook runs, nothing is copied either way" || bad "  a v2 mission control was still copied" "$out"
 rm -f "$W/mc-nomirror/.godspeed/sync-config.json"
 
 # 9c. The copy program itself honours the answer, so typing it by hand cannot undo a "no".
@@ -241,7 +239,7 @@ else
 fi
 
 # ---- what came down is never sent back up ----------------------------------------------
-# world-pull.py writes `origin: menerio` files. Sending one up hands Menerio its own
+# An older tools/world-pull.py wrote `origin: menerio` files. Sending one up hands Menerio its own
 # record as a new note, which the next pull brings down again. world/removed/ holds the
 # pull's notices about what Menerio dropped, and must not put it back.
 mkdir -p "$W/wh/world/claims" "$W/wh/world/removed"
@@ -492,28 +490,20 @@ echo "$many" | grep -q "^ALREADY 0 1$" && ok "notes another computer already res
 echo "$many" | grep -q "^BEHIND 30$"   && ok "notes the notebook holds in the older form are still sent" || bad "the check stopped a real resend" "$many"
 echo "$many" | grep -q "^FEW 3 0$"     && ok "a few changed files are sent without asking first" || bad "an ordinary save asked the notebook first" "$many"
 
-# ---- the arrow down saves itself, on the one computer that keeps the facts --------------
-# A stand-in python records how the runner calls the two programs; nothing reaches a network.
-K="$W/keeper"; mkdir -p "$K/home/.godspeed" "$K/mc" "$K/stub"
+# ---- the runner sends up and brings nothing down ---------------------------------------
+# A stand-in python records how the runner calls its programs; nothing reaches a network. The arrow
+# down (tools/world-pull.py, facts as files in world/) is gone: facts are the notebook's own records.
+K="$W/runner"; mkdir -p "$K/home/.godspeed" "$K/mc" "$K/stub"
 printf '#!/bin/sh\n[ "$1" = "-c" ] && exit 0\necho "$*" >> "$KEEP_LOG"\nexit 0\n' > "$K/stub/python3"
 chmod +x "$K/stub/python3"
 printf 'GODSPEED_DIR=%s\nGODSPEED_NOTEBOOK_MIRROR=1\n' "$K/mc" > "$K/home/.godspeed/device.env"
 HOME="$K/home" MENERIO_API_KEY=stand-in KEEP_LOG="$K/one.log" PATH="$K/stub:$PATH" \
   sh "$HERE/mc-notebook-sync" >/dev/null 2>&1
-grep -q "world-pull.py --apply --commit" "$K/one.log" 2>/dev/null \
-  && ok "the computer that keeps the facts saves what the pull brought" \
-  || bad "the pull was not asked to save what it brought" "$(cat "$K/one.log" 2>/dev/null)"
-printf 'GODSPEED_WORLD_KEEPER=0\n' >> "$K/home/.godspeed/device.env"
-HOME="$K/home" MENERIO_API_KEY=stand-in KEEP_LOG="$K/two.log" PATH="$K/stub:$PATH" \
-  sh "$HERE/mc-notebook-sync" >/dev/null 2>&1
-if grep -q "notebook-sync.py" "$K/two.log" 2>/dev/null && ! grep -q "world-pull.py" "$K/two.log"; then
-  ok "every other computer still sends, and leaves the facts to the one that keeps them"
+if grep -q "notebook-sync.py" "$K/one.log" 2>/dev/null && ! grep -q "world-pull" "$K/one.log"; then
+  ok "the runner sends up and runs no world pull"
 else
-  bad "a computer told to leave the facts to another one pulled them anyway, or sent nothing" "$(cat "$K/two.log" 2>/dev/null)"
+  bad "the runner did not send up, or still pulled the world down" "$(cat "$K/one.log" 2>/dev/null)"
 fi
-grep -q "world pull: skipped, another computer keeps the facts" "$K/home/.godspeed/notebook-sync.log" 2>/dev/null \
-  && ok "and its log says why, in a line the sync watchdog reads as a healthy run" \
-  || bad "the skip left no world pull line in the log" "$(tail -3 "$K/home/.godspeed/notebook-sync.log" 2>/dev/null)"
 
 echo
 echo "  $PASS passed, $FAIL failed"
