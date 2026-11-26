@@ -29,7 +29,7 @@ import { Store, hash } from './records/store.mjs';
 import { frontMatter } from './world-facts.mjs';
 import { queueNotice } from './notices.mjs';
 import { DUE_COPY_TYPE, WORLD_COPY_TYPE } from './copy-types.mjs';
-import { canonical, converted, read, writable } from './due-copy.mjs';
+import { canonical, converted, read, writable, noteOf, writeNote } from './due-copy.mjs';
 
 export const COPY_TYPE = WORLD_COPY_TYPE;
 export const slugify = text => String(text || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -68,7 +68,7 @@ export function oldFiles(root) {
 }
 
 // ---------------------------------------------------------------- the cheap look first
-// Names, sizes and times of the old files, in .godspeed/ (this computer's own state, never synced),
+// Names, sizes and times of the old files, in due-copy's note in .godspeed/ (this computer's own state, never synced),
 // so that the usual run where nothing changed opens no workspace and takes no lock.
 function marks(root) {
   const out = [];
@@ -78,14 +78,7 @@ function marks(root) {
   }
   return hash(out.join('\n'));
 }
-const markFile = root => path.join(root, '.godspeed', 'world-copy.json');
-export function noteOf(root) { try { return JSON.parse(fs.readFileSync(markFile(root), 'utf8')) || {}; } catch { return {}; } }
-export function writeNote(root, patch) {
-  const note = { ...noteOf(root), ...patch };
-  try { fs.mkdirSync(path.dirname(markFile(root)), { recursive: true }); fs.writeFileSync(markFile(root), JSON.stringify(note) + '\n'); }
-  catch { /* a copy that cannot leave a note just looks again next time */ }
-  return note;
-}
+const marked = root => noteOf(root).worldFiles || '';
 
 // ---------------------------------------------------------------- who a file's subject is
 // In the notebook's own terms, whatever it hides: an entity file names its person's notebook id
@@ -263,12 +256,12 @@ function copyUnderLock(store) {
     write.push(converted(COPY_TYPE, record, old));
   }
   for (const item of report.needsALook) tellAbout(store, item);
-  if (!write.length) { writeNote(root, { files: report.needsALook.length ? '' : marks(root) }); return report; }
+  if (!write.length) { writeNote(root, { worldFiles: report.needsALook.length ? '' : marks(root) }); return report; }
   report.unchanged = false;
   store.commit(write);
   const gone = forget.filter(key => store.get('record_history', key.slice('record_history/'.length)));
   if (gone.length) store.commit([], { removeKeys: gone });
-  writeNote(root, { files: report.needsALook.length ? '' : marks(root) });
+  writeNote(root, { worldFiles: report.needsALook.length ? '' : marks(root) });
   return report;
 }
 
@@ -285,7 +278,7 @@ function tellAbout(store, { file, why, hash: fileHash }) {
 // For a caller that holds no store. Opens the workspace only when an old file is new or changed.
 export function copyWorldIfChanged(root, { store = null, timeoutMs = 30000 } = {}) {
   if (!fs.existsSync(path.join(root, 'notebook')) && !fs.existsSync(path.join(root, '.godspeed'))) return { skipped: 'no notebook' };
-  if (marks(root) === (noteOf(root).files || '')) return { skipped: 'nothing changed' };
+  if (marks(root) === marked(root)) return { skipped: 'nothing changed' };
   const own = store || new Store(root);
   if (!writable(own)) return { skipped: 'read-only' };
   return copyOldWorld(own, { timeoutMs });
