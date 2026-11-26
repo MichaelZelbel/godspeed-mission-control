@@ -1,3 +1,4 @@
+import {copyOldWorld} from '../core/world-copy.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';import {commandWords,nativeCardRows} from '../core/card-commands.mjs';
 const fixture=()=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-cards-')));return {store,domains:new Domains(new QueryService(store))};};
 
@@ -24,14 +25,14 @@ test('a work card the person postponed is mirrored as held, and as waiting for a
  fs.mkdirSync(path.join(root,'work'),{recursive:true});fs.mkdirSync(path.join(root,'world','claims'),{recursive:true});
  const card=(id,touches)=>fs.writeFileSync(path.join(root,'work',id+'.md'),`ID: ${id}\nSTATUS: blocked\nKEY: apply-${id}\n${touches?`TOUCHES: ${touches}\n`:''}WHAT: Answer the podcast's interview invitation about the book\nDONE WHEN: answered\nOWNER: godspeed\nNEEDS: authorization\nOUTWARD: yes\nSOURCE: next-action\n\n## Log\n`);
  card('W-1','the-book');card('W-2','');
- const claim=validTo=>fs.writeFileSync(path.join(root,'world','claims','the-book--interview-stance--2026-09-10.md'),`---\nsubject: the-book\nattribute: interview-stance\nvalue: not yet, only once the book is out of beta\nstance: postponed\nsteps: [interview]\nvalid_from: 2026-09-10\n${validTo?`valid_to: ${validTo}\n`:''}---\n`);
+ const claim=validTo=>{fs.writeFileSync(path.join(root,'world','claims','the-book--interview-stance--2026-09-10.md'),`---\nsubject: the-book\nattribute: interview-stance\nvalue: not yet, only once the book is out of beta\nstance: postponed\nsteps: [interview]\nvalid_from: 2026-09-10\n${validTo?`valid_to: ${validTo}\n`:''}---\n`);copyOldWorld(store);};
  const rows=()=>Object.fromEntries(nativeCardRows(store,'work_items').map(r=>[r.id,r]));
  try{
   process.env.GODSPEED_TODAY='2026-09-26';claim('');
-  let r=rows();assert.equal(r['W-1'].state,'held');assert.equal(r['W-1'].held_by,'world/claims/the-book--interview-stance--2026-09-10.md');
+  let r=rows();assert.equal(r['W-1'].state,'held');assert.equal(r['W-1'].held_by,'the-book--interview-stance--2026-09-10');
   assert.equal(r['W-2'].state,'awaiting_approval');assert.equal(r['W-2'].held_by,undefined);
   claim('2026-09-20');r=rows();assert.equal(r['W-1'].state,'awaiting_approval');assert.equal(r['W-1'].held_by,undefined);
-  fs.rmSync(path.join(root,'world','claims'),{recursive:true});fs.writeFileSync(path.join(root,'world','claims'),'not a folder');r=rows();
+  const list=store.list;store.list=type=>{if(type==='claims')throw new Error('unreadable');return list.call(store,type);};try{r=rows();}finally{store.list=list;}
   assert.equal(r['W-1'].state,'held');assert.match(r['W-1'].held_by,/^holds not read: /);assert.equal(r['W-2'].state,'awaiting_approval');
  }finally{if(today===undefined)delete process.env.GODSPEED_TODAY;else process.env.GODSPEED_TODAY=today;}
 });
