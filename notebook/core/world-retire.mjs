@@ -21,8 +21,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { hash } from './records/store.mjs';
-import { COPY_TYPE, copyOldWorld } from './world-copy.mjs';
-import { read } from './due-copy.mjs';
+import { COPY_TYPE, copyOldWorld, oldFiles } from './world-copy.mjs';
+import { read, writable, dayOf } from './due-copy.mjs';
 import { folderMode, moveInto } from './due-retire.mjs';
 import { queueNotice } from './notices.mjs';
 
@@ -78,4 +78,12 @@ export function retireOldWorld(store, { day }) {
 export function takeInOldWorld(store, { day, timeoutMs = 30000 } = {}) {
   const work = () => ({ copy: copyOldWorld(store), retire: retireOldWorld(store, { day }) });
   return store.holding ? work() : store.withLockSoon(work, { timeoutMs });
+}
+
+// Once when the notebook starts (server/main.mjs): waits for the workspace without holding the
+// notebook up, and does nothing when there is no old file to take in or to retire.
+export async function takeInWorldAtStart(store, { timeoutMs = 60000, signal } = {}) {
+  if (!writable(store)) return { skipped: 'not writable' };
+  if (!oldFiles(store.root).length && !store.list(COPY_TYPE).some(r => r.file && fs.existsSync(path.join(store.root, ...r.file.split('/'))))) return { skipped: 'nothing to take in' };
+  return store.withLockAsync(() => takeInOldWorld(store, { day: dayOf(store) }), { timeoutMs, signal });
 }

@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Store } from '../core/records/store.mjs';
-import { takeInOldWorld, MOVED_NOTE } from '../core/world-retire.mjs';
+import { takeInOldWorld, takeInWorldAtStart, MOVED_NOTE } from '../core/world-retire.mjs';
 import { oldFiles } from '../core/world-copy.mjs';
 import { readNotices } from '../core/notices.mjs';
 
@@ -66,4 +66,12 @@ test('a record that is not there moves nothing and is said once', t => {
   takeInOldWorld(store, { day: DAY });
   assert.equal(readNotices(store).filter(n => n.step === 'world-retire').length, 1);
   assert.ok(fs.existsSync(path.join(store.root, 'world/events/2026-08-11-moved.md')));
+});
+
+test('starting the notebook takes the files in and retires them, and with nothing to do costs nothing', async t => {
+  const store = seeded(t);
+  assert.equal((await takeInWorldAtStart(store)).retire.moved.length, 3);
+  assert.equal((await takeInWorldAtStart(store)).skipped, undefined, 'the unreadable file is still looked at');
+  fs.rmSync(path.join(store.root, 'world/events/2026-08-12-broken.md'));
+  assert.equal((await takeInWorldAtStart(store)).skipped, 'nothing to take in');
 });
