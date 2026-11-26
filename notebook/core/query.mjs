@@ -54,7 +54,7 @@ tables.add('tracker_proposals');tables.add('tracker_deletions');
 // A meal held for its one question about an amount, and her answer (D-321 step 5).
 tables.add('food_questions');
 // What the notebook has already copied out of due/ and world/events/, per old file (due-copy.mjs).
-tables.add('due_copies');
+tables.add('due_copies');tables.add('world_copies');
 const defaults = {
   // Postgres filled in status; an item saved without one would now be left
   // out by Actions' .neq("status", "dismissed"), since NULL <> x is not true.

@@ -11,7 +11,7 @@ export const credentialRecord=type=>credentialTypes.has(type)||(type.endsWith('_
 // a file belongs to the notebook that made the file.
 // due_copies says which of THIS mission control's due/ files have been copied into THIS notebook
 // (due-copy.mjs); another notebook's answer to that says nothing here.
-const ownBookkeeping=new Set(['import_mappings','due_copies']);
+const ownBookkeeping=new Set(['import_mappings','due_copies','world_copies']);
 // A record as the notebook keeps it, without its bookkeeping hash, and with its
 // keys in one order, so the same record compares equal however it was written.
 const comparable=record=>JSON.stringify(record,(key,value)=>value&&typeof value==='object'&&!Array.isArray(value)
