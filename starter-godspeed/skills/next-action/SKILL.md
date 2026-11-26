@@ -347,7 +347,7 @@ MAKE item for the runner (Step 4), and joins the ship list the day it is ready.
 
     ### <n>. <one line a stranger understands: what changes where>
     GOAL: <id>
-    TOUCHES: <the slugs of the people and things in the notebook this move is about,
+    TOUCHES: <the slugs of the world entities this move is about (a person or thing in the notebook),
              comma-separated, or none>
     BET: <the weekly number now> -> <what you expect it to be seven days after this goes live>
     AIMS AT: <the LIMIT from the goal's research brief (a strategy's or project's without one:
