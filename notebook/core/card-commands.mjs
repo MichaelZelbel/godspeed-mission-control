@@ -1,6 +1,6 @@
 import fs from 'node:fs';import path from 'node:path';import {spawnSync} from 'node:child_process';import {createRequire} from 'node:module';import {fileURLToPath} from 'node:url';import {hash,safe} from './records/store.mjs';
 const {parseCard,renderCard}=createRequire(import.meta.url)('../../tools/mc-cards.js');
-// A work card the person declined or postponed (a current hold claim in world/claims, #282) is
+// A work card the person declined or postponed (a current hold claim in the notebook, #282) is
 // shown as held, never as waiting for their approval. Read live and never stored, so it lifts by
 // itself when its claim ends. Holds that cannot be read mark every card that touches an entity
 // held, because "could not tell" must never show a step the person may have declined.

@@ -211,7 +211,7 @@ one of the others is not installed.
   a set time (UTC, 18:00 unless the plan says otherwise) unless you say stop
   first, and `mc-work stop` keeps one step or the whole day back. Chapters 3 and 8.
 - **`holds.js`** (`mc-holds`) remembers the steps you declined or postponed. Your "no" or
-  "not yet, until the book is out of beta" is a claim in `world/claims/`, and every program that
+  "not yet, until the book is out of beta" is a claim in the notebook, and every program that
   puts a proposal in front of you reads it: a step about that thing stays off the day's moves,
   the card and the work list, and comes back by itself when the claim, or the one it waits on,
   ends. `mc-holds list` shows what is held; `mc-holds end` takes a no back.
