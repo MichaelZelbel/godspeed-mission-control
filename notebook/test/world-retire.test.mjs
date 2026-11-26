@@ -75,3 +75,20 @@ test('starting the notebook takes the files in and retires them, and with nothin
   fs.rmSync(path.join(store.root, 'world/events/2026-08-12-broken.md'));
   assert.equal((await takeInWorldAtStart(store)).skipped, 'nothing to take in');
 });
+
+test('a notebook restarted with no old world files answers at once and the start takes nothing in', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-world-restart-'));
+  const own = { service: null };
+  t.after(async () => { await own.service?.close(); fs.rmSync(root, { recursive: true, force: true, maxRetries: 5 }); });
+  process.env.GODSPEED_ASSISTANT_CONFIG = path.join(root, 'no-assistant.json');
+  process.env.GODSPEED_TIMELINE_REPAIR = 'on';
+  t.after(() => { delete process.env.GODSPEED_ASSISTANT_CONFIG; delete process.env.GODSPEED_TIMELINE_REPAIR; });
+  const { createService } = await import('../server/main.mjs');
+  for (let start = 0; start < 2; start++) {
+    await own.service?.close();
+    const service = own.service = await createService({ root, port: 0 });
+    assert.equal((await fetch('http://127.0.0.1:' + service.address.port + '/health')).status, 200);
+    assert.deepEqual(await service.timelineRepair, { skipped: 'nothing to repair' });
+  }
+  assert.equal(new Store(root, { device: 'pc' }).list('world_copies').length, 0);
+});
