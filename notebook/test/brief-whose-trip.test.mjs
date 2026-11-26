@@ -1,9 +1,10 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {jobExecutor} from '../core/runtime.mjs';import {dayOf} from '../core/trackers.mjs';
+import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {jobExecutor} from '../core/runtime.mjs';import {dayOf} from '../core/trackers.mjs';import {copyOldWorld} from '../core/world-copy.mjs';
 // Issue #386: the calendar made a booking mail into an event the owner organized, a collected
 // summary turned that into "with <owner>", and the brief said "you fly" about someone else's flight.
 const DAY=86400000,today=dayOf(new Date(),'UTC'),later=new Date(Date.now()+30*DAY).toISOString().slice(0,10);
 const write=(root,relative,text)=>{const file=path.join(root,relative);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,text);};
+const worldClaim=(store,name,text)=>{write(store.root,'world/claims/'+name,text);copyOldWorld(store);};
 const HEALTH='No fresh fictional health observations are available.';
 // A stand-in fact check that can only catch the wrong "you" from the records the brief hands it.
 const run=async(store,duringCheck=()=>{})=>{
@@ -31,7 +32,7 @@ test("someone else's trip in the owner's calendar is not told as the owner's, th
  store.save('contacts',{name:'Fictional Anna'});
  const trip=store.save('notes',{title:'Fictional Anna travel Lisbon '+today+' - '+later,content:'Fictional packing list.',created_at:new Date(Date.now()-2*DAY).toISOString()});
  const old=store.save('notes',{title:'Fictional trip 2020-01-01 - 2020-01-05',content:'Long over.',created_at:'2020-01-01T08:00:00Z'});
- write(store.root,'world/claims/anna-travel.md','---\nsubject: fictional-anna\nattribute: travel\nvalue: Lisbon\nvalid_from: '+today+'\nvalid_to: '+later+'\n---\nFictional Anna flies to Lisbon.\n');
+ worldClaim(store,'anna-travel.md','---\nsubject: fictional-anna\nattribute: travel\nvalue: Lisbon\nvalid_from: '+today+'\nvalid_to: '+later+'\n---\nFictional Anna flies to Lisbon.\n');
  write(store.root,'observations/calendar-today.md','10:25 to 05:30 Flight to Lisbon with Fictional Owner\n');
  const {saved,calls,writes}=await run(store),first=writes[0];
  assert.ok(first.context.workspace_sources.files.some(f=>f.path==='observations/calendar-today.md'));
@@ -59,8 +60,8 @@ test('a dated fact about a person or thing hidden from assistants reaches neithe
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-hidden-people-')));
  store.save('contacts',{name:'Fictional Hidden Bob',ai_visibility:'hidden'});
  store.save('entities',{name:'Fictional Secret Clinic',ai_visibility:'hidden'});
- write(store.root,'world/claims/bob-travel.md','---\nsubject: fictional-hidden-bob\nattribute: travel\nvalue: Rome\nvalid_from: '+today+'\nvalid_to: '+later+'\n---\nFictional Hidden Bob flies to Rome.\n');
- write(store.root,'world/claims/clinic-visit.md','---\nsubject: fictional-secret-clinic\nattribute: appointment\nvalue: Fictional therapy\nvalid_from: '+today+'\nvalid_to: '+later+'\n---\nFictional therapy session.\n');
+ worldClaim(store,'bob-travel.md','---\nsubject: fictional-hidden-bob\nattribute: travel\nvalue: Rome\nvalid_from: '+today+'\nvalid_to: '+later+'\n---\nFictional Hidden Bob flies to Rome.\n');
+ worldClaim(store,'clinic-visit.md','---\nsubject: fictional-secret-clinic\nattribute: appointment\nvalue: Fictional therapy\nvalid_from: '+today+'\nvalid_to: '+later+'\n---\nFictional therapy session.\n');
  write(store.root,'observations/calendar-today.md','10:25 Flight to Lisbon\n');
  const {evidence,calls}=await run(store);
  for(const call of calls)assert.doesNotMatch(JSON.stringify(call.context),/Rome|Fictional therapy|Hidden Bob|Secret Clinic/);
@@ -71,7 +72,7 @@ test('a people fact that changes while the brief is judged sends it back for a n
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-people-changed-')));
  store.save('contacts',{name:'Fictional Anna'});
  write(store.root,'observations/calendar-today.md','10:25 Flight to Lisbon\n');
- const changeOnce=input=>{if(input.check==='source-facts'&&!fs.existsSync(path.join(store.root,'world/claims/anna-travel.md')))write(store.root,'world/claims/anna-travel.md','---\nsubject: fictional-anna\nattribute: travel\nvalue: Lisbon\nvalid_from: '+today+'\nvalid_to: '+later+'\n---\nFictional Anna flies to Lisbon.\n');};
+ const changeOnce=input=>{if(input.check==='source-facts'&&!store.list('claims').length)worldClaim(store,'anna-travel.md','---\nsubject: fictional-anna\nattribute: travel\nvalue: Lisbon\nvalid_from: '+today+'\nvalid_to: '+later+'\n---\nFictional Anna flies to Lisbon.\n');};
  await assert.rejects(run(store,changeOnce),/Briefing sources changed during judgment/);
  assert.equal(store.list('notifications').length,0);
 });
@@ -79,7 +80,7 @@ test('a people fact that changes while the brief is judged sends it back for a n
 test('a fact check that keeps rejecting a people fact by its id still ends in a checked factual brief',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-people-rejected-')));
  store.save('contacts',{name:'Fictional Anna'});
- write(store.root,'world/claims/anna-travel.md','---\nsubject: fictional-anna\nattribute: travel\nvalue: Lisbon\nvalid_from: '+today+'\nvalid_to: '+later+'\n---\nFictional Anna flies to Lisbon.\n');
+ worldClaim(store,'anna-travel.md','---\nsubject: fictional-anna\nattribute: travel\nvalue: Lisbon\nvalid_from: '+today+'\nvalid_to: '+later+'\n---\nFictional Anna flies to Lisbon.\n');
  const query=new QueryService(store);let factId;
  const provider=async input=>{
   if(input.kind==='brief-verification'){

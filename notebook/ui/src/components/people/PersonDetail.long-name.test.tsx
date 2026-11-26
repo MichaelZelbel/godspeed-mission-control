@@ -13,7 +13,7 @@ vi.mock("@/integrations/supabase/client", () => {
 });
 const { auth } = vi.hoisted(() => ({ auth: { user: { id: "owner" }, session: { access_token: "t", user: { id: "owner" } } } }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => auth }));
-vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => true }));
+vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => true, usePanesTogether: () => false }));
 vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
 vi.mock("@/hooks/usePeople", () => {
   const mutation = () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false });
@@ -56,5 +56,23 @@ describe("a person page with a 200-character name", () => {
     expect(header.className).not.toContain("sm:sticky");
     // Pinned only when the window is wide and tall enough (a phone held sideways is short).
     expect(header.className).toContain("min-height:600px)]:sticky");
+  });
+
+  it("pins a compact bar with the name and the Edit and Merge actions on phones", async () => {
+    await heading(words);
+    const bar = screen.getByTestId("person-pinned-bar");
+    expect(bar.className).toMatch(/(^|\s)sticky/);
+    expect(bar.className).toContain("max-sm:flex");
+    expect(bar.className).toContain("[@media(max-height:599px)]:flex");
+    // The classes must generate CSS (a comma-joined media variant emitted nothing).
+    const postcss = (await import("postcss")).default;
+    const tailwind = (await import("tailwindcss")).default;
+    const cfg = (await import("../../../tailwind.config")).default;
+    const out = await postcss([tailwind({ ...cfg, content: [{ raw: bar.className }] })]).process("@tailwind utilities;", { from: undefined });
+    expect(out.css).toMatch(/max-sm\\:flex\s*\{\s*display:\s*flex/);
+    expect(out.css).toMatch(/max-height:\s*599px[\s\S]*display:\s*flex/);
+    expect(bar).toHaveTextContent(words.slice(0, 20));
+    expect(bar.querySelector('[aria-label="Edit person"]')).not.toBeNull();
+    expect(bar.querySelector('[aria-label="Merge person"]')).not.toBeNull();
   });
 });

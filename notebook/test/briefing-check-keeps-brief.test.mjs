@@ -82,7 +82,7 @@ test('when the source check refuses every sentence, the honest note is saved and
  const timer=setTimeout(()=>child.kill(),120000);
  const status=await new Promise(resolve=>child.on('close',resolve));clearTimeout(timer);
  assert.equal(status,0,stderr);
- assert.match(stdout,/^Your full morning briefing for \d{4}-\d{2}-\d{2} could not be written today, because the checks refused what was drafted\. A repair item has been opened for it\.\s+Next: open Submit the fictional reading plan and choose the first step to finish before 2027-01-15\.\s*$/);
+ assert.match(stdout,/^Your full morning briefing for \d{4}-\d{2}-\d{2} could not be written today, because the checks refused what was drafted\. A repair item has been opened for it\.\s+One of your saved goals is Read the fictional reading list\.\s+Next: open Submit the fictional reading plan and choose the first step to finish before 2027-01-15\.\s*$/);
  const fresh=new QueryService(new Store(root)),notes=briefs(fresh);
  assert.equal(notes.length,1);assert.equal(notes[0].fallback,true);assert.equal(notes[0].content.trim(),stdout.trim());
  assert.doesNotMatch(notes[0].content,/calendar|review the fictional reading list/i,'none of the refused draft claims reaches the fallback');

@@ -1,10 +1,11 @@
 import {NO_AI_CHAT,NO_AI_ANALYSIS,readReply,unreadableReply} from './no-ai.mjs';
 import {plainAIError,publishAIFunctions} from './ai-outcome.mjs';
 import {momentDraft} from './moment-draft.mjs';
+import {assertRealClaimDates} from './real-dates.mjs';
 import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
 import {startCharmJudgement} from './charm-judgement.mjs';
 import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
-import {savedBriefAnswer} from './briefing.mjs';
+import {savedBriefAnswer,missingBriefAnswer} from './briefing.mjs';
 import {NOTEBOOK_CHAT_FUNCTIONS} from './notebook-chat.mjs';
 
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
@@ -209,6 +210,7 @@ export class Domains {
     const fields=fieldList(this.store.root),given = input.attribute || slug(input.label).replaceAll('-', '_'),listed=!!given&&fields.listed(given);
     const attribute = listed?fields.canonical(given):given, value = String(input.value || '').trim();
     if (!attribute || !value) throw new Error('A fact needs a label and value');
+    assertRealClaimDates({attribute,value,valid_from:input.valid_from,valid_to:input.valid_to},name=>fields.canonical(name));
     if (factSuppressed(this.query,{subject_type,subject_id,attribute,value})) return { ok: true, facts: [{ attribute, outcome: 'suppressed', reason: 'Previously rejected by the user' }] };
     return this.store.withLock(() => {
       // The values of this fact: under this name and, for a listed kind, under
@@ -361,6 +363,11 @@ export class Domains {
         const reply=String(saved.content||'');
         await this.store.saveAsync('conversation_messages',{role:'assistant',content:reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'morning-brief'},undefined,{signal:input.signal});
         return {reply};
+      }
+      const missing=missingBriefAnswer(this.store,input.message);
+      if(missing){
+        await this.store.saveAsync('conversation_messages',{role:'assistant',content:missing,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'morning-brief-missing'},undefined,{signal:input.signal});
+        return {reply:missing};
       }
     }
     if(name==='conversation-chat'&&chatOf(input.conversation_id)&&!String(input.message||'').startsWith('/')){

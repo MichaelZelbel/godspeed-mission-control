@@ -51,7 +51,7 @@
 //     An opening whose idea file says "STATUS: dropped" (the person said no) or "STATUS: made" is
 //     skipped, though it stays in openings.md until its UNTIL; a missing idea file is still required.
 //   - nothing the person declined or postponed is proposed again (2026-11-11, #282): a move whose
-//     TOUCHES line names the subject of a hold claim in world/claims/ (holds.js says which) is a
+//     TOUCHES line names the subject of a hold claim in the notebook (holds.js says which) is a
 //     gap naming the claim; a carried APPLY step it holds gets a "HELD <id>" note and stays off
 //     today's card and out of the count. A move with no TOUCHES line is never held, and a NOTE says so.
 //
@@ -173,7 +173,7 @@ if (text === null) {
 const FIELDS = ['GOAL', 'WHERE', 'NOW', 'AFTER', 'WHO DID THIS', 'HOW IT LANDS', 'UNDO', 'PERMISSION'];
 // Read like the fields above, but required only for a goal whose research names its limit.
 const PARSED = [...FIELDS, 'AIMS AT', 'TOUCHES'];
-// What the person declined or postponed, live from world/claims (holds.js). Without holds.js beside
+// What the person declined or postponed, live from the notebook's claims (holds.js). Without holds.js beside
 // this program nothing is held; one that is there and fails says so, never a quiet "nothing held"
 // (mc-decide then ends the day not clean: a send-back could not mend it).
 const notes = [];

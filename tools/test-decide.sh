@@ -151,7 +151,7 @@ echo "-- a step the person postponed is held off the day, and comes back when it
 mkdir -p "$G/world/claims"
 printf -- '---\nsubject: the-book\nattribute: status\nvalue: beta\nvalid_from: 2026-09-01\n---\n' > "$G/world/claims/the-book--status--2026-09-01.md"
 printf -- '---\nsubject: the-book\nattribute: interview-stance\nvalue: not yet, only once the book is out of beta\nstance: postponed\nsteps: [interview]\nuntil: the-book--status--2026-09-01\nvalid_from: 2026-09-10\n---\n' > "$G/world/claims/the-book--interview-stance--2026-09-10.md"
-HOLD=world/claims/the-book--interview-stance--2026-09-10.md
+HOLD=the-book--interview-stance--2026-09-10
 GODSPEED_ROOT="$G" GODSPEED_TODAY="$D" "$NODE" "$HERE/work.js" file --id W-HELD-01 --what "Answer Podcast X's interview invitation about the book" --done-when "sent" --outward yes --key apply-answer-interview --source next-action >/dev/null
 fresh; PROMPTS="$TMP/prompts.txt"; rm -f "$PROMPTS"
 OUT="$(FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_PROMPTS="$PROMPTS" decide)"; RC=$?
@@ -218,13 +218,13 @@ printf "### 1. Answer Podcast X's interview invitation about the book\nTOUCHES: 
 GODSPEED_ROOT="$G" "$NODE" "$HERE/holds.js" strip --run "$NOCARD" --date "$D" --godspeed "$G" >/dev/null
 check "  a decision with no card gets one that says the step is held back" "$(sed -n '/^## For you today/,$p' "$NOCARD/decision.md")" "$(printf '## For you today\nHeld back: move 1 of moves.md is a step you postponed (%s); if this card names it in other words, it is not applied.' "$HOLD")"
 contains "  and the rest of it stays" "$(cat "$NOCARD/decision.md")" "$(printf '## Moves\nOne.')"
-mv "$G/world/claims" "$G/world/claims.away"; printf 'not a folder\n' > "$G/world/claims"
+mv "$G/notebook" "$G/notebook.away"; printf 'not a folder\n' > "$G/notebook"
 fresh; OUT="$(FAKE_MODE=holds FAKE_APPLY=W-HELD-01 decide)"; RC=$?
 check "  holds that cannot be read: the day ends NOT clean" "$RC" "1"
 contains "  and says why" "$OUT" "decided $D, but what the person declined or postponed could not be read"
 contains "  the run is told it cannot tell" "$(cat "$RUN/holds.txt")" "holds NOT read:"
 contains "  and the moves check says so" "$(GODSPEED_ROOT="$G" "$NODE" "$HERE/check-moves.js" --godspeed "$G" --date "$D" 2>&1)" "NOTE holds NOT read ("
-rm -f "$G/world/claims"; mv "$G/world/claims.away" "$G/world/claims"
+rm -f "$G/notebook"; mv "$G/notebook.away" "$G/notebook"
 D2=2026-10-11
 GODSPEED_ROOT="$G" "$NODE" "$HERE/holds.js" end the-book--status--2026-09-01 --words "the book is out of beta" --date "$D2" --godspeed "$G" >/dev/null
 OUT="$(D="$D2" RUN="$G/routines/next-action/$D2"; GODSPEED_RUNNER=claude FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_RUN="$RUN" FAKE_CALLS="$CALLS" bash "$HERE/mc-decide" --godspeed "$G" --date "$D2" --timeout 60 2>&1)"
@@ -248,7 +248,7 @@ contains "  a scheduled run (no --date) marks by today, as before" "$(grep W-HEL
 
 echo "-- a dry run for a day ahead lists Open work by that day, as its work.txt does (#432)"
 openwork() { printf '%s\n' "$1" | sed -n '/^Open work/,/^$/p' | grep W-HELD-01; }
-registry() { (cd "$G" && find goals forecasts work world -type f 2>/dev/null | LC_ALL=C sort | xargs -r sha256sum); }
+registry() { (cd "$G" && find goals forecasts work -type f 2>/dev/null | LC_ALL=C sort | xargs -r sha256sum); }
 fresh; BEFORE="$(registry)"
 OUT="$(dated 2026-10-12 --date 2026-10-12 --dry-run)"
 contains "  (the step is listed under Open work)" "$(openwork "$OUT")" "W-HELD-01"

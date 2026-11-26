@@ -6125,6 +6125,66 @@ refuses 'a clipped phone-width state label' notebook-assistant-journeys "$N/clip
 copy "$N/good" "$N/http-disagrees"; node -e 'let x=require(process.argv[1]);x.snapshots.find(v=>v.surface==="http-status"&&v.state==="connected").httpAgreement=false;require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/http-disagrees/ai-state-evidence.json"
 refuses 'direct HTTP and page state disagreement' notebook-assistant-journeys "$N/http-disagrees" 'incomplete or contradicts'
 
+# ======================================================= talk-preparation-installed
+talk_prep_good() {
+  local folder=$1
+  rm -rf "$folder"; mkdir -p "$folder"
+  printf 'Run a fictional 10k\n' >"$folder/goal.txt"
+  printf '1795514400\n' >"$folder/run-requested.txt"
+  printf '{"id":"job7","title":"Coaching talk preparation","last_run_at":null,"last_status":null,"last_error":null}\n' >"$folder/routine.json"
+  printf '{"started":true,"id":"job7"}\n' >"$folder/run-now.json"
+  printf '{"id":"job7","title":"Coaching talk preparation","last_run_at":"2026-11-24T10:00:30Z","last_status":"ok","last_error":null}\n' >"$folder/routine-after.json"
+  printf '{"coach-prep":{"at":"2026-11-24T10:00:30Z","failed":null}}\n' >"$folder/routine-status.json"
+  printf 'weekly-check-in 2026-11-25: prepared (coach/weekly-check-in/prep/2026-11-25.md)\n' >"$folder/summary.txt"
+  printf 'coach/weekly-check-in/prep/2026-11-25.md\n' >"$folder/prep-path.txt"
+  printf 'AREA: weekly-check-in\nTALK: 2026-11-25 18:00\nPREPARED: 2026-11-24T10:00:20Z\nSTATE: ready\n\n## The opening\nYour goal is to run a fictional 10k.\n' >"$folder/prep.md"
+  printf 'ready: coach/weekly-check-in/prep/2026-11-25.md\n' >"$folder/prep-check.txt"
+  printf 'Area weekly-check-in, preparation ready.\n' >"$folder/brief.txt"
+  printf 'started-by-this-route=none\nrunning-after=none\n' >"$folder/cleanup.txt"
+}
+section talk-preparation-installed
+T=$TMP/talk-preparation
+talk_prep_good "$T/good"
+passes 'a ready preparation written by the installed routine after a public Run now' talk-preparation-installed "$T/good" 'the coach'"'"'s own gate accepts'
+passes 'a re-judged folder without the AI key does not claim a leak scan' talk-preparation-installed "$T/good" 'was not scanned for it'
+GODSPEED_SCENARIO_AI_KEY=scenario-secret-never-retain passes 'a judged folder with the AI key claims the leak scan' talk-preparation-installed "$T/good" 'AI key is not in its evidence'
+copy "$T/good" "$T/no-run-now"; printf '{"error":"Choose an existing Hermes task"}\n' >"$T/no-run-now/run-now.json"
+refuses 'a Run now the notebook did not start' talk-preparation-installed "$T/no-run-now" 'did not answer Run now'
+copy "$T/good" "$T/other-routine"; printf '{"started":true,"id":"job9"}\n' >"$T/other-routine/run-now.json"
+refuses 'a Run now for another routine' talk-preparation-installed "$T/other-routine" 'did not answer Run now'
+copy "$T/good" "$T/other-record"; sed -i 's/"id":"job7"/"id":"job9"/' "$T/other-record/routine-after.json"
+refuses 'a run record that belongs to another routine' talk-preparation-installed "$T/other-record" 'another routine'
+copy "$T/good" "$T/old-run"; sed -i 's/2026-11-24T10:00:30Z/2026-11-01T10:00:30Z/' "$T/old-run/routine-after.json"
+refuses 'a run record from before Run now' talk-preparation-installed "$T/old-run" 'no run that began after'
+copy "$T/good" "$T/run-failed"; sed -i 's/"last_status":"ok"/"last_status":"error"/' "$T/run-failed/routine-after.json"
+refuses 'a run that ended in error' talk-preparation-installed "$T/run-failed" 'ended its run as "error"'
+copy "$T/good" "$T/status-failed"; printf '{"coach-prep":{"at":"2026-11-24T10:00:30Z","failed":"one talk could not be prepared ahead"}}\n' >"$T/status-failed/routine-status.json"
+refuses 'an assistant record that says the routine failed' talk-preparation-installed "$T/status-failed" 'coach-prep routine failed'
+copy "$T/good" "$T/no-prep"; : >"$T/no-prep/prep-path.txt"; : >"$T/no-prep/prep.md"
+refuses 'a run that wrote no preparation' talk-preparation-installed "$T/no-prep" 'wrote no coach'
+copy "$T/good" "$T/draft"; sed -i 's/^STATE: ready/STATE: draft/' "$T/draft/prep.md"
+refuses 'a preparation that stays a draft' talk-preparation-installed "$T/draft" 'is not ready'
+copy "$T/good" "$T/stale"; sed -i 's/^PREPARED: .*/PREPARED: 2026-10-01T10:00:00Z/' "$T/stale/prep.md"
+refuses 'a preparation dated before the run' talk-preparation-installed "$T/stale" 'not dated at the run'
+copy "$T/good" "$T/undated"; sed -i '/^PREPARED:/d' "$T/undated/prep.md"
+refuses 'a preparation with no date' talk-preparation-installed "$T/undated" 'not dated at the run'
+copy "$T/good" "$T/gate-refuses"; printf 'not ready: no opening\n' >"$T/gate-refuses/prep-check.txt"
+refuses 'a preparation the coach'"'"'s gate does not accept' talk-preparation-installed "$T/gate-refuses" 'own gate does not accept'
+copy "$T/good" "$T/unnamed"; printf 'nothing to prepare\n' >"$T/unnamed/summary.txt"
+refuses 'a summary that does not name the preparation' talk-preparation-installed "$T/unnamed" 'does not name the preparation'
+copy "$T/good" "$T/left-behind"; printf 'started-by-this-route=none\nrunning-after=1234\n' >"$T/left-behind/cleanup.txt"
+refuses 'a process left behind' talk-preparation-installed "$T/left-behind" 'left no process'
+copy "$T/good" "$T/no-status"; : >"$T/no-status/routine-status.json"
+refuses 'an assistant record with no entry for the routine' talk-preparation-installed "$T/no-status" 'no coach-prep entry'
+copy "$T/good" "$T/bad-title"; sed -i 's/Coaching talk preparation/Weekly review/' "$T/bad-title/routine.json"
+refuses 'a routine that is not the talk preparation' talk-preparation-installed "$T/bad-title" 'is not "Coaching talk preparation"'
+copy "$T/good" "$T/bad-path"; printf 'notes/2026-11-25.md\n' >"$T/bad-path/prep-path.txt"
+refuses 'a preparation outside coach/<area>/prep/' talk-preparation-installed "$T/bad-path" 'is not coach/<area>/prep/<day>.md'
+copy "$T/good" "$T/no-brief"; : >"$T/no-brief/brief.txt"
+refuses 'a coach that printed no brief' talk-preparation-installed "$T/no-brief" 'printed no brief'
+copy "$T/good" "$T/leak"; printf 'scenario-secret-never-retain\n' >"$T/leak/leak.txt"
+GODSPEED_SCENARIO_AI_KEY=scenario-secret-never-retain refuses 'an AI key in retained evidence' talk-preparation-installed "$T/leak" 'leaked into retained evidence'
+
 # ================================================================ the night's report
 # report-night.mjs opens, comments on and closes the issues of a failed night; its own tests stand a
 # fake GitHub in for the real one.

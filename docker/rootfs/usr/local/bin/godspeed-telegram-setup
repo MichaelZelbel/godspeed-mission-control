@@ -796,6 +796,10 @@ FALLBACK_CODEX = ["gpt-6-sol", "gpt-5.6-terra", "gpt-5.5", "gpt-5.4"]
 # Key providers that need more than a key (a local program, an endpoint, a cloud account).
 NOT_A_KEY_ALONE = {"lmstudio", "azure-foundry", "copilot", "custom", "commandcode-anthropic", "actual", "router"}
 PROOF_QUESTION = "Reply with the single word: ready"
+# The one-word answer needs a handful of tokens. Without a limit the request reserves the
+# model's whole output budget (65536 on OpenRouter), and a key with a modest credit limit
+# is refused with HTTP 402 although it can pay for the question.
+PROOF_MAX_TOKENS = "256"
 
 
 def more_brains():
@@ -849,7 +853,13 @@ def use_model(slug, model):
 
 def proof():
     """(True, "") when the assistant answers a question with the AI set up, else (False, why)."""
-    rc, out = run(HERMES + ["chat", "--oneshot", "-q", PROOF_QUESTION], timeout=180)
+    # The small budget is set for the question only and lifted again (0 = the model's own),
+    # so the assistant keeps its full answers afterwards.
+    run(HERMES + ["config", "set", "model.max_tokens", PROOF_MAX_TOKENS], timeout=60)
+    try:
+        rc, out = run(HERMES + ["chat", "--oneshot", "-q", PROOF_QUESTION], timeout=180)
+    finally:
+        run(HERMES + ["config", "set", "model.max_tokens", "0"], timeout=60)
     if rc == 0:
         return True, ""
     text = ANSI.sub("", out)

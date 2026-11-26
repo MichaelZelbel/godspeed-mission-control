@@ -3,7 +3,7 @@ import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
 import {CHAT_AVAILABILITIES} from '../../../../core/chat-availability.mjs';
 import {AI_CONNECTION_UNREADABLE_STATUS,AI_REFUSED_STATUS,AI_STALLED_STATUS,AI_UNREACHABLE_STATUS,NO_AI_STATUS,SETTINGS_ONLY_AI_HELP,SETTINGS_ONLY_AI_STATUS} from '../../../../core/no-ai.mjs';
-import {listenForChatOptions} from '@/local/chat-options.mjs';
+import {listenForChatOptions,MODEL_LIST_RETRY,MODEL_LIST_UNAVAILABLE,retryDelay,sharedFailureCount,sharedReadFailed,sharedReadSucceeded} from '@/local/chat-options.mjs';
 export type ChatAvailability=(typeof CHAT_AVAILABILITIES)[number];
 type ChatOptions={connected?:boolean;usable?:boolean;availability?:ChatAvailability};
 export type ChatAIState='checking'|ChatAvailability;
@@ -66,7 +66,11 @@ export function useChatCheckRunning(){
 }
 export function askChatCheck(){checkAsked=true;}
 
-export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}={}){
+/** One predicate for every surface: the shared read failed and no earlier state remains to show. */
+export function modelListUnavailable(options:{isError:boolean;data?:unknown}){return options.isError&&!options.data;}
+
+// readsAsChat: whether this surface counts as a chat that has used the shared state (#822); Settings only watches it.
+export function useChatOptions({confirmOnMount=false,readsAsChat=!confirmOnMount}:{confirmOnMount?:boolean;readsAsChat?:boolean}={}){
   const queryClient=useQueryClient();
   // A surface that arrives wants the AI confirmed afresh, not the warm state an open chat kept
   // (#822): when a chat has read the shared state since the last confirmation, its first read asks
@@ -78,7 +82,7 @@ export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}=
   // from that check, so reading each second costs no AI request and keeps a change inside about five
   // seconds of that check (#590).
   const options=useQuery<ChatOptions>({queryKey:['chat-options'],queryFn:async()=>{
-    if(!confirmOnMount)markChatRead();
+    if(readsAsChat)markChatRead();
     const asked=checkAsked;
     checkAsked=false;
     const check=asked||(confirm.current&&chatReadSinceConfirm());
@@ -95,10 +99,12 @@ export function useChatOptions({confirmOnMount=false}:{confirmOnMount?:boolean}=
           try{read=await chatOptions({check:true});clearChatRead();}catch{/* the plain read stands */}
         }
       }
+      // An open composer reads its model list on its own; it reads again when this read recovers.
+      if(sharedReadSucceeded()&&typeof window!=='undefined')window.dispatchEvent(new Event(CHAT_AVAILABILITY_CHANGED));
       return read;
-    }catch(error){confirm.current=check;throw error;}
+    }catch(error){confirm.current=check;sharedReadFailed();throw error;}
     finally{if(running)setCheckRunning(-1);}
-  },refetchInterval:1000,refetchIntervalInBackground:true});
+  },refetchInterval:query=>query.state.status==='error'?retryDelay(sharedFailureCount()):1000,refetchIntervalInBackground:true,retry:false});
   useEffect(()=>listenForChatOptions((next:ChatOptions)=>queryClient.setQueryData(['chat-options'],next)),[queryClient]);
   // A picker that just read a newer state asks the shared query to read it too (#667).
   useEffect(()=>{const refresh=()=>{void options.refetch();};window.addEventListener('chat-ai-options-changed',refresh);return()=>window.removeEventListener('chat-ai-options-changed',refresh);},[options.refetch]);
@@ -124,8 +130,9 @@ export function stateSaid(message?:string|null):ChatAIState|null{
 export function ChatConnectionEmptyState({ready,said}:{ready:React.ReactNode;said?:string|null}){
   const options=useChatOptions();
   const state=chatAIState(options.data);
-  if(state==='ready')return <>{ready}</>;
   const underConversation=ready===null;
+  if(!underConversation&&modelListUnavailable(options))return <div className="text-center text-muted-foreground text-sm py-8" role="alert" data-chat-ai-state="models-unavailable"><p className="font-semibold text-foreground">{MODEL_LIST_UNAVAILABLE}</p><p>{MODEL_LIST_RETRY}</p></div>;
+  if(state==='ready')return <>{ready}</>;
   // Under an open conversation the first read stays quiet; only a known state shows.
   if(state==='checking')return underConversation?null:<div className="text-center text-muted-foreground text-sm py-8" role="status">Checking AI connection…</div>;
   if(underConversation&&(state==='none'||stateSaid(said)===state))return null;

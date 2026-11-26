@@ -31,7 +31,7 @@ import { PeopleTree } from "@/components/people/PeopleTree";
 import { PersonDetail } from "@/components/people/PersonDetail";
 import { MergePersonDialog } from "@/components/people/MergePersonDialog";
 import { personLabel } from "@/components/timeline/people";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { usePanesTogether } from "@/hooks/use-mobile";
 import { useGroups, useCreateGroup, useUpdateGroup, useArchiveGroup, useRestoreGroup } from "@/hooks/useGroups";
 import { useAllMemberships, useAddMembership, useRemoveMembership } from "@/hooks/useGroupMemberships";
 import {
@@ -48,7 +48,9 @@ export default function People() {
   const { id: routePersonId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const isMobile = useIsMobile();
+  // A person beside the tree needs a wide window; below PANE_BREAKPOINT the person takes the whole
+  // pane, as on a phone, and the tree's back button leads back (#887).
+  const stacked = !usePanesTogether();
 
   // Selection is URL-driven so /dashboard/people/:id deep-links work and the
   // browser back button behaves. We never keep a separate copy that could
@@ -213,17 +215,18 @@ export default function People() {
   const deleteTarget = findPerson(deleteTargetId);
 
   // The pane fills main's content height where the floating chat button shows, defined in
-  // DashboardLayout.
+  // DashboardLayout. "relative" makes the pane the containing block of the details' visually hidden
+  // (absolutely positioned) labels, so its overflow clips them and the page itself cannot scroll past it (#1033).
   return (
-    <div className="flex h-[var(--page-h)] overflow-hidden">
+    <div className="relative flex h-[var(--page-h)] overflow-hidden">
       <SEOHead title="People - Godspeed Mission Control" noIndex />
 
       {/* Left panel - tree + search */}
       <div
         className={cn(
           "shrink-0 flex-col border-r border-border bg-background min-w-0",
-          isMobile ? "w-full" : "w-72",
-          isMobile && selectedPersonId ? "hidden" : "flex",
+          stacked ? "w-full" : "w-72",
+          stacked && selectedPersonId ? "hidden" : "flex",
         )}
       >
         <div className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-2">
@@ -304,7 +307,7 @@ export default function People() {
       </div>
 
       {/* Right panel - detail */}
-      <div className={cn("min-w-0 flex-1 flex-col", isMobile && !selectedPersonId ? "hidden" : "flex")}>
+      <div className={cn("min-w-0 flex-1 flex-col", stacked && !selectedPersonId ? "hidden" : "flex")}>
         {selectedPersonId && selectedQuery.isPending ? (
           <p role="status" className="p-8">Loading person...</p>
         ) : selectedPersonId && selectedQuery.isError ? (

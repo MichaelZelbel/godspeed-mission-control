@@ -6,10 +6,7 @@ import {fieldList} from './fields.mjs';
 import {rememberWhatYouSaidRoot} from './file-policy.mjs';
 import {sameValue as sameThing} from './same-thing.mjs';
 import {MACHINE_BANNER} from '../../tools/prompt-machine-openers.mjs';
-import {stringify as stringifyYaml} from './records/yaml.mjs';
-import {frontMatter} from './world-facts.mjs';
-import {setValidTo} from './fact-closing.mjs';
-import {DAILY_MEMORY_ORIGIN,dailyMemoryOwns,dailyMemorySubjectId,normalName as normal} from './memory-daily-identity.mjs';
+import {dailyMemorySubjectId,normalName as normal} from './memory-daily-identity.mjs';
 import {decodeDailyMemoryPlan,day as calendarDay,id as referenceId,name as planName} from './daily-memory-plan.mjs';
 
 export const ROUTINE_FOLDER=rememberWhatYouSaidRoot;
@@ -116,12 +113,9 @@ function newSubjects(items,target,terms,refusals){
  const seen=new Set;
  for(const item of items){const id=referenceId(item?.id);if(id&&safeName(item?.name,terms)&&!seen.has(id)){target.push({id,name:item.name.trim()});seen.add(id);}else refusals.push({reason:'private-or-invalid'});}
 }
-const slug=value=>normal(value).replace(/ /g,'-').slice(0,80)||'item';
-const worldSubjectId=subject=>subject.type==='self'?'me':(subject.type==='new-thing'?'thing-':'')+slug(subject.name);
-function currentFact(query,root,subject,kind,value,fields){
- if(!query){const expected=existingWorldEntity(root,subject)||worldSubjectId(subject);try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md')).some(name=>{const document=frontMatter(fs.readFileSync(path.join(root,'world','claims',name),'utf8')),item=document?.fields;if(!item)return false;return item.subject===expected&&fields.canonical(item.attribute)===fields.canonical(kind)&&!item.valid_to&&(String(item.value).toLowerCase()===String(value).toLowerCase()||sameThing(item.value,value));});}catch{return false;}}
+function currentFact(query,subject,kind,value,fields){
  const canonical=fields.canonical(kind);
- return query.rows('claims').some(f=>!f.valid_to&&f.subject_type===subject.type&&(f.subject_id||null)===(subject.id||null)&&fields.canonical(f.attribute)===canonical&&(String(f.value).toLowerCase()===String(value).toLowerCase()||sameThing(f.value,value)));
+ return !!query&&query.rows('claims').some(f=>!f.valid_to&&f.subject_type===subject.type&&(f.subject_id||null)===(subject.id||null)&&fields.canonical(f.attribute)===canonical&&(String(f.value).toLowerCase()===String(value).toLowerCase()||sameThing(f.value,value)));
 }
 function findRecord(query,table,name){return query.rows(table).find(r=>normal(r.name)===normal(name));}
 function notebookSubject(query,subject){
@@ -141,9 +135,8 @@ const sameNotebookEvent=(query,left,right)=>{
  const wanted=notebookParticipants(query,left.participants),have=notebookParticipants(query,right.participants);
  return have.length===wanted.length&&have.every((id,index)=>id===wanted[index]);
 };
-const sameEvent=(query,root,event)=>{
- if(!query){try{return fs.readdirSync(path.join(root,'world','events')).filter(n=>n.endsWith('.md')).some(name=>{const document=frontMatter(fs.readFileSync(path.join(root,'world','events',name),'utf8'));return document?.fields.date===event.day&&normal(document.body)===normal(event.what+'\n\n'+event.citation.quote);});}catch{return false;}}
- return query.rows('moments').some(m=>sameNotebookEvent(query,event,{day:String(m.happened_at||'').slice(0,10),what:m.title||m.description,participants:[...query.rows('moment_participants').filter(p=>p.moment_id===m.id).map(p=>({type:'contact',id:p.person_id||p.contact_id})).filter(p=>p.id),...query.rows('moment_entities').filter(p=>p.moment_id===m.id&&p.entity_id).map(p=>({type:'entity',id:p.entity_id}))]}));
+const sameEvent=(query,event)=>{
+ return !!query&&query.rows('moments').some(m=>sameNotebookEvent(query,event,{day:String(m.happened_at||'').slice(0,10),what:m.title||m.description,participants:[...query.rows('moment_participants').filter(p=>p.moment_id===m.id).map(p=>({type:'contact',id:p.person_id||p.contact_id})).filter(p=>p.id),...query.rows('moment_entities').filter(p=>p.moment_id===m.id&&p.entity_id).map(p=>({type:'entity',id:p.entity_id}))]}));
 };
 const sameFact=(subject,kind,value,fact)=>fact.type==='fact'&&fact.subject.type===subject.type&&(fact.subject.id||null)===(subject.id||null)&&fact.kind===kind&&(String(fact.value).toLowerCase()===String(value).toLowerCase()||sameThing(fact.value,value));
 const sameAcceptedEvent=(query,event,accepted,notebook)=>accepted.type==='event'&&(notebook?sameNotebookEvent(query,event,accepted):accepted.day===event.day&&normal(accepted.what)===normal(event.what));
@@ -159,39 +152,14 @@ export function validateResponse(answer,{messages,query,root,terms=[],deadlines=
  for(const item of facts){const citation=itemCitation(item,messages),subject=subjectReference(item?.subject,subjects);const kind=typeof item?.kind==='string'?item.kind.trim():'';const value=typeof item?.value==='string'?item.value.trim():'';const date=item?.date||citation?.day;
   if(!citation){refusals.push({reason:'quote',item});continue;}if(!subject){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!safeName(subject.name,responseTerms)||!kind||!value||!calendarDay(date)||privateMaterial([kind,value,citation.quote,...citationContext(citation,messages)],responseTerms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
   const fact={type:'fact',subject,kind:fields.canonical(kind),value,date,cardinality:item.one_or_many==='one'?'one':'many',confidence:item.confidence==='likely'?'likely':'certain',citation};
-  if(currentFact(query,root,subject,fact.kind,value,fields)||accepted.some(effect=>sameFact(subject,fact.kind,value,effect))){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(fact);
+  if(currentFact(query,subject,fact.kind,value,fields)||accepted.some(effect=>sameFact(subject,fact.kind,value,effect))){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(fact);
  }
  for(const item of events){const citation=itemCitation(item,messages),day=item?.day,what=typeof item?.what==='string'?item.what.trim():'',participantReferences=Array.isArray(item.participants)?item.participants:null,participants=participantReferences?.map(reference=>subjectReference(reference,subjects));if(!citation){refusals.push({reason:'quote',item});continue;}if(!participantReferences||participants.some(subject=>!subject)){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!what||!calendarDay(day)||privateMaterial([what,citation.quote,...participants.map(subject=>subject.name),...citationContext(citation,messages)],responseTerms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
   const requested=typeof item.deadline_id==='string'?item.deadline_id:null,deadline=deadlines.find(d=>d?.slug===requested),deadline_id=completionEvidence(deadline,item,citation,messages)?requested:null;if(requested&&!deadline){refusals.push({reason:'unknown-deadline',item,citation});continue;}if(requested&&!deadline_id){refusals.push({reason:'deadline-evidence',item,citation});continue;}
-  const event={type:'event',what,day,participants,citation,deadline_id};if(sameEvent(query,root,event)||accepted.some(effect=>sameAcceptedEvent(query,event,effect,!!query))){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(event);
+  const event={type:'event',what,day,participants,citation,deadline_id};if(sameEvent(query,event)||accepted.some(effect=>sameAcceptedEvent(query,event,effect,!!query))){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(event);
  }
  const used=new Set(accepted.flatMap(effect=>effect.type==='fact'?[effect.subject]:effect.participants).map(subject=>referenceKey(subject.type,subject.id||'')));
  return {plan:decodeDailyMemoryPlan({people:newPeople.filter(row=>used.has(referenceKey('new-person',row.id))),things:newThings.filter(row=>used.has(referenceKey('new-thing',row.id))),effects:accepted}),refusals};
-}
-const yamlScalar=value=>stringifyYaml({value}).trim().slice('value: '.length);
-function worldFile(file,fields,body){const front=Object.entries(fields).filter(([,v])=>v!==null&&v!==undefined&&v!=='').map(([key,value])=>Array.isArray(value)?key+': ['+value.map(yamlScalar).join(', ')+']':stringifyYaml({[key]:value}).trim()).join('\n');mkdir(file);atomic(file,'---\n'+front+'\n---\n'+(body||'')+'\n');}
-// The one rule that maps a named subject to a world entity: slug or file name,
-// then name or alias; `type` only keeps a person from matching a non-person.
-function existingWorldEntity(root,subject){
- if(subject.type==='self')return 'me';
- const id=worldSubjectId(subject),wantPerson=subject.type==='new-person'||subject.type==='contact',wanted=normal(subject.name);
- let names=[];try{names=fs.readdirSync(path.join(root,'world','entities')).filter(n=>n.endsWith('.md'));}catch{return null;}
- for(const file of names){const fields=frontMatter(fs.readFileSync(path.join(root,'world','entities',file),'utf8'))?.fields,slugName=fields?.slug||file.replace(/\.md$/,'');
-  if(slugName===id||file===id+'.md')return slugName;
-  if((!fields?.type||(fields.type==='person')===wantPerson)&&[fields?.name,...(Array.isArray(fields?.aliases)?fields.aliases:[])].some(n=>typeof n==='string'&&normal(n)===wanted))return slugName;}
- return null;
-}
-function ensureWorldSubject(root,subject,created){
- if(subject.type==='self')return 'me';const key=referenceKey(subject.type,subject.id),found=created.get(key);if(found)return found;
- const id=worldSubjectId(subject),existing=existingWorldEntity(root,subject);if(existing){created.set(key,existing);return existing;}
- worldFile(path.join(root,'world','entities',id+'.md'),{slug:id,origin:DAILY_MEMORY_ORIGIN,name:subject.name,type:subject.type==='new-person'?'person':'thing'},'');created.set(key,id);return id;
-}
-function writeWorld(root,plan){
- const created=new Map;for(const p of plan.people)ensureWorldSubject(root,{type:'new-person',id:p.id,name:p.name},created);for(const t of plan.things)ensureWorldSubject(root,{type:'new-thing',id:t.id,name:t.name},created);
- for(const effect of plan.effects){const index=hash([effect.citation.id,effect.type,effect.type==='fact'?[effect.subject.type,effect.subject.id,effect.kind,effect.value]:[effect.day,effect.what]]).slice(0,16);
-  if(effect.type==='fact'){const subject=ensureWorldSubject(root,effect.subject,created),file=path.join(root,'world','claims',subject+'--'+slug(effect.kind)+'--'+effect.date+'-'+index+'.md'),fields=fieldList(root);if(fields.one(effect.kind))for(const name of (()=>{try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md'));}catch{return [];}})()){const old=path.join(root,'world','claims',name),document=frontMatter(fs.readFileSync(old,'utf8')),front=document?.fields;if(!front)continue;if(front.subject===subject&&fields.canonical(front.attribute)===fields.canonical(effect.kind)&&dailyMemoryOwns(front)&&!front.valid_to&&front.value!==effect.value)setValidTo(old,effect.date);}worldFile(file,{subject,origin:DAILY_MEMORY_ORIGIN,attribute:effect.kind,value:effect.value,valid_from:effect.date,confidence:effect.confidence,source:'conversation_archive:'+effect.citation.id},effect.citation.quote);}
-  else worldFile(path.join(root,'world','events',effect.day+'-'+slug(effect.what)+'-'+index+'.md'),{date:effect.day,origin:DAILY_MEMORY_ORIGIN,participants:effect.participants.map(subject=>ensureWorldSubject(root,subject,created)),source:'conversation_archive:'+effect.citation.id},effect.what+'\n\n'+effect.citation.quote);
- }
 }
 function stateFile(root){return rootPath(root,'state.json');}
 function readState(root,now){const state=safeJson(stateFile(root),null);return state&&Array.isArray(state.consumed)?state:{version:1,not_before:dayOf(new Date(now.getTime()-6*86400000)),consumed:[]};}
@@ -223,7 +191,7 @@ async function rememberUnderLock({root,store,query,domains,model,due,now,terms,d
   if(!receipt){let valid=null;for(let attempt=0;attempt<3&&!valid;attempt++)try{const reply=await model(modelRequest({messages:piece.messages,query,root,terms,deadlines}));valid=validateResponse(reply?.text??reply,{messages:piece.messages,query,root,terms,deadlines});if(!valid.plan)valid=null;}catch{}
    const plan=valid?.plan;if(!plan){failed++;continue;}receipt={id:piece.id,message_ids:piece.messages.map(m=>m.id),plan,refusals:safeRefusals(valid.refusals,piece.messages,[...terms,...employerTerms(piece.messages)]),prepared_at:now.toISOString(),applied:false};const file=receiptFile(root,piece);mkdir(file);writeJson(file,receipt);}
   try{const plan=receipt.plan;if(!receipt.applied){for(const effect of plan.effects.filter(x=>x.type==='event'&&x.deadline_id)){const done=await due(effect.deadline_id,effect.citation.quote);if(done!==true)throw Error('deadline-refused');}
-    if(notebook)domains.writeDailyMemory(plan);else writeWorld(root,plan);receipt={...receipt,plan,applied:true};}
+    if(plan.effects.length){if(!notebook)throw Error('no-notebook');domains.writeDailyMemory(plan);}receipt={...receipt,plan,applied:true};}
    archiveReceipt(root,piece,receipt,now);newlyConsumed.push(...piece.messages.map(message=>message.id));completed++;
   }catch(error){failed++;if(String(error.message)==='deadline-refused'){deadlineRefused=true;break;}}
  }

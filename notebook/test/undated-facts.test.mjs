@@ -4,7 +4,7 @@ import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
 import {closeFacts} from '../core/fact-closing.mjs';
-import {frontMatter} from '../core/world-facts.mjs';
+import {copyOldWorld} from '../core/world-copy.mjs';
 
 // A fact filed without a "since when" has no known start (9 October 2026). A live run filed the
 // facts of a briefing ("Sam lives in Easton") with no date, and the notebook stored the filing day
@@ -17,7 +17,7 @@ import {frontMatter} from '../core/world-facts.mjs';
 const today=()=>new Date().toISOString().slice(0,10);
 const tmp=(t,prefix)=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),prefix));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;};
 const worldFile=(root,folder,name,fields,body='fixture')=>{const p=path.join(root,'world',folder,name);fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,['---',...Object.entries(fields).map(([k,v])=>k+': '+v),'---','',body,''].join('\n'));return p;};
-const meta=p=>frontMatter(fs.readFileSync(p,'utf8')).fields;
+const claimOf=(store,value)=>store.list('claims').find(c=>c.value===value&&!c.removed_at);
 const offline=t=>{const root=tmp(t,'godspeed-undated-');const store=new Store(root,{device:'local'}),query=new QueryService(store),domains=new Domains(query);store.save('settings',{id:'installation',owner:'local',timezone:'UTC'});return {root,store,query,domains};};
 const livesIn=(query,type='self',id=null)=>query.rows('claims').filter(c=>c.subject_type===type&&(c.subject_id||null)===id&&c.attribute==='lives-in'&&!c.removed_at);
 async function service(t){
@@ -71,27 +71,29 @@ test('an undated value filed after a dated one ends it on the day it was recorde
   // The same kind in a Mission Control world file, older and still open.
   fs.mkdirSync(path.join(root,'world','entities'),{recursive:true});
   worldFile(root,'entities','owner.md',{slug:'owner',name:'Fictional Owner',self:'true'});
-  const file=worldFile(root,'claims','owner--lives-in--2026-03-01.md',{subject:'owner',attribute:'lives-in',value:'Fictional Older Town',valid_from:'2026-03-01'});
+  worldFile(root,'claims','owner--lives-in--2026-03-01.md',{subject:'owner',attribute:'lives-in',value:'Fictional Older Town',valid_from:'2026-03-01'});
   const written=domains.writeFact({label:'Lives in',attribute:'lives-in',value:'Bristol'});
+  copyOldWorld(store);const file=claimOf(store,'Fictional Older Town');
   assert.equal(written.facts[0].closed,1);
   const [krefeld,bristol]=['Krefeld','Bristol'].map(v=>livesIn(query).find(c=>c.value===v));
   assert.equal(krefeld.valid_to,today(),'what it replaces ends on the day it was recorded');
   assert.equal(bristol.valid_from,null);assert.equal(bristol.recorded_on,today());
   const result=await closeFacts({store,query});
   assert.deepEqual(result.values.map(v=>[v.value,v.ends]),[['Fictional Older Town',today()]],'the older dated value in the other store ends, not the newer undated one');
-  assert.equal(meta(file).valid_to,today());
+  assert.equal(store.get('claims',file.id).valid_to,today());
   assert.deepEqual(livesIn(query).filter(c=>!c.valid_to).map(c=>c.value),['Bristol']);
 });
 
 test('two values with the same newest day stay as two answers, also when one of them has only its recording day',async t=>{
   const {root,store,query,domains}=offline(t);
   worldFile(root,'entities','owner.md',{slug:'owner',name:'Fictional Owner',self:'true'});
-  const file=worldFile(root,'claims','owner--lives-in--today.md',{subject:'owner',attribute:'lives-in',value:'Fictional File Town',valid_from:today()});
+  worldFile(root,'claims','owner--lives-in--today.md',{subject:'owner',attribute:'lives-in',value:'Fictional File Town',valid_from:today()});
   domains.writeFact({label:'Lives in',attribute:'lives-in',value:'Fictional Notebook Town'});
+  copyOldWorld(store);const file=claimOf(store,'Fictional File Town');
   const result=await closeFacts({store,query});
   assert.equal(result.values.length,0,'a tie is left to a person');
-  assert.equal(meta(file).valid_to,undefined);
-  assert.deepEqual(livesIn(query).filter(c=>!c.valid_to).map(c=>c.value),['Fictional Notebook Town']);
+  assert.equal(store.get('claims',file.id).valid_to??null,null);
+  assert.deepEqual(livesIn(query).filter(c=>!c.valid_to).map(c=>c.value).sort(),['Fictional File Town','Fictional Notebook Town']);
 });
 
 test('a many-at-a-time kind keeps every undated value, and an unlisted kind an assistant files keeps both',async t=>{

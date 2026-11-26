@@ -71,8 +71,8 @@ import {NoteProcessing} from '../core/processing.mjs';
 import {mediaObjectName,mediaFileName} from '../core/media-names.mjs';
 import {CARRY_LIMIT,carriedRoot,carryMedia,findMedia,keepMedia,keptHere,keptElsewhere,mediaPresence,missingHere,removeCarried} from '../core/media-store.mjs';
 import {retireShares} from '../core/shares.mjs';
-import {installFoodTable,foodTableWanted} from '../core/food-table.mjs';
 import {repairTimelineAtStart} from '../core/due-copy.mjs';
+import {takeInWorldAtStart} from '../core/world-retire.mjs';
 import {IdentityShelf} from '../core/identity-shelf.mjs';
 import {VERSION} from '../core/version.mjs';
 import {recordRunningNotebook} from '../core/running-notebook.mjs';
@@ -389,7 +389,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // The page's own form must carry its origin (same-origin), and the code in
       // its address still never goes to another site.
       if(route.startsWith('/login/')){
-        const code=route.slice(7),expiry=loginLinks.get(code),page=(status,{title,text,button,link})=>{res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'same-origin','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Godspeed Mission Control</title><style>body{font-family:system-ui,sans-serif;background:hsl(222 30% 8%);color:hsl(220 15% 90%);margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem;box-sizing:border-box;line-height:1.5}main{max-width:28rem;width:100%;padding:2rem;border-radius:.75rem;border:1px solid hsl(220 15% 90%/.2);background:hsl(222 30% 11%)}p.brand{margin:0 0 1rem;font-size:.85rem;opacity:.7}h1{font-size:1.3rem;margin:0 0 .75rem}p{margin:0 0 1.25rem}.go{display:inline-block;font-size:1.05rem;padding:.6rem 1.4rem;border:0;border-radius:.5rem;background:hsl(217 75% 58%);color:#fff;text-decoration:none;cursor:pointer}@media (prefers-color-scheme:light){body{background:hsl(216 43% 97%);color:hsl(225 62% 12%)}main{background:#fff;border-color:hsl(225 62% 12%/.2)}.go{background:hsl(220 70% 45%)}}</style><body><main><p class="brand">Godspeed Mission Control</p><h1>'+title+'</h1>'+(text?'<p>'+text+'</p>':'')+(button?'<form method="post"><button type="submit" class="go">Continue</button></form>':'')+(link?'<a class="go" href="'+link.href+'">'+link.label+'</a>':'')+'</main></body></html>');};
+        const code=route.slice(7),expiry=loginLinks.get(code),page=(status,{title,text,button,link})=>{res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'same-origin','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="'+(store.get('settings','ui-preferences')?.preferences?.theme==='light'?'light':'dark')+'"><title>Godspeed Mission Control</title><style>body{font-family:system-ui,sans-serif;background:hsl(222 30% 8%);color:hsl(220 15% 90%);margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem;box-sizing:border-box;line-height:1.5}main{max-width:28rem;width:100%;padding:2rem;border-radius:.75rem;border:1px solid hsl(220 15% 90%/.2);background:hsl(222 30% 11%)}p.brand{margin:0 0 1rem;font-size:.85rem;opacity:.7}h1{font-size:1.3rem;margin:0 0 .75rem}p{margin:0 0 1.25rem}.go{display:inline-block;font-size:1.05rem;padding:.6rem 1.4rem;border:0;border-radius:.5rem;background:hsl(217 75% 58%);color:#fff;text-decoration:none;cursor:pointer}'+(store.get('settings','ui-preferences')?.preferences?.theme==='light'?'body{background:hsl(216 43% 97%);color:hsl(225 62% 12%)}main{background:#fff;border-color:hsl(225 62% 12%/.2)}.go{background:hsl(220 70% 45%)}':'')+'</style><body><main><p class="brand">Godspeed Mission Control</p><h1>'+title+'</h1>'+(text?'<p>'+text+'</p>':'')+(button?'<form method="post"><button type="submit" class="go">Continue</button></form>':'')+(link?'<a class="go" href="'+link.href+'">'+link.label+'</a>':'')+'</main></body></html>');};
         if(!expiry||expiry<Date.now())return page(401,{title:'This sign-in link expired or was already used.',text:'Each sign-in link works once, for five minutes.',link:{href:'/dashboard',label:'Go to your notebook'}});
         if(req.method!=='POST')return page(200,{title:'Open your Godspeed Mission Control',button:true});
         loginLinks.delete(code);
@@ -929,6 +929,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   let firstQueryTraced=false;
   const listen = (server, port, host) => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   const server = http.createServer(handle(remote, auth));
+  // An older notebook gains its missing routines before the server answers, so Settings lists them at once.
+  try{await scheduler.ensureStartingJobs?.();}catch{}
   await listen(server, port, host);
   console.error(startupTrace('main-door-listening'));
   // The link an assistant gives when asked for the notebook (get_notebook_link), with the port this door really has.
@@ -937,7 +939,6 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // one-click image do not run install-native-notebook.sh) fetches it once, a minute after it starts,
   // in the background, checked against its pinned checksum. Never under the test runner, never with
   // GODSPEED_FOOD_TABLE=off; a failure is one line in the log and nothing else.
-  if (foodTableWanted(store.state)) { const foodTableTimer = setTimeout(() => { void installFoodTable(store.state).catch(error => console.error('Godspeed Mission Control: the food table was not downloaded: ' + error.message)); }, 60000); foodTableTimer.unref?.(); }
   // Deadlines finished before 2.0.0-beta.15 get their timeline status and scores when the notebook
   // starts after the update, not when the deadline copy next happens to run (core/due-copy.mjs,
   // repairTimelineAtStart; 2 November 2026). In the background, two seconds after the door opened,
@@ -952,7 +953,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     timelineRepairDone = resolve;
     timelineRepairTimer = setTimeout(() => {
       timelineRepairTimer = null;
-      resolve(repairTimelineAtStart(store, { signal: timelineRepairStop.signal }).then(report => {
+      resolve(repairTimelineAtStart(store, { signal: timelineRepairStop.signal }).then(async report => {
+        // The old world files (#90): taken into the records and retired, the same quiet way.
+        await takeInWorldAtStart(store, { signal: timelineRepairStop.signal }).catch(error => { if (!timelineRepairStop.signal.aborted) console.error('Godspeed Mission Control: the old world files were not taken into the notebook this time (the next start does it): ' + error.message); });
         if (report?.corrected?.length) console.log('Godspeed Mission Control: ' + report.corrected.length + ' finished deadline(s) now show their status and scores in the timeline.');
         return report;
       }).catch(error => {
@@ -988,7 +991,6 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const processingTimer=setInterval(()=>{if(!menerioImport.mutating)void processing.tick().catch(()=>{});},60000);processingTimer.unref?.();
   const backupSchedule=new BackupSchedule({store,runner:backupRunner,device}),backupTimer=setInterval(()=>{if(!menerioImport.mutating)void backupSchedule.tick().catch(()=>{});},600000);backupTimer.unref?.();
   const automaticTimer=setInterval(()=>{if(!menerioImport.mutating)void automaticUpdate.tick().catch(()=>{});},60000);automaticTimer.unref?.();
-  void scheduler.ensureStartingJobs?.().catch(()=>{});
   const factTimer=setInterval(()=>{if(!menerioImport.mutating)void factClosing.tick().catch(()=>{});},600000);factTimer.unref?.();
   // Finished journal tasks become moments (core/journal-moments.mjs).
   const journalMoments=new JournalMoments({store,query,device}),journalMomentsTimer=setInterval(()=>{if(!menerioImport.mutating)void journalMoments.tick().catch(()=>{});},60000);journalMomentsTimer.unref?.();

@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {createService} from '../server/main.mjs';
 import {queryTerms} from '../core/index/search.mjs';
+import {copyOldWorld} from '../core/world-copy.mjs';
 import {nativeAgent,homeHasModel} from '../core/native-agent.mjs';
 import {EventEmitter} from 'node:events';import {PassThrough} from 'node:stream';
 
@@ -35,6 +36,7 @@ async function setup(){
   file('entities','rik.md',{slug:'rik',name:'Fictional Rik',type:'real_person',menerio_id:lover.id});
   file('claims','rik--relationship-to-mei--2026-10-08.md',{subject:'rik',attribute:'relationship-to-mei',value:'lover',valid_from:'2026-10-08',origin:'godspeed'});
   file('claims','mei--hobbies--2026-08-01.md',{subject:'mei',attribute:'hobbies',value:'fictional pottery',valid_from:'2026-08-01',origin:'godspeed'});
+  copyOldWorld(s);
   s.save('notes',{title:'Names',content:'Full name of the fictional neighbour is Fictional Karl. His name day is in May.'});
   service.index.rebuild();
   return {service,call,wife,copy1,copy2,exes,girlfriend,lover,ex,hidden};
@@ -132,7 +134,7 @@ test('one fixed name per kind of fact: the newest value of a one-at-a-time fact 
     service.store.save('claims',{subject_type:'self',attribute:'city',value:'Fictional New Town',confidence:'likely',valid_from:'2026-09-30'});
     file('owner--hobby--2026-01-01.md',{subject:'owner',attribute:'hobby',value:'fictional chess',valid_from:'2026-01-01'});
     file('owner--hobbies--2026-09-01.md',{subject:'owner',attribute:'hobbies',value:'fictional go',valid_from:'2026-09-01'});
-    service.index.rebuild();
+    copyOldWorld(service.store);service.index.rebuild();
     const now=await call('get_claims',{subject_type:'self',attribute:'lives-in'});
     assert.deepEqual(now.claims.map(c=>c.value),['Fictional New Town'],'asked by its fixed name, the newest value under any name');
     assert.equal(now.claims[0].two_answers,undefined);
@@ -143,6 +145,7 @@ test('one fixed name per kind of fact: the newest value of a one-at-a-time fact 
       {name:'lives-in',one:true,aliases:['location','current-city','city']},{name:'age',one:true,aliases:['age']},
       {name:'hobbies',one:false,aliases:['hobby']}]}));
     file('owner--age--2026-09-11.md',{subject:'owner',attribute:'age',value:'55',valid_from:'2026-09-11'});
+    copyOldWorld(service.store);
     assert.deepEqual((await call('get_claims',{subject_type:'self',attribute:'age'})).claims.map(c=>c.value),['55'],'a listed kind is found by its names only, not inside app-usage');
     const hobbies=await call('get_claims',{subject_type:'self',attribute:'hobbies'});
     assert.deepEqual(hobbies.claims.map(c=>c.value).sort(),['fictional chess','fictional go'],'a many-at-a-time fact keeps every value');

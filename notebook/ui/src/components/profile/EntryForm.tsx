@@ -36,7 +36,7 @@ interface EntryFormProps {
   categorySlug: string | null;
   suggestedLabels?: string[];
   existingLabels?: string[];
-  onSave: (data: EntryFormData) => void;
+  onSave: (data: EntryFormData) => void | Promise<unknown>;
   onCancel: () => void;
 }
 
@@ -85,17 +85,28 @@ export function EntryForm({
     }
   }, [availableSuggestions.length]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resolvedLabel.trim() || !value.trim()) return;
+    if (saving || !resolvedLabel.trim() || !value.trim()) return;
     if (needsDate && !validFrom) return;
-    onSave({
+    setSaveError(null);
+    setSaving(true);
+    try {
+      await onSave({
       label: resolvedLabel.trim(),
       value: value.trim(),
       linked_note_id: noteId,
       category_slug: categorySlug,
       valid_from: needsDate ? validFrom : null,
-    });
+      });
+    } catch (error) {
+      setSaveError((error as Error)?.message || "The entry was not saved.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -192,6 +203,12 @@ export function EntryForm({
         </div>
       )}
 
+      {saveError && (
+        <p role="alert" className="text-xs text-destructive">
+          {saveError}
+        </p>
+      )}
+
       <div className="flex gap-2 justify-end">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           Cancel
@@ -199,7 +216,7 @@ export function EntryForm({
         <Button
           type="submit"
           size="sm"
-          disabled={!resolvedLabel.trim() || !value.trim() || (needsDate && !validFrom)}
+          disabled={saving || !resolvedLabel.trim() || !value.trim() || (needsDate && !validFrom)}
         >
           Save
         </Button>

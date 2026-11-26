@@ -37,7 +37,10 @@ if [ "$SKILL" = "work-result-review" ]; then
   cp "$PF" "$(dirname "$OUT")/review-prompt-seen.txt"
   case "${FAKE_REVIEW:-pass}" in
     fail) printf '%s\n' '{"passed":false,"reason":"the draft omits a required candidate","missing":["the third named candidate"]}' ;;
+    prose) printf 'I read the file. {not this} Verdict: {"passed":true,"reason":"%s","missing":[]} Done.\n' "$(head -c 700 /dev/zero | tr '\0' x)" ;;
+    proseno) printf 'The file lacks it: {"passed":false,"reason":"no third candidate","missing":[]}\n' ;;
     malformed) printf '%s\n' 'not json' ;;
+    malformedonce) if [ -e "$(dirname "$OUT")/review-asked" ]; then printf '%s\n' '{"passed":true,"reason":"meets DONE WHEN","missing":[]}'; else touch "$(dirname "$OUT")/review-asked"; echo 'not json'; fi ;;
     *) printf '%s\n' '{"passed":true,"reason":"the file meets every content requirement in DONE WHEN","missing":[]}' ;;
   esac > "$OUT"
   exit 0
@@ -50,7 +53,12 @@ case "${FAKE_MODE:-ok}" in
   exit1)    echo "boom" > "$OUT"; exit 1 ;;
   noresult) echo "I did things but never said so" > "$OUT"; exit 0 ;;
   failed)   echo "RESULT: FAILED: the shop needs a login this machine does not have" > "$OUT"; exit 0 ;;
-  short)    [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; echo "too short" > "$P"; }; echo "RESULT: wrote $P" > "$OUT"; exit 0 ;;
+  shortonce) if grep -q "did not verify" "$PF"; then
+              [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; { for i in $(seq 1 80); do printf 'word%s ' "$i"; done; echo; } > "$P"; }
+            else [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; echo "too short" > "$P"; }; fi
+            echo "RESULT: wrote $P" > "$OUT"; exit 0 ;;
+  short)    [ -n "${FAKE_BEFORE:-}" ] && printf '%s\n' "$FAKE_BEFORE" > "$(dirname "$OUT")/before.txt"
+            [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; echo "too short" > "$P"; }; echo "RESULT: wrote $P" > "$OUT"; exit 0 ;;
   repair)   KEPT="$KEEP$FAKE_FAULT"; mkdir -p "$(dirname "$KEPT")"; cp "$FAKE_FAULT" "$KEPT"
             if [ "${FAKE_FIX:-works}" = works ]; then printf 'upgrade: runs\n' > "$FAKE_FAULT"; else printf 'upgrade: still broken\n' > "$FAKE_FAULT"; fi
             echo "RESULT: put the fixed setting in place; it now says: $(cat "$FAKE_FAULT")" ;;
@@ -161,8 +169,8 @@ contains "an item another runner holds is not runnable and is not taken" "$OUT" 
 missing "  and the held one was left alone" "$OUT" "W-20260915-04 taken"
 contains "  its lease is still the other runner's" "$(cat "$TMP/work/W-20260915-04.md")" "LEASE: hermes-server until"
 
-# --- no check at all: attempted, for a person to verify ----------------------------------------------------------
-check "an item with no check stays attempted after the assistant's word" "$(status_of W-20260915-05)" "attempted"
+# --- no check at all: a Godspeed-owned file result is verified by its content review (#748) --------------------------
+check "an item with no check and a passing content review is verified" "$(status_of W-20260915-05)" "verified"
 
 # --- a finished piece with no sentence for the person is recorded, not announced ----------------------------------
 hw file --learn "Does housekeeping stay quiet?" --path research/quiet.md --check "$NODE $TMP/bin/check-written.js research/quiet.md --min-words 50" --key quiet --publish yes --source test >/dev/null
@@ -429,6 +437,52 @@ check "  the shape-only draft stays attempted" "$(status_of "$GAP")" "attempted"
 contains "  the missing requirement is named to the run" "$OUT" "the third named candidate"
 contains "  and retained on the card" "$(cat "$TMP/work/$GAP.md")" "UNVERIFIED content review"
 contains "  the reviewer read the exact result file" "$(cat "$TMP/routines/work/2026-09-15/$GAP/review-prompt-seen.txt")" "RESULT FILE: research/review-gap.md"
+
+# --- a refused draft is repaired once, in the same run (#1104) -------------------------------------------------
+hw file --what "Write the repair note" --done-when "research/repair-note.md has fifty words" --check "test \$(wc -w < research/repair-note.md) -ge 50" --key repair-once --source test >/dev/null
+RO="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="repair-once").id))')"
+OUT="$(FAKE_MODE=shortonce run --only "$RO" 2>&1)"
+check "a draft the check refuses is repaired in the same run" "$(status_of "$RO")" "verified"
+contains "  and the repair try was shown the refusal" "$(cat "$TMP/routines/work/2026-09-15/$RO/prompt-repair.txt")" "Your first answer did not verify"
+check "  and counts as one attempt" "$(grep -m1 '^ATTEMPTS:' "$TMP/work/$RO.md")" "ATTEMPTS: 1"
+hw file --what "Write the reviewed note" --done-when "research/reviewed-note.md exists" --check "test -s research/reviewed-note.md" --key review-once --source test >/dev/null
+RV="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="review-once").id))')"
+OUT="$(FAKE_REVIEW=malformedonce run --only "$RV" 2>&1)"
+check "a reviewer that answered in no valid shape is asked once more" "$(status_of "$RV")" "verified"
+missing "  without re-running the work" "$OUT" "one repair try"
+hw file --what "Write the prose-verdict note" --done-when "research/prose-note.md exists" --check "test -s research/prose-note.md" --key review-prose --source test >/dev/null
+RP="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="review-prose").id))')"
+FAKE_REVIEW=prose run --only "$RP" >/dev/null 2>&1
+check "a verdict said after some words, with a long reason, is still the reader's verdict" "$(status_of "$RP")" "verified"
+hw file --what "Write the refused prose note" --done-when "research/prose-no.md exists" --check "test -s research/prose-no.md" --key review-proseno --source test >/dev/null
+RN="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="review-proseno").id))')"
+FAKE_REVIEW=proseno run --only "$RN" >/dev/null 2>&1
+check "  and a refusing verdict said that way still refuses" "$(status_of "$RN")" "attempted"
+
+# a refusal is repaired only for a plain item: never an approved one, never one with no check (exit 1), never past the budget
+hw file --what "Write the approved note" --done-when "research/approved-note.md has fifty words" --check "test \$(wc -w < research/approved-note.md) -ge 50" --key approved-short --source test --outward yes >/dev/null
+AP="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="approved-short").id))')"
+hw unblock "$AP" --why "test" --approved-by "yes, do it" >/dev/null
+FAKE_MODE=short run --only "$AP" >/dev/null 2>&1
+check "an approved item the check refuses is not run a second time" "$([ -e "$TMP/routines/work/2026-09-15/$AP/prompt-repair.txt" ] && echo repaired || echo once)" "once"
+hw file --what "Write the standing note" --done-when "research/standing-note.md has fifty words" --goal five-friends --outward yes --may circle-replies --check "test \$(wc -w < research/standing-note.md) -ge 50" --goes-out 2026-09-15T18:00 --key standing-short --source test >/dev/null
+SS="$(grep -l 'KEY: standing-short$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+hw announce "$SS" >/dev/null 2>&1
+GODSPEED_NOW=2026-09-15T18:03:00.000Z FAKE_BEFORE="as it was" FAKE_MODE=short run --only "$SS" >/dev/null 2>&1
+check "the standing step ran and its check refused it" "$(status_of "$SS")" "attempted"
+check "a standing-permission step the check refuses is not run a second time" "$([ -e "$TMP/routines/work/2026-09-15/$SS/prompt-repair.txt" ] && echo repaired || echo once)" "once"
+hw file --what "Mend the short note" --done-when "research/repair-short.md has fifty words" --check "test \$(wc -w < research/repair-short.md) -ge 50" --kind repair --key repair-short --source test >/dev/null
+RS="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="repair-short").id))')"
+FAKE_MODE=short run --only "$RS" >/dev/null 2>&1
+check "a repair item the check refuses is not run a second time" "$([ -e "$TMP/routines/work/2026-09-15/$RS/prompt-repair.txt" ] && echo repaired || echo once)" "once"
+hw file --what "Decide the venue" --done-when "the venue is chosen and said in the answer" --key no-check-nofile --source test >/dev/null
+NC="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="no-check-nofile").id))')"
+FAKE_MODE=ok run --only "$NC" >/dev/null 2>&1
+check "an item with no check, no file and no evidence (exit 1) is not repaired" "$([ -e "$TMP/routines/work/2026-09-15/$NC/prompt-repair.txt" ] && echo repaired || echo once)" "once"
+hw file --what "Write the late note" --done-when "research/late-note.md has fifty words" --check "test \$(wc -w < research/late-note.md) -ge 50" --key late-short --source test >/dev/null
+LT="$(hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).find(x=>x.KEY==="late-short").id))')"
+FAKE_MODE=short run --only "$LT" --budget 0 >/dev/null 2>&1
+check "a refused item is not repaired once the budget is spent" "$([ -e "$TMP/routines/work/2026-09-15/$LT/prompt-repair.txt" ] && echo repaired || echo once)" "once"
 
 echo
 echo "$PASS passed, $FAIL failed"

@@ -1,10 +1,10 @@
 name: notebook-ui
 on:
   pull_request:
-    paths: ['notebook/ui/**', '.github/workflows/notebook-ui.yml']
+    paths: ['notebook/ui/**', 'notebook/test/**', '.github/workflows/notebook-ui.yml']
   push:
     branches: [main]
-    paths: ['notebook/ui/**', '.github/workflows/notebook-ui.yml']
+    paths: ['notebook/ui/**', 'notebook/test/**', '.github/workflows/notebook-ui.yml']
 permissions:
   contents: read
 jobs:

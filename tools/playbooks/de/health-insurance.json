@@ -1,0 +1,21 @@
+{
+  "id": "de-health-insurance",
+  "version": 1,
+  "pattern": 3,
+  "checked": "2026-11-12",
+  "recheck_days": 90,
+  "sources": [
+    { "url": null, "checked": "2026-11-12", "note": "Owner research in issue #379 (pattern 3): a higher extra contribution allows leaving until the end of the month in which it first applies; since 2026-07-30 insurers no longer have to tell members individually. No page was fetched for this file." }
+  ],
+  "dates": {
+    "special_right": { "event": "contribution-rise", "until": "end-of-month-of-effect" }
+  },
+  "grace_days": 45,
+  "route": "A higher extra contribution lets you leave until the end of the month in which it first applies. Apply to the new insurer, which handles the change with the old one.",
+  "services": [],
+  "person_does": [
+    "Choose the new insurer and check its extra contribution on its own site.",
+    "Sign the application and send it before the deadline.",
+    "Send your assistant the new insurer's confirmation."
+  ]
+}

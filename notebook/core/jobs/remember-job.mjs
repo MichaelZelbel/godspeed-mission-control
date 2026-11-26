@@ -7,7 +7,7 @@ import {assistantConfiguration} from '../running-notebook.mjs';
 const PROGRAM=fileURLToPath(new URL('../../scripts/memory-daily.mjs',import.meta.url));
 // The same program, in its own process, that the Hermes routine runs. With no AI connected it exits 0
 // having sent nothing. Its output is never put in the message: stderr may hold credentials.
-const hasAI=root=>{const {assistantFile,providerFile}=assistantConfiguration(root);return !!assistantFile||fs.existsSync(providerFile);};
+export const hasAI=root=>{const {assistantFile,providerFile}=assistantConfiguration(root);return !!assistantFile||fs.existsSync(providerFile);};
 export async function runRememberWhatYouSaid({store,run=runChild,connected=hasAI(store.root)}){
   if(!connected)throw new Error(NO_AI_CONNECT);
   let result;

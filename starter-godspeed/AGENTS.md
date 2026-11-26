@@ -231,9 +231,9 @@ short sentence that names the page. Follow my privacy rules for all of it.
 - **Beside the notebook, in this folder:** the cards in `goals/` (above) are
   shown under Settings, and `profile/about-me.md` stays in step with My Profile.
 - **Without the `notebook` tools**, on a computer where they are not
-  connected: people, facts and events go into `world/` as `world/README.md`
-  says, `mc-search <words>` searches this folder, and you tell me the
-  notebook was not reached.
+  connected: save nothing about people, facts or events,
+  `mc-search <words>` searches this folder, and tell me the notebook was
+  not reached.
 - **"Connect Gmail for me", "connect my email".** Follow
   `skills/connect-email/SKILL.md`. Never ask me for a password in a chat.
 

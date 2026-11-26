@@ -1,0 +1,23 @@
+{
+  "id": "de-car-insurance",
+  "version": 1,
+  "pattern": 2,
+  "checked": "2026-11-12",
+  "recheck_days": 180,
+  "sources": [
+    { "url": null, "checked": "2026-11-12", "note": "Owner research in issue #379 (patterns 2 and 3): most contracts can be cancelled by 30 November; after a higher bill the special right runs four weeks. No page was fetched for this file." }
+  ],
+  "dates": {
+    "window_opens": "11-01",
+    "window_deadline": "11-30",
+    "special_right": { "event": "price-rise", "days_after_event": 28 }
+  },
+  "grace_days": 45,
+  "route": "Compare on a comparison portal each autumn and finish the new contract there before the cancellation deadline; the new insurer handles the cancellation. After a higher bill the special right lets you leave within four weeks of it.",
+  "services": [],
+  "person_does": [
+    "Open a comparison portal and enter the facts from the prepared page (no-claims class, mileage, car).",
+    "Choose the new contract, confirm it and sign on the portal or the insurer's page.",
+    "Send your assistant the new insurer's confirmation."
+  ]
+}

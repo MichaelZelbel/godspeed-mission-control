@@ -276,7 +276,7 @@ function standing(goal) {
 function goalMay(goal) { const st = standing(goal); return st ? st.lines : null; }
 
 // ---------------------------------------------------------------------------
-// holds: a step the person declined or postponed (#282), read live from world/claims through
+// holds: a step the person declined or postponed (#282), read live from the notebook's claims through
 // holds.js, so it lifts by itself when its claim ends. A card names what it touches in TOUCHES;
 // one without it is never held. Without holds.js beside this program nothing is held; one that is
 // there and fails stops the command, because "could not tell" must never read as "not held".
@@ -557,7 +557,7 @@ cmds.file = (a) => {
   if (!done) die('--done-when is required: what a reader will see when this is done, so it can be verified by someone who is not the runner');
   const touches = a.touches === undefined || a.touches === 'true' ? [] : (holdsLib() || die('--touches needs holds.js beside this program')).touchTokens(a.touches);
   const badSlug = touches.find(t => !holdsLib().SLUG.test(t));
-  if (badSlug) die(`--touches names world entities by their slugs (world/entities/<slug>.md), comma-separated; "${badSlug}" is not one`);
+  if (badSlug) die(`--touches names the notebook's people and things by their slugs, comma-separated; "${badSlug}" is not one`);
   const key = oneLine(a.key || what.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 80));
   const dup = S.all().find(c => c.f.KEY === key && OPEN.includes(c.f.STATUS));
   if (dup) { say(`${dup.id}: already on the register with this key (${dup.f.STATUS}); nothing filed twice`); return; }
@@ -713,7 +713,7 @@ cmds.verify = (a) => {
   const d = a.date || today();
   const ev = oneLine(a.evidence);
   const resultFile = fileNamed(c.f['DONE WHEN']);
-  const needsContentReview = c.f.OWNER === 'godspeed' && !!resultFile && !ev;
+  const needsContentReview = c.f.OWNER === 'godspeed' && !!resultFile;
   const reviewPath = a['content-review'] === true ? '' : oneLine(a['content-review']);
   const contentReview = () => {
     if (!reviewPath) return { passed: false, reason: 'the independent content review is missing', missing: ['a review of the result against DONE WHEN'] };
@@ -756,6 +756,20 @@ cmds.verify = (a) => {
       say(`${c.id}: the runner said done, the check says not; stays attempted`);
       process.exit(2);
     }
+  }
+  if (needsContentReview) {
+    const review = contentReview();
+    if (!review.passed) {
+      L.logLine(c, d, 'UNVERIFIED', `content review required: ${review.reason}; missing: ${review.missing.join('; ')}`);
+      S.write(c);
+      say(`${c.id}: a Godspeed-owned file result needs the content review against DONE WHEN (--content-review <json-file>); evidence alone does not verify it: ${review.missing.join('; ')}; stays ${c.f.STATUS}`);
+      process.exit(2);
+    }
+    c.f.STATUS = 'verified'; c.f.LEASE = '';
+    L.logLine(c, d, 'VERIFIED', `content review passed: ${review.reason}` + (ev ? `; ${ev}` : ''));
+    S.write(c);
+    say(`${c.id}: verified by content review`);
+    return;
   }
   if (!ev) die(`${c.id} has ${c.f.CHECK ? 'a failing check' : 'no check'}; verify with --evidence "<what a person observed, where>" or add a CHECK`);
   if (c.f.OWNER === 'godspeed' && !c.f.CHECK && !/\b(saw|read|opened|screenshot|observed|https?:)/i.test(ev)) die('evidence for mc-owned work names what was observed or a link; "done" is not evidence');
@@ -1037,7 +1051,7 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
   file --what "..." --done-when "..." [--key K] [--goal G] [--card C] [--check "<shell, exit 0 when done>"]
        [--owner godspeed|person|company:<slug>] [--needs none|person|authorization|capability:<x>] [--outward yes|no]
        [--max-attempts 3] [--stale-after 7] [--source "..."]       a second file with the same open KEY files nothing
-       [--touches "<slug>, <slug>"]     the world entities it is about (world/entities/<slug>.md): a step the person
+       [--touches "<slug>, <slug>"]     the people and things it is about (their slugs): a step the person
                                         declined or postponed on one of them (mc-holds) is held: listed as held,
                                         never taken, unblocked, announced or going out until that claim ends
        [--kind do|learn|repair]         a learn item is a question; its DONE WHEN must name a file the answer is written in.
@@ -1080,7 +1094,7 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
   attempt <id> --runner <name> --ok --result "..." | --failed "why"   failed: retry in 1, 2, 4 days, never outward
   verify <id> [--content-review <json-file> | --evidence "..."]
                                      runs CHECK; a Godspeed-owned file result also needs an independent
-                                     content review against DONE WHEN; person-observed evidence stays available
+                                     content review against DONE WHEN; person-observed evidence alone verifies only results that are not Godspeed-owned files
   block <id> --needs ... | unblock <id> --why ... [--approved-by "..."] | cancel <id> --why ...
   sweep --card <id> --reason "..."   your answer on a card cancels the work under it (or --stale)
   sweep --goal <id> [--cancel|--stale] --reason "..."   a goal changed; its work is re-planned

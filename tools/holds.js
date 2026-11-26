@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 //
-// holds.js - the steps the person declined or postponed, read from the world's claims, so a
+// holds.js - the steps the person declined or postponed, read from the notebook's claims, so a
 // proposal they already answered is not put in front of them again. Type it as `mc-holds`.
 //
 // WHY THIS EXISTS (#282, 2026-11-11). The person said "not yet, only once the book is out of beta"
@@ -12,77 +12,52 @@
 // proposals a current claim holds. Nothing "held" is stored anywhere, so a hold lifts by itself the
 // day its claim or its condition ends.
 //
-// A HOLD CLAIM is a world claim (world/claims/*.md, world/README.md) with
+// A HOLD CLAIM is a claim record of the notebook (Facts/, docs/full-version/file-format.md) with
 //   stance: declined | postponed
 //   steps: [interview, ...]   optional: the kinds of step it holds; without it, every step
-//   until: <claim file>       optional, postponed only: it holds while that claim is current
+//   until: <claim>            optional, postponed only: it holds while that claim is current
 //   valid_to: YYYY-MM-DD      optional: it holds through the day before
-// A PROPOSAL names the world entities it touches (a move's TOUCHES line, a work card's TOUCHES
+// Until the old world/claims/ files were taken into the notebook (#90) a hold was a file there; the
+// notebook takes in what an older version still writes (notebook/core/world-copy.mjs).
+// A PROPOSAL names the notebook's people and things it touches (a move's TOUCHES line, a work card's TOUCHES
 // field). It is held when it touches the claim's subject and, if the claim names steps, one of
 // them begins a word of the proposal's own line (a move's heading, a card's WHAT). A proposal that
 // touches nothing is never held.
 //
 // A CLAIM IS CURRENT on day D when its valid_from is empty or at most D and its valid_to is empty
 // or after D, and no newer claim replaces it: one with the same subject and attribute whose
-// valid_from is later than its own and at most D (the way world/README.md says a fact changes).
-// An `until` claim that is not in world/claims/ keeps the hold, and `list` says so: silently
+// valid_from is later than its own and at most D (the way a fact changes).
+// An `until` claim the notebook does not have keeps the hold, and `list` says so: silently
 // asking again is the failure this exists to stop.
 //
 //   mc-holds list [--date D] [--json]
 //   mc-holds hold --subject <slug> --stance declined|postponed --words "<their words>"
-//                 [--steps "<word>, <word>"] [--until <claim file>] [--to YYYY-MM-DD] [--attribute A] [--date D]
-//   mc-holds end <claim file> --words "<their words>" [--date D]
+//                 [--steps "<word>, <word>"] [--until <claim>] [--to YYYY-MM-DD] [--attribute A] [--date D]
+//   mc-holds end <claim> --words "<their words>" [--date D]
 //   mc-holds strip --run <run folder> [--date D]     mc-decide's: takes held moves out of moves.md
 
 const fs = require('fs');
 const path = require('path');
 const L = require(path.join(__dirname, 'mc-cards.js'));
+const { notebookCore } = require(path.join(__dirname, 'notebook-core.js'));
 
 const STANCES = ['declined', 'postponed'];
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
-const CLAIMS = path.join('world', 'claims');
-
-// world/ files are YAML front matter of `key: value` lines, a list as `[a, b]`, then free text.
-// The same reading as notebook/core/world-facts.mjs frontMatter, which this CommonJS file cannot load.
-function scalar(value) {
-  const v = value.trim();
-  if (/^".*"$/.test(v)) { try { return JSON.parse(v); } catch (e) { return v.slice(1, -1); } }
-  if (/^'.*'$/.test(v)) return v.slice(1, -1).replace(/''/g, "'");
-  return v === 'null' || v === '~' ? '' : v;
-}
-function frontMatter(text) {
-  const m = /^﻿?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n([\s\S]*))?$/.exec(String(text));
-  if (!m) return null;
-  const fields = {};
-  for (const line of m[1].split(/\r?\n/)) {
-    const kv = /^([A-Za-z_][\w-]*):[ \t]*(.*)$/.exec(line);
-    if (!kv) continue;
-    const raw = kv[2].trim();
-    fields[kv[1]] = /^\[.*\]$/.test(raw) ? raw.slice(1, -1).split(',').map(scalar).filter(Boolean) : scalar(raw);
-  }
-  return { fields, body: (m[2] || '').trim() };
-}
 
 const text = (v) => (Array.isArray(v) ? v.join(', ') : String(v == null ? '' : v)).trim();
 const day = (v) => { const s = text(v); return L.isoDate(s) ? s : ''; };
-const claimName = (s) => path.basename(String(s || '').trim()).replace(/\.md$/, '');
 const sameAttribute = (a, b) => text(a).toLowerCase().replace(/[-_\s]+/g, '-') === text(b).toLowerCase().replace(/[-_\s]+/g, '-');
 
-function readClaims(root) {
-  const dir = path.join(root, CLAIMS);
-  let names;
-  try { names = fs.readdirSync(dir).filter(n => n.endsWith('.md') && n !== 'README.md').sort(); } catch (e) {
-    if (e.code === 'ENOENT') return { claims: [], unread: [] };
-    throw e;
-  }
-  const claims = [], unread = [];
-  for (const file of names) {
-    const parsed = frontMatter(L.readText(path.join(dir, file)));
-    if (parsed) claims.push({ name: file.replace(/\.md$/, ''), id: `world/claims/${file}`, f: parsed.fields, body: parsed.body });
-    else unread.push(`world/claims/${file}: no front matter, so whether it holds anything cannot be told`);
-  }
-  return { claims, unread };
+// The notebook's claims and the code that reads them. A copy of this program with no notebook
+// beside it cannot know what is held, and says so rather than reading "nothing is held".
+function world(root, given = null) {
+  const dir = notebookCore(root, 'world-records.mjs');
+  if (!dir) throw new Error('I could not find the notebook that keeps your claims, so I did not read or change anything. Run this through your mission control (godspeed ...).');
+  const records = require(path.join(dir, 'world-records.mjs'));
+  return { records, store: records.openWorld(root, given) };
 }
+// Every live claim, as { name, id, uid, f } where f has the fields the rules below read.
+const readClaims = (records, store) => records.claimRows(store).map(c => ({ name: c.name, id: c.name, uid: c.uid, f: c }));
 
 const started = (c, date) => !day(c.f.valid_from) || day(c.f.valid_from) <= date;
 const closed = (c, date) => !!day(c.f.valid_to) && day(c.f.valid_to) <= date;
@@ -94,33 +69,36 @@ function replacedBy(c, all, date) {
 const current = (c, all, date) => started(c, date) && !closed(c, date) && !replacedBy(c, all, date);
 
 // Every hold that is in force on `date`, { id, name, subject, stance, steps, value, until, waiting },
-// and `skipped`: one line for each claim file that may be a hold but cannot be read as one.
+// and `skipped`: one line for each claim that may be a hold but cannot be read as one.
 // `waiting` says what the condition claim is: 'current', 'missing', or '' when there is none.
-// A claim file that cannot be read throws: "could not tell" must never read as "nothing is held".
-function readHolds(root, date) {
-  const { claims: all, unread } = readClaims(root);
-  const byName = new Map(all.map(c => [c.name, c]));
-  const holds = [], skipped = [...unread];
+// A notebook that cannot be read throws: "could not tell" must never read as "nothing is held".
+function readHolds(root, date, store = null) {
+  const { records, store: opened } = world(root, store);
+  store = opened;
+  const all = readClaims(records, store);
+  const byRef = new Map(all.flatMap(c => [[c.uid, c], [c.name, c]]));
+  const holds = [], skipped = [];
   for (const c of all) {
     const stance = text(c.f.stance).toLowerCase();
     if (!STANCES.includes(stance) || !current(c, all, date)) continue;
     if (!SLUG.test(text(c.f.subject))) {
-      skipped.push(`${c.id}: stance ${stance}, but its subject "${text(c.f.subject)}" is not the slug of a world entity, so it holds nothing`);
+      skipped.push(`${c.id}: stance ${stance}, but its subject "${text(c.f.subject)}" is not the slug of a person or thing, so it holds nothing`);
       continue;
     }
-    const until = stance === 'postponed' && text(c.f.until) ? claimName(c.f.until) : '';
-    let waiting = '';
-    if (until) {
-      const cond = byName.get(until);
+    const wanted = stance === 'postponed' ? text(c.f.until) : '';
+    let waiting = '', until = '';
+    if (wanted) {
+      const cond = byRef.get(wanted);
       if (cond && (closed(cond, date) || replacedBy(cond, all, date))) continue;
       waiting = cond ? 'current' : 'missing';
+      until = cond ? cond.name : text(c.f.untilName) || wanted;
     }
     const steps = (Array.isArray(c.f.steps) ? c.f.steps : text(c.f.steps).split(',')).map(s => text(s).toLowerCase()).filter(Boolean);
     holds.push({ id: c.id, name: c.name, subject: text(c.f.subject), stance, steps, value: text(c.f.value), until, waiting });
   }
   return { holds, skipped };
 }
-const currentHolds = (root, date) => readHolds(root, date).holds;
+const currentHolds = (root, date, store = null) => readHolds(root, date, store).holds;
 
 // The words of a TOUCHES line or field, as written; "none" and empty name nothing. mc-work file
 // refuses one that is not a SLUG, and matching reads them lower-cased (parseTouches).
@@ -149,7 +127,7 @@ function describe(h) {
   return `${h.id} (${h.stance}, "${h.value}")`;
 }
 function condition(h) {
-  return !h.until ? '' : h.waiting === 'missing' ? `until ${h.until}, which is not in world/claims (it holds until that is fixed)`
+  return !h.until ? '' : h.waiting === 'missing' ? `until ${h.until}, which the notebook does not have (it holds until that is fixed)`
     : `until ${h.until}: still current`;
 }
 
@@ -178,55 +156,40 @@ cmds.list = (a) => {
 cmds.hold = (a) => {
   const root = ROOT_OF(a), d = DATE_OF(a);
   const subject = L.oneLine(a.subject);
-  if (!SLUG.test(subject)) L.die('--subject is the slug of a world entity (world/entities/<slug>.md): lower-case letters, digits and dashes');
+  if (!SLUG.test(subject)) L.die('--subject is the slug of a person or thing in the notebook: lower-case letters, digits and dashes');
   const stance = L.oneLine(a.stance);
   if (!STANCES.includes(stance)) L.die('--stance is declined or postponed');
   const said = words(a);
   if (!said) L.die('--words is required: what the person said, as they said it');
   const steps = a.steps && a.steps !== 'true' ? parseTouches(a.steps) : [];
-  let until = '';
+  const { records, store } = world(root);
+  let until = '', untilName = '';
   if (a.until !== undefined) {
     if (stance !== 'postponed') L.die('--until is for a postponement; a step declined stays declined until you end it');
-    until = claimName(a.until === 'true' ? '' : a.until);
-    if (!until || !fs.existsSync(path.join(root, CLAIMS, until + '.md'))) L.die(`--until names no claim in world/claims/ (${until || 'nothing'}); write the claim it waits on first, or use --to <date>`);
+    untilName = a.until === 'true' ? '' : L.oneLine(a.until);
+    const cond = records.claimRows(store).find(c => c.name === untilName || c.id === untilName || c.uid === untilName);
+    if (!untilName || !cond) L.die(`--until names no claim in the notebook (${untilName || 'nothing'}); write the claim it waits on first, or use --to <date>`);
+    until = cond.uid; untilName = cond.name;
   }
   const to = a.to === undefined ? '' : String(a.to);
   if (a.to !== undefined && (!L.isoDate(to) || to <= d)) L.die('--to is a day after today, YYYY-MM-DD: the hold lifts on that day');
   const attribute = L.oneLine(a.attribute || (steps.length ? `${steps[0]}-stance` : 'proposals-stance')).toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  const dir = path.join(root, CLAIMS);
-  fs.mkdirSync(dir, { recursive: true });
-  let name = `${subject}--${attribute}--${d}`;
-  for (let n = 2; fs.existsSync(path.join(dir, name + '.md')); n++) name = `${subject}--${attribute}--${d}-${n}`;
-  const lines = ['---', `subject: ${subject}`, 'origin: mission control', `attribute: ${attribute}`, `value: ${yamlValue(said)}`,
-    `stance: ${stance}`];
-  if (steps.length) lines.push(`steps: [${steps.join(', ')}]`);
-  if (until) lines.push(`until: ${until}`);
-  lines.push(`valid_from: ${d}`);
-  if (to) lines.push(`valid_to: ${to}`);
-  lines.push('confidence: certain', `source: your words, ${d}`, '---', JSON.stringify(said), '');
-  fs.writeFileSync(path.join(dir, name + '.md'), lines.join('\n'), 'utf8');
-  L.say(`world/claims/${name}.md: ${stance}${steps.length ? ' ' + steps.join(', ') : ''} touching ${subject}`
-    + (until ? `, until ${until} ends` : to ? `, until ${to}` : ''));
+  const { name } = records.writeHold(store, { subject, stance, words: said, steps, until, untilName, to, attribute, day: d });
+  L.say(`${name}: ${stance}${steps.length ? ' ' + steps.join(', ') : ''} touching ${subject}`
+    + (until ? `, until ${untilName} ends` : to ? `, until ${to}` : ''));
 };
 
 cmds.end = (a) => {
   const root = ROOT_OF(a), d = DATE_OF(a);
-  const name = claimName(a._[0] || L.die('usage: mc-holds end <claim file> --words "<their words>"'));
-  const file = path.join(root, CLAIMS, name + '.md');
-  if (!fs.existsSync(file)) L.die(`no claim world/claims/${name}.md`);
+  const name = L.oneLine(a._[0] || L.die('usage: mc-holds end <claim> --words "<their words>"'));
   const said = words(a);
   if (!said) L.die('--words is required: what the person said, as they said it');
-  const raw = L.readText(file);
-  const parsed = frontMatter(raw);
-  if (!parsed) L.die(`world/claims/${name}.md has no front matter to close`);
-  if (text(parsed.fields.origin).toLowerCase() === 'menerio') L.die(`world/claims/${name}.md came from Menerio; fix it in the notebook`);
-  if (closed({ f: parsed.fields }, d)) L.die(`world/claims/${name}.md already ended on ${day(parsed.fields.valid_to)}`);
-  const head = raw.match(/^﻿?---\n[\s\S]*?\n---/)[0];
-  const rest = raw.slice(head.length).replace(/^[ \t]*\n?/, '');
-  const newHead = /^valid_to:.*$/m.test(head) ? head.replace(/^valid_to:.*$/m, `valid_to: ${d}`) : head.replace(/\n---$/, `\nvalid_to: ${d}\n---`);
-  const body = rest.replace(/\s*$/, '');
-  fs.writeFileSync(file, `${newHead}\n${body ? body + '\n' : ''}- ${d} ended: ${JSON.stringify(said)}\n`, 'utf8');
-  L.say(`world/claims/${name}.md: ended on ${d}`);
+  const { records, store } = world(root);
+  const done = records.endClaim(store, name, { day: d, words: said });
+  if (done.missing) L.die(`no claim ${name} in the notebook`);
+  if (done.menerio) L.die(`${name} came from Menerio; fix it in the notebook`);
+  if (done.ended) L.die(`${name} already ended on ${done.ended}`);
+  L.say(`${name}: ended on ${d}`);
 };
 
 // STRIP, run by mc-decide after the moves check. A move the person declined or postponed that is
@@ -363,17 +326,17 @@ cmds.strip = (a) => {
   for (const l of out) L.say(l);
 };
 
-cmds.help = () => L.say(`mc-holds: what the person declined or postponed, read live from world/claims/
+cmds.help = () => L.say(`mc-holds: what the person declined or postponed, read live from the notebook's claims
 
   list [--date D] [--json]          every hold in force: its claim, stance, steps, subject, their words, and
                                     the claim it waits on; "nothing is held" when there is none
   hold --subject <slug> --stance declined|postponed --words "<their words>"
        [--steps "<word>, <word>"]   the kinds of step it holds (a word that begins a word of the move's line);
                                     without it, every step touching <slug>
-       [--until <claim file>]       postponed until that claim ends (gets a valid_to, or a newer claim replaces it)
+       [--until <claim>]            postponed until that claim ends (gets a valid_to, or a newer claim replaces it)
        [--to YYYY-MM-DD]            or until that day
-       [--attribute A] [--date D]   writes world/claims/<slug>--<attribute>--<date>.md
-  end <claim file> --words "<their words>" [--date D]   a later yes: the claim gets valid_to and stays
+       [--attribute A] [--date D]   files a claim named <slug>--<attribute>--<date>
+  end <claim> --words "<their words>" [--date D]   a later yes: the claim gets valid_to and stays
   strip --run <folder> [--date D]   mc-decide's: held moves out of moves.md into held.md and off today's card`);
 
 if (require.main === module) {

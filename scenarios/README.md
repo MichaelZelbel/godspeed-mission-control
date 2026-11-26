@@ -34,6 +34,19 @@ be a native Linux systemd service, with either a usable user systemd session or 
 `${GODSPEED_SCENARIO_WORK:-${RUNNER_TEMP:-/tmp}}/notebook-assistant-journeys`; set
 `GODSPEED_SCENARIO_WORK=<kept folder>` to retain it somewhere durable.
 
+`talk-preparation-installed` is a maintained manual scenario. Run it on a throwaway native scenario
+machine with `bash scenarios/talk-preparation-installed.sh <stage ref>`. A full 40-character product
+commit is also supported: the route first makes the same commit-stage fixture as the scenarios
+workflow, so it installs that commit rather than the older frozen release named by the commit's
+checked-in `stage.json`. It files a first goal through
+the installed notebook, then presses Run now on the installed "Coaching talk preparation" routine
+(`POST /api/jobs/run` with the id Settings lists) and judges the ready preparation the run wrote and
+the coach's own gate accepts. Nothing in it writes a preparation or a seal. It needs a real model,
+because the installed assistant writes the preparation: set `GODSPEED_SCENARIO_AI_KEY`,
+`GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` (without them it fails). It starts no
+process of its own and sends nothing outward. Evidence is kept under
+`${GODSPEED_SCENARIO_WORK:-${RUNNER_TEMP:-/tmp}}/talk-preparation-installed`.
+
 `workouts-from-hevy`, `day-becomes-facts`, `hermes-update-rollback` and `first-day` are jobs of that workflow, and the verdict requires all four unless the run was started with `-f only=<job names>`, in which case it judges only the jobs named there. Their fixtures are loopback-only and contain only made-up people, workouts and messages.
 
 | script | what it proves |
@@ -56,6 +69,7 @@ be a native Linux systemd service, with either a usable user systemd session or 
 | `telegram-language.sh` | through the installed assistant's own outgoing hook and Telegram send path, a reply written in the other language than the message it answers is sent in the message's language (three English journal messages with a German draft, English, German, English in one chat, a cron delivery left alone); the builder's copy runs it with `GODSPEED_SCENARIO_PRODUCT` and a Hermes it can run |
 | `brief-asked-in-chat.sh` | with the Charm Challenge running and the Morning brief routine run, "today's brief" asked in the notebook's chat is answered with the saved briefing's Charm line word for word, a seeded sentence that breaks a writing rule is absent from the briefing and the answer and its repair item is listed, and asking again saves no second briefing note |
 | `notebook-assistant-journeys.sh` | through installed Chromium and the production notebook UI, Settings saves Another service across navigation, reload and restart; Timeline saves and edits with and without AI; and every dashboard/chat/pop-out reports no-AI, connected, refused, recovered and unreachable states consistently at desktop and phone widths, including old tabs and direct HTTP agreement. It retains redacted state, request/reply, clipping, restart and screenshot evidence and stops only its own browser and loopback fixture |
+| `talk-preparation-installed.sh` | after a first goal is filed through the installed notebook, Run now on the installed Coaching talk preparation routine ends ok and writes a ready preparation, dated at the run, that `godspeed-coach prep-check` accepts; the routine's own summary names it, no process of the route's own is left and the AI key is not in the evidence |
 | `talk-prep-honest.sh` | a fixture person with one health area serving three goals and naming research domains: a preparation whose review leaves a goal uncovered is refused by the real seal and the installed gate, and the talk opens with the one sentence naming what is missing and no line claiming a research duration; a preparation covering all three goals, routes recorded in full, with a passing review sealed by the real seal opens the talk from its own opening |
 | `phone-health-days.sh` | on the Docker server install, made-up Health Auto Export uploads (overlapping windows, a day re-sent, a workout sent twice, a run and a slow "run") leave exact day records, a second paired notebook shows the same days after a sync, and a wrong token answers 404 and stores nothing |
 | `incomplete-day.sh` | a day whose last point is 19:55 is briefed as stopping at 19:55, with no short-day wording and its protein count unknown; after a protein number is given by hand the next briefing counts it |
@@ -135,6 +149,7 @@ Named by the job, never in a file here (for the scenarios above that await their
 | `voice` | `ELEVENLABS_TEST_KEY_NO_STT` | a test key it refuses that permission |
 | `charm-challenge` | `GODSPEED_SCENARIO_AI_KEY` | the owner's own chat has to be answered by a model, because that is where a vent is noticed; the same two say which |
 | `brief-asked-in-chat` | optional in the builder's copy | the Morning brief is written by the configured model when a key is supplied; without one, a local stand-in makes the public saved-brief route executable |
+| `talk-preparation-installed` | `GODSPEED_SCENARIO_AI_KEY` | the installed assistant writes the preparation with the model Settings connects; `GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` say which. No stand-in: a missing key fails |
 | `talk-prep-honest` | `GODSPEED_SCENARIO_AI_KEY` | the talk the owner asks for in the chat is opened by a model; the same two say which. Coverage is never judged by it: the preparations, the run records and the reviews are fixtures sealed by the coach's own commands |
 | `telegram-language` | `GODSPEED_SCENARIO_AI_KEY` | optional in the builder's copy: when a key is supplied the seven texts of `telegram-language-cases.json` are translated by that model, and then `GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` are required as well (missing either fails); without a key the builder's copy uses its local stand-in on 127.0.0.1 |
 | `incomplete-day` | `GODSPEED_SCENARIO_AI_KEY` | a model writes the briefings the scenario reads; it judges only what a briefing says of a day, never the numbers |
