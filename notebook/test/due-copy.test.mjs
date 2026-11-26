@@ -645,7 +645,7 @@ test('tools/due.js copied into the command folder finds the notebook beside the 
   // The command folder: the files the installer copies there, and no notebook of its own.
   const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-bin-'));
   t.after(() => fs.rmSync(bin, { recursive: true, force: true }));
-  for (const name of ['due.js', 'due-files.js']) fs.copyFileSync(fileURLToPath(new URL('../../tools/' + name, import.meta.url)), path.join(bin, name));
+  for (const name of ['due.js', 'due-files.js', 'notebook-core.js']) fs.copyFileSync(fileURLToPath(new URL('../../tools/' + name, import.meta.url)), path.join(bin, name));
   assert.ok(!fs.existsSync(path.join(bin, '..', 'notebook')), 'nothing of the notebook is beside it');
 
   const said = execFileSync(process.execPath, [path.join(bin, 'due.js'), '--godspeed', root, 'state'],
