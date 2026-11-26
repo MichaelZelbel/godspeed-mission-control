@@ -377,27 +377,21 @@ mc-mail setup [--check]        tell every assistant on this computer about the t
   installer again. On a yes, it sends a copy of every Markdown file git tracks in your mission control up
   to your notebook, into one folder called `godspeed`. Each decision in `decisions.md`
   goes as its own note. It leaves out `dev/`, anything your `.gitignore` keeps out, records in
-  `world/` that came down from Menerio, a few generated index pages, and any file over 300 KB
+  `world/` that an older version brought down from Menerio, a few generated index pages, and any file over 300 KB
   (it names those). Each copy says in its first line which file it is a copy of. Menerio ranks
   the copies below your own notes, never mines them for facts, and never exports them as
   files. Your files are never changed; the copies are. It sends a file again only when the
   file changed.
-- **`world-pull.py`** brings the other direction down: the people, dated things and
-  facts your notebook knows, written into `world/` as small files so they survive
-  without the notebook. It rewrites only the files marked `origin: menerio` and
-  never touches one you wrote. It follows the same answer as the mirror: with a no, it
-  does not run.
+The other direction, the notebook's facts written into `world/` as small files, is gone: facts are
+the notebook's own records, and the notebook's Menerio import (Settings) brings them in.
 
-`mc-notebook-sync` runs them by itself: whenever you save a change, and once an hour. It
-runs the mirror and the pull only when `GODSPEED_NOTEBOOK_MIRROR=1`. It also hands a
-replaced key to Hermes. You can run them by hand to look:
+`mc-notebook-sync` runs it by itself: whenever you save a change, and once an hour. It
+runs the mirror only when `GODSPEED_NOTEBOOK_MIRROR=1`. It also hands a
+replaced key to Hermes. You can run it by hand to look:
 
 ```
 python3 ~/.local/bin/notebook-sync.py              # dry run, shows what it would send
 python3 ~/.local/bin/notebook-sync.py --apply
-
-python3 ~/.local/bin/world-pull.py                 # dry run, shows what it would write
-python3 ~/.local/bin/world-pull.py --apply
 ```
 
 `notebook-sync.py --apply` reads your answer too. With the mission control copy switched off it sends

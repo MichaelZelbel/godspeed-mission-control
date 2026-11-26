@@ -11,7 +11,7 @@
 # has an author.
 #
 # The throwaway home is $TEST_GUARD_HOME; a test that sets its own EXIT trap removes it there too.
-# Plain sh as well as bash: tools/test-world-pull.sh is an sh script.
+# Plain sh as well as bash: some of these tests are sh scripts.
 for _guard_v in $(env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' | grep -E '^(GODSPEED_|HERMES_|MENERIO_|KB_|MC_)|^(CODEX_HOME|CLAUDE_CONFIG_DIR)$'); do
   unset "$_guard_v"
 done

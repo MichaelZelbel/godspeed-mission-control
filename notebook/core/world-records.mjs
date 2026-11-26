@@ -13,12 +13,24 @@ import { takeInOldWorld } from './world-retire.mjs';
 
 const slugify = text => String(text || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+// Another program writing this moment (the notebook, another tool) holds the lock the store takes
+// when it opens; that is waited out for a few seconds, never reported as an unreadable notebook.
+function openStore(root, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try { return new Store(root); } catch (error) {
+      if (error.code !== 'WRITER_BUSY' || Date.now() >= deadline) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25 + Math.floor(Math.random() * 25));
+    }
+  }
+}
+
 // The workspace's store, after the old files a version on another machine wrote have been taken in.
 // Work left undone here is done by the next run, and is never the reason a tool fails. A store the
 // caller hands in is the notebook's own, which takes them in when it starts.
 export function openWorld(root, given = null) {
   if (given) return given;
-  const own = new Store(root);
+  const own = openStore(root);
   const waiting = oldFiles(root).length || own.list(COPY_TYPE).some(r => r.file && fs.existsSync(path.join(root, ...r.file.split('/'))));
   if (writable(own) && waiting) { try { takeInOldWorld(own, { day: dayOf(own) }); } catch { /* the next run takes them in */ } }
   return own;
