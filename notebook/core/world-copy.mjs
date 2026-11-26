@@ -28,7 +28,7 @@ import path from 'node:path';
 import { Store, hash } from './records/store.mjs';
 import { frontMatter } from './world-facts.mjs';
 import { queueNotice } from './notices.mjs';
-import { WORLD_COPY_TYPE } from './copy-types.mjs';
+import { DUE_COPY_TYPE, WORLD_COPY_TYPE } from './copy-types.mjs';
 import { canonical, converted, read, writable } from './due-copy.mjs';
 
 export const COPY_TYPE = WORLD_COPY_TYPE;
@@ -154,7 +154,7 @@ function copyUnderLock(store) {
   const report = { copied: [], updated: [], needsALook: [], unchanged: true };
   const book = new Map(store.list(COPY_TYPE).map(record => [record.file, record]));
   const write = [], forget = [], touched = new Map();
-  const dueTook = new Set(store.list('due_copies').map(record => record.file));
+  const dueTook = new Set(store.list(DUE_COPY_TYPE).map(record => record.file));
 
   // The files, read once; a file another version of this program (due-copy) owns is not ours.
   const docs = [];

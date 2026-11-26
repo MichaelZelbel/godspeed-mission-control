@@ -37,6 +37,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { Store, hash, readableSlug } from './records/store.mjs';
 import { deadlineUid, closingUid, closingMoment, closingMomentRatings, CLOSING_KINDS } from './deadline-records.mjs';
+import { DUE_COPY_TYPE } from './copy-types.mjs';
 
 const require_ = createRequire(import.meta.url);
 const { createDueFiles } = require_('../../tools/due-files.js');
@@ -44,7 +45,7 @@ const { createDueFiles } = require_('../../tools/due-files.js');
 // The notebook's bookkeeping of the copy: one record per old file, holding the hash that was
 // copied and what it became. It is bookkeeping, not a page, so it lives in _system/ and syncs
 // with everything else there.
-export const COPY_TYPE = 'due_copies';
+export const COPY_TYPE = DUE_COPY_TYPE;
 // The review item for the one case nobody may decide for the owner.
 export const BOTH_CHANGED = 'deadline_both_changed';
 
