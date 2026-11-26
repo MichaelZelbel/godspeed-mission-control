@@ -5356,7 +5356,7 @@ if mv "$HFD_STATE" "$HFD_MISSING" \
   && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check >"$HFD_OUTPUT" 2>&1 \
   && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --no-backup --yes >>"$HFD_OUTPUT" 2>&1 \
   && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --backup >>"$HFD_OUTPUT" 2>&1 \
-  && ! grep -q '1.1.0' "$HFD_OUTPUT" \
+  && ! grep -q '1\.1\.0' "$HFD_OUTPUT" \
   && mv "$HFD_MISSING" "$HFD_STATE"; then
   ok 'the local Hermes fixture refuses every state-dependent update without fabricating a release'
 else
