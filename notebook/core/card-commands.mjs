@@ -58,7 +58,7 @@ export function nativeCardRows(store,type){
  const kind=Object.keys(table).find(k=>table[k]===type);if(!kind)return null;
  const folder=path.join(store.root,kind==='forecast'?'forecasts':kind);if(!fs.existsSync(folder))return [];
  let inForce=[],unread=holdsError;
- if(kind==='work'&&holds)try{inForce=holds.currentHolds(store.root,process.env.GODSPEED_TODAY||new Date().toISOString().slice(0,10));}catch(e){unread=String(e.message).split('\n')[0];}
+ if(kind==='work'&&holds)try{inForce=holds.currentHolds(store.root,process.env.GODSPEED_TODAY||new Date().toISOString().slice(0,10),store);}catch(e){unread=String(e.message).split('\n')[0];}
  return fs.readdirSync(folder).filter(n=>n.endsWith('.md')&&n!=='README.md').flatMap(name=>{
   const file=path.join(folder,name),text=fs.readFileSync(file,'utf8'),card=parseCard(text);if(!card.f.ID)return [];
   const stored=store.get(type,card.f.ID),held=kind==='work'&&unread&&card.f.TOUCHES?{id:`holds not read: ${unread}`}:inForce.length?holds.heldBy(inForce,{touches:card.f.TOUCHES,text:card.f.WHAT}):null;

@@ -276,7 +276,7 @@ function standing(goal) {
 function goalMay(goal) { const st = standing(goal); return st ? st.lines : null; }
 
 // ---------------------------------------------------------------------------
-// holds: a step the person declined or postponed (#282), read live from world/claims through
+// holds: a step the person declined or postponed (#282), read live from the notebook's claims through
 // holds.js, so it lifts by itself when its claim ends. A card names what it touches in TOUCHES;
 // one without it is never held. Without holds.js beside this program nothing is held; one that is
 // there and fails stops the command, because "could not tell" must never read as "not held".
@@ -557,7 +557,7 @@ cmds.file = (a) => {
   if (!done) die('--done-when is required: what a reader will see when this is done, so it can be verified by someone who is not the runner');
   const touches = a.touches === undefined || a.touches === 'true' ? [] : (holdsLib() || die('--touches needs holds.js beside this program')).touchTokens(a.touches);
   const badSlug = touches.find(t => !holdsLib().SLUG.test(t));
-  if (badSlug) die(`--touches names world entities by their slugs (world/entities/<slug>.md), comma-separated; "${badSlug}" is not one`);
+  if (badSlug) die(`--touches names the notebook's people and things by their slugs, comma-separated; "${badSlug}" is not one`);
   const key = oneLine(a.key || what.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 80));
   const dup = S.all().find(c => c.f.KEY === key && OPEN.includes(c.f.STATUS));
   if (dup) { say(`${dup.id}: already on the register with this key (${dup.f.STATUS}); nothing filed twice`); return; }
@@ -1051,7 +1051,7 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
   file --what "..." --done-when "..." [--key K] [--goal G] [--card C] [--check "<shell, exit 0 when done>"]
        [--owner godspeed|person|company:<slug>] [--needs none|person|authorization|capability:<x>] [--outward yes|no]
        [--max-attempts 3] [--stale-after 7] [--source "..."]       a second file with the same open KEY files nothing
-       [--touches "<slug>, <slug>"]     the world entities it is about (world/entities/<slug>.md): a step the person
+       [--touches "<slug>, <slug>"]     the people and things it is about (their slugs): a step the person
                                         declined or postponed on one of them (mc-holds) is held: listed as held,
                                         never taken, unblocked, announced or going out until that claim ends
        [--kind do|learn|repair]         a learn item is a question; its DONE WHEN must name a file the answer is written in.

@@ -42,7 +42,7 @@ const list = value => Array.isArray(value) ? value.filter(Boolean) : value ? [St
 const OWNED = {
   entities: ['name', 'slug', 'entity_type', 'aliases', 'description', 'menerio_id', 'origin'],
   claims: ['subject_type', 'subject_id', 'attribute', 'value', 'valid_from', 'valid_to', 'confidence', 'cardinality', 'category_slug',
-    'evidence_quote', 'origin', 'relationship', 'object_type', 'object_id', 'object_name', 'stance', 'steps', 'until'],
+    'evidence_quote', 'origin', 'relationship', 'object_type', 'object_id', 'object_name', 'stance', 'steps', 'until', 'until_name', 'subject_slug'],
   moments: ['title', 'happened_at', 'description', 'source', 'origin'],
 };
 const digestOf = (type, record) => hash(canonical(OWNED[type].map(field => record?.[field] ?? null)));
@@ -128,6 +128,13 @@ function people(store, entityFiles, write) {
   return { who: slug => find(slug, true), known: slug => find(slug, false) };
 }
 
+// The record a world slug names today, with the entity record to write when nothing in the notebook
+// has it yet (tools that file a claim about a slug: tools/holds.js).
+export function subjectOfSlug(store, slug) {
+  const records = [], { who } = people(store, new Map(), records);
+  return { subject: who(slug), records };
+}
+
 // ---------------------------------------------------------------- the copy
 //
 // Under the notebook's workspace lock, exactly once: a caller that holds it already is not asked
@@ -194,13 +201,13 @@ function copyUnderLock(store) {
     const other = f.object ? who(f.object) : named && named.id && named.type !== 'self' ? named : null;
     const value = other ? f.value + ': ' + (other.type === 'self' ? 'you' : other.name) : String(f.value);
     const record = converted('claims', {
-      uid: fileUid(doc.file), subject_type: who_.type, subject_id: who_.id, attribute: f.attribute, value,
+      uid: fileUid(doc.file), subject_type: who_.type, subject_id: who_.id, subject_slug: String(f.subject), attribute: f.attribute, value,
       ...(other ? { relationship: String(f.value), object_type: other.type, object_id: other.id, object_name: other.type === 'self' ? 'you' : other.name } : {}),
       valid_from: isDay(f.valid_from) ? f.valid_from : null, valid_to: isDay(f.valid_to) ? f.valid_to : null,
       confidence: f.confidence || 'confirmed', cardinality: f.cardinality || 'many', category_slug: f.category || null,
       evidence_quote: body ? body.slice(0, 600) : null, source_type: 'file', source_id: doc.file, origin: f.origin || 'mission control',
       ...(f.stance ? { stance: String(f.stance) } : {}), ...(list(f.steps).length ? { steps: list(f.steps) } : {}),
-      ...(f.until ? { until: fileUid('world/claims/' + String(f.until).replace(/\.md$/, '') + '.md') } : {}),
+      ...(f.until ? { until: fileUid('world/claims/' + String(f.until).replace(/\.md$/, '') + '.md'), until_name: String(f.until).replace(/\.md$/, '') } : {}),
       created_at: (isDay(f.valid_from) ? f.valid_from : '1970-01-01') + 'T00:00:00Z', updated_at: (isDay(f.valid_from) ? f.valid_from : '1970-01-01') + 'T00:00:00Z' }, null);
     const kept = place('claims', record, doc.file, old);
     // The claim is shown to the assistant by its slot (query.mjs profile_facts), as every claim
