@@ -54,7 +54,7 @@ const COPIED = ['title', 'done_when', 'cost_if_missed', 'self_check', 'self_chec
   'source', 'addon', 'addon_key', 'addon_state', 'calendar_marker', 'head_lines', 'native_slug',
   'native_file', 'windows', 'log'];
 // Keys sorted, so the same value compares equal however it was read back.
-const canonical = value => JSON.stringify(value, (key, v) => v && typeof v === 'object' && !Array.isArray(v)
+export const canonical = value => JSON.stringify(value, (key, v) => v && typeof v === 'object' && !Array.isArray(v)
   ? Object.fromEntries(Object.keys(v).sort().map(name => [name, v[name]])) : v);
 const digestOf = record => hash(canonical(COPIED.map(field => record?.[field] ?? null)));
 // What a bookkeeping record says, without the housekeeping the store adds.
@@ -66,8 +66,8 @@ const copyUid = file => hash('due-copy/' + file).slice(0, 32);
 // A name tools/due.js can use for a file in due/, and so for a reminder (tools/due-files.js).
 const SLUG = /^[a-z0-9][a-z0-9-]{0,59}$/;
 const idFor = (prefix, text) => prefix + '-' + hash(text).slice(0, 24);
-const read = file => { try { return fs.readFileSync(file, 'utf8'); } catch (error) { if (error.code === 'ENOENT' || error.code === 'EISDIR') return null; throw error; } };
-const dayOf = store => {
+export const read = file => { try { return fs.readFileSync(file, 'utf8'); } catch (error) { if (error.code === 'ENOENT' || error.code === 'EISDIR') return null; throw error; } };
+export const dayOf = store => {
   const timezone = store.get('settings', 'installation')?.timezone || 'UTC';
   return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 };
@@ -143,7 +143,7 @@ export function liveMoments(store, byMoment = corrections(store)) {
 // record, byte for byte, and the merge has nothing to decide. The same reason record_history's own
 // copies are written by hand, as the device 'history'.
 const WRITTEN_BY = 'due-copy';
-function converted(type, value, old) {
+export function converted(type, value, old) {
   const uid = String(old?.uid || value.uid);
   // The id the store would give it (records/store.mjs prepare): out of the title and the uid, so
   // it is the same id on every machine. A deadline brings its own, `due-<slug>`.
