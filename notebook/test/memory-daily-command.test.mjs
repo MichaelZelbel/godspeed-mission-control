@@ -22,7 +22,7 @@ const realNow=Date.now();mock.timers.enable({apis:['Date'],now:Date.parse('2026-
 const model=fileURLToPath(new URL('./fixtures/memory-daily-model.mjs',import.meta.url));
 const due=fileURLToPath(new URL('./fixtures/memory-daily-due.mjs',import.meta.url));
 const memoryScript=fileURLToPath(new URL('../scripts/memory-daily.mjs',import.meta.url));
-const workspace=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-memory-command-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));fs.mkdirSync(path.join(root,'prompts','archive'),{recursive:true});return root;};
+const workspace=(t,{notebook=true}={})=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-memory-command-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));fs.mkdirSync(path.join(root,'prompts','archive'),{recursive:true});if(notebook)fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);return root;};
 const archive=(root,rows)=>fs.writeFileSync(path.join(root,'prompts','archive','fixture.jsonl'),rows.map(JSON.stringify).join('\n')+'\n');
 const response=value=>JSON.stringify(value);
 const self={kind:'self'};
@@ -42,7 +42,7 @@ test('the command files a quoted notebook fact once through its model-command bo
 });
 
 test('two daily-memory command processes submit one archive piece once',async t=>{
- const root=workspace(t),row={id:'process-once',at:new Date(realNow-3600000).toISOString(),text:'I moved to Hamburg on 1 November'};archive(root,[row]);let requests=0,firstRequest,secondStarted;const requested=new Promise(resolve=>firstRequest=resolve),second=new Promise(resolve=>secondStarted=resolve);
+ const root=workspace(t,{notebook:false}),row={id:'process-once',at:new Date(realNow-3600000).toISOString(),text:'I moved to Hamburg on 1 November'};archive(root,[row]);let requests=0,firstRequest,secondStarted;const requested=new Promise(resolve=>firstRequest=resolve),second=new Promise(resolve=>secondStarted=resolve);
  const server=http.createServer(async(req,res)=>{let body='';for await(const chunk of req)body+=chunk;requests++;if(requests===1){firstRequest(JSON.parse(body));await second;await new Promise(resolve=>setTimeout(resolve,300));}res.end(JSON.stringify({choices:[{message:{content:response({facts:[],events:[]})}}]}));});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
  fs.mkdirSync(path.join(root,'.godspeed'),{recursive:true});fs.writeFileSync(path.join(root,'.godspeed','provider.json'),JSON.stringify({url:'http://127.0.0.1:'+server.address().port+'/v1/chat/completions',key:'fixture-key',model:'fixture-model'}));
  const first=runScript(root);const request=await requested;const secondRun=runScript(root);secondStarted();await Promise.all([first,secondRun]);assert.equal(requests,1);assert.deepEqual(JSON.parse(request.messages[1].content).messages.map(message=>message.id),[row.id]);assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'routines','remember-what-you-said','state.json'),'utf8')).consumed,[row.id]);
@@ -72,42 +72,6 @@ test('the command reads the harvest redaction file before requesting a model',as
  const root=workspace(t),home=path.join(root,'home'),log=path.join(root,'model.log'),redacted={id:'redacted',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'},allowed={id:'allowed',at:'2026-11-02T13:00:00Z',text:'I moved to Berlin on 1 November'};fs.mkdirSync(path.join(home,'.godspeed'),{recursive:true});fs.writeFileSync(path.join(home,'.godspeed','redact.txt'),'Hamburg\n');archive(root,[redacted,allowed]);
  await run(root,{env:{HOME:home,FIXTURE_MEMORY_MODEL_LOG:log,FIXTURE_MEMORY_MODEL_RESPONSE:response({facts:[]})}});
  const request=JSON.parse(fs.readFileSync(log,'utf8'));assert.deepEqual(JSON.parse(request.prompt).messages.map(message=>message.id),['allowed']);
-});
-
-test('the starter fallback deduplicates current facts and events',async t=>{
- const root=workspace(t),first={id:'first',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November and visited the park'},second={...first,id:'second',at:'2026-11-03T12:00:00Z'};archive(root,[first]);
- const answer=row=>({people:[{id:'alex',name:'Alex'}],facts:[{subject:self,kind:'home-city',value:'Hamburg',citation:{id:row.id,quote:'I moved to Hamburg on 1 November'}}],events:[{what:'Visited the park',day:'2026-11-02',participants:[{kind:'new-person',id:'alex'}],citation:{id:row.id,quote:'visited the park'}}]});
- await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(first))}});const events=path.join(root,'world','events');archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(second))}});assert.ok(fs.existsSync(path.join(root,'world','entities','alex.md')));assert.equal(fs.readdirSync(path.join(root,'world','claims')).length,1);assert.equal(fs.readdirSync(events).length,1);
-});
-
-test('the starter fallback round-trips colon-bearing fact values before deduplicating',async t=>{
- const root=workspace(t),first={id:'first-colon',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg: Germany on 1 November'},second={id:'second-colon',at:'2026-11-03T12:00:00Z',text:'I still live in Hamburg: Germany'};const answer=row=>({facts:[{subject:self,kind:'home-city',value:'Hamburg: Germany',citation:{id:row.id,quote:row.text}}]});archive(root,[first]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(first))}});const claims=path.join(root,'world','claims'),written=fs.readFileSync(path.join(claims,fs.readdirSync(claims)[0]),'utf8');assert.match(written,/value: "Hamburg: Germany"/);archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(second))}});assert.equal(fs.readdirSync(claims).length,1);
-});
-
-test('the starter fallback recognizes a BOM-marked current claim',async t=>{
- const root=workspace(t),row={id:'bom-claim',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'},claims=path.join(root,'world','claims');fs.mkdirSync(claims,{recursive:true});fs.writeFileSync(path.join(claims,'hamburg.md'),'\ufeff---\nsubject: me\nattribute: lives-in\nvalue: Hamburg\nvalid_from: 2026-11-01\n---\nI moved to Hamburg on 1 November\n');archive(root,[row]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(fact(row.id,row.text))}});assert.equal(fs.readdirSync(claims).length,1);
-});
-
-test('the starter fallback keeps a current new thing fact across archive runs',async t=>{
- const root=workspace(t),first={id:'first-thing',at:'2026-11-02T12:00:00Z',text:'The Robin project moved to Hamburg on 1 November'},second={...first,id:'second-thing',at:'2026-11-03T12:00:00Z'};archive(root,[first]);
- const answer=row=>({things:[{id:'robin-project',name:'Robin project'}],facts:[{subject:{kind:'new-thing',id:'robin-project'},kind:'home-city',value:'Hamburg',citation:{id:row.id,quote:row.text}}]});
- await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(first))}});archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(second))}});
- assert.equal(fs.readdirSync(path.join(root,'world','claims')).length,1);
-});
-
-test('the starter fallback files equivalent facts and events from one response once',async t=>{
- const root=workspace(t),first={id:'first',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November and visited the park'},second={id:'second',at:'2026-11-02T12:01:00Z',text:'I now live in Hamburg and went to the park'};archive(root,[first,second]);
- const answer={facts:[{subject:self,kind:'home-city',value:'Hamburg',citation:{id:first.id,quote:'I moved to Hamburg on 1 November'}},{subject:self,kind:'home-city',value:'Hamburg',citation:{id:second.id,quote:'I now live in Hamburg'}}],events:[{what:'Visited the park',day:'2026-11-02',participants:[],citation:{id:first.id,quote:'visited the park'}},{what:'Visited the park',day:'2026-11-02',participants:[],citation:{id:second.id,quote:'went to the park'}}]};
- await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});
- assert.equal(fs.readdirSync(path.join(root,'world','claims')).length,1);assert.equal(fs.readdirSync(path.join(root,'world','events')).length,1);
-});
-
-test('the starter fallback keeps same-named people and things distinct',async t=>{
- const root=workspace(t),row={id:'robin',at:'2026-11-02T12:00:00Z',text:'Robin lives in Kiel and the Robin project moved to Hamburg'};archive(root,[row]);
- const answer={people:[{id:'person-robin',name:'Robin'}],things:[{id:'thing-robin',name:'Robin'}],facts:[{subject:{kind:'new-person',id:'person-robin'},kind:'home-city',value:'Kiel',citation:{id:row.id,quote:row.text}},{subject:{kind:'new-thing',id:'thing-robin'},kind:'home-city',value:'Hamburg',citation:{id:row.id,quote:row.text}}],events:[{what:'Robin project moved to Hamburg',day:'2026-11-02',participants:[{kind:'new-thing',id:'thing-robin'}],citation:{id:row.id,quote:row.text}}]};
- await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});
- assert.ok(fs.existsSync(path.join(root,'world','entities','robin.md')));assert.ok(fs.existsSync(path.join(root,'world','entities','thing-robin.md')));
- assert.match(fs.readdirSync(path.join(root,'world','claims')).map(name=>fs.readFileSync(path.join(root,'world','claims',name),'utf8')).join('\n'),/subject: thing-robin/);assert.match(fs.readFileSync(path.join(root,'world','events',fs.readdirSync(path.join(root,'world','events'))[0]),'utf8'),/participants: \[thing-robin\]/);
 });
 
 test('the notebook keeps distinct same-day events with the same participants',async t=>{
@@ -181,18 +145,16 @@ test('malformed successful deadline state stops before a model request or cursor
  }
 });
 
-test('the command preserves an older unmarked world home city without a notebook and keeps its words',async t=>{
- const root=workspace(t),row={id:'hamburg',at:'2026-11-01T12:00:00Z',text:'I moved to Hamburg on 1 November'},claims=path.join(root,'world','claims');fs.mkdirSync(claims,{recursive:true});
- fs.writeFileSync(path.join(claims,'me--lives-in--2026-01-01.md'),'---\nsubject: me\nattribute: lives-in\nvalue: "Kiel"\nvalid_from: 2026-01-01\nmenerio_id: 12345\n# kept\nnotes:\n  - a\n---\nI live in Kiel.\n');archive(root,[row]);
- const result=await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(fact(row.id,row.text))}});assert.equal(result.completed,1);
- const files=fs.readdirSync(claims).map(name=>fs.readFileSync(path.join(claims,name),'utf8'));assert.equal(files.length,2);
- const kiel=files.find(text=>/Kiel/.test(text)),hamburg=files.find(text=>/Hamburg/.test(text));
- assert.doesNotMatch(kiel,/valid_to/);assert.match(kiel,/I live in Kiel\./);assert.match(kiel,/menerio_id: 12345\n# kept\nnotes:\n  - a\n/,'lines the routine does not own stay as written');assert.doesNotMatch(hamburg,/valid_to/);assert.match(hamburg,/I moved to Hamburg on 1 November/);
-});
-
 test('the command refuses a fact naming a redacted term the cited message does not contain',async t=>{
  const root=workspace(t),row={id:'human',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);archive(root,[row]);
  const result=await run(root,{env:{GODSPEED_REDACT_TERMS:'Bluebird',FIXTURE_MEMORY_MODEL_RESPONSE:response(fact(row.id,row.text,'Bluebird'))}});assert.equal(result.completed,1);
  assert.equal(new QueryService(new Store(root)).rows('claims').length,0);
  const runs=path.join(root,'routines','remember-what-you-said','runs'),receipts=fs.readdirSync(runs).flatMap(day=>fs.readdirSync(path.join(runs,day)).map(name=>fs.readFileSync(path.join(runs,day,name),'utf8'))).join('\n');assert.match(receipts,/private-or-invalid/);assert.doesNotMatch(receipts,/Bluebird/i);
+});
+
+test('a workspace without a notebook files nothing and leaves every row unread',async t=>{
+ const root=workspace(t,{notebook:false}),row={id:'bare',at:'2026-11-01T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);
+ const result=await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(fact(row.id,row.text))}});
+ assert.equal(result.completed,0);assert.equal(result.failed,1);assert.ok(!fs.existsSync(path.join(root,'world')),'no plain files are written');
+ assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'routines','remember-what-you-said','state.json'))).consumed,[]);
 });
