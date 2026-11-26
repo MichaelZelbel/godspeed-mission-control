@@ -28,9 +28,11 @@ import path from 'node:path';
 import { Store, hash } from './records/store.mjs';
 import { frontMatter } from './world-facts.mjs';
 import { queueNotice } from './notices.mjs';
+import { WORLD_COPY_TYPE } from './copy-types.mjs';
 import { canonical, converted, read, writable } from './due-copy.mjs';
 
-export const COPY_TYPE = 'world_copies';
+export const COPY_TYPE = WORLD_COPY_TYPE;
+export const slugify = text => String(text || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 export const FOLDERS = ['world/claims', 'world/events', 'world/entities'];
 const EPOCH = '1970-01-01T00:00:00Z';
 const norm = s => String(s ?? '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -95,6 +97,8 @@ function people(store, entityFiles, write) {
   for (const c of contacts) for (const id of [c.id, ...(c.former_ids || [])]) byId.set(id, c);
   const follow = c => { for (let hops = 0; c?.merged_into && c.merged_into !== 'self' && hops < 6; hops++) c = byId.get(c.merged_into) || c; return c; };
   for (const c of contacts) if (!c.merged_into) for (const n of [c.name, ...list(c.aliases)]) if (typeof n === 'string' && n.trim()) byName.set(norm(n), [...(byName.get(norm(n)) || []), c]);
+  const bySlugName = new Map();
+  for (const c of contacts) if (!c.merged_into && slugify(c.name)) bySlugName.set(slugify(c.name), [...(bySlugName.get(slugify(c.name)) || []), c]);
   const things = store.list('entities'), bySlug = new Map(things.filter(e => e.slug).map(e => [e.slug, e]));
   const cached = new Map();
   const namesOf = (slug, e) => [e.name, ...list(e.aliases)].filter(Boolean).map(norm).concat(e.name ? [] : [norm(humanize(slug))]);
@@ -106,7 +110,7 @@ function people(store, entityFiles, write) {
     if (slug === 'me' || String(e.self) === 'true') result = { type: 'self', id: null, name: e.name || null };
     else {
       let c = e.menerio_id ? follow(byId.get(e.menerio_id)) : null;
-      if (!c) c = follow([...new Set(names.flatMap(n => byName.get(n) || []))].sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))[0]);
+      if (!c) c = follow([...new Set([...names.flatMap(n => byName.get(n) || []), ...(bySlugName.get(slug) || [])])].sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))[0]);
       if (c) result = { type: 'contact', id: c.id, name: c.name };
       else {
         const thing = bySlug.get(slug) || things.find(t => names.includes(norm(t.name)));
@@ -155,7 +159,11 @@ function copyUnderLock(store) {
   // The files, read once; a file another version of this program (due-copy) owns is not ours.
   const docs = [];
   for (const { file, kind } of oldFiles(root)) {
-    const text = read(path.join(root, ...file.split('/')));
+    let text;
+    try { text = read(path.join(root, ...file.split('/'))); } catch (error) {
+      report.needsALook.push({ file, why: 'it cannot be read (' + (error.code || 'error') + ')', hash: String(error.code || 'unreadable') });
+      continue;
+    }
     if (text === null) continue;
     const parsed = frontMatter(text);
     if (kind === 'events' && (dueTook.has(file) || (parsed && ('closes' in parsed.fields || 'drops' in parsed.fields)))) continue;
@@ -168,14 +176,16 @@ function copyUnderLock(store) {
   // not changed it. `record_digest` is what the COPY wrote, never what the owner has.
   const place = (type, record, file, old) => {
     const there = store.list(type, { removed: true }).find(r => r.uid === record.uid);
-    if (!there) { write.push(record); report.copied.push(file); return record; }
-    if (digestOf(type, there) === digestOf(type, record)) return there;
+    if (!there) { write.push(record); report.copied.push(file); return { kept: record, digest: digestOf(type, record) }; }
+    if (digestOf(type, there) === digestOf(type, record)) return { kept: there, digest: digestOf(type, there) };
     if (old?.record_digest && digestOf(type, there) === old.record_digest) {
       forget.push('record_history/' + there.uid + '-' + there.revision + '-' + there._hash.slice(0, 12));
       const next = converted(type, { ...record, uid: there.uid, id: there.id }, there);
-      write.push(next); report.updated.push(file); return next;
+      write.push(next); report.updated.push(file); return { kept: next, digest: digestOf(type, next) };
     }
-    return there; // the owner's version stays
+    // The owner's version stays, and the book keeps what the COPY last wrote, so that no later
+    // change of the file mistakes the owner's version for its own.
+    return { kept: there, digest: old?.record_digest ?? null };
   };
   const remember = (file, text, digest, value) => touched.set(file, { file, file_text: text, file_hash: digest, ...value });
   const bad = (doc, why) => { report.needsALook.push({ file: doc.file, why, hash: doc.digest }); };
@@ -209,7 +219,7 @@ function copyUnderLock(store) {
       ...(f.stance ? { stance: String(f.stance) } : {}), ...(list(f.steps).length ? { steps: list(f.steps) } : {}),
       ...(f.until ? { until: fileUid('world/claims/' + String(f.until).replace(/\.md$/, '') + '.md'), until_name: String(f.until).replace(/\.md$/, '') } : {}),
       created_at: (isDay(f.valid_from) ? f.valid_from : '1970-01-01') + 'T00:00:00Z', updated_at: (isDay(f.valid_from) ? f.valid_from : '1970-01-01') + 'T00:00:00Z' }, null);
-    const kept = place('claims', record, doc.file, old);
+    const { kept, digest } = place('claims', record, doc.file, old);
     // The claim is shown to the assistant by its slot (query.mjs profile_facts), as every claim
     // the notebook writes is (domains.mjs writeFact).
     const slotOf = store.list('fact_slots').find(s => s.subject_type === record.subject_type && s.subject_id === record.subject_id && s.attribute === record.attribute);
@@ -217,7 +227,7 @@ function copyUnderLock(store) {
       write.push(converted('fact_slots', { uid: slotUid(record.subject_type, record.subject_id, record.attribute), name: record.attribute, subject_type: record.subject_type,
         subject_id: record.subject_id, contact_id: record.subject_type === 'contact' ? record.subject_id : null, attribute: record.attribute, label: humanize(record.attribute),
         category_slug: f.category || null, cardinality: record.cardinality, show_to_agent: true, is_pinned: false, created_at: record.created_at, updated_at: record.created_at }, null));
-    remember(doc.file, doc.text, doc.digest, { kind: 'claim', record_type: 'claims', record_uid: kept.uid, record_digest: digestOf('claims', kept) });
+    remember(doc.file, doc.text, doc.digest, { kind: 'claim', record_type: 'claims', record_uid: kept.uid, record_digest: digest });
   }
 
   for (const doc of docs.filter(d => d.kind === 'events')) {
@@ -230,7 +240,7 @@ function copyUnderLock(store) {
       uid: fileUid(doc.file), title: (body.split(/\r?\n/)[0] || '').trim().slice(0, 200) || path.basename(doc.file, '.md'), happened_at: f.date, description: body || null,
       status: 'past_fact', source: f.source || null, source_type: 'file', source_id: doc.file, origin: f.origin || 'mission control',
       created_at: f.date + 'T00:00:00Z', updated_at: f.date + 'T00:00:00Z' }, null);
-    const kept = place('moments', record, doc.file, old);
+    const { kept, digest } = place('moments', record, doc.file, old);
     // participants, as the links the timeline reads; the owner is no link
     for (const slug of list(f.participants)) {
       const p = who(slug);
@@ -240,7 +250,7 @@ function copyUnderLock(store) {
       write.push(converted(link, { id, uid: hash(id).slice(0, 32), moment_id: kept.id, ...(p.type === 'contact' ? { person_id: p.id } : { entity_id: p.id }),
         created_at: f.date + 'T00:00:00Z', updated_at: f.date + 'T00:00:00Z', references: [{ type: 'moments', id: kept.id, uid: kept.uid }] }, null));
     }
-    remember(doc.file, doc.text, doc.digest, { kind: 'event', record_type: 'moments', record_uid: kept.uid, record_digest: digestOf('moments', kept) });
+    remember(doc.file, doc.text, doc.digest, { kind: 'event', record_type: 'moments', record_uid: kept.uid, record_digest: digest });
   }
 
   // ---- the notes of what was copied, then one write

@@ -48,7 +48,8 @@ export function retireOldWorld(store, { day }) {
 
   const differences = [], ready = [];
   for (const record of left) {
-    const text = read(path.join(root, ...record.file.split('/')));
+    let text;
+    try { text = read(path.join(root, ...record.file.split('/'))); } catch { continue; }
     if (text === null || hash(text) !== record.file_hash) continue;
     const type = TYPES[record.record_type];
     if (type && !store.list(type, { removed: true }).some(r => r.uid === record.record_uid)) differences.push(record.file + ': the notebook has no record for it');

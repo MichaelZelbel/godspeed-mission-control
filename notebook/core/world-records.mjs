@@ -8,10 +8,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Store } from './records/store.mjs';
 import { writable, dayOf } from './due-copy.mjs';
-import { COPY_TYPE, oldFiles, subjectOfSlug } from './world-copy.mjs';
+import { COPY_TYPE, oldFiles, slugify, subjectOfSlug } from './world-copy.mjs';
 import { takeInOldWorld } from './world-retire.mjs';
 
-const slugify = text => String(text || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // Another program writing this moment (the notebook, another tool) holds the lock the store takes
 // when it opens; that is waited out for a few seconds, never reported as an unreadable notebook.

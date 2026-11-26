@@ -88,6 +88,50 @@ test('a changed file updates a record the owner has not touched, and never one t
   copyOldWorld(store);
   assert.equal(city().value, 'Hamburg', 'the owner\'s value stays');
   assert.match(store.list('world_copies').find(r => r.file.endsWith('2026-03-01.md')).file_text, /Munich/, 'and the file is still kept whole');
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('Munich', 'Cologne'));
+  copyOldWorld(store);
+  assert.equal(city().value, 'Hamburg', 'nor by the second change of the file');
+});
+
+test('a file that does not read is said, and the others are still copied', t => {
+  const store = seeded(t);
+  const bad = path.join(store.root, 'world/claims/boiler--hold--2026-10-01.md');
+  const realRead = fs.readFileSync;
+  t.mock.method(fs, 'readFileSync', (f, ...rest) => { if (f === bad) throw Object.assign(new Error('no'), { code: 'EACCES' }); return realRead(f, ...rest); });
+  const report = copyOldWorld(store);
+  assert.deepEqual(report.needsALook.map(n => n.file), ['world/claims/boiler--hold--2026-10-01.md']);
+  assert.match(report.needsALook[0].why, /EACCES/);
+  assert.ok(store.list('claims').some(c => c.attribute === 'city'));
+  assert.equal(readNotices(store).filter(n => n.step === 'world-copy').length, 1);
+});
+
+test('a subject is the contact it names: merged, same-named (oldest), or by alias', t => {
+  const files = {
+    'world/entities/old-anna.md': '---\nslug: old-anna\nname: Old Anna\nmenerio_id: c-old\n---\n',
+    'world/entities/twin.md': '---\nslug: twin\nname: Twin Person\n---\n',
+    'world/entities/robbie.md': '---\nslug: robbie\nname: Robbie\naliases: [Rob the Builder]\n---\n',
+    'world/entities/jose.md': '---\nslug: jose\n---\n',
+    'world/claims/old-anna--city--2026-01-01.md': '---\nsubject: old-anna\nattribute: city\nvalue: Rome\n---\n',
+    'world/claims/twin--city--2026-01-01.md': '---\nsubject: twin\nattribute: city\nvalue: Oslo\n---\n',
+    'world/claims/robbie--city--2026-01-01.md': '---\nsubject: robbie\nattribute: city\nvalue: Bonn\n---\n',
+    'world/claims/jose--city--2026-01-01.md': '---\nsubject: jose\nattribute: city\nvalue: Lima\n---\n',
+  };
+  const store = seeded(t, { files });
+  store.save('contacts', { id: 'c-new', name: 'Anna New', former_ids: ['c-old'] });
+  store.save('contacts', { id: 'c-gone', name: 'Anna Gone', merged_into: 'c-new', former_ids: [] });
+  store.save('contacts', { id: 'c-mid', name: 'Mid', merged_into: 'c-gone' });
+  store.save('contacts', { id: 'c-old', name: 'Old Anna', merged_into: 'c-mid' });
+  store.save('contacts', { id: 'c-t2', name: 'Twin Person', created_at: '2026-02-01T00:00:00Z' });
+  store.save('contacts', { id: 'c-t1', name: 'Twin Person', created_at: '2025-01-01T00:00:00Z' });
+  store.save('contacts', { id: 'c-rob', name: 'Rob the Builder' });
+  store.save('contacts', { id: 'c-jose', name: 'José' });
+  copyOldWorld(store);
+  const who = city => store.list('claims').find(c => c.value === city).subject_id;
+  assert.equal(who('Rome'), 'c-new', 'a merged contact is the one it was merged into');
+  assert.equal(who('Oslo'), 'c-t1', 'one name twice: the oldest');
+  assert.equal(who('Bonn'), 'c-rob', 'by alias');
+  assert.equal(who('Lima'), 'c-jose', 'an accented name matches its slug');
+  assert.equal(store.list('entities').some(e => e.slug === 'jose'), false);
 });
 
 test('a file that cannot be copied is left alone and said once', t => {
