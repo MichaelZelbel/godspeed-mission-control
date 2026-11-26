@@ -23,6 +23,7 @@ for c in $(git -C "$REPO" rev-list --first-parent -n 50 "$head"); do
   if out=$(bash "$HERE/stage-for-run.sh" '' "$c" "$folder" 2>"$err"); then
     cat "$err" >&2
     printf '%s\nproof=%s\n' "$out" "$c"
+    echo "night-proof: proved=$c" >&2
     if [ "$c" != "$head" ]; then
       echo "The night proves ${c:0:7}, the newest main commit whose server image exists; ${head:0:7} is proved by the next night." | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}" >&2
     fi

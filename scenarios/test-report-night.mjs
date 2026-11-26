@@ -68,6 +68,7 @@ async function night(results, state = {}, extra = {}) {
       if (req.method === 'GET' && p === '/actions/runs/77/jobs') return send(200, { jobs: st.jobs });
       const m = p.match(/^\/actions\/jobs\/(\d+)\/logs$/);
       if (m) { const j = st.jobs.find((x) => String(x.id) === m[1]); return send(200, st.logs[j.name] ?? ''); }
+      if (req.method === 'GET' && p === '/contents/scenarios/scenario-catalog.tsv') return st.catalog === undefined ? send(404, {}) : send(200, st.catalog);
       send(404, { message: 'not stubbed' });
     });
   });
@@ -156,6 +157,52 @@ test('a passed scenario with an open issue closes it', async () => {
   assert.equal(r.patches.length, 1);
   assert.equal(r.patches[0].path, '/issues/12');
   assert.equal(r.patches[0].body.state, 'closed');
+});
+
+const NEW = 'a'.repeat(40);
+const OLD = 'b'.repeat(40);
+const stageJob = { id: 9, name: 'the stage file', conclusion: 'success' };
+const nightEnv = { GITHUB_EVENT_NAME: 'schedule', GITHUB_SHA: NEW };
+const catalogOf = (...ids) => `# header\n${ids.map((i) => `${i}\tinline\tpooled\tnative\tno\tx`).join('\n')}\n`;
+
+test('a night that proved an older commit closes no issue, whatever passed', async () => {
+  const r = await night('voice=success late-reminder-file=success', {
+    openIssues: [{ number: 12, title: T('voice') }], jobs: [stageJob],
+    logs: { 'the stage file': `night-proof: proved=${OLD}\n` }, catalog: catalogOf('voice', 'late-reminder-file'),
+  }, nightEnv);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.patches.length + r.comments.length + r.created.length, 0);
+});
+
+test('a night whose proved commit cannot be read closes no issue either', async () => {
+  const r = await night('voice=success', { openIssues: [{ number: 12, title: T('voice') }], jobs: [stageJob], logs: { 'the stage file': 'nothing' } }, nightEnv);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.patches.length, 0);
+});
+
+test('a night that proved its own commit still closes a passed issue', async () => {
+  const r = await night('voice=success', { openIssues: [{ number: 12, title: T('voice') }], jobs: [stageJob], logs: { 'the stage file': `night-proof: proved=${NEW}\n` } }, nightEnv);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.patches.length, 1);
+});
+
+test('a failure on an older proved commit is filed and names that commit', async () => {
+  const r = await night('voice=failure', {
+    jobs: [stageJob, { id: 5, name: 'a voice note, with the permission and without it', conclusion: 'failure' }],
+    logs: { 'the stage file': `night-proof: proved=${OLD}\n`, 'a voice note, with the permission and without it': 'FAIL voice: no sound\n' },
+    catalog: catalogOf('voice'),
+  }, nightEnv);
+  assert.equal(r.created.length, 1);
+  assert.match(r.created[0].body.body, new RegExp(`proved ${OLD.slice(0, 12)}`));
+});
+
+test("a scenario the proved checkout does not have is left out, not judged from the current catalog", async () => {
+  const r = await night('voice=failure late-reminder-file=success', {
+    jobs: [stageJob], logs: { 'the stage file': `night-proof: proved=${OLD}\n` }, catalog: catalogOf('late-reminder-file'),
+    openIssues: [],
+  }, { ...nightEnv, PROOF_SHA: OLD });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.created.length, 0);
 });
 
 test('a passed scenario with no open issue does nothing', async () => {
