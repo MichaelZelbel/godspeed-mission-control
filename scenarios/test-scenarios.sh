@@ -6251,5 +6251,82 @@ else
   bad "addon-carried-hashes.test.mjs: its cases fail"
 fi
 
+# night-proof.sh: the night proves the newest main commit that stage-for-run.sh accepts, never more than it allows.
+section "night-proof.sh: the night proves the newest commit that can be proved (#820)"
+NP="$ROOT/scenarios/night-proof.sh"
+# Its own small repository: ONE and TWO change nothing the server image carries, THREE changes the notebook.
+NP_REPO="$TMP/np-repo"
+mkdir -p "$TMP/np-public/beta"
+cp "$ROOT/stage.json" "$TMP/np-public/beta/stage.json"
+mkdir -p "$NP_REPO/third-party/addons"
+git -C "$NP_REPO" init -q
+printf '#!/bin/sh
+echo installer
+' >"$NP_REPO/install-godspeed.sh"
+printf '[]
+' >"$NP_REPO/third-party/addons/sources.json"
+git -C "$NP_REPO" add -A
+git -C "$NP_REPO" -c user.name=t -c user.email=t@t commit -q -m one
+NP_ONE=$(git -C "$NP_REPO" rev-parse HEAD)
+echo two >"$NP_REPO/two"
+git -C "$NP_REPO" add -A
+git -C "$NP_REPO" -c user.name=t -c user.email=t@t commit -q -m two
+NP_TWO=$(git -C "$NP_REPO" rev-parse HEAD)
+mkdir -p "$NP_REPO/notebook"
+echo changed >"$NP_REPO/notebook/x"
+git -C "$NP_REPO" add -A
+git -C "$NP_REPO" -c user.name=t -c user.email=t@t commit -q -m three
+NP_THREE=$(git -C "$NP_REPO" rev-parse HEAD)
+printf '%s:v2-sha-%s %s
+' "$SFR_IMAGE" "$NP_TWO" "$SFR_DA" >"$TMP/np-images-two"
+printf '%s:v2-sha-%s %s
+' "$SFR_IMAGE" "$NP_ONE" "$SFR_DB" >"$TMP/np-images-one"
+printf '%s:v2-sha-%s %s
+' "$SFR_IMAGE" "$NP_THREE" "$SFR_DA" >"$TMP/np-images-three"
+np() { # <images file> <head> <folder> [public raw]
+  NP_OUT=$(GODSPEED_SCENARIO_REPO=$NP_REPO GODSPEED_SCENARIO_PUBLIC_RAW=${4:-file://$TMP/np-public} GODSPEED_SCENARIO_IMAGES=$1 \
+    GITHUB_STEP_SUMMARY=$TMP/np-summary bash "$NP" "$2" "$3" 2>"$TMP/np.err"); NP_CODE=$?
+}
+: >"$TMP/np-summary"
+np "$TMP/np-images-two" "$NP_THREE" "$TMP/np-1"
+if [ "$NP_CODE" = 0 ] && [ "$(printf '%s\n' "$NP_OUT" | tail -1)" = "proof=$NP_TWO" ] \
+  && [ "$(printf '%s\n' "$NP_OUT" | head -1)" = "ref=this-commit" ] \
+  && [ "$(node "$ROOT/stage/stage.mjs" "$TMP/np-1/this-commit/stage.json" get productCommit)" = "$NP_TWO" ] \
+  && grep -qF "The night proves ${NP_TWO:0:7}, the newest main commit whose server image exists; ${NP_THREE:0:7} is proved by the next night." "$TMP/np-summary"; then
+  ok "a newest commit with no image yet: the night proves the next older one that has its own, and says so"
+else
+  bad "night fallback to the older commit (exit $NP_CODE: $NP_OUT; $(cat "$TMP/np.err"))"
+fi
+: >"$TMP/np-summary"
+np "$TMP/np-images-three" "$NP_THREE" "$TMP/np-2"
+if [ "$NP_CODE" = 0 ] && [ "$(printf '%s\n' "$NP_OUT" | tail -1)" = "proof=$NP_THREE" ] && [ ! -s "$TMP/np-summary" ]; then
+  ok "a newest commit with its own image is proved itself, with no extra line in the summary"
+else
+  bad "night proves the newest commit when its image exists (exit $NP_CODE: $NP_OUT)"
+fi
+np "$TMP/np-images-one" "$NP_THREE" "$TMP/np-3"
+if [ "$NP_CODE" = 0 ] && [ "$(printf '%s\n' "$NP_OUT" | tail -1)" = "proof=$NP_TWO" ]; then
+  ok "an older commit is taken on the ancestor rule only when no image input changed in between"
+else
+  bad "night ancestor rule (exit $NP_CODE: $NP_OUT; $(cat "$TMP/np.err"))"
+fi
+np "$TMP/sfr-images-none" "$NP_THREE" "$TMP/np-4"
+if [ "$NP_CODE" = 1 ] && ! printf '%s' "$NP_OUT" | grep -q proof= && grep -qF 'No commit in the newest 50' "$TMP/np.err"; then
+  ok "no commit in the window can be proved: the night fails as before"
+else
+  bad "night with no image anywhere (exit $NP_CODE: $NP_OUT)"
+fi
+np "$TMP/np-images-two" "$NP_THREE" "$TMP/np-5" file:///no/such/place
+if [ "$NP_CODE" = 1 ] && grep -qF 'could not be read' "$TMP/np.err" && ! grep -qF 'No commit in the newest 50' "$TMP/np.err"; then
+  ok "another failure (the public stage unreadable) stops at once, not walked past"
+else
+  bad "night with an unreadable public stage (exit $NP_CODE: $(cat "$TMP/np.err"))"
+fi
+if grep -q 'night-proof.sh' "$ROOT/.github/workflows/scenarios.yml" && grep -q "steps.night.outputs.proof" "$ROOT/.github/workflows/scenarios.yml"; then
+  ok "scenarios.yml uses night-proof.sh for the schedule and hands its commit to every job as proof"
+else
+  bad "scenarios.yml does not use night-proof.sh"
+fi
+
 printf '\n%s of %s pass.\n' "$PASS" "$((PASS + FAIL))"
 [ "$FAIL" -eq 0 ]

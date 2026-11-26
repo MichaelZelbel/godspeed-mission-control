@@ -24,6 +24,7 @@
 // GITHUB_TOKEN, GITHUB_REPOSITORY,
 // GITHUB_RUN_ID, GITHUB_SERVER_URL, GITHUB_API_URL, NIGHT (default: today, UTC),
 // WORKFLOW_FILE (default .github/workflows/scenarios.yml, where the jobs' display names are read),
+// GITHUB_EVENT_NAME, GITHUB_SHA and PROOF_SHA (optional) tell a night that proved an older commit.
 // GATE_FILE (default scenario-gate.tsv beside this script, where the weekly jobs are read).
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -97,6 +98,15 @@ export const lastLines = (log, n = LAST_LINES) =>
     .filter((l) => l.trim())
     .slice(-n)
     .join('\n');
+
+// The commit the night proved, when it is not known to be the one the run started from. The night
+// (scenarios/night-proof.sh) may prove an older main commit than GITHUB_SHA; its stage step logs the
+// full commit as "night-proof: proved=<sha>". PROOF_SHA, when set, says it directly.
+export function provedFrom(env, stageLog) {
+  if (env.PROOF_SHA) return env.PROOF_SHA;
+  const m = String(stageLog || '').match(/night-proof: proved=([0-9a-f]{40})/);
+  return m ? m[1] : '';
+}
 
 export async function reportNight(env = process.env, log = console.log) {
   const repo = env.GITHUB_REPOSITORY;
@@ -197,6 +207,31 @@ export async function reportNight(env = process.env, log = console.log) {
       return id && !excluded.has(id) ? [[id, job.conclusion || '']] : [];
     }));
   }
+  // The night may have proved an older commit than the one this run started from. What it saw
+  // says nothing about newer code: failures are still filed (they are real, for the proved commit,
+  // and say which), but no issue is closed by it, and a scenario the proved checkout does not have
+  // (its catalog row is absent there) is left out instead of judged from the current catalog.
+  let older = '';
+  if (!weekly && env.GITHUB_EVENT_NAME === 'schedule') {
+    let proved = env.PROOF_SHA || '';
+    if (!proved) {
+      const stageJob = (await runJobs()).list.find((job) => job.name === (jobs.names.stage || 'stage'));
+      if (stageJob) { try { proved = provedFrom(env, await (await call('GET', `/actions/jobs/${stageJob.id}/logs`)).text()); } catch {} }
+    }
+    if (!proved || proved !== env.GITHUB_SHA) {
+      older = proved || 'a commit that could not be read from the stage job';
+      if (proved) {
+        try {
+          const res = await call('GET', `/contents/scenarios/scenario-catalog.tsv?ref=${proved}`, null, [404]);
+          if (res.ok) {
+            const ids = new Set(String(await res.text()).split(/\r?\n/).filter((l) => l && !l.startsWith('#')).map((l) => l.split('\t')[0]));
+            for (const name of [...scenarios.keys()]) if (!ids.has(name)) { scenarios.delete(name); log(`skip   ${name}: not in the proved commit's catalog`); }
+          } else log(`the proved commit's catalog was not found: nothing is left out`);
+        } catch (e) { log(`the proved commit's catalog could not be read (${e.message})`); }
+      }
+    }
+  }
+  const provedNote = older ? `\n\nThe night proved ${older.slice(0, 12)}, not the run's own commit ${String(env.GITHUB_SHA || '').slice(0, 12)}.` : '';
   // A job the run did not pick ended skipped and is no failure of its own.
   if (pickedNames) for (const name of [...scenarios.keys()]) if (!pickedNames.has(name)) scenarios.delete(name);
   const stageEnded = stageResult && stageResult !== 'success' ? stageResult : '';
@@ -204,7 +239,7 @@ export async function reportNight(env = process.env, log = console.log) {
     const number = open.get(stageTitle);
     const got = await jobLog('stage');
     const lines = got?.text || `The stage job ended ${stageEnded}; its log could not be read.`;
-    const body = `${when} of ${night}: the shared stage job ended ${stageEnded}, so no scenario ran.\n\nRun: ${runLink}\n\nThe last lines:\n\n\`\`\`\n${lines}\n\`\`\`\n`;
+    const body = `${when} of ${night}: the shared stage job ended ${stageEnded}, so no scenario ran.${provedNote}\n\nRun: ${runLink}\n\nThe last lines:\n\n\`\`\`\n${lines}\n\`\`\`\n`;
     if (number) {
       await call('POST', `/issues/${number}/comments`, { body });
       log(`commented stage: still failing, night added to #${number}`);
@@ -222,6 +257,7 @@ export async function reportNight(env = process.env, log = console.log) {
     if (result === 'success') {
       // The week also closes the night's older issue of a scenario that now only runs weekly; a release
       // gate job still runs every night, and its night issue is closed by the night.
+      if (older && (number || open.get(titleOf(name)))) { log(`kept   ${name}: passed on an older commit, issue left open`); continue; }
       const closing = [number, weekly && weeklyOnly.has(name) ? open.get(titleOf(name)) : undefined].filter(Boolean);
       if (!closing.length) { log(`ok     ${name}: passed, no issue open`); continue; }
       for (const n of closing) {
@@ -241,7 +277,7 @@ export async function reportNight(env = process.env, log = console.log) {
       else if (got && got.skipped) lines = `The job did not run.`;
       else lines = `The job's log could not be read; the run link has it.`;
     }
-    const body = `${when} of ${night}: ${name} ${why}.\n\nRun: ${runLink}\n\nThe last lines:\n\n\`\`\`\n${lines}\n\`\`\`\n`;
+    const body = `${when} of ${night}: ${name} ${why}.${provedNote}\n\nRun: ${runLink}\n\nThe last lines:\n\n\`\`\`\n${lines}\n\`\`\`\n`;
     if (number) {
       await call('POST', `/issues/${number}/comments`, { body });
       log(`commented ${name}: still failing, night added to #${number}`);

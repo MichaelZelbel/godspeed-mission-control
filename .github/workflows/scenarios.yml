@@ -189,7 +189,7 @@ jobs:
     outputs:
       # The reuse step only runs on a pull request, and only when this checkout has its script; otherwise the pick stands.
       picked: ${{ steps.reuse.outputs.picked || steps.pick.outputs.picked }}
-      proof: ${{ env.PROOF_SHA }}
+      proof: ${{ steps.night.outputs.proof || env.PROOF_SHA }}
       version: ${{ steps.read.outputs.version }}
       product: ${{ steps.read.outputs.product }}
       engine: ${{ steps.read.outputs.engine }}
@@ -203,10 +203,18 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22.19.0' }
       - name: This commit's own stage (no stage given, the night)
+        id: night
         if: ${{ !inputs.stage }}
         run: |
           set -e
-          out=$(bash scenarios/stage-for-run.sh '' "$PROOF_SHA" "$RUNNER_TEMP/run-stage")
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            # The night proves the newest main commit that can be proved (scenarios/night-proof.sh).
+            out=$(bash scenarios/night-proof.sh "$PROOF_SHA" "$RUNNER_TEMP/run-stage")
+            echo "proof=$(printf '%s\n' "$out" | sed -n 's/^proof=//p')" >> "$GITHUB_OUTPUT"
+            out=$(printf '%s\n' "$out" | grep -v '^proof=')
+          else
+            out=$(bash scenarios/stage-for-run.sh '' "$PROOF_SHA" "$RUNNER_TEMP/run-stage")
+          fi
           echo "$out"
           [ "$out" = "$(printf 'ref=%s\nraw=%s' "$STAGE_REF" "$RAW")" ] || { echo "the stage is not where the jobs will read it ($RAW)"; exit 1; }
       - uses: actions/upload-artifact@v4
