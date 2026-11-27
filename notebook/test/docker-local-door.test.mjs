@@ -38,6 +38,8 @@ test('a Docker add-on uses a separate loopback door while every web API still ne
   assert.equal(made.status,200,JSON.stringify(made.json));assert.equal(made.json.data.created,true);
   assert.equal((await request(local,'/api/functions/addon-deadlines',{addon:'paperwork-test',action:'list'})).json.data.deadlines.length,1);
   assert.equal((await request(remote,'/api/functions/addon-deadlines',{addon:'paperwork-test',action:'list'})).status,401);
+  assert.equal((await request(remote,'/api/functions/addon-deadlines',{addon:'paperwork-test',action:'close',key:'letter-1'})).status,401);
+  assert.equal((await request(local,'/api/functions/addon-deadlines',{addon:'paperwork-test',action:'list'})).json.data.deadlines[0].state,'open');
 });
 
 test('a native service keeps its usual local door without creating another listener',async t=>{

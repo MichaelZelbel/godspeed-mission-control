@@ -11,8 +11,9 @@ const script=fileURLToPath(new URL('../../tools/due.js',import.meta.url));
 //   {addon, action:'list'}                                               its deadlines
 //   {addon, action:'create', key, title, due, done_when, cost, link?, start?}   made once per key
 //   {addon, action:'update', key, due?, title?}                          only while nobody touched it
+//   {addon, action:'close', key}                                         calls its own deadline off, only while nobody touched it
 // A deadline the person changed (its title or a date) or closed or dropped is theirs: an update
-// answers {updated:false, touched:true} and changes nothing (tools/due.js, "add-on deadlines").
+// answers {updated:false, touched:true} (a close, {closed:false, touched:true}) and changes nothing (tools/due.js, "add-on deadlines").
 // docs/full-version/addon-model.md is the contract add-on authors read.
 const NAME=/^[a-z0-9][a-z0-9-]{0,39}$/,KEY=/^[A-Za-z0-9][A-Za-z0-9._:#/-]{0,119}$/;
 const fail=message=>{throw Object.assign(Error(message),{status:400});};
@@ -45,9 +46,17 @@ export function addonDeadlines(store,input={}){
  const addon=String(input.addon||'');
  if(!NAME.test(addon))fail('Give the add-on\'s name: small letters, digits and dashes, at most 40.');
  if(input.action==='list')return {deadlines:rows(store,addon)};
- if(!['create','update'].includes(input.action))fail('The action is list, create or update.');
+ if(!['create','update','close'].includes(input.action))fail('The action is list, create, update or close.');
  const key=String(input.key||'');
  if(!KEY.test(key))fail('Give the add-on\'s own key for the deadline: letters, digits and . _ : # / -, no spaces, at most 120.');
+ if(input.action==='close'){
+  const now=find(store,addon,key);if(!now)fail('No deadline of this add-on has that key.');
+  if(now.touched)return {closed:false,touched:true,deadline:now};
+  const r=due(store,['addon-close',now.slug,'--addon',addon]);
+  if(r.status===4)return {closed:false,touched:true,deadline:find(store,addon,key)};
+  if(r.status!==0)fail(r.out.split('\n')[0]||'The deadline could not be closed.');
+  return {closed:true,deadline:find(store,addon,key)};
+ }
  if(input.action==='update'){
   const now=find(store,addon,key);if(!now)fail('No deadline of this add-on has that key.');
   if(input.due!==undefined&&input.due!==null&&!realDay(input.due))fail('The deadline needs a real day, written year first, like 2027-03-14.');
