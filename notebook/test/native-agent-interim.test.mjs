@@ -51,6 +51,6 @@ test('an assistant that refuses --format is asked again for plain output',async(
   seen.push(args);const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();
   child.stdin.on('data',()=>queueMicrotask(()=>{if(args.includes('--format')){child.stderr.write('error: unrecognized arguments: --format stream-json');child.emit('close',2);}else{child.stdout.write('plain answer');child.emit('close',0);}}));return child;
  }});
- assert.deepEqual(await ask({message:'hi'}),{reply:'plain answer',interim:[]});
+ assert.deepEqual(await ask({message:'hi'}),{reply:'plain answer'});
  assert.equal(seen.length,2);assert.equal(seen[1].includes('--format'),false);
 });
