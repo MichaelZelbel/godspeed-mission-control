@@ -94,7 +94,7 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
    keepAiFailure({file:keptFile,diagnostic,said,secrets,extra:{exit_code:result.code,model:input.model||saved?.model||null,conversation:String(input.conversation_id||input.note_id||'general').slice(0,80)}});
    throw hermesFailure(diagnostic,secrets);
   }
-  return {reply,interim};
+  return interim.length?{reply,interim}:{reply};
  }finally{release?.();}};
  return agent;
 }
