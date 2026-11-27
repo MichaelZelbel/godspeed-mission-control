@@ -214,13 +214,22 @@ user touched is the user's.** Once they changed its title or a date (also a day 
 closed or dropped it, `touched` is `true` and an update answers `{"updated": false, "touched":
 true}` and changes nothing, for good. Otherwise `{"updated": true}`.
 
+Close one: `{"addon":"your-add-on","action":"close","key":"5d41402abc4b2a76#1"}`, for example
+when the add-on is uninstalled and its reminder should not outlive it. It calls the deadline off
+(dropped, as if the user had dropped it): the page stays as history and nothing mentions it again.
+The answer is `{"closed": true}`. Only a deadline this add-on made can be closed: another add-on's
+key or one the user made answers HTTP 400, "No deadline of this add-on has that key.", and
+changes nothing. A deadline the user touched, or one already closed or dropped (so also a second
+close), answers `{"closed": false, "touched": true}` and changes nothing; that is nothing left to
+do, so an uninstall can repeat the call safely.
+
 A Godspeed from before this answers HTTP 400, "Processing function has not been ported:
 addon-deadlines". The add-on then makes no deadline and should tell the user once that updating
 Godspeed lets it keep their deadlines.
 
 In the file, three lines say whose a deadline is: `ADDON`, `ADDON-KEY` and `ADDON-STATE`, a
 fingerprint of its title and dates as the add-on last wrote them. `mc-due add --addon <name>
---addon-key <key>` and `mc-due addon-update` are the commands behind the door; an add-on uses the
+--addon-key <key>`, `mc-due addon-update` and `mc-due addon-close` are the commands behind the door; an add-on uses the
 door, which runs them under the notebook's lock in the right mission control.
 
 ## A web address for an add-on

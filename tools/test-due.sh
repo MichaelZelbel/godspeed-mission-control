@@ -429,6 +429,18 @@ touchcase closed "the person closed it" ad done closed --evidence "paid it"
 touchcase dropped "the person dropped it" ad drop dropped --yes
 out="$(ad addon-update no-such-thing --addon an-addon --to 2026-12-20)"; rc=$?
 check "an update of a deadline that is not there fails" "$rc" "1"
+mk closeme "Close me" 2026-12-10 "k-closeme" >/dev/null
+out="$(ad addon-close closeme --addon other-addon)"; rc=$?
+check "another add-on cannot close it" "$rc" "1"
+out="$(ad addon-close closeme --addon an-addon)"; rc=$?
+check "the add-on closes its untouched deadline" "$rc" "0"
+contains "  and the state says it was called off" "$(ad state --json)" '"slug":"closeme"'
+out="$(ad addon-close closeme --addon an-addon)"; rc=$?
+check "a second close leaves it as it is" "$rc" "4"
+out="$(ad addon-close by-hand --addon an-addon)"; rc=$?
+check "a deadline the person changed is not closed" "$rc" "4"
+out="$(ad addon-close no-such-thing --addon an-addon)"; rc=$?
+check "a close of a deadline that is not there fails" "$rc" "1"
 
 # `mc-due add` would have filed the reader's reminder there too. The order is now mc-goals' order.
 echo "which mission control"

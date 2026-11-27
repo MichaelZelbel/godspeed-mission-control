@@ -693,8 +693,8 @@ function help() {
   mc-due --godspeed PATH              a mission control somewhere else
 
 An add-on makes its deadlines through the notebook (add --addon NAME --addon-key KEY, and
-addon-update NAME --addon NAME --to/--title). Once you change or close one, it is yours and the
-add-on can no longer change it.
+addon-update NAME --addon NAME --to/--title, addon-close NAME --addon NAME). Once you change or
+close one, it is yours and the add-on can no longer change it.
 
 Without --godspeed it works on the mission control your assistant was started in, else the one
 you are standing in, else GODSPEED_DIR, else the one this computer was joined to.
@@ -1015,6 +1015,27 @@ function cmdAddonUpdate(day) {
   return 0;
 }
 
+// ADDON-CLOSE. The add-on calls off its own deadline (it was uninstalled), as a drop: nothing is
+// deleted. Exit 4 when the person changed or closed it, or it is already called off: it is theirs.
+function cmdAddonClose(day) {
+  const slug = args[1], addon = argOf("--addon", "");
+  if (!slug || !addon) { console.log("Which one, and whose?  mc-due addon-close <name> --addon <add-on>"); return 1; }
+  roll(day);
+  const o = parseFile(slug);
+  if (!o) { console.log("You have nothing called " + slug + "."); return 1; }
+  if (String(o.head["ADDON"] || "").trim() !== addon) { console.log(slug + " was not made by " + addon + ", so " + addon + " cannot close it."); return 1; }
+  if (addonTouched(o)) { console.log("Left as it is: " + slug + " was changed or closed by you, so it is yours now."); return 4; }
+  const rel = writeEvent(today(), {
+    drops: ["due/" + slug], evidence: addon + " closed it", source: "mc-due addon-close",
+    text: (o.head["TITLE"] || slug) + ": called off by " + addon + ".",
+  });
+  if (!rel) { console.log("I could not write it down, so nothing was closed."); return 1; }
+  logLine(o, today(), "closed by " + addon + " (" + rel + ")");
+  save(o);
+  console.log("Closed " + slug + " (called off by " + addon + "). The file stays as history.");
+  return 0;
+}
+
 function cmdDrop() {
   const slug = args[1];
   if (!slug) { console.log("Which one?  mc-due drop <name> --yes"); return 1; }
@@ -1155,6 +1176,7 @@ switch (cmd) {
   case "state": rc = cmdState(day); break;
   case "marker": rc = cmdMarker(day); break;
   case "addon-update": rc = cmdAddonUpdate(day); break;
+  case "addon-close": rc = cmdAddonClose(day); break;
   // The notebook's due recipe tells the assistant `mc-due help` shows the installed contract.
   case "help": help(); break;
   default: console.log("I do not know \"" + cmd + "\"."); help(); rc = 1;

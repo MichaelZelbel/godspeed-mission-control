@@ -83,9 +83,34 @@ test('an add-on deadline the person changed or closed is never changed by the ad
  assert.equal(states.closed,'closed');assert.equal(states.dropped,'dropped');assert.equal(states['by-hand'],'open');
 });
 
+test('close calls off an add-on\'s own untouched deadline and leaves the history',()=>{
+ const {store}=fixture(),close=(key='a1b2c3#1',addon='an-addon')=>addonDeadlines(store,{addon,action:'close',key});
+ const {deadline}=addonDeadlines(store,bill());
+ const closed=close();
+ assert.equal(closed.closed,true);assert.equal(closed.deadline.state,'dropped');
+ assert.ok(fs.existsSync(pageFile(store,deadline.slug)));
+ assert.deepEqual(close(),{closed:false,touched:true,deadline:closed.deadline});
+});
+
+test('close refuses another add-on\'s deadline and the person\'s own, and changes nothing',async()=>{
+ const {store,domains}=fixture();
+ const {deadline}=addonDeadlines(store,bill());
+ await domains.invoke('personal-operation',{type:'due-command',args:['add','own-thing','--title','Mine','--to',dayFrom(5),'--done-when','d','--cost','c']});
+ const files=()=>store.list('deadlines').map(r=>fs.readFileSync(store.file(r),'utf8'));
+ const before=files();
+ assert.throws(()=>addonDeadlines(store,{addon:'other-addon',action:'close',key:'a1b2c3#1'}),/No deadline of this add-on has that key/);
+ assert.throws(()=>addonDeadlines(store,{addon:'an-addon',action:'close',key:'own-thing'}),/No deadline of this add-on has that key/);
+ assert.deepEqual(files(),before);
+ assert.equal(addonDeadlines(store,{addon:'an-addon',action:'list'}).deadlines[0].state,'open');
+ const f=pageFile(store,deadline.slug);fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('deadline: '+deadline.due,'deadline: '+dayFrom(12)));
+ const kept=fs.readFileSync(f,'utf8');
+ const out=addonDeadlines(store,{addon:'an-addon',action:'close',key:'a1b2c3#1'});
+ assert.deepEqual([out.closed,out.touched],[false,true]);assert.equal(fs.readFileSync(f,'utf8'),kept);
+});
+
 test('bad input is refused in plain words',()=>{
  const {store}=fixture();
- const refused=[[{addon:'An Addon'},/add-on's name/],[{action:'forget'},/list, create or update/],[{title:''},/Say what needs doing/],[{title:'two\nlines'},/one line/],
+ const refused=[[{addon:'An Addon'},/add-on's name/],[{action:'forget'},/list, create, update or close/],[{title:''},/Say what needs doing/],[{title:'two\nlines'},/one line/],
   [{due:'2026-02-30'},/real day/],[{due:'next week'},/real day/],[{key:'two words'},/key/],[{link:'javascript:alert(1)'},/http/],[{done_when:''},/what is true when it is done/],[{cost:''},/what it costs/],
   [{start:dayFrom(9)},/start.*before/i]];
  for(const [over,why] of refused)assert.throws(()=>addonDeadlines(store,bill(over)),why,JSON.stringify(over));
