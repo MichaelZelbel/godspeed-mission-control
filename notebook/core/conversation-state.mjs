@@ -70,7 +70,9 @@ export function retainCompletedConversation(store,input,result,{asyncWriter=fals
   if(!at){messages.push({role:'user',content:input.message,...(input.files?.length?{attachments:input.files}:{})});at=messages.length;}
   messages[at-1]={...messages[at-1]};
   delete messages[at-1].lastFailure;
-  messages.splice(at,0,{role:'assistant',content:result.reply,...(result.tool_results?{toolResults:result.tool_results}:{}),...(result.notes_created?.length?{notesCreated:result.notes_created}:{})});
+  // What the assistant said on the way to its answer comes before the answer.
+  const said=(result.interim||[]).map(content=>({role:'assistant',content}));
+  messages.splice(at,0,...said,{role:'assistant',content:result.reply,...(result.tool_results?{toolResults:result.tool_results}:{}),...(result.notes_created?.length?{notesCreated:result.notes_created}:{})});
   store.commit([store.prepare('note_conversations',{id,context_key:key,state:{...state,messages},completed_request_ids:[...(old?.completed_request_ids||[]),...(input.request_id?[input.request_id]:[])]},old)]);
  },{signal});
 }

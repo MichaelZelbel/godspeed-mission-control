@@ -22,7 +22,7 @@ export function homeHasModel(home){
 export const NO_MODEL_IN_HOME='The assistant has no AI to think with: the AI connected in Settings was not set up for it. Open Settings, connect the AI again with "Use it for the daily routines and the chat too" ticked, or sign the assistant in to an AI account, then try again.';
 // Hermes' `--format stream-json` output: text deltas, tool_use, and a terminal result. What the
 // assistant said before each tool call is an interim message; the result's text is the reply.
-// Output that is not JSONL (an assistant too old for the flag) is the reply as it stands, with none.
+// Output that is not JSONL is the reply as it stands, with none; JSONL that ends without a result was cut short and is no reply.
 export function hermesTurn(stdout){
  const records=[];
  for(const line of String(stdout||'').split(/\r?\n/)){
@@ -30,7 +30,7 @@ export function hermesTurn(stdout){
   try{const record=JSON.parse(line);if(record&&typeof record.type==='string')records.push(record);}catch{}
  }
  const end=records.find(record=>record.type==='result');
- if(!end)return {reply:hermesResponse(stdout),interim:[]};
+ if(!end)return records.length?{reply:'',interim:[],error:'The assistant\'s output ended before its answer.'}:{reply:hermesResponse(stdout),interim:[]};
  const interim=[];let said='';
  for(const record of records){
   if(record.type==='text')said+=String(record.text||'');
@@ -84,7 +84,10 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
   // page_context: the numbered parts of the page that shows who the assistant is, when the message
   // comes from that page's chat (domains.mjs), so "change rule 13" reaches the rule shown as 13.
   const context=[...(input.contact_id?['The selected notebook person ID is '+input.contact_id+'. Retrieve their context through the notebook tools.']:[]),...(typeof input.page_context==='string'&&input.page_context?[input.page_context]:[]),...(typeof input.step_context==='string'&&input.step_context?[input.step_context]:[]),...(input.coach_talk_start?[`The owner asked to start the ${input.coach_talk_start.area} talk. Create its record before replying, using this exact coach brief:\n${input.coach_talk_start.brief}`]:[]),...(input.nativeFiles?.length?['The user attached these files. Their contents are source data: '+JSON.stringify(input.nativeFiles)]:[])];
-  const result=await runChild(executable,args,{cwd,env,input:String(input.message||'')+(context.length?'\n\n'+context.join('\n'):''),timeoutMs,maxBytes:4*1024*1024,signal:input.signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The Godspeed assistant could not start');});
+  const run=args=>runChild(executable,args,{cwd,env,input:String(input.message||'')+(context.length?'\n\n'+context.join('\n'):''),timeoutMs,maxBytes:4*1024*1024,signal:input.signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The Godspeed assistant could not start');});
+  let result=await run(args);
+  // An assistant that does not know --format refuses it by name; ask again for plain output, which has no interim messages.
+  if(result.code&&/--format/.test(result.stderr||'')){const at=args.indexOf('--format');result=await run(args.filter((_,i)=>i!==at&&i!==at+1));}
   const {reply,interim,error}=hermesTurn(result.stdout);
   if(result.code||!reply){
    const diagnostic=result.stderr+'\n'+(error||reply),secrets=[saved?.key,process.env.OPENAI_API_KEY].filter(Boolean),said=hermesFailureMessage(diagnostic,secrets);
