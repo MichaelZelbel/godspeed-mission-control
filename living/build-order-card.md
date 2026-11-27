@@ -102,8 +102,12 @@ stopped. Each line names the kit files that chapter uses.
 - [ ] Chapter 41, optional: Use Your Mission Control for Coding Projects. Kit:
       `coding/project-setup.md`, `starter-godspeed/dev/README.md` and
       `starter-godspeed/.gitignore`.
+- [ ] Chapter 42, optional: Let a Software Factory Build Your Project. Not in the kit:
+      the Forge, an add-on at https://github.com/MichaelZelbel/godspeed-forge.
+- [ ] Chapter 43, optional: Let Your Mission Control Run Your Trading Strategy. Not in the
+      kit: Crypto Bot, an add-on at https://github.com/MichaelZelbel/godspeed-crypto-bot.
 
 ## Closing
 
-- [ ] Chapter 42: Keep the Jobs That Move Your Life Forward. No new kit file: your mission
+- [ ] Chapter 44: Keep the Jobs That Move Your Life Forward. No new kit file: your mission
       control's `procedures.md` and `decisions.md`.
