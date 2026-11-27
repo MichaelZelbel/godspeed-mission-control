@@ -13,7 +13,8 @@ import {backup,restore} from '../core/archives.mjs';
 const setup=()=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-closure-'))),query=new QueryService(store);return {store,query};};
 test('activity survives restart and derives create, edit and removal from durable history',()=>{
  const {store,query}=setup(),note=store.save('notes',{title:'Activity fixture',content:'Original'});store.save('notes',{id:note.id,content:'Changed'});store.structural('notes',note.id,'remove');
- const activity=new QueryService(new Store(store.root)).rows('activity_events').filter(r=>r.item_id===note.id);assert.deepEqual(activity.map(r=>r.action).sort(),['create','delete','update']);assert.equal(new Set(activity.map(r=>r.id)).size,3);
+ const activity=new QueryService(new Store(store.root)).rows('activity_events').filter(r=>r.item_id===note.id);// The edit came seconds after the create, so it is part of that one action (activity-actions.test.mjs).
+ assert.deepEqual(activity.map(r=>r.action).sort(),['create','delete']);assert.equal(new Set(activity.map(r=>r.id)).size,2);assert.equal(activity[0].item_name,'Activity fixture');
 });
 test('model reviews tolerate a legacy gap string and inference validates before changing the source',async()=>{
  const {store,query}=setup(),note=store.save('notes',{title:'Synthetic preferences',content:'Alex said "blue is my favorite".',metadata:{summary:'Owner summary'}});

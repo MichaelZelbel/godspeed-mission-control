@@ -10,7 +10,7 @@ function check(name, ok, detail) {
   if (!ok) { failures++; console.log('  ' + String(detail || '').split('\n').join('\n  ')); }
 }
 const say = verdicts => () => JSON.stringify(verdicts);
-const good = { understand: true, like: true, pitch: false, backfire: false, true: true };
+const good = { understand: true, like: true, pitch: false, backfire: false, true: true, agree: true, substance: true };
 const bad = Object.assign({}, good, { like: false, why: 'a pitch' });
 
 const BRIEF = 'Morning.\n\nThree things only you can move today:\n\n1. Cancel the mailboxes.\n\n' +

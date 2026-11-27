@@ -7,13 +7,14 @@ import { pipeline } from 'node:stream';
 import os from 'node:os';
 import { Store, atomic, hash } from '../core/records/store.mjs';
 import { seed } from '../core/seeds.mjs';
-import { SearchIndex } from '../core/index/search.mjs';
+import { SearchIndex, isUnreadable } from '../core/index/search.mjs';
 import { MeaningIndex, embeddingConfig, saveEmbeddingConfig, embedder } from '../core/index/meaning.mjs';
 import { QueryService } from '../core/query.mjs';
 import { Domains } from '../core/domains.mjs';
 import { Scheduler } from '../core/jobs/scheduler.mjs';
 import {controlRoutine} from '../core/jobs/routine-control.mjs';
 import { modelProvider, jobExecutor,hermesProvider,isHermesExecutable } from '../core/runtime.mjs';
+import {readSavedProvider,savedProviderOrNull} from '../core/saved-provider.mjs';
 import {assistantEnvironment} from '../core/assistant-files.mjs';
 import { FileSync } from '../core/sync/git.mjs';
 import {conflictView,resolveSavedConflict} from '../core/conflicts.mjs';
@@ -35,6 +36,7 @@ import { spawn } from 'node:child_process';
 import {ApiKeys,toolScope} from '../core/api-keys.mjs';
 import {Telegram} from '../core/telegram.mjs';
 import {NOTEBOOK_CHAT_FUNCTIONS} from '../core/notebook-chat.mjs';
+import {savedBriefAnswer} from '../core/briefing.mjs';
 import {browserChat} from './browser-chat.mjs';
 import {KEPT_FILE} from '../core/ai-failures.mjs';
 import {transcribeRecording} from '../core/dictation.mjs';
@@ -69,8 +71,8 @@ import {NoteProcessing} from '../core/processing.mjs';
 import {mediaObjectName,mediaFileName} from '../core/media-names.mjs';
 import {CARRY_LIMIT,carriedRoot,carryMedia,findMedia,keepMedia,keptHere,keptElsewhere,mediaPresence,missingHere,removeCarried} from '../core/media-store.mjs';
 import {retireShares} from '../core/shares.mjs';
-import {installFoodTable,foodTableWanted} from '../core/food-table.mjs';
 import {repairTimelineAtStart} from '../core/due-copy.mjs';
+import {takeInWorldAtStart} from '../core/world-retire.mjs';
 import {IdentityShelf} from '../core/identity-shelf.mjs';
 import {VERSION} from '../core/version.mjs';
 import {recordRunningNotebook} from '../core/running-notebook.mjs';
@@ -97,17 +99,6 @@ export const startupReadiness=publication=>{
 };
 export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
 const providerView=config=>({configured:true,url:baseAddress(config.url),model:config.model,key:!!config.key});
-// What a damaged saved connection answers with, its own sentence instead of the generic
-// invalid-JSON one (#861 review D4), naming the step that recovers it.
-const DAMAGED_PROVIDER='The saved AI connection could not be read. Connect your AI again in Settings, Your AI.';
-const readSavedProvider=file=>{
-  let text;try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code==='ENOENT')return null;throw error;}
-  // A damaged file is one plain log line per request, never a stack trace, and never the file's own
-  // text, which holds the key (#833).
-  let config;try{config=JSON.parse(text);}catch{console.error('Godspeed Mission Control: the saved AI connection ('+file+') is not valid JSON. Connect your AI again in Settings, Your AI.');throw new Error(DAMAGED_PROVIDER);}
-  if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error(DAMAGED_PROVIDER);
-  return config;
-};
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
@@ -153,6 +144,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // The store keeps every record in memory and re-reads only the files its
   // watcher names; the index follows the store's changes row by row.
   const store = new Store(root,{device,watch:true}), index = new SearchIndex(store,{background:true}), query = new QueryService(store), sync = new FileSync(store);
+  index.onUnreadable=(entered,cleared)=>{
+    for(const name of entered)console.error('Godspeed Mission Control: search cannot read '+name+'; the other folders are still indexed');
+    for(const name of cleared)console.error('Godspeed Mission Control: search can read '+name+' again');
+  };
   const readiness=startupReadiness(index.initialPublication);
   index.initialPublication.then(
     ()=>console.error(startupTrace('index-published')),
@@ -182,7 +177,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // else (an env address, a Hermes with its own AI, a provider handed in): what a changed file on
   // disk is compared against (#826).
   let savedConfig=null;
-  if(!provider&&fs.existsSync(providerPath)){const saved=JSON.parse(fs.readFileSync(providerPath,'utf8'));provider=guarded(modelProvider(saved));savedConfig=saved;}
+  // A saved connection that cannot be read leaves the notebook running with no AI connected, and
+  // Settings, Your AI, says so; the file stays for a look (#805). Until then it stopped startup.
+  if(!provider){try{const saved=readSavedProvider(providerPath);if(saved){provider=guarded(modelProvider(saved));savedConfig=saved;}}
+    catch(error){if(!error.savedProviderLogged)console.error('Godspeed Mission Control: the saved AI connection in '+providerPath+' cannot be read, so no AI is connected from it:',error.message);}}
   provider ||= guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}));
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
   // Where this notebook really runs from, for the tools (core/running-notebook.mjs): Windows only.
@@ -229,7 +227,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const routineAI=originalRuntime&&descriptor?.verified&&descriptor.home?{home:descriptor.home,state:store.state}:null;
   // An AI connected in Settings for the notebook only, while Hermes, which answers the chats, has no
   // AI of its own: the chats and the card say so, with the step that changes it (#590).
-  const settingsOnlyAI=()=>{if(!routineAI||!fs.existsSync(providerPath))return false;try{return routineAIStatus(routineAI).source==='none';}catch{return false;}};
+  const settingsOnlyAI=()=>{if(!routineAI||!savedProviderOrNull(providerPath))return false;try{return routineAIStatus(routineAI).source==='none';}catch{return false;}};
   // The saved file is the connection Settings shows (#826): read it the way Settings does. A file
   // that exists but cannot be read makes the one availability 'unreadable'; a file repaired or
   // replaced on disk while the notebook runs is followed, so the chats serve the saved AI again,
@@ -303,6 +301,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const factClosing=domains.factClosing=new FactClosing({store,query,device});
   const menerioImport=new MenerioImport(store,mediaRoot,()=>{index.rebuild();factClosing.request();},{beat});
   const telegramConnection=new TelegramConnection();
+  // A send the person stopped is not a failure: it ends as the plain outcome the chat already shows, never the engine's abort error.
+  const stoppedReply=(controller,error)=>controller.signal.aborted?Object.assign(new Error('Reply stopped.'),{status:409}):error;
   const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store),backupRunner=new BackupRunner(store,mediaRoot);let dictationBusy=false;
   // The page that shows who the assistant is (core/identity-shelf.mjs): who it is, its rules, what
   // it knows about its owner and its skills, with every earlier version. Its assistant's own identity file follows
@@ -389,9 +389,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // The page's own form must carry its origin (same-origin), and the code in
       // its address still never goes to another site.
       if(route.startsWith('/login/')){
-        const code=route.slice(7),expiry=loginLinks.get(code),page=(status,text,button)=>{res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'same-origin','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Godspeed Mission Control</title><body style="font-family:system-ui,sans-serif;max-width:28rem;margin:4rem auto;padding:0 1rem;line-height:1.5"><h1 style="font-size:1.3rem">'+text+'</h1>'+(button?'<form method="post"><button type="submit" style="font-size:1.05rem;padding:.6rem 1.4rem">Continue</button></form>':'')+'</body></html>');};
-        if(!expiry||expiry<Date.now())return page(401,'This sign-in link expired or was already used.',false);
-        if(req.method!=='POST')return page(200,'Open your Godspeed Mission Control',true);
+        const code=route.slice(7),expiry=loginLinks.get(code),page=(status,{title,text,button,link})=>{res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'same-origin','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="'+(store.get('settings','ui-preferences')?.preferences?.theme==='light'?'light':'dark')+'"><title>Godspeed Mission Control</title><style>body{font-family:system-ui,sans-serif;background:hsl(222 30% 8%);color:hsl(220 15% 90%);margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem;box-sizing:border-box;line-height:1.5}main{max-width:28rem;width:100%;padding:2rem;border-radius:.75rem;border:1px solid hsl(220 15% 90%/.2);background:hsl(222 30% 11%)}p.brand{margin:0 0 1rem;font-size:.85rem;opacity:.7}h1{font-size:1.3rem;margin:0 0 .75rem}p{margin:0 0 1.25rem}.go{display:inline-block;font-size:1.05rem;padding:.6rem 1.4rem;border:0;border-radius:.5rem;background:hsl(217 75% 58%);color:#fff;text-decoration:none;cursor:pointer}'+(store.get('settings','ui-preferences')?.preferences?.theme==='light'?'body{background:hsl(216 43% 97%);color:hsl(225 62% 12%)}main{background:#fff;border-color:hsl(225 62% 12%/.2)}.go{background:hsl(220 70% 45%)}':'')+'</style><body><main><p class="brand">Godspeed Mission Control</p><h1>'+title+'</h1>'+(text?'<p>'+text+'</p>':'')+(button?'<form method="post"><button type="submit" class="go">Continue</button></form>':'')+(link?'<a class="go" href="'+link.href+'">'+link.label+'</a>':'')+'</main></body></html>');};
+        if(!expiry||expiry<Date.now())return page(401,{title:'This sign-in link expired or was already used.',text:'Each sign-in link works once, for five minutes.',link:{href:'/dashboard',label:'Go to your notebook'}});
+        if(req.method!=='POST')return page(200,{title:'Open your Godspeed Mission Control',button:true});
         loginLinks.delete(code);
         if(!auth.configured()) { res.writeHead(303,{'Location':auth.invite().path,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});return res.end(); }
         const destination=safeReturn(url.searchParams.get('next')||'/dashboard');
@@ -474,7 +474,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
             const sourceId=input.request_id?'browser-message-'+hash([conversation,input.request_id]):undefined;if(!sourceId||!store.get('conversation_messages',sourceId))await store.saveAsync('conversation_messages',{id:sourceId,role:'user',content:input.message,conversation_id:conversation,source_app:'browser-chat'},undefined,{signal:controller.signal});
             const result=await domains.invoke('conversation-chat',{message:input.message,conversation_id:conversation,request_id:input.request_id,talk_id:talk?.id,signal:controller.signal}),saved={reply:result.reply};
             if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'verified',result:saved},undefined,{signal:controller.signal});return send(res,200,saved);
-          }catch(error){if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message});throw error;}finally{if(receiptId)chatRequests.delete(receiptId);}
+          }catch(raw){const error=stoppedReply(controller,raw);if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message});throw error;}finally{if(receiptId)chatRequests.delete(receiptId);}
         }
         return send(res,405,{error:'Use GET or POST'});
       }
@@ -731,6 +731,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         return send(res,404,{error:'Unknown operation'});
       }
       if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...await scheduler.configure({...input,owner:mediaSync.server()||device}),results:setupResults(store,await scheduler.tick({raise:true}))});}
+      if(route==='/api/jobs/run'&&req.method==='POST'&&!originalRuntime){const input=JSON.parse(await body(req));if(typeof input.id==='string'&&(input.id==='memory-daily'||!store.get('jobs',input.id)))return send(res,202,scheduler.startRun(input.id));if(typeof input.id==='string')return send(res,200,{results:await scheduler.runAndWait(input.id)});return send(res,200,{results:await scheduler.tick()});}
       if(route==='/api/jobs/run'&&req.method==='POST'){const input=JSON.parse(await body(req));if(originalRuntime)return send(res,202,scheduler.startRun(input.id));return send(res,200,{results:await scheduler.tick()});}
       if(route==='/api/connections/recheck'&&req.method==='POST'){await jobExecutor(provider,query)({kind:'connection-check',id:'manual-connection-check',manual:true},{store,settings:store.get('settings','installation')||{}});return send(res,200,{connections:query.rows('connector_status').map(({id,ok,status,checked_at})=>({id,ok,status,checked_at}))});}
       if(route==='/api/jobs/update'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:originalRuntime?await scheduler.control(input):await controlRoutine(store,input,{device})});}
@@ -862,7 +863,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         // included, says what Settings says and asks the provider loaded before the damage nothing.
         // Read before the settings-only check: with the file damaged, its advice cannot be followed.
         if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&domains.provider&&!assistantMissing&&chatAIAvailability()==='unreadable')throw new Error(AI_CONNECTION_UNREADABLE_STATUS);
-        if(isChat&&domains.provider&&!assistantMissing&&settingsOnlyAI())throw new Error(SETTINGS_ONLY_AI_STATUS+'. '+SETTINGS_ONLY_AI_HELP);
+        if(isChat&&domains.provider&&!assistantMissing&&settingsOnlyAI()&&!savedBriefAnswer(store,input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||''))throw new Error(SETTINGS_ONLY_AI_STATUS+'. '+SETTINGS_ONLY_AI_HELP);
         if(isChat&&id&&(!/^[a-f0-9-]{36}$/.test(id)||chatRequests.has(id)))throw new Error('Invalid chat request');
         const receiptId=isChat&&id?'chat-request-'+id:null,requestHash=hash({name,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
         if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,{data:previous.result,error:null});throw Error('This interrupted chat request needs review before replay');}
@@ -886,7 +887,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           if(isChat)await retainCompletedConversation(store,input,data,{asyncWriter:true,signal:controller.signal});
           if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'verified',result:data},undefined,{signal:controller.signal});
           return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});
-        }catch(error){
+        }catch(raw){
+          const error=isChat?stoppedReply(controller,raw):raw;
           if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});
           // Every AI failure is already the one plain sentence a person reads: Domains.invoke
           // translated it (core/ai-outcome.mjs), for this route and for every other one, so no
@@ -927,6 +929,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   let firstQueryTraced=false;
   const listen = (server, port, host) => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   const server = http.createServer(handle(remote, auth));
+  // An older notebook gains its missing routines before the server answers, so Settings lists them at once.
+  try{await scheduler.ensureStartingJobs?.();}catch{}
   await listen(server, port, host);
   console.error(startupTrace('main-door-listening'));
   // The link an assistant gives when asked for the notebook (get_notebook_link), with the port this door really has.
@@ -935,7 +939,6 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // one-click image do not run install-native-notebook.sh) fetches it once, a minute after it starts,
   // in the background, checked against its pinned checksum. Never under the test runner, never with
   // GODSPEED_FOOD_TABLE=off; a failure is one line in the log and nothing else.
-  if (foodTableWanted(store.state)) { const foodTableTimer = setTimeout(() => { void installFoodTable(store.state).catch(error => console.error('Godspeed Mission Control: the food table was not downloaded: ' + error.message)); }, 60000); foodTableTimer.unref?.(); }
   // Deadlines finished before 2.0.0-beta.15 get their timeline status and scores when the notebook
   // starts after the update, not when the deadline copy next happens to run (core/due-copy.mjs,
   // repairTimelineAtStart; 2 November 2026). In the background, two seconds after the door opened,
@@ -950,7 +953,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     timelineRepairDone = resolve;
     timelineRepairTimer = setTimeout(() => {
       timelineRepairTimer = null;
-      resolve(repairTimelineAtStart(store, { signal: timelineRepairStop.signal }).then(report => {
+      resolve(repairTimelineAtStart(store, { signal: timelineRepairStop.signal }).then(async report => {
+        // The old world files (#90): taken into the records and retired, the same quiet way.
+        await takeInWorldAtStart(store, { signal: timelineRepairStop.signal }).catch(error => { if (!timelineRepairStop.signal.aborted) console.error('Godspeed Mission Control: the old world files were not taken into the notebook this time (the next start does it): ' + error.message); });
         if (report?.corrected?.length) console.log('Godspeed Mission Control: ' + report.corrected.length + ' finished deadline(s) now show their status and scores in the timeline.');
         return report;
       }).catch(error => {
@@ -1047,13 +1052,55 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     watchers.set(name,watcher);
     watcher.on('error',()=>{try{watcher.close();}catch{}if(watchers.get(name)===watcher){watchers.delete(name);changed(name)('rename',null);rearm(name);}});
   };
-  for(const name of durableRoots)watchRoot(name);
+  // A root that cannot be watched yet is tried again by `reconcile`; only a
+  // permission failure is let through, anything else still fails the start.
+  const watchRootOrWait=name=>{try{watchRoot(name);}catch(error){if(!isUnreadable(error))throw error;}};
+  for(const name of durableRoots)watchRootOrWait(name);
   // A manual or extra instructions changed by anything (a sync from another machine, a session, an
   // editor) bring the assistant's own identity file in step with them (assistant-soul.mjs).
   let soulDebounce;const followPersona=()=>{clearTimeout(soulDebounce);soulDebounce=setTimeout(()=>{try{shelf.followPersona();}catch{}},2000);soulDebounce.unref?.();};
-  const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){try{watchRoot(name);}catch{rearm(name);}changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
+  const onRootEvent=(event,name)=>{
+    const first=name==null?null:String(name).split(/[\\/]/)[0];
+    if(durableRoots.includes(first)){try{watchRoot(first);}catch{rearm(first);}changed(first)(event,null);}
+    else if(durableFiles.includes(first)){changed('')(event,first);if(first==='AGENTS.md')followPersona();}
+  };
+  const inodeOf=()=>{try{return fs.statSync(store.root).ino;}catch{return null;}};
+  let rootWatcher=null,rootInode=inodeOf();
+  const openRootWatcher=()=>{const watcher=fs.watch(store.root,onRootEvent);watcher.on('error',()=>{});return watcher;};
+  try{rootWatcher=openRootWatcher();}catch(error){if(rootInode!==null&&error?.code!=='ENOENT')throw error;}
+  // Once a second: a folder that appeared (a durable root created after start,
+  // including one under a parent such as routines/) or could not be watched yet
+  // is watched now; and the workspace folder itself, replaced under the running
+  // notebook, leaves every watcher on a folder that no longer exists, so all of
+  // them are armed again against the new one and the index is read in full.
+  const reconcile=setInterval(()=>{
+    if(menerioImport.mutating)return;
+    const inode=inodeOf();
+    if(inode===null)return;
+    if(inode!==rootInode){
+      // The new folder's watcher and the notes store are armed before anything
+      // else is torn down and before the inode is remembered: a failure here (a
+      // folder or its notes folder not yet readable or writable, no handles
+      // left) is retried on the next tick, never thrown out of the timer.
+      let next;try{next=openRootWatcher();}catch{return;}
+      try{store.unwatch();store.watch();}catch{store.unwatch();try{next.close();}catch{}return;}
+      rootInode=inode;
+      try{rootWatcher?.close();}catch{}
+      rootWatcher=next;
+      for(const watcher of watchers.values()){try{watcher.close();}catch{}}
+      watchers.clear();
+      for(const timer of rewatches.values())clearTimeout(timer);
+      rewatches.clear();
+      changed('')('rename',null);
+    }
+    for(const name of durableRoots){
+      if(watchers.has(name))continue;
+      try{watchRoot(name);}catch{continue;}
+      if(watchers.has(name))changed(name)('rename',null);
+    }
+  },1000);reconcile.unref?.();
   let localServer = null;
-  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(automaticTimer);clearInterval(factTimer);clearInterval(journalMomentsTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();watchers.clear();for(const timer of rewatches.values())clearTimeout(timer);rewatches.clear();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
+  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(automaticTimer);clearInterval(factTimer);clearInterval(journalMomentsTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();clearInterval(reconcile);rootWatcher?.close();for(const watcher of watchers.values())watcher.close();watchers.clear();for(const timer of rewatches.values())clearTimeout(timer);rewatches.clear();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
   // A container's main door listens on its network interface and always needs sign-in.
   // Add-ons and tools in that same container may use this opt-in, loopback-only door,
   // with the exact Host/Origin guards and API contract of a native local installation.

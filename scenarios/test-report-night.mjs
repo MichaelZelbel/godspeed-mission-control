@@ -59,7 +59,7 @@ async function night(results, state = {}, extra = {}) {
       const p = url.pathname.replace('/repos/o/r', '');
       calls.push({ method: req.method, path: p, body });
       const send = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(typeof obj === 'string' ? obj : JSON.stringify(obj)); };
-      if (req.method === 'GET' && p === '/labels/scenario-failure') return send(st.labelExists ? 200 : 404, {});
+      if (req.method === 'GET' && (p === '/labels/scenario-failure' || p === '/labels/weekly-test')) return send(st.labelExists ? 200 : 404, {});
       if (req.method === 'POST' && p === '/labels') return send(201, {});
       if (req.method === 'GET' && p === '/issues') return send(200, url.searchParams.get('page') === '1' ? st.openIssues : []);
       if (req.method === 'POST' && p === '/issues') return send(201, { number: next++ });
@@ -68,6 +68,7 @@ async function night(results, state = {}, extra = {}) {
       if (req.method === 'GET' && p === '/actions/runs/77/jobs') return send(200, { jobs: st.jobs });
       const m = p.match(/^\/actions\/jobs\/(\d+)\/logs$/);
       if (m) { const j = st.jobs.find((x) => String(x.id) === m[1]); return send(200, st.logs[j.name] ?? ''); }
+      if (req.method === 'GET' && p === '/contents/scenarios/scenario-catalog.tsv') return st.catalog === undefined ? send(404, {}) : send(200, st.catalog);
       send(404, { message: 'not stubbed' });
     });
   });
@@ -156,6 +157,52 @@ test('a passed scenario with an open issue closes it', async () => {
   assert.equal(r.patches.length, 1);
   assert.equal(r.patches[0].path, '/issues/12');
   assert.equal(r.patches[0].body.state, 'closed');
+});
+
+const NEW = 'a'.repeat(40);
+const OLD = 'b'.repeat(40);
+const stageJob = { id: 9, name: 'the stage file', conclusion: 'success' };
+const nightEnv = { GITHUB_EVENT_NAME: 'schedule', GITHUB_SHA: NEW };
+const catalogOf = (...ids) => `# header\n${ids.map((i) => `${i}\tinline\tpooled\tnative\tno\tx`).join('\n')}\n`;
+
+test('a night that proved an older commit closes no issue, whatever passed', async () => {
+  const r = await night('voice=success late-reminder-file=success', {
+    openIssues: [{ number: 12, title: T('voice') }], jobs: [stageJob],
+    logs: { 'the stage file': `night-proof: proved=${OLD}\n` }, catalog: catalogOf('voice', 'late-reminder-file'),
+  }, nightEnv);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.patches.length + r.comments.length + r.created.length, 0);
+});
+
+test('a night whose proved commit cannot be read closes no issue either', async () => {
+  const r = await night('voice=success', { openIssues: [{ number: 12, title: T('voice') }], jobs: [stageJob], logs: { 'the stage file': 'nothing' } }, nightEnv);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.patches.length, 0);
+});
+
+test('a night that proved its own commit still closes a passed issue', async () => {
+  const r = await night('voice=success', { openIssues: [{ number: 12, title: T('voice') }], jobs: [stageJob], logs: { 'the stage file': `night-proof: proved=${NEW}\n` } }, nightEnv);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.patches.length, 1);
+});
+
+test('a failure on an older proved commit is filed and names that commit', async () => {
+  const r = await night('voice=failure', {
+    jobs: [stageJob, { id: 5, name: 'a voice note, with the permission and without it', conclusion: 'failure' }],
+    logs: { 'the stage file': `night-proof: proved=${OLD}\n`, 'a voice note, with the permission and without it': 'FAIL voice: no sound\n' },
+    catalog: catalogOf('voice'),
+  }, nightEnv);
+  assert.equal(r.created.length, 1);
+  assert.match(r.created[0].body.body, new RegExp(`proved ${OLD.slice(0, 12)}`));
+});
+
+test("a scenario the proved checkout does not have is left out, not judged from the current catalog", async () => {
+  const r = await night('voice=failure late-reminder-file=success', {
+    jobs: [stageJob], logs: { 'the stage file': `night-proof: proved=${OLD}\n` }, catalog: catalogOf('late-reminder-file'),
+    openIssues: [],
+  }, { ...nightEnv, PROOF_SHA: OLD });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.created.length, 0);
 });
 
 test('a passed scenario with no open issue does nothing', async () => {
@@ -677,7 +724,7 @@ test('a pull request from a fork runs nothing, and its verdict passes', async ()
   const verdict = blockOf('verdict');
   assert.match(verdict, /^ {4}if: always\(\)$/m, 'the verdict does not always run, so a fork pull request would get no verdict');
   const at = verdict.indexOf('          bad=0\n');
-  const to = verdict.indexOf('      - name: Tell the night in issues');
+  const to = verdict.indexOf('      - name: Tell the night or the week in issues');
   assert.ok(at > 0 && to > at, 'the verdict step was not found');
   const script = verdict.slice(at, to).replace(/^ {10}/gm, '');
   const run = (env) => spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { ...process.env, GITHUB_STEP_SUMMARY: '/dev/null', STAGE_REF: 'this-commit', WANT_MAC: 'false', IS_CANDIDATE: 'false', RESULTS: 'voice=skipped plain-yes=skipped', PICKED: '', PR_IMAGE: 'success', ...env } });
@@ -728,18 +775,236 @@ test('the workflow runs on a pull request opened, pushed to or reopened, and one
   assert.ok(conc.includes("cancel-in-progress: ${{ github.event_name == 'pull_request' }}"), 'only a pull request may cancel its older run');
 });
 
-test('the pick says all on a night, a candidate and a manual run', async () => {
+test('the pick says all on a plain manual run', async () => {
   const { readFileSync, writeFileSync, mkdtempSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { spawnSync } = await import('node:child_process');
   const script = pickStep(readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n'));
-  for (const event of ['schedule', 'workflow_dispatch']) {
-    const dir = mkdtempSync(`${tmpdir()}/pickall-`).replaceAll(String.fromCharCode(92), '/');
-    writeFileSync(`${dir}/out`, '');
-    const r = spawnSync('bash', ['-c', script], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', env: { ...process.env, GITHUB_EVENT_NAME: event, GITHUB_OUTPUT: `${dir}/out`, RUNNER_TEMP: dir, GITHUB_STEP_SUMMARY: `${dir}/sum` } });
-    assert.equal(r.status, 0, r.stderr);
-    assert.equal(readFileSync(`${dir}/out`, 'utf8'), 'picked=all\n', `${event} does not prove every scenario`);
+  const dir = mkdtempSync(`${tmpdir()}/pickall-`).replaceAll(String.fromCharCode(92), '/');
+  writeFileSync(`${dir}/out`, '');
+  const r = spawnSync('bash', ['-c', script], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', env: { ...process.env, GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_OUTPUT: `${dir}/out`, RUNNER_TEMP: dir, GITHUB_STEP_SUMMARY: `${dir}/sum` } });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(readFileSync(`${dir}/out`, 'utf8'), 'picked=all\n', 'a manual run with no stage and no only does not prove every scenario');
+});
+
+// The release gate: the catalog's `gate` column is the one place that says which jobs can hold up a release.
+const GATE_FILE = fileURLToPath(new URL('./scenario-gate.tsv', import.meta.url));
+const PICK_RUN = fileURLToPath(new URL('./pick-run.sh', import.meta.url));
+const INFRASTRUCTURE = new Set(['pr-image', 'stage', 'verdict']);
+const CANDIDATE_ONLY_JOBS = new Set(['mac-install', 'windows-old-names-move']);
+
+// scenarios/scenario-gate.tsv: one row per job, "<job>\t<release|weekly>"; a job twice is kept twice.
+const gateRows = (text) => text.split(/\r?\n/).filter((line) => line.trim() && !line.startsWith('#')).map((line) => {
+  const [id, gate] = line.split('\t');
+  return { id, gate: gate || '', candidateOnly: CANDIDATE_ONLY_JOBS.has(id) };
+});
+// What is wrong with the grouping of these jobs: a job in neither group, in both, twice, or a row for no job.
+const groupProblems = (jobs, rows) => {
+  const problems = [];
+  for (const id of jobs) {
+    const own = rows.filter((r) => r.id === id);
+    if (!own.length) problems.push(`${id} is in neither group`);
+    else if (own.length > 1) problems.push(`${id} is on ${own.length} rows${new Set(own.map((r) => r.gate)).size > 1 ? ', in both groups' : ''}`);
   }
+  for (const r of rows) {
+    if (!['release', 'weekly'].includes(r.gate)) problems.push(`${r.id} has no valid group (${JSON.stringify(r.gate)})`);
+    if (!jobs.includes(r.id)) problems.push(`${r.id} is no job of scenarios.yml`);
+  }
+  return problems;
+};
+
+async function pickRun(env, gateFile = GATE_FILE) {
+  const { spawnSync } = await import('node:child_process');
+  const r = spawnSync('bash', [PICK_RUN], { encoding: 'utf8', env: { PATH: process.env.PATH, GATE: gateFile, ...env } });
+  return { status: r.status, out: r.stdout.trim(), err: r.stderr };
+}
+const pickedSet = (line) => new Set(line.replace(/^picked=/, '').split(',').filter(Boolean));
+
+test('every scenario job is in exactly one group, and the groups are the approved ones', async () => {
+  const { readFileSync } = await import('node:fs');
+  const rows = gateRows(readFileSync(GATE_FILE, 'utf8'));
+  const workflowText = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const jobs = workflowJobs(workflowText.slice(workflowText.indexOf('\njobs:\n'))).map((j) => j.id).filter((id) => !INFRASTRUCTURE.has(id));
+  assert.deepEqual(groupProblems(jobs, rows), [], 'every job of scenarios.yml must be on exactly one row of scenarios/scenario-gate.tsv, release or weekly');
+  const release = rows.filter((r) => r.gate === 'release').map((r) => r.id);
+  assert.equal(release.length, 17, 'the release gate is the 17 jobs approved on 2026-11-22; changing it is the owner\'s decision');
+  assert.equal(rows.length - release.length, 15);
+  // The approved list itself, pinned so that swapping one job between the groups cannot pass unseen.
+  assert.deepEqual([...release].sort(), ['brief-asked-in-chat', 'briefing-breaks-a-rule', 'docker-server', 'first-day', 'linux-install', 'linux-update', 'mac-install', 'plain-yes', 'reminder-closed-elsewhere', 'reminder-from-settings', 'server-update-keeps-everything', 'settings-on-install', 'talk-prep-honest', 'telegram-language', 'update-keeps-everything', 'what-was-that', 'windows-old-names-move']);
+  for (const id of ['linux-install', 'docker-server', 'first-day', 'plain-yes', 'reminder-closed-elsewhere', 'windows-old-names-move']) assert.ok(release.includes(id), `${id} holds up a release`);
+  for (const id of ['voice', 'connection-check', 'late-reminder-file', 'hermes-update-rollback', 'media-travels']) assert.ok(!release.includes(id), `${id} is weekly only`);
+});
+
+test('a job in no group, in both, or on no job at all is found', () => {
+  const jobs = ['a', 'b', 'c'];
+  assert.deepEqual(groupProblems(jobs, gateRows('a\trelease\nb\tweekly\nc\tweekly\n')), []);
+  assert.deepEqual(groupProblems(jobs, gateRows('a\trelease\nb\tweekly\n')), ['c is in neither group']);
+  assert.deepEqual(groupProblems(jobs, gateRows('a\trelease\na\tweekly\nb\tweekly\nc\tweekly\n')), ['a is on 2 rows, in both groups']);
+  assert.deepEqual(groupProblems(jobs, gateRows('a\trelease\nb\tweekly\nc\n')), ['c has no valid group ("")']);
+  assert.deepEqual(groupProblems(jobs, gateRows('a\trelease\nb\tweekly\nc\tweekly\nd\tweekly\n')), ['d is no job of scenarios.yml']);
+});
+
+test('the night and a default candidate run pick exactly the release gate, and the candidate-only jobs only on their own run', async () => {
+  const { readFileSync } = await import('node:fs');
+  const rows = gateRows(readFileSync(GATE_FILE, 'utf8'));
+  const gate = rows.filter((r) => r.gate === 'release');
+  const everyday = new Set(gate.filter((r) => !r.candidateOnly).map((r) => r.id));
+  const night = await pickRun({ EVENT: 'schedule' });
+  assert.equal(night.status, 0, night.err);
+  assert.deepEqual(pickedSet(night.out), everyday, 'the night is not exactly the release gate without Mac and Windows');
+  assert.ok(night.out.startsWith('picked=,') && night.out.endsWith(','), 'a pick is a comma-wrapped list, as `contains` reads it');
+  const candidate = await pickRun({ EVENT: 'workflow_dispatch', STAGE_INPUT: 'candidate/2.0.0-beta.30', MAC: 'false' });
+  assert.deepEqual(pickedSet(candidate.out), new Set([...everyday, 'windows-old-names-move']), 'a default candidate runs the gate with Windows, and no Mac');
+  const withMac = await pickRun({ EVENT: 'workflow_dispatch', STAGE_INPUT: 'candidate/2.0.0-beta.30', MAC: 'true' });
+  assert.deepEqual(pickedSet(withMac.out), new Set(gate.map((r) => r.id)), 'a candidate with mac=true runs the whole gate');
+  const beta = await pickRun({ EVENT: 'workflow_dispatch', STAGE_INPUT: 'beta' });
+  assert.deepEqual(pickedSet(beta.out), everyday, 'a stage that is no candidate tag has no Windows job');
+  for (const id of rows.filter((r) => r.gate === 'weekly').map((r) => r.id)) {
+    assert.ok(!pickedSet(night.out).has(id) && !pickedSet(candidate.out).has(id), `${id} is weekly only and must not run at night or on a candidate`);
+  }
+});
+
+test('all runs every job, an only run names its jobs, a plain run keeps running everything, and a stage with no gate file runs everything', async () => {
+  assert.equal((await pickRun({ EVENT: 'workflow_dispatch', ALL: 'true' })).out, 'picked=all');
+  assert.equal((await pickRun({ EVENT: 'workflow_dispatch', ALL: 'true', STAGE_INPUT: 'candidate/x' })).out, 'picked=all', 'a candidate can ask for every job');
+  assert.equal((await pickRun({ EVENT: 'workflow_dispatch', ALL: 'false', ONLY: 'voice,first-day', STAGE_INPUT: 'candidate/x' })).out, 'picked=,voice,first-day,', 'only wins, gate or not');
+  assert.equal((await pickRun({ EVENT: 'workflow_dispatch', ALL: 'true', ONLY: 'voice' })).out, 'picked=,voice,');
+  assert.equal((await pickRun({ EVENT: 'workflow_dispatch' })).out, 'picked=all', 'a hand run with no stage runs everything, as before');
+  assert.equal((await pickRun({ EVENT: 'schedule', ALL: 'true', ONLY: 'voice' })).out.includes(',voice,'), false, 'the night ignores only and all');
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const dir = mkdtempSync(`${tmpdir()}/oldcat-`);
+  assert.equal((await pickRun({ EVENT: 'schedule' }, `${dir}/none.tsv`)).out, 'picked=all', 'a stage with no gate file picks everything, never nothing');
+});
+
+test('the workflow reads the gate through pick-run.sh with the inputs it needs, and `all` is a boolean dispatch input', async () => {
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  assert.match(text, /^ {6}all:\n {8}description: .*\n {8}type: boolean\n {8}default: false$/m, 'the dispatch input `all` (boolean, default false) is missing');
+  assert.match(pickStep(text), /bash scenarios\/pick-run\.sh/);
+  const at = text.indexOf('        id: pick\n', text.indexOf('\n  stage:'));
+  const env = text.slice(at, text.indexOf('        run: |', at));
+  for (const need of ['ALL: ${{ inputs.all }}', 'MAC: ${{ inputs.mac }}', 'STAGE_INPUT: ${{ inputs.stage }}', 'ONLY: ${{ inputs.only }}']) assert.ok(env.includes(need), `the pick step does not hand over ${need}`);
+  assert.match(text, /^run-name: .*inputs\.stage \|\| \(inputs\.all && 'main, the week'\) \|\| 'main, the night'/m, 'the title of a candidate stays "scenarios <stage>", the week is titled, the night is the default');
+  assert.ok(text.includes("cron: '30 2 * * *'"), 'the night stays a schedule run of this workflow');
+});
+
+test('the weekly workflow dispatches the full run on main by itself, and is no schedule run of scenarios.yml', async () => {
+  const { readFileSync } = await import('node:fs');
+  const weekly = readFileSync(fileURLToPath(new URL('../.github/workflows/scenarios-weekly.yml', import.meta.url)), 'utf8').replace(/\r\n/g, '\n');
+  assert.equal([...weekly.matchAll(/^ {4}- cron: /gm)].length, 1, 'one weekly schedule');
+  assert.match(weekly, /^ {4}- cron: '\d+ \d+ \* \* \d'$/m, 'the schedule is weekly: one weekday, never every day');
+  assert.match(weekly, /^permissions:\n {2}contents: read\n {2}actions: write$/m, 'it may dispatch workflows and nothing more');
+  assert.match(weekly, /gh workflow run scenarios\.yml [^\n]*--ref main[^\n]* -f all=true/, 'it must dispatch scenarios.yml on main with all=true');
+  assert.doesNotMatch(weekly, /^ {2}pull_request:/m);
+  const main = readFileSync(WORKFLOW, 'utf8');
+  assert.equal([...main.matchAll(/- cron:/g)].length, 1, 'scenarios.yml keeps only the night as a schedule: a second one would be planned into a bug-fix release');
+});
+
+test('the night leaves the jobs it did not pick out of its report', async () => {
+  const r = await night('linux-install=success voice=skipped first-day=skipped plain-yes=failure', { openIssues: [] }, { PICKED: ',linux-install,plain-yes,', STAGE: 'success' });
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(r.created.map((c) => c.body.title), [T('plain-yes')], 'only the picked, failed job gets an issue; a job the night did not pick, skipped, gets none');
+  const all = await night('voice=skipped plain-yes=failure', {}, { PICKED: 'all' });
+  assert.equal(all.created.length, 2, 'with every job picked, a skipped job still reports');
+});
+
+const W = (name) => `Weekly test failed: ${name}`;
+
+test('a weekly failure is an ordinary bug: its own title, labels bug, scenario-failure, weekly-test, never priority or archon-triage', async () => {
+  const r = await night('voice=failure connection-check=success', { openIssues: [] }, { WEEKLY: 'true', PICKED: 'all' });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.created.length, 1);
+  assert.equal(r.created[0].body.title, W('voice'));
+  assert.deepEqual(r.created[0].body.labels, ['bug', 'scenario-failure', 'weekly-test']);
+  assert.ok(!r.created[0].body.labels.includes('priority') && !r.created[0].body.labels.includes('archon-triage'));
+  assert.match(r.created[0].body.body, /^Week of 2026-11-03: voice failed\./);
+  const stage = await night('', { jobs: [{ id: 1, name: 'the stage file', conclusion: 'failure' }] }, { WEEKLY: 'true', STAGE: 'failure', RESULTS: '' });
+  assert.equal(stage.created[0].body.title, 'Weekly shared stage failed: stage');
+  assert.deepEqual(stage.created[0].body.labels, ['bug', 'scenario-failure', 'weekly-test']);
+});
+
+test('the night keeps its own labels, and no weekly label is created when it exists', async () => {
+  const n = await night('plain-yes=failure');
+  assert.deepEqual(n.created[0].body.labels, ['bug', 'scenario-failure', 'archon-triage'], 'the night keeps its labels');
+  const w = await night('voice=failure', { labelExists: true }, { WEEKLY: 'true' });
+  assert.equal(w.labelsMade.length, 0);
+});
+
+test('a weekly failure again adds a comment; a weekly pass closes the weekly issue and the night\'s older one', async () => {
+  const again = await night('voice=failure', { openIssues: [{ number: 7, title: W('voice') }] }, { WEEKLY: 'true' });
+  assert.equal(again.created.length, 0);
+  assert.equal(again.comments[0].path, '/issues/7/comments');
+  const pass = await night('voice=success', { openIssues: [{ number: 7, title: W('voice') }, { number: 3, title: T('voice') }] }, { WEEKLY: 'true' });
+  assert.deepEqual(pass.patches.map((x) => x.path).sort(), ['/issues/3', '/issues/7']);
+  assert.ok(pass.patches.every((x) => x.body.state === 'closed'));
+  const nightPass = await night('voice=success', { openIssues: [{ number: 7, title: W('voice') }, { number: 3, title: T('voice') }] });
+  assert.deepEqual(nightPass.patches.map((x) => x.path), ['/issues/3'], 'the night closes only its own');
+});
+
+test("a weekly pass of a release-gate job leaves the night's issue open: the night still runs it and closes its own", async () => {
+  const gatePass = await night('plain-yes=success voice=success', { openIssues: [{ number: 4, title: T('plain-yes') }, { number: 3, title: T('voice') }] }, { WEEKLY: 'true' });
+  assert.equal(gatePass.code, 0, gatePass.stderr);
+  assert.deepEqual(gatePass.patches.map((x) => x.path), ['/issues/3'], 'only the weekly job voice has its night issue closed; plain-yes is in the release gate');
+  assert.ok(!gatePass.comments.some((c) => c.path === '/issues/4/comments'), 'the night issue of a gate job gets no weekly comment either');
+  const withOwn = await night('plain-yes=success', { openIssues: [{ number: 8, title: W('plain-yes') }, { number: 4, title: T('plain-yes') }] }, { WEEKLY: 'true' });
+  assert.deepEqual(withOwn.patches.map((x) => x.path), ['/issues/8'], "a gate job's own weekly issue is still closed by the week");
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const noGate = await night('voice=success', { openIssues: [{ number: 3, title: T('voice') }] }, { WEEKLY: 'true', GATE_FILE: `${mkdtempSync(`${tmpdir()}/nogate-`)}/none.tsv` });
+  assert.equal(noGate.code, 0, noGate.stderr);
+  assert.deepEqual(noGate.patches, [], 'a gate file that cannot be read closes no night issue');
+});
+
+test('weeklyJobs reads exactly the weekly rows of the gate file', async () => {
+  const { weeklyJobs } = await import('./report-night.mjs');
+  assert.deepEqual([...weeklyJobs('# job\tgroup\na\trelease\nb\tweekly\r\nc\n\nd\tweekly\n')], ['b', 'd']);
+  const { readFileSync } = await import('node:fs');
+  const rows = gateRows(readFileSync(GATE_FILE, 'utf8'));
+  assert.deepEqual([...weeklyJobs(readFileSync(GATE_FILE, 'utf8'))].sort(), rows.filter((r) => r.gate === 'weekly').map((r) => r.id).sort());
+});
+
+test('a gate file that leaves the run no release job fails the pick loudly, and never picks nothing', async () => {
+  const { mkdtempSync, writeFileSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const dir = mkdtempSync(`${tmpdir()}/emptygate-`).replaceAll(String.fromCharCode(92), '/');
+  const weeklyOnly = `${dir}/weekly-only.tsv`;
+  writeFileSync(weeklyOnly, '# job\tgroup\nvoice\tweekly\nfirst-day\tweekly\n');
+  for (const env of [{ EVENT: 'schedule' }, { EVENT: 'workflow_dispatch', STAGE_INPUT: 'candidate/2.0.0-beta.30', MAC: 'true' }]) {
+    const r = await pickRun(env, weeklyOnly);
+    assert.notEqual(r.status, 0, `${JSON.stringify(env)}: a gate with no release row must fail, not pick nothing`);
+    assert.equal(r.out, '', 'and print no pick');
+    assert.match(r.err, /names no release job/);
+  }
+  // Only candidate-only release rows: the night has nothing to run and fails; a candidate with Mac runs them.
+  const candidateOnly = `${dir}/candidate-only.tsv`;
+  writeFileSync(candidateOnly, 'mac-install\trelease\nwindows-old-names-move\trelease\nvoice\tweekly\n');
+  assert.notEqual((await pickRun({ EVENT: 'schedule' }, candidateOnly)).status, 0);
+  assert.equal((await pickRun({ EVENT: 'workflow_dispatch', STAGE_INPUT: 'candidate/x', MAC: 'true' }, candidateOnly)).out, 'picked=,mac-install,windows-old-names-move,');
+  // And the workflow's stage step fails with it, writing no pick, so the verdict fails on the stage.
+  writeFileSync(`${dir}/out`, '');
+  const step = spawnSync('bash', ['-c', pickStep(readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n'))], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', env: { ...process.env, GITHUB_EVENT_NAME: 'schedule', EVENT: 'schedule', GATE: weeklyOnly, GITHUB_OUTPUT: `${dir}/out`, RUNNER_TEMP: dir, GITHUB_STEP_SUMMARY: `${dir}/sum` } });
+  assert.notEqual(step.status, 0, 'the stage step must fail when the pick fails');
+  assert.equal(readFileSync(`${dir}/out`, 'utf8'), '', 'and write no picked output');
+});
+
+test('the verdict job reports the night and the week, and tells the report which it is', async () => {
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const at = text.indexOf('      - name: Tell the night or the week in issues');
+  assert.ok(at > 0, 'the report step is missing');
+  const step = text.slice(at);
+  assert.ok(step.includes("WEEKLY: ${{ github.event_name != 'schedule' }}"), 'the report is not told when it is the week');
+  const reportsOn = "(github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.all && inputs.stage == '' && inputs.pr == '' && inputs.only == ''))";
+  assert.ok(step.includes(`if: \${{ always() && ${reportsOn} }}`), 'it reports the night and the weekly run on main only');
+  // The checkout and Node the report needs come on the same runs, and a full run on another branch gets neither.
+  const verdictSteps = text.slice(text.indexOf('\n  verdict:\n'), at);
+  assert.equal(verdictSteps.split(`if: \${{ ${reportsOn} }}`).length - 1, 2, 'the checkout and setup-node of the verdict job run exactly when the report does');
+  const verdictAll = text.slice(text.indexOf('\n  verdict:\n'));
+  const count = (re) => (verdictAll.match(re) || []).length;
+  assert.equal(count(/inputs\.all && inputs\.stage == ''/g), count(/github\.ref == 'refs\/heads\/main' && inputs\.all && inputs\.stage == ''/g), 'no step of the verdict job acts on a full run without checking it is on main');
+  assert.ok(text.includes('      PICKED: ${{ needs.stage.outputs.picked }}'), 'the verdict job passes the pick on to the report');
 });
 
 // The whole pull request arm with a stand-in `gh` that insists on the pull request's files endpoint,
@@ -850,7 +1115,7 @@ test('the pick on a hand-started run reads `only`, and a night and an empty `onl
   assert.equal(pick('workflow_dispatch', '').out, 'picked=all\n', 'an empty only runs everything');
   assert.equal(pick('workflow_dispatch', undefined).out, 'picked=all\n');
   assert.equal(pick('workflow_dispatch', 'all').out, 'picked=,all,\n', '`all` is no job: it is picked as a name, so the verdict fails it');
-  assert.equal(pick('schedule', 'first-day').out, 'picked=all\n', 'the night ignores only');
+  assert.ok(pick('schedule', 'voice').out.startsWith('picked=,') && !pick('schedule', 'voice').out.includes(',voice,'), 'the night is the release gate, whatever only says');
   for (const empty of [',', ',,, ,']) {
     const none = pick('workflow_dispatch', empty);
     assert.notEqual(none.status, 0, `only=${JSON.stringify(empty)} names no job and must fail, not pass with nothing run`);
@@ -889,7 +1154,7 @@ test('the pick on a hand-started run reads `only`, and a night and an empty `onl
   assert.equal(evalCond({ event: 'workflow_dispatch', stage: 'candidate/x', picked: 'all', mac: true }, 'mac-install'), true);
   assert.equal(evalCond({ event: 'workflow_dispatch', stage: 'candidate/x', picked: ',first-day,', mac: true }, 'mac-install'), false, 'mac=true does not add the Mac job to an only run');
   // no issue is filed for a run that is not the night's
-  assert.match(text, /Tell the night in issues[\s\S]*?if: always\(\) && github\.event_name == 'schedule'/);
+  assert.match(text, /Tell the night or the week in issues[\s\S]*?if: \$\{\{ always\(\) && \(github\.event_name == 'schedule'/);
 });
 
 test('the draft picks by hand with `only`, hands the pick to the pool, and picks the PR image through the catalog', async () => {

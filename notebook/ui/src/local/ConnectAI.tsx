@@ -7,6 +7,8 @@ import {AlertTriangle,CheckCircle2,Loader2} from 'lucide-react';
 import {parseInstant,showDate} from '@/lib/local-date';
 import {providerService} from '../../../core/provider-service.mjs';
 import {AI_CONNECTION_UNREADABLE_STATUS} from '../../../core/no-ai.mjs';
+import {modelListUnavailable,useChatOptions} from '@/components/chat/ChatConnectionEmptyState';
+import {MODEL_LIST_RETRY,MODEL_LIST_UNAVAILABLE} from './chat-options.mjs';
 
 // Settings > Your AI (18 October 2026). What the person connects here powers the notebook and, unless
 // they untick it, the daily routines and the chat too (notebook/core/routine-ai.mjs): every installer
@@ -102,6 +104,8 @@ export function RoutineAIState({status,checking,onCheck,connected=false}:{status
 export function ConnectAI(){
   const qc=useQueryClient(),id=useId();
   const status=useQuery({queryKey:['routine-ai'],queryFn:routineAIStatus});
+  // The same shared AI state the Dashboard card and the chats read, so Settings says the same thing about the model list (#1124).
+  const modelList=useChatOptions({readsAsChat:false});
   // The saved file is read again while this page is open (#826): a connection damaged or repaired
   // on disk reaches it within one status refresh, the same five seconds the chat reads keep.
   const saved=useQuery({queryKey:['provider'],queryFn:savedProvider,refetchInterval:5000,refetchIntervalInBackground:true});
@@ -172,6 +176,7 @@ export function ConnectAI(){
     good data, so "configured" alone would keep saying a connected AI answers the chat while the
     notice below says the file cannot be read. The two must agree. */}
     {status.isLoading?<p role="status">Reading which AI your routines use…</p>:<RoutineAIState status={data} checking={checking} onCheck={check} connected={!saved.error&&!!saved.data?.configured}/>}
+    {modelListUnavailable(modelList)&&<p role="status" data-chat-ai-state="models-unavailable">{MODEL_LIST_UNAVAILABLE} {MODEL_LIST_RETRY}</p>}
     {saved.error?<div className="space-y-3"><p role="alert" className="text-red-500">{AI_CONNECTION_UNREADABLE_STATUS} The form is unavailable so it cannot be overwritten. Remove it to connect one again.</p>{removeControl}{error&&<p role="alert" className="text-red-500">{error}</p>}</div>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
       <p>Connect the AI account you pay for. The key stays on this device and never goes into your notes.</p>
       <div><label className="block" htmlFor={id+'service'}>Your AI service</label>
@@ -180,7 +185,7 @@ export function ConnectAI(){
       {service==='other'&&<div><label className="block" htmlFor={id+'address'}>Its address, as the service gives it (OpenAI-compatible)</label>
         <Input id={id+'address'} required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></div>}
       <div><label className="block" htmlFor={id+'model'}>Model, written the way your service writes it</label>
-        <Input id={id+'model'} required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></div>
+        <Input id={id+'model'} required spellCheck={false} placeholder={service==='openrouter'?'vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></div>
       <div><label className="block" htmlFor={id+'key'}>{canRetainKey?'Key (leave it empty to keep the saved one)':'Key'}</label>
         <Input id={id+'key'} required={!canRetainKey} type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></div>
       {data?.available&&<div className="flex gap-2 items-start"><input id={id+'routines'} type="checkbox" className="mt-1" checked={useForRoutines} onChange={e=>setRoutines(e.target.checked)}/><label htmlFor={id+'routines'}>Use it for the daily routines and the chat too{data.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':'.'}</label></div>}
@@ -238,7 +243,7 @@ export function BackupAI(){
       {service==='other'&&<div><label className="block" htmlFor={id+'address'}>Backup AI address, as the service gives it (OpenAI-compatible)</label>
         <Input id={id+'address'} required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></div>}
       <div><label className="block" htmlFor={id+'model'}>Backup model, written the way your service writes it</label>
-        <Input id={id+'model'} required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></div>
+        <Input id={id+'model'} required spellCheck={false} placeholder={service==='openrouter'?'vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></div>
       <div><label className="block" htmlFor={id+'key'}>Backup key</label>
         <Input id={id+'key'} required type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></div>
       <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect as backup'}</Button></>}

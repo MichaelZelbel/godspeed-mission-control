@@ -563,7 +563,7 @@ export default function KnowledgeGraph() {
   }, [selectedNode, selectedNodeEdges, processedGraph.nodes]);
 
   return (
-    <div className={fullscreen ? "fixed inset-0 z-50 bg-background flex flex-col" : "flex flex-col h-full"}>
+    <div className={fullscreen ? "fixed inset-0 z-50 bg-background flex flex-col" : "flex flex-col h-full max-sm:h-auto max-sm:min-h-full"}>
       <SEOHead title="Note Graph - Godspeed Mission Control" noIndex />
 
       {/* Header */}
@@ -610,10 +610,10 @@ export default function KnowledgeGraph() {
       </div>
 
       {/* Main content */}
-      <div className="flex flex-1 min-h-0">
-        {/* Sidebar with tabs */}
+      <div className="flex flex-1 min-h-0 flex-col max-sm:flex-none sm:flex-row">
+        {/* Sidebar with tabs: above the canvas on a phone, beside it from sm up */}
         {showFilters && (
-          <div className="w-60 shrink-0 border-r border-border bg-muted/10 overflow-y-auto flex flex-col">
+          <div className="w-full shrink-0 border-b sm:w-60 sm:border-b-0 sm:border-r border-border bg-muted/10 overflow-y-auto flex flex-col">
             <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as any)} className="flex flex-col flex-1">
               <TabsList className="w-full rounded-none border-b border-border h-8">
                 <TabsTrigger value="filters" className="text-[10px] flex-1 h-7">Filters</TabsTrigger>
@@ -774,7 +774,7 @@ export default function KnowledgeGraph() {
         )}
 
         {/* Graph canvas */}
-        <div ref={containerRef} className="flex-1 min-w-0 bg-card relative">
+        <div ref={containerRef} className="flex-1 min-w-0 max-sm:h-96 overflow-hidden bg-card relative">
           {isLoading ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">
               <Loader2 className="h-6 w-6 animate-spin mr-2" />
@@ -790,7 +790,7 @@ export default function KnowledgeGraph() {
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
               <FileText className="h-8 w-8" />
               <p className="text-sm">No nodes to display.</p>
-              <p className="text-xs">Link notes by writing a title in [[double brackets]]; similar notes and the people they name connect on their own.</p>
+              <p className="text-xs text-center [overflow-wrap:anywhere]">Link notes by writing a title in [[double brackets]]; similar notes and the people they name connect on their own.</p>
             </div>
           ) : (
             <>

@@ -1,5 +1,6 @@
 import { hash, encode } from './records/store.mjs';
 import { tables } from './query.mjs';
+import { COPY_TYPES } from './copy-types.mjs';
 // Records that are keys or sign-ins for other services. An export leaves them
 // out and an import never takes them: a file someone saves or passes on must
 // not carry them. note_connections is not one of them: it is a link the owner
@@ -11,7 +12,7 @@ export const credentialRecord=type=>credentialTypes.has(type)||(type.endsWith('_
 // a file belongs to the notebook that made the file.
 // due_copies says which of THIS mission control's due/ files have been copied into THIS notebook
 // (due-copy.mjs); another notebook's answer to that says nothing here.
-const ownBookkeeping=new Set(['import_mappings','due_copies']);
+const ownBookkeeping=new Set(['import_mappings',...COPY_TYPES]);
 // A record as the notebook keeps it, without its bookkeeping hash, and with its
 // keys in one order, so the same record compares equal however it was written.
 const comparable=record=>JSON.stringify(record,(key,value)=>value&&typeof value==='object'&&!Array.isArray(value)

@@ -21,6 +21,11 @@ CURRENT_STEP='fresh Docker server installation'
 fail() {
   if [ "${CHECK_ONLY:-no}" = no ] && [ -n "${EVIDENCE:-}" ]; then
     printf 'FAIL %s: %s: %s\n' "$SCENARIO" "$CURRENT_STEP" "$*" | tee -a "$EVIDENCE/steps.tsv" >&2
+    # A refused item's own log and verdict live in the workspace; keep them so the cause is read, not guessed (#1104).
+    if type server_copy_evidence_if_there >/dev/null 2>&1; then
+      server_copy_evidence_if_there /opt/data/full-candidate/workspace/work "$EVIDENCE" 2>/dev/null || true
+      server_copy_evidence_if_there /opt/data/full-candidate/workspace/routines/work "$EVIDENCE" 2>/dev/null || true
+    fi
   fi
   verdict "FAIL $SCENARIO: $*"
   exit 1
@@ -116,6 +121,7 @@ act() {
   first_day_phase 'installed morning brief and its Telegram delivery'
   server_scheduled_brief "$EVIDENCE/brief.txt" 1800
   server_telegram_mark scheduled-brief cron
+  server_table job_receipts "$EVIDENCE/job-receipts-after-brief.json"
   server_table notes "$EVIDENCE/notes-before-reply.json"
   server_telegram_say todays-brief "today's brief"
   server_telegram_snapshot
@@ -154,17 +160,15 @@ check() { # <evidence folder>
     fail 'the installed scheduled morning brief has no successful recorded run'
   grep -Eqi 'source[[:space:]]*[:=][[:space:]]*"?builtin' "$folder/brief-cron-runs.txt" ||
     fail 'the morning brief was not triggered by the installed scheduler'
-  if ! reason=$("$NODE" - "$folder" "$GOAL" "$WORK_ID" "$WORK_KEY" "$RESULT_FILE" "${sparse_files[@]}" 2>&1 <<'NODE'
+  "$NODE" "$HERE/../notebook/scripts/briefing-unread-state.mjs" "$folder" "${sparse_files[@]}" ||
+    fail 'the brief was not run with the required sparse installed state'
+  if ! reason=$("$NODE" - "$folder" "$GOAL" "$WORK_ID" "$WORK_KEY" "$RESULT_FILE" 2>&1 <<'NODE'
 const fs=require('fs'),path=require('path');
-const [folder,goal,workId,workKey,resultFile,...sparseFiles]=process.argv.slice(2),read=file=>fs.readFileSync(path.join(folder,file),'utf8');
+const [folder,goal,workId,workKey,resultFile]=process.argv.slice(2),read=file=>fs.readFileSync(path.join(folder,file),'utf8');
 const rows=file=>{const d=JSON.parse(read(file));return Array.isArray(d)?d:d.data||[]};
 const fail=message=>{console.error(message);process.exit(1)};
 const normalized=value=>String(value||'').replace(/\r\n?/g,'\n').trim();
 if(!normalized(read('brief.txt')))fail('the installed morning brief saved no readable text');
-for(const file of sparseFiles){
- const state=JSON.parse(read(file)),rows=Array.isArray(state)?state:state.data||[];
- if(!Array.isArray(rows)||rows.length)fail('the brief was not run with the required sparse installed state');
-}
 // The finished work is the scenario's own card when the daily round took it, held to its checklist,
 // or else work the product chose for this goal itself (since 9 November 2026: the choice files its
 // own items and the round takes those first): a card under its own ID, verified by its recorded

@@ -65,6 +65,8 @@ st = json.load(open(state_f)) if os.path.exists(state_f) else {"keys": {}}
 def save(): json.dump(st, open(state_f, "w"))
 if a[:3] == ["config", "set", "model.provider"]:
     st["provider"] = a[3]; save(); sys.exit(0)
+if a[:3] == ["config", "set", "model.max_tokens"]:
+    st["max_tokens"] = a[3]; save(); sys.exit(0)
 if a[:3] == ["config", "set", "model.default"]:
     st["model"] = a[3]; save(); sys.exit(0)
 if a[:2] == ["auth", "remove"]:
@@ -77,6 +79,7 @@ if a[:2] == ["auth", "add"] and "api-key" in a:
 if a[:2] == ["chat", "--oneshot"]:
     # The proof question: ChatGPT answers only on the models the plan may use, a key only when good.
     p = st.get("provider")
+    st.setdefault("proof_max_tokens", []).append(st.get("max_tokens")); save()
     if p == "openai-codex":
         ok = os.path.exists(mark) and st.get("model") in os.environ.get("FAKE_CODEX_OK", "gpt-5.6-terra").split(",")
     else:
@@ -466,6 +469,9 @@ def test_key_provider():
     check("the key that works is kept, with Hermes' default model for OpenRouter",
           r["hstate"].get("provider") == "openrouter" and r["hstate"].get("keys", {}).get("openrouter") == good
           and r["hstate"].get("model") == "z-ai/glm-5.2")
+    budgets = r["hstate"].get("proof_max_tokens", [])
+    check("every proof question asks for a small output budget, and the budget is lifted afterwards",
+          len(budgets) == 2 and all(b and 0 < int(b) <= 1024 for b in budgets) and r["hstate"].get("max_tokens") == "0")
     check("every message with a key is deleted from the chat", len(r["fake"].deleted) == 3)
     check("no key is in the log, the output or any message the bot sent",
           all(k not in r["log"] and k not in r["out"] and not any_has(to_anna, k) for k in (good, bad)))

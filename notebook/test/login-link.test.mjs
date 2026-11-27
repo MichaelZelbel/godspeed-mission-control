@@ -23,7 +23,15 @@ test('a one-time sign-in link survives a link preview and is used only by the pe
  const used=await press();assert.equal(used.status,303);assert.equal(used.headers.get('location'),'/dashboard/chat');
  const session=used.headers.get('set-cookie').split(';')[0];assert.equal((await fetch(base+'/api/session',{headers:{Cookie:session}})).status,200);
  assert.equal((await press()).status,401);
- const expired=await fetch(base+link);assert.equal(expired.status,401);await expired.text();
+ for(const address of [link,'/login/not-a-real-code']){const expired=await fetch(base+address);assert.equal(expired.status,401);const html=await expired.text();
+  assert.match(html,/This sign-in link expired or was already used\./);assert.match(html,/href="\/dashboard"/);assert.match(html,/<style/);}
+ // The expired page wears the notebook's theme, never the browser's.
+ const look=async()=>{const html=await (await fetch(base+'/login/not-a-real-code')).text();return {html,light:/background:hsl\(216 43% 97%\)/.test(html),scheme:html.match(/name="color-scheme" content="(\w+)"/)[1]};};
+ assert.doesNotMatch((await look()).html,/prefers-color-scheme/);
+ assert.deepEqual([(await look()).light,(await look()).scheme],[false,'dark']);
+ for(const [theme,light] of [['light',true],['dark',false]]){
+  const saved=await fetch(base+'/api/query',{method:'POST',headers:{'Content-Type':'application/json',Cookie:cookie},body:JSON.stringify({table:'settings',operation:'upsert',values:{id:'ui-preferences',preferences:{theme}}})});assert.equal(saved.status,200);
+  const page=await look();assert.equal(page.light,light);assert.equal(page.scheme,light?'light':'dark');assert.doesNotMatch(page.html,/private-installation-proof/);}
  // The destination stays on this server.
  const other=(await json('/api/login-link',{},cookie)).data.path;
  const away=await fetch(base+other+'?next='+encodeURIComponent('/.//evil.example/phish'),{method:'POST',headers:{Origin:base},redirect:'manual'});assert.equal(away.headers.get('location'),'/dashboard');

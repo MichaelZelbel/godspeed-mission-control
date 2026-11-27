@@ -161,7 +161,8 @@ function SortableFieldRow({
               value={field.type}
               onValueChange={(value) => updateType(value as FieldType)}
             >
-              <SelectTrigger>
+              {/* aria-label: the trigger shows the chosen type, and without a name the check reads none (#887). */}
+              <SelectTrigger aria-label={`Type of ${field.label || "field"}`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -392,7 +393,14 @@ export default function CollectionSchema() {
       setCollection(current);
       setCollections(allCollections ?? []);
       setFields(parsed);
-      setInitialSchema(JSON.stringify(toJsonSchema(parsed)));
+      // A collection saved with no fields shows a starting "Name" field that
+      // it does not have yet: the saved side stays empty, so the page says
+      // "Unsaved changes" and leaving asks first.
+      setInitialSchema(
+        Array.isArray(current.field_schema) && current.field_schema.length === 0
+          ? "[]"
+          : JSON.stringify(toJsonSchema(parsed)),
+      );
       setIsLoading(false);
     };
     load();
@@ -518,11 +526,12 @@ export default function CollectionSchema() {
         noIndex
       />
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">
+        {/* min-w-0 + shrink: the name column can wrap, the buttons keep their width (#887). */}
+        <div className="min-w-0 flex-1">
+          <p className="break-words text-sm text-muted-foreground">
             Collections / {collection?.name} / Schema
           </p>
-          <h1 className="mt-2 text-2xl font-bold font-display">
+          <h1 className="mt-2 break-words text-2xl font-bold font-display">
             {collection?.icon} {collection?.name} - Schema
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -530,7 +539,11 @@ export default function CollectionSchema() {
             reorder fields anytime.
           </p>
           {isDirty && (
-            <p className="mt-2 text-xs text-primary">Unsaved changes</p>
+            <p className="mt-2 text-xs text-primary">
+              Unsaved changes
+              {initialSchema === "[]" &&
+                ": this collection has no fields until you press Save"}
+            </p>
           )}
           {errors.__form?.map((error) => (
             <p key={error} className="mt-2 text-xs text-destructive">
@@ -538,7 +551,9 @@ export default function CollectionSchema() {
             </p>
           ))}
         </div>
-        <div className="flex gap-2">
+        {/* flex-wrap: at 768 px, beside the sidebar, the two buttons cannot share one row with the
+            form's column, and a clipped one is a fault (#887). */}
+        <div className="flex flex-wrap gap-2 md:shrink-0">
           <Button variant="ghost" onClick={cancel}>
             Cancel
           </Button>

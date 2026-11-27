@@ -71,8 +71,7 @@ refuses redacted or private material, and files only evidenced items. It never s
 you have not connected an AI.
 Rhythm: every day at 03:40, your time zone, after prompt harvesting and before the daily fact
 closing. It says nothing to you.
-Lands: in your notebook as dated facts and timeline events, or in world/ when the notebook is not
-connected. Its portable read position, pending work and dated receipts live under
+Lands: in your notebook as dated facts and timeline events; with no notebook connected it files nothing and the messages stay unread. Its portable read position, pending work and dated receipts live under
 routines/remember-what-you-said/ so another computer that runs your routines continues safely.
 Facts and events retain the exact supporting quote and archive source.
 Off-switch: Pause "Remember what you said" under Settings > Routines.

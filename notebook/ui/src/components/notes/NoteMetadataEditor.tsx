@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect, useId } from "react";
 import { useStickyPanelPreference } from "@/hooks/useStickyPanelPreference";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +69,9 @@ interface NoteMetadataEditorProps {
 }
 
 export function NoteMetadataEditor({ noteId, metadata: savedMetadata, onUpdate, tags = [], onAddTag, onRemoveTag, showTagInput }: NoteMetadataEditorProps) {
+  const topicFieldId = useId();
+  const personFieldId = useId();
+  const typeFieldId = useId();
   const [topicInput, setTopicInput] = useState("");
   const [personInput, setPersonInput] = useState("");
   // Sticky global preference: remembers the user's expand/collapse choice
@@ -228,12 +231,12 @@ export function NoteMetadataEditor({ noteId, metadata: savedMetadata, onUpdate, 
           {/* Type & Sentiment row */}
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground font-medium">Type:</span>
+              <label htmlFor={typeFieldId} className="text-muted-foreground font-medium">Type:</label>
               <Select
                 value={type}
                 onValueChange={(val) => update({ type: val })}
               >
-                <SelectTrigger className="h-6 w-[140px] text-xs border-border/50">
+                <SelectTrigger id={typeFieldId} className="h-6 w-[140px] text-xs border-border/50">
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -274,7 +277,8 @@ export function NoteMetadataEditor({ noteId, metadata: savedMetadata, onUpdate, 
               </Badge>
             ))}
             <div className="flex items-center">
-              <Input aria-label="Add topic"
+              <label htmlFor={topicFieldId} className="text-[10px] text-muted-foreground whitespace-nowrap">Add topic</label>
+              <Input id={topicFieldId}
                 ref={topicInputRef}
                 value={topicInput}
                 onChange={(e) => setTopicInput(e.target.value)}
@@ -335,7 +339,8 @@ export function NoteMetadataEditor({ noteId, metadata: savedMetadata, onUpdate, 
               );
             })}
             <div className="flex items-center">
-              <Input aria-label="Add person"
+              <label htmlFor={personFieldId} className="text-[10px] text-muted-foreground whitespace-nowrap">Add person</label>
+              <Input id={personFieldId}
                 value={personInput}
                 onChange={(e) => setPersonInput(e.target.value)}
                 onKeyDown={(e) => {

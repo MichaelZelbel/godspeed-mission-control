@@ -40,6 +40,7 @@ export default function Profile() {
 
 
   const [seeded, setSeeded] = useState(false);
+  const [fieldFilter, setFieldFilter] = useState("");
   // Status of useProfile's categories query, read from the cache without a
   // second observer. useProfile turns a failed read into an empty list, and an
   // empty list is what triggers seeding, so without the status a failed read
@@ -122,16 +123,18 @@ export default function Profile() {
 
 
         <Tabs defaultValue="profile">
-          <TabsList>
+          {/* The three names together do not fit a 320 px phone's row, so the list wraps instead of
+              clipping a name (#887). */}
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="instructions">Agent Instructions</TabsTrigger>
-            <TabsTrigger value="export">Export & Share</TabsTrigger>
+            <TabsTrigger value="export">Export &amp; Share</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="space-y-3 mt-4">
             <RelationshipsSection contactId={null} contactName="My" />
             <SelfRecognitionSection />
-            <ProfileCompleteness categories={categories} facts={facts} />
+            <ProfileCompleteness categories={categories} facts={facts} filterQuery={fieldFilter} />
             <ProfileSuggestions
               categories={categories}
               factCount={currentFacts.length}
@@ -143,6 +146,8 @@ export default function Profile() {
               facts={facts}
               actions={actions}
               showScope
+              showEmptyCategories
+              onFilterChange={setFieldFilter}
               onUpdateCategory={(data) => upsertCategory.mutate(data)}
               onDeleteCategory={(id) => deleteCategory.mutate(id)}
               onAddCategory={(data) => upsertCategory.mutate(data)}

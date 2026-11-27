@@ -1,5 +1,6 @@
 import {visibleRows} from './visibility.mjs';
 import {QueryService} from './query.mjs';
+import {COPY_TYPES} from './copy-types.mjs';
 
 // Validate current records and their complete reference graph, rather than a
 // previously supplied prompt or the patch's replacement owner fields.
@@ -34,7 +35,7 @@ function visibleSuggestion(query,record){
 // An explicit personal operation (pause a routine, switch the journal off)
 // keeps its own schedules, settings and receipts; its code writes those rows,
 // never the model's values.
-export const controlTables=new Set(['mcp_preferences','approvals','shared_notes','permissions','user_roles','agent_instructions','mcp_api_tokens','user_mcp_servers','connected_apps','discord_connections','gdrive_connections','github_connections','godspeed_connections','telegram_connections','import_mappings','gdrive_imports','github_sync_log','jobs','job_receipts','work_tool_receipts','command_receipts','settings','notification_preferences','ai_suggestion_preferences','record_history','embeddings','profiles','due_copies']);
+export const controlTables=new Set(['mcp_preferences','approvals','shared_notes','permissions','user_roles','agent_instructions','mcp_api_tokens','user_mcp_servers','connected_apps','discord_connections','gdrive_connections','github_connections','godspeed_connections','telegram_connections','import_mappings','gdrive_imports','github_sync_log','jobs','job_receipts','work_tool_receipts','command_receipts','settings','notification_preferences','ai_suggestion_preferences','record_history','embeddings','profiles',...COPY_TYPES]);
 const operationTables=new Set(['jobs','settings','command_receipts']);
 // What the generic save_record writes: the owner's notes, people, things,
 // timeline, collections and actions, and proposed facts as

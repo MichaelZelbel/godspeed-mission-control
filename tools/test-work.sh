@@ -25,6 +25,8 @@ cp "$HERE/goals.js" "$TMP/bin/"
 cp "$HERE/mc-cards.js" "$TMP/bin/"
 cp "$HERE/check-written.js" "$TMP/bin/"
 cp "$HERE/holds.js" "$TMP/bin/"
+cp "$HERE/notebook-core.js" "$TMP/bin/"
+export GODSPEED_KIT_DIR="$(cd "$HERE/.." && pwd)"   # the copied tools find the notebook code in the kit, as an install does
 export GODSPEED_ROOT="$TMP"
 export GODSPEED_TODAY="2026-09-13"
 export GODSPEED_NOW="2026-09-13T10:00:00.000Z"
@@ -261,6 +263,18 @@ OUT="$(hw verify $CH5 2>&1)"; check "a learn item whose answer was only reported
 mkdir -p "$TMP/research"; printf '## Answer\nAbout forty percent of readers reach chapter 5, from the reading log.\n' > "$TMP/research/chapter-5.md"
 printf '%s\n' '{"passed":true,"reason":"the answer and its evidence are in the promised file","missing":[]}' > "$TMP/ch5-review.json"
 OUT="$(hw verify $CH5 --content-review "$TMP/ch5-review.json" 2>&1)"; contains "  once the answer is written and independently reviewed, it verifies" "$OUT" "verified by its check and content review"
+
+# --- #748: evidence alone never verifies a Godspeed-owned file result -------------------------------------
+hw file --learn "How many readers reach chapter 6" --path research/chapter-6.md --key ch6 --source test >/dev/null
+CH6="$(idof ch6)"
+printf '## Answer\nAbout half of readers reach chapter 6.\n' > "$TMP/research/chapter-6.md"
+hw take "$CH6" --runner claude-laptop >/dev/null
+hw attempt "$CH6" --runner claude-laptop --ok --result "wrote the chapter 6 answer" >/dev/null
+OUT="$(hw verify $CH6 --evidence "opened research/chapter-6.md, the answer is there" 2>&1)"; check "evidence alone does not verify a Godspeed-owned file result" "$?" "2"
+contains "  and says the content review is required" "$OUT" "needs the content review against DONE WHEN"
+check "  and it stays attempted" "$(grep -c '^STATUS: attempted' "$TMP/work/$CH6.md")" "1"
+printf '%s\n' '{"passed":true,"reason":"the answer is in the promised file","missing":[]}' > "$TMP/ch6-review.json"
+OUT="$(hw verify $CH6 --evidence "opened research/chapter-6.md" --content-review "$TMP/ch6-review.json" 2>&1)"; contains "  a passing content review verifies it, with evidence" "$OUT" "verified by content review"
 
 # --- one list of result extensions for filing and finding (#914) -------------------------------------------
 # The filing gate and the file-finding side share one list, so a learn item whose DONE WHEN
@@ -777,12 +791,12 @@ contains "  a day later it is not listed again" "$(GODSPEED_TODAY=2026-10-02 hw 
 contains "  --date names the day" "$(hw went-out --date 2026-09-30 2>&1)" "$AL1"
 
 # --- a step the person declined or postponed (#282) ------------------------------------------------
-# Held while a current world claim holds it, live, so it comes back by itself when that claim ends.
+# Held while a current claim of the notebook holds it (an old world/claims/ file is taken in when read), live, so it comes back by itself when that claim ends.
 echo "-- holds"
 mkdir -p "$TMP/world/claims"
 printf -- '---\nsubject: the-book\nattribute: status\nvalue: beta\nvalid_from: 2026-09-01\n---\n' > "$TMP/world/claims/the-book--status--2026-09-01.md"
 printf -- '---\nsubject: the-book\nattribute: interview-stance\nvalue: not yet, only once the book is out of beta\nstance: postponed\nsteps: [interview]\nuntil: the-book--status--2026-09-01\nvalid_from: 2026-09-10\n---\n' > "$TMP/world/claims/the-book--interview-stance--2026-09-10.md"
-HOLD=world/claims/the-book--interview-stance--2026-09-10.md
+HOLD=the-book--interview-stance--2026-09-10
 OUT="$(hw file --what "Answer the podcast's interview invitation" --done-when "the answer is sent" --outward yes --key apply-interview --touches "the-book" --source next-action 2>&1)"
 HI="$(idof apply-interview)"
 contains "file --touches stores TOUCHES on the card" "$(cat "$TMP/work/$HI.md")" "TOUCHES: the-book"
@@ -796,10 +810,10 @@ contains "  and how to go ahead" "$OUT" "mc-holds end the-book--interview-stance
 missing "  a held step is never next for a runner" "$(hw next 2>&1)" "$HI"
 OUT="$(hw take "$HI" --runner test 2>&1)"; check "  nor taken" "$?" "1"
 contains "  because it is held" "$OUT" "is held: $HOLD"
-mv "$TMP/world/claims" "$TMP/world/claims.away"; printf 'not a folder\n' > "$TMP/world/claims"
+mv "$TMP/notebook" "$TMP/notebook.away"; printf 'not a folder\n' > "$TMP/notebook"
 OUT="$(hw take "$HI" --runner test 2>&1)"; check "  holds that cannot be read: it is not taken either" "$?" "1"
 contains "  and that is said" "$OUT" "what the person declined or postponed could not be read"
-rm "$TMP/world/claims"; mv "$TMP/world/claims.away" "$TMP/world/claims"
+rm "$TMP/notebook"; mv "$TMP/notebook.away" "$TMP/notebook"
 "$NODE" -e 'const fs=require("fs"),f=process.argv[1];fs.writeFileSync(f,fs.readFileSync(f,"utf8").replace("STATUS: planned","STATUS: blocked").replace("NEEDS: none","NEEDS: authorization").replace(/\nAPPROVED: .*/,""))' "$TMP/work/$HI.md"
 printf 'ID: book\nSTATUS: adopted\nTITLE: The book\n\nMAY: book-notes | send notes about the book | 10 per week | notice | "send them for me" 2026-09-10\n\n## Log\n- 2026-09-10 FILED adopted outcome, source: x\n' > "$TMP/goals/book.md"
 OUT="$(hw file --what "Say yes to the interview slot" --done-when "said" --outward yes --goal book --may book-notes --check "test -f live.txt" --goes-out 2026-09-13T18:00 --touches the-book --key held-notice --source t 2>&1)"

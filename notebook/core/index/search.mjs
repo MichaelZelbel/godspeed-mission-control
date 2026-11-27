@@ -8,6 +8,8 @@ import {mergeRanked} from './meaning.mjs';
 import {MeaningWorker} from './meaning-worker-client.mjs';
 import {STOPWORDS} from './stopwords.mjs';
 
+export const isUnreadable = error => error?.code === 'EACCES' || error?.code === 'EPERM';
+
 // The search index: one SQLite file beside the notebook, rebuilt from the
 // notebook whenever it is missing or of an older form, so it never holds
 // anything the files do not. Words are found with SQLite's full-text search
@@ -148,17 +150,29 @@ export class SearchIndex {
     return changed.length + removed.length;
   }
   fileDocument(relative, text) { return ['file-' + hash(relative), 'workspace_file', relative, relative, text, hash(text)]; }
+  // A folder the process may not read is skipped, so the folders it can read
+  // are still indexed; `onUnreadable(entered, cleared)` hears each change of
+  // state, not each rebuild.
+  reportUnreadable(now) {
+    const before = this.unreadable || new Set();
+    this.unreadable = now;
+    const entered = [...now].filter(name => !before.has(name)), cleared = [...before].filter(name => !now.has(name));
+    if (entered.length || cleared.length) this.onUnreadable?.(entered, cleared);
+  }
   rebuild() {
     this.generation = (this.generation || 0) + 1;
     const documents = this.recordDocuments(), seen = new Set();
-    const visit = (relative, allowed = shared, limit = 512 * 1024) => { const absolute = path.join(this.store.root, relative); if (!fs.existsSync(absolute)) return; const stat = fs.lstatSync(absolute); if (stat.isSymbolicLink()) return; if (stat.isDirectory()) { for (const name of fs.readdirSync(absolute)) if (allowed(relative + '/' + name)) visit(relative + '/' + name, allowed, limit); } else if (stat.size <= limit && /\.(md|json|jsonl|txt)$/.test(relative) && !seen.has(relative)) { seen.add(relative); documents.push(this.fileDocument(relative, fs.readFileSync(absolute, 'utf8'))); } };
-    for (const name of [...durableRoots.filter(r => r !== recordsFolder), ...durableFiles]) visit(name);
+    const unreadable = new Set();
+    let top = '';
+    const visit = (relative, allowed = shared, limit = 512 * 1024) => { try { const absolute = path.join(this.store.root, relative); if (!fs.existsSync(absolute)) return; const stat = fs.lstatSync(absolute); if (stat.isSymbolicLink()) return; if (stat.isDirectory()) { for (const name of fs.readdirSync(absolute)) if (allowed(relative + '/' + name)) visit(relative + '/' + name, allowed, limit); } else if (stat.size <= limit && /\.(md|json|jsonl|txt)$/.test(relative) && !seen.has(relative)) { seen.add(relative); documents.push(this.fileDocument(relative, fs.readFileSync(absolute, 'utf8'))); } } catch (error) { if (!isUnreadable(error)) throw error; unreadable.add(top); } };
+    for (const name of [...durableRoots.filter(r => r !== recordsFolder), ...durableFiles]) { top = name; visit(name); }
     // An owner's own pages in the notebook folder are searched like any file.
-    for (const file of this.store.documents || []) visit(path.relative(this.store.root, file).split(path.sep).join('/'));
+    for (const file of this.store.documents || []) { const relative = path.relative(this.store.root, file).split(path.sep).join('/'); top = relative.split('/')[0]; visit(relative); }
     // Mission Control's other folders are searched too, as Menerio searched its
     // copies of them (6 October 2026), up to Menerio's 300 KB a file. Never
     // the routines' run logs or the memory benchmark's own questions.
-    for (const name of SEARCH_ONLY_ROOTS) visit(name, searchOnly, 300 * 1024);
+    for (const name of SEARCH_ONLY_ROOTS) { top = name; visit(name, searchOnly, 300 * 1024); }
+    this.reportUnreadable(unreadable);
     return this.replace(documents);
   }
   // Compare what was read with what the index holds and write only the rows
@@ -224,7 +238,10 @@ export class SearchIndex {
       // reach the index through the store.
       const page = !relative.startsWith(recordsFolder + '/') || this.store.documents?.has(absolute);
       if (stat?.isFile() && page && shared(relative) && stat.size <= 512 * 1024 && /\.(md|json|jsonl|txt)$/.test(relative)) {
-        const document = this.fileDocument(relative, fs.readFileSync(absolute, 'utf8'));
+        // One file the notebook may not read must not lose its neighbours.
+        let text = null; try { text = fs.readFileSync(absolute, 'utf8'); } catch {}
+        if (text === null) { if (this.indexed.has(uid)) removed.push(uid); continue; }
+        const document = this.fileDocument(relative, text);
         if (this.indexed.get(uid) !== document[5]) changed.push(document);
       } else if (this.indexed.has(uid)) removed.push(uid);
     }
@@ -246,7 +263,9 @@ export class SearchIndex {
   async readBackground() {
     const documents = [], io = fs.promises;
     this.readsSinceBreath = 0;
-    const entries = async folder => { try { return await io.readdir(folder, { withFileTypes: true }); } catch (error) { if (error.code === 'ENOENT') return []; throw error; } };
+    const unreadable = new Set();
+    let top = recordsFolder;
+    const entries = async folder => { try { return await io.readdir(folder, { withFileTypes: true }); } catch (error) { if (error.code === 'ENOENT') return []; if (isUnreadable(error)) { unreadable.add(top); return []; } throw error; } };
     let pages = [];
     if (this.store.watching) {
       // The store already holds every record and is told about every change.
@@ -275,19 +294,20 @@ export class SearchIndex {
     const visit = async (relative, allowed = shared, limit = 512 * 1024) => {
       if (this.closed) return;
       const absolute = path.join(this.store.root, relative); let stat;
-      try { stat = await io.lstat(absolute); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
+      try { stat = await io.lstat(absolute); } catch (error) { if (error.code === 'ENOENT') return; if (isUnreadable(error)) { unreadable.add(top); return; } throw error; }
       if (stat.isSymbolicLink()) return;
       if (stat.isDirectory()) { for (const entry of await entries(absolute)) if (allowed(relative + '/' + entry.name)) await visit(relative + '/' + entry.name, allowed, limit); }
       else if (stat.size <= limit && /\.(md|json|jsonl|txt)$/.test(relative) && !seen.has(relative)) {
         seen.add(relative);
         await this.breathe();
-        const text = this.readText(absolute);
+        let text; try { text = this.readText(absolute); } catch (error) { if (!isUnreadable(error)) throw error; unreadable.add(top); return; }
         if (text !== null) documents.push(this.fileDocument(relative, text));
       }
     };
-    for (const name of [...durableRoots.filter(r => r !== recordsFolder), ...durableFiles]) await visit(name);
-    for (const name of pages) await visit(name);
-    for (const name of SEARCH_ONLY_ROOTS) await visit(name, searchOnly, 300 * 1024);
+    for (const name of [...durableRoots.filter(r => r !== recordsFolder), ...durableFiles]) { top = name; await visit(name); }
+    for (const name of pages) { top = name; await visit(name); }
+    for (const name of SEARCH_ONLY_ROOTS) { top = name; await visit(name, searchOnly, 300 * 1024); }
+    if (!this.closed) this.reportUnreadable(unreadable);
     return documents;
   }
   // Ranked word search. Every word must appear; a word may be the start of

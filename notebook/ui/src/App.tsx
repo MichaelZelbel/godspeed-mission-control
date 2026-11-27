@@ -1,4 +1,5 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense } from 'react';
+import { onThisComputer } from '@/lib/on-this-computer';
 import { BrowserRouter, Routes, Route, Navigate, Link, Outlet, useLocation } from 'react-router-dom';
 import { BRAIN_PAGE } from '@/lib/brain-page';
 import { ThemeProvider } from 'next-themes';
@@ -43,15 +44,30 @@ function ShortAddress(){
   if(!(SHORT_ADDRESSES as readonly string[]).includes(name))return <Unavailable/>;
   return <Navigate to={['/dashboard',name,...rest].join('/')+search+hash} replace/>;
 }
+function Reconnect({error,refreshSession}:{error:string;refreshSession:()=>Promise<void>}){
+  return <AuthShell><h2>Let’s reconnect</h2><p className="auth-intro" role="alert">{error}</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
+}
 function Layout(){
-  const {user,loading,authError,refreshSession}=useAuth();
+  const {user,loading,authError,refreshSession,local}=useAuth();
   if(loading)return <AuthShell><h2>Opening Godspeed Mission Control</h2><p role="status">Checking your sign-in…</p></AuthShell>;
-  if(!user&&authError)return <AuthShell><h2>Let’s reconnect</h2><p className="auth-intro" role="alert">{authError}</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
+  if(!user&&authError)return <Reconnect error={authError} refreshSession={refreshSession}/>;
+  // A notebook on this computer needs no sign-in (the server always answers signed in there), so it
+  // never lands on the server's sign-in, invite or setup screens, even if a read comes back oddly.
+  if(!user&&local)return <AuthShell><h2>Reconnecting to your notebook</h2><p className="auth-intro" role="status">Your notebook is on this computer and needs no sign-in.</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
   if(!user)return <AuthScreen/>;
   return <><KeepUnsavedNotes/><DashboardLayout/></>;
 }
+// A setup link only means something on a server install. A local notebook's server always answers
+// signed in, so its stale setup link goes back to the dashboard; a read that fails cannot say
+// whether the server is local, so the reconnect shell keeps the server's screens away until it answers.
+function SetupRoute(){
+  const {user,local,authError,refreshSession}=useAuth();
+  if(local)return <Navigate to="/dashboard" replace/>;
+  if(!user&&authError&&onThisComputer())return <Reconnect error={authError} refreshSession={refreshSession}/>;
+  return <AuthScreen/>;
+}
 // The notebook's addresses; App puts them in the browser's router, the tests in a memory router.
-export function AppRoutes(){return <Routes><Route path="/setup" element={<AuthScreen/>}/><Route path="/shared/:token" element={<Suspense fallback={<p>Opening...</p>}><SharedNote/></Suspense>}/><Route element={<Layout/>}>
+export function AppRoutes(){return <Routes><Route path="/setup" element={<SetupRoute/>}/><Route path="/shared/:token" element={<Suspense fallback={<p>Opening...</p>}><SharedNote/></Suspense>}/><Route element={<Layout/>}>
   <Route path="/" element={<Navigate to="/dashboard" replace/>}/><Route path="/dashboard" element={<Home/>}/>
   <Route path="/dashboard/chat" element={<GlobalAIChatFAB page/>}/><Route path="/dashboard/control" element={<Navigate to="/dashboard" replace/>}/><Route path="/dashboard/notes/*" element={<Notes/>}/>
   <Route path="/dashboard/goals" element={<Goals/>}/>

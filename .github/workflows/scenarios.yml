@@ -2,7 +2,7 @@ name: scenarios
 # The run's name carries the stage it proved, so a run on a candidate's tag that was left at the
 # default stage (beta) cannot be read as that candidate's pass: GitHub shows the input itself only
 # in the run's logs.
-run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull request {0}', github.event.pull_request.number) || (inputs.pr && format('scenarios on pull request {0}, started by hand', inputs.pr)) || format('scenarios {0}', inputs.stage || 'main, the night') }}
+run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull request {0}', github.event.pull_request.number) || (inputs.pr && format('scenarios on pull request {0}, started by hand', inputs.pr)) || format('scenarios {0}', inputs.stage || (inputs.all && 'main, the week') || 'main, the night') }}
 # The proving scenarios a candidate runs before the maintainer is asked for "go" (godspeed-dev,
 # releases/godspeed-2.0.0-beta.7-stages/plan.md, "Proving scenarios" 1, 2 and 5, and
 # releases/godspeed-2.0.0-beta.8-faster-chat/plan.md, "Proving scenarios" 1, 3 and 4, which are
@@ -13,10 +13,23 @@ run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull r
 # line in the run's summary: PASS <name>, or FAIL <name>: <what went wrong>. A scenario that cannot
 # run fails: the verdict job at the end says so for every scenario that did not pass, and fails the
 # run.
-# Every night on main (process.md section 5): the Linux and Docker jobs. The Mac and Windows jobs
-# are for a candidate (the Mac one only when `inputs.mac` is true, the Windows one only on a
-# candidate's tag), which a scheduled run never is. The verdict job's last step then tells the night
-# in issues (scenarios/report-night.mjs, releases/godspeed-2.0.0-beta.15-nightly-proof-six-repairs).
+# What runs when. Which jobs can hold up a release is data: scenarios/scenario-gate.tsv (`release`
+# for what people do first and most: install, update, the first day, chat and Telegram, the morning
+# brief, reminders; `weekly` for the rest), read by scenarios/pick-run.sh. A test fails when a job here is in neither group or in both.
+# - The night (schedule, every night on main, process.md section 5) runs only the release gate: the
+#   Linux and Docker jobs of it. The jobs it does not pick end `skipped` and do not fail the run. The
+#   verdict job's last step tells the night in issues (scenarios/report-night.mjs: "Nightly scenario
+#   failed: <job>"), as before. The Mac and Windows jobs are for a candidate (the Mac one only when
+#   `inputs.mac` is true, the Windows one only on a candidate's tag), which a scheduled run never is.
+# - A candidate (a hand-started run with `stage` set and `only` empty, as the release step starts it:
+#   --ref candidate/2.0.0-beta.8 -f stage=candidate/2.0.0-beta.8, and -f mac=true) runs only the
+#   release gate by default. `-f all=true` runs every job instead.
+# - The week: scenarios-weekly.yml starts this workflow on main every Sunday with `all` true, so every
+#   job runs once a week and the run is titled "scenarios main, the week". It is a separate workflow
+#   and a hand-started run, never a `schedule` run of this one, because the factory driver plans the
+#   newest `schedule` run's failures into the next bug-fix release, and a weekly failure is an ordinary
+#   bug that never holds up a release. Its failures are filed as "Weekly test failed: <job>" (labels
+#   bug, scenario-failure, weekly-test; never `priority`), and the first week one passes it is closed.
 # A hand-started run may instead name a pull request (`pr`, with `only`, and `stage` left empty: -f pr=463 -f only=plain-yes):
 # it builds that pull request's head image and proves the head on it, so a pull request that changes
 # only the notebook (which no scenario script names, so a pull request run picks nothing) gets its
@@ -28,11 +41,11 @@ run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull r
 # Nothing else runs on a pull request: no Mac, no Windows, no scenario whose files the pull request
 # did not touch (and never the install, Docker or update jobs), no issue in the night's name; a pull request from a fork runs nothing (no secrets).
 # A newer commit on the same pull request cancels the older run.
-# A candidate's run can be narrowed by hand: `-f only=first-day,talk-prep-honest` (job names, comma
+# A run can be narrowed by hand: `-f only=first-day,talk-prep-honest` (job names, comma
 # separated) runs only those jobs, plus the stage job and the verdict, which judges only what was
-# picked and fails on a name that is no job; no issue is filed for it. Without `only` every job runs
-# as before (the night, a plain dispatch). The Mac and Windows jobs run on `only` when listed. The
-# run keeps the title "scenarios <stage>": the release gate counts a run by that title.
+# picked and fails on a name that is no job; no issue is filed for it. Without `only` and without a
+# stage, a plain dispatch runs every job as before. The Mac and Windows jobs run on `only` when listed.
+# A candidate's run keeps the title "scenarios <stage>": the release step finds it by that title.
 # A night proves main's own commit: with no `stage` input (the schedule) the stage is made from
 # github.sha by scenarios/stage-for-run.sh and handed to every job as the artifact run-stage, read as
 # file://; main's own stage.json names the last frozen version and is never read.
@@ -56,9 +69,13 @@ on:
         type: boolean
         default: false
       only:
-        description: 'Only these jobs (comma-separated job names, e.g. first-day,talk-prep-honest); empty runs every job'
+        description: 'Only these jobs (comma-separated job names, e.g. first-day,talk-prep-honest); empty runs the release gate when a stage is given, otherwise every job'
         required: false
         default: ''
+      all:
+        description: Run every job, not only the release gate (the weekly run does; so can a candidate)
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -172,7 +189,7 @@ jobs:
     outputs:
       # The reuse step only runs on a pull request, and only when this checkout has its script; otherwise the pick stands.
       picked: ${{ steps.reuse.outputs.picked || steps.pick.outputs.picked }}
-      proof: ${{ env.PROOF_SHA }}
+      proof: ${{ steps.night.outputs.proof || env.PROOF_SHA }}
       version: ${{ steps.read.outputs.version }}
       product: ${{ steps.read.outputs.product }}
       engine: ${{ steps.read.outputs.engine }}
@@ -186,10 +203,18 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22.19.0' }
       - name: This commit's own stage (no stage given, the night)
+        id: night
         if: ${{ !inputs.stage }}
         run: |
           set -e
-          out=$(bash scenarios/stage-for-run.sh '' "$PROOF_SHA" "$RUNNER_TEMP/run-stage")
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            # The night proves the newest main commit that can be proved (scenarios/night-proof.sh).
+            out=$(bash scenarios/night-proof.sh "$PROOF_SHA" "$RUNNER_TEMP/run-stage")
+            echo "proof=$(printf '%s\n' "$out" | sed -n 's/^proof=//p')" >> "$GITHUB_OUTPUT"
+            out=$(printf '%s\n' "$out" | grep -v '^proof=')
+          else
+            out=$(bash scenarios/stage-for-run.sh '' "$PROOF_SHA" "$RUNNER_TEMP/run-stage")
+          fi
           echo "$out"
           [ "$out" = "$(printf 'ref=%s\nraw=%s' "$STAGE_REF" "$RAW")" ] || { echo "the stage is not where the jobs will read it ($RAW)"; exit 1; }
       - uses: actions/upload-artifact@v4
@@ -205,19 +230,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           ONLY: ${{ inputs.only }}
+          ALL: ${{ inputs.all }}
+          MAC: ${{ inputs.mac }}
+          STAGE_INPUT: ${{ inputs.stage }}
+          EVENT: ${{ github.event_name }}
         run: |
           set -e
           if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
-            # A hand-started run may name the jobs to run; an empty value and every other event run them all.
-            only=$(printf '%s' "${ONLY:-}" | tr -d ' \t\r\n')
-            if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ] || [ -z "$only" ]; then
-              echo "picked=all" | tee -a "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            [[ "$only" =~ ^[a-z0-9,-]*[a-z0-9-][a-z0-9,-]*$ ]] || { echo "only must be job names separated by commas, not: $only" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
-            picked=$(printf ',%s,' "$only" | tr -s ',')
-            echo "Only these jobs run:$picked" | tee -a "$GITHUB_STEP_SUMMARY"
-            echo "picked=$picked" | tee -a "$GITHUB_OUTPUT"
+            # Not a pull request: scenarios/pick-run.sh decides (only, all, the release gate), and
+            # reads which jobs are the gate from the catalog's own column.
+            # A stage from before this script existed has no gate to read: every job runs, as it did.
+            line='picked=all'
+            [ ! -f scenarios/pick-run.sh ] || line=$(bash scenarios/pick-run.sh)
+            echo "$line" | tee -a "$GITHUB_OUTPUT"
             exit 0
           fi
           # A pull request: the scenarios whose own files it changed, a job being named like its
@@ -1312,11 +1337,11 @@ jobs:
         server-update-keeps-everything=${{ needs.server-update-keeps-everything.result }}
     steps:
       - uses: actions/checkout@v4
-        if: github.event_name == 'schedule'
+        if: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.all && inputs.stage == '' && inputs.pr == '' && inputs.only == '')) }}
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
-        if: github.event_name == 'schedule'
+        if: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.all && inputs.stage == '' && inputs.pr == '' && inputs.only == '')) }}
         with: { node-version: '22.19.0' }
       - name: Every scenario passed, or the run fails
         run: |
@@ -1348,8 +1373,13 @@ jobs:
             esac
           done
           exit $bad
-      - name: Tell the night in issues (one per failing scenario, closed when it passes)
-        if: always() && github.event_name == 'schedule'
+      - name: Tell the night or the week in issues (one per failing scenario, closed when it passes)
+        # Only the night and the week on main file issues: a full run started by hand on another
+        # branch is no week of main and files or closes nothing.
+        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.all && inputs.stage == '' && inputs.pr == '' && inputs.only == '')) }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          # The night's failures are "Nightly scenario failed" issues; the week's run is not a
+          # schedule run, and its failures are ordinary bugs: "Weekly test failed", never urgent.
+          WEEKLY: ${{ github.event_name != 'schedule' }}
         run: node scenarios/report-night.mjs

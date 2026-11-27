@@ -111,7 +111,8 @@ export interface AddFactInput {
 
 /** Everything a fact list can do, passed down to the section components. */
 export interface FactActions {
-  add: (input: AddFactInput) => void;
+  /** Resolves once the fact is saved; rejects with the reason when it was not. */
+  add: (input: AddFactInput) => Promise<unknown>;
   /** "It changed": the new value from `validFrom`; the old one becomes history. */
   changed: (fact: ProfileFact, value: string, validFrom: string) => void;
   /** "Fix a mistake": the value is corrected in place. */
@@ -210,9 +211,14 @@ export function groupSlots(facts: ProfileFact[]): FactSlot[] {
  * Sections in taxonomy order (custom sections after, by name; "Other" last),
  * each holding its slots. A section shows when it has a slot with a current
  * value or history, or when it is an empty custom section (so a new custom
- * section is never a dead end). Pure.
+ * section is never a dead end). With `emptyCategories`, every category row
+ * shows, empty or not, so a page can offer a first fact in each. Pure.
  */
-export function groupFacts(facts: ProfileFact[], categories: ProfileCategory[] = []): FactSection[] {
+export function groupFacts(
+  facts: ProfileFact[],
+  categories: ProfileCategory[] = [],
+  options: { emptyCategories?: boolean } = {},
+): FactSection[] {
   const sections = new Map<string, FactSection>();
   const categoryBySlug = new Map(categories.map((c) => [c.slug, c]));
 
@@ -245,7 +251,7 @@ export function groupFacts(facts: ProfileFact[], categories: ProfileCategory[] =
     sectionFor(slot.categorySlug, first?.category_name ?? null).slots.push(slot);
   }
   for (const category of categories) {
-    if (!sections.has(category.slug) && !(category.slug in taxonomyBySlug)) {
+    if (!sections.has(category.slug) && (options.emptyCategories || !(category.slug in taxonomyBySlug))) {
       sectionFor(category.slug, null);
     }
   }
@@ -814,7 +820,7 @@ export function useFacts(subject: FactSubject | null) {
   });
 
   const actions: FactActions = {
-    add: (input) => addFact.mutate(input),
+    add: (input) => addFact.mutateAsync(input),
     changed: (fact, value, validFrom) => changeFact.mutate({ fact, value, validFrom }),
     fix: (fact, value) => fixFact.mutate({ fact, value }),
     redate: (fact, validFrom) => redateFact.mutate({ fact, validFrom }),

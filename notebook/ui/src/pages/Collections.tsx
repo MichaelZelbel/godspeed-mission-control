@@ -25,6 +25,7 @@ import { LoadErrorState } from "@/components/collections/LoadErrorState";
 import { charmShelf, habitShelf, lastEntryDays, shelve, talksLabel, type CharmListed } from "@/lib/tracker-shelf";
 import type { HabitProgress } from "@/lib/habit-progress";
 import { CharmCard } from "@/components/collections/CharmCard";
+import { defaultField, toJsonSchema } from "@/components/collections/schemaFields";
 import { collectionNameSchema } from "@/lib/collection-name";
 
 type Collection = Database["public"]["Tables"]["collections"]["Row"];
@@ -117,7 +118,7 @@ function CollectionCard({ collection }: { collection: CollectionWithCount }) {
               <CollectionIcon icon={collection.icon} />
             </div>
             <div className="min-w-0 flex-1">
-              <CardTitle className="truncate text-base">{collection.name}</CardTitle>
+              <CardTitle className="break-words text-base">{collection.name}</CardTitle>
               <p className="mt-1 line-clamp-2 min-h-10 text-sm text-muted-foreground">
                 {collection.description || "No description"}
               </p>
@@ -152,7 +153,7 @@ function HabitCard({ habit }: { habit: HabitCardData }) {
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary" aria-hidden="true">✓</div>
             <div className="min-w-0 flex-1">
-              <CardTitle className="truncate text-base">{habit.name}</CardTitle>
+              <CardTitle className="break-words text-base">{habit.name}</CardTitle>
               <p className="mt-1 line-clamp-2 min-h-10 text-sm text-muted-foreground">
                 Habit{talksLabel(habit) ? `, ${talksLabel(habit)}` : ""}{habit.habit_status && habit.habit_status !== "active" ? `, ${habit.habit_status}` : ""}
               </p>
@@ -223,7 +224,7 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
         icon: parsed.icon || null,
         description: parsed.description || null,
         visibility: parsed.visibility,
-        field_schema: [],
+        field_schema: toJsonSchema([defaultField()]),
         agent_instructions: null,
       })
       .select("slug")
@@ -254,15 +255,15 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
           </div>
 
           <div className="space-y-2">
-            <p id="collection-icon-label" className="text-sm font-medium leading-none">Icon</p>
-            <div role="group" aria-labelledby="collection-icon-label" className="flex flex-wrap gap-2">
+            <Label htmlFor="collection-icon">Icon</Label>
+            <div className="flex flex-wrap gap-2">
               {emojiOptions.map((emoji) => (
                 <button key={emoji} type="button" className={cn("flex h-9 w-9 items-center justify-center rounded-md border text-lg transition-colors hover:bg-accent", values.icon === emoji && "border-primary bg-primary/10")} onClick={() => updateValue("icon", emoji)}>
                   {emoji}
                 </button>
               ))}
             </div>
-            <Input value={values.icon} maxLength={4} onChange={(event) => updateValue("icon", event.target.value)} onBlur={validate} className="w-24" aria-label="Custom emoji" />
+            <Input value={values.icon} maxLength={4} onChange={(event) => updateValue("icon", event.target.value)} onBlur={validate} className="w-24" id="collection-icon" />
             {errors.icon && <p className="text-xs text-destructive">{errors.icon}</p>}
           </div>
 
@@ -280,7 +281,7 @@ export function NewCollectionDialog({ open, onOpenChange }: { open: boolean; onO
             </RadioGroup>
           </div>
 
-          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">URL: {BRAND.domain}/collections/{slugPreview}</p>
+          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">URL: {BRAND.url}/collections/{slugPreview}</p>
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>

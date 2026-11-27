@@ -88,14 +88,22 @@ export function retireOldFiles(store, { day, force = false } = {}) {
     return { done: true, moved: [], note: MOVED_NOTE, differences: [], reason: 'folder mode: one note, and not one file changed' };
   }
   const into = 'archives/' + day + '-due-moved-to-the-notebook';
+  const moved = moveInto(root, into, left.map(record => record.file), message => { if (process.env.GODSPEED_DUE_COPY === 'say') console.error('due-retire: ' + message); });
+  return { done: moved.length === left.length, moved, note: '', differences: [], reason: 'moved into ' + into };
+}
+
+// Moves each file to the same path below `into`, never deleting one. A file that could not be moved
+// stays where it is and is tried again on the next run; it is still a record in the notebook, so
+// nothing of it is lost by waiting. Answers the files it moved.
+export function moveInto(root, into, files, say = () => {}) {
   const moved = [];
-  for (const record of left) {
-    const from = path.join(root, ...record.file.split('/'));
-    const to = path.join(root, ...into.split('/'), ...record.file.split('/'));
+  for (const file of files) {
+    const from = path.join(root, ...file.split('/'));
+    const to = path.join(root, ...into.split('/'), ...file.split('/'));
     try {
       fs.mkdirSync(path.dirname(to), { recursive: true });
-      // Moved, never deleted. A rename across devices (an archive on another disk) answers EXDEV,
-      // and then the copy is written first and only the file that is surely there is unlinked.
+      // A rename across devices (an archive on another disk) answers EXDEV, and then the copy is
+      // written first and only the file that is surely there is unlinked.
       try { fs.renameSync(from, to); }
       catch (error) {
         if (error.code !== 'EXDEV') throw error;
@@ -103,12 +111,8 @@ export function retireOldFiles(store, { day, force = false } = {}) {
         if (fs.statSync(to).size !== fs.statSync(from).size) throw new Error('the copy into ' + into + ' did not come out whole');
         fs.unlinkSync(from);
       }
-      moved.push(record.file);
-    } catch (error) {
-      // A file that could not be moved stays where it is and is tried again on the next run. It is
-      // still a reminder in the notebook, so nothing of it is lost by waiting.
-      if (process.env.GODSPEED_DUE_COPY === 'say') console.error('due-retire: ' + record.file + ': ' + error.message);
-    }
+      moved.push(file);
+    } catch (error) { say(file + ': ' + error.message); }
   }
-  return { done: moved.length === left.length, moved, note: '', differences: [], reason: 'moved into ' + into };
+  return moved;
 }

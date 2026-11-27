@@ -7,7 +7,7 @@ import {relatedNotes} from '../core/related.mjs';
 import {STOPWORDS} from '../core/index/stopwords.mjs';
 import {privateFile as markedPrivate} from '../core/context.mjs';
 import {retireShares} from '../core/shares.mjs';
-import {linkFacts, worldFacts, relationshipsAsked, relationshipKinds, isRelationshipFact, closeness, ownerRelationships, fieldList, newestOnly} from '../core/world-facts.mjs';
+import {linkFacts, relationshipsAsked, relationshipKinds, isRelationshipFact, closeness, ownerRelationships, fieldList, newestOnly} from '../core/world-facts.mjs';
 
 // Menerio's tool names and arguments, answered from the notebook. Mission
 // Control's skills, routines and memory benchmark called these names for
@@ -82,12 +82,12 @@ function personFor(query, a) { return pick(people(query), {id: a.contact_id, nam
 function entities(query) { return live(visibleRows(query, 'entities')); }
 
 // Facts with their labels and categories, and which have two current answers.
-// The notebook's own claims, the links between people and Mission Control's
-// world claims (core/world-facts.mjs): one set, so every tool reads the same.
+// The notebook's own claims and the links between people (core/world-facts.mjs):
+// one set, so every tool reads the same.
 function facts(query) { return query.withSnapshot(() => factsNow(query)); }
 function factsNow(query) {
   const day = new Intl.DateTimeFormat('en-CA', {timeZone: query.rows('profiles')[0]?.timezone || 'UTC'}).format(new Date()), fields = fieldList(query.store.root);
-  const own = live(visibleRows(query, 'profile_facts')), rows = newestOnly([...own, ...linkFacts(query), ...worldFacts(query, own)], fields, day);
+  const own = live(visibleRows(query, 'profile_facts')), rows = newestOnly([...own, ...linkFacts(query)], fields, day);
   // Two answers are two current values of one kind of fact, whatever name each was filed under.
   const kind = f => f.subject_type + '|' + (f.subject_id || '') + '|' + fields.canonical(f.attribute), groups = new Map();
   for (const f of rows) if (holds(f, day)) groups.set(kind(f), [...(groups.get(kind(f)) || []), f]);
@@ -221,8 +221,6 @@ async function searchBrain(a, ctx) {
     shownAsClaims = new Set(claims.slice(0, limit).map(f => f.id));
   }
   if (include.includes('note')) ({hits, mode, note} = await noteHits(ctx, text, {limit: 50}));
-  // A world claim shown as a fact is not listed again as a file.
-  if (shownAsClaims.size) hits = hits.filter(h => !h.file || !shownAsClaims.has(h.file));
   const shown = hits.slice(offset, offset + limit), label = labeler(query);
   ctx.seen?.(shown.filter(h => !h.file).map(h => h.note));
   parts.push('Found ' + claims.length + ' claim(s) and ' + hits.length + ' note(s) [' + mode + '].' + (hits.length ? ' Showing notes ' + (shown.length ? offset + 1 : 0) + '-' + (offset + shown.length) + ' (has_more: ' + (offset + limit < hits.length) + ').' : '') + (note ? ' ' + note : ''));

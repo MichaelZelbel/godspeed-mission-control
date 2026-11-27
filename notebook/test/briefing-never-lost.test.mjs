@@ -28,7 +28,7 @@ test('a delivery review rejection after the rewrite saves a checked factual brie
  assert.equal(result.fallback,true);assert.equal(query.rows('notes').filter(note=>note.source_app==='morning-brief').length,1);
  assert.match(saved.content,/Prepare a fictional guide/);assert.doesNotMatch(saved.content,/Rejected private model prose/);
  const receipt=query.rows('job_receipts').find(row=>row.kind==='brief-factual-fallback');
- assert.equal(receipt.state,'verified');assert.equal(receipt.rejected_draft,'Rejected private model prose.');
+ assert.equal(receipt.state,'verified');assert.match(receipt.rejected_draft,/^Rejected private model prose\.\n\nNext: /);
  assert.equal(repairs(query).filter(row=>row.note_id===saved.id).length,1);
 });
 
@@ -41,11 +41,11 @@ test('a factual fallback retains the Charm line and checked contribution after n
  assert.ok(saved.split(/\r?\n/).includes(line));assert.match(saved,/Fictional copy ready draft/);assert.match(saved,new RegExp('/dashboard/notes/'+note.id));
 });
 
-test('a source claim rejected by id is absent from the factual fallback',async()=>{
+test('a goal whose id a source check rejected is still named in the factual fallback',async()=>{
  const {store,query}=fixture([]);const goal=store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  const provider=async input=>input.kind==='brief-verification'?input.check==='source-facts'?{passed:false,reason:'This goal is not current.',rejection_scope:'source-claims',rejected_source_ids:[goal.id]}:{passed:false,reason:'The draft is not useful enough.',rejection_scope:'non-source',rejected_source_ids:[]}:'Rejected private model prose.';
  const result=await run(provider,query,store,'brief-factual-rejected-source'),saved=store.get('notes',result.record_id).content;
- assert.doesNotMatch(saved,/Prepare a fictional guide|goal step/);assert.match(saved,/Tell Godspeed one goal/);
+ assert.match(saved,/One of your saved goals is Prepare a fictional guide/);assert.doesNotMatch(saved,/Tell Godspeed one goal/);
  const receipt=query.rows('job_receipts').find(row=>row.kind==='brief-factual-fallback');assert.deepEqual(receipt.rejected_source_ids,[goal.id]);
 });
 
@@ -67,11 +67,11 @@ test('a source-rejected checked contribution is absent and remains ready',async(
  assert.equal(store.get('lead_entries',entry.id).status,'ready');
 });
 
-for(const check of ['source-facts','plain-words-and-delivery'])test('a '+check+' source-claim rejection excludes its record',async()=>{
+for(const check of ['source-facts','plain-words-and-delivery'])test('a '+check+' source-claim rejection still leaves the goal named',async()=>{
  const {store,query}=fixture([]);const goal=store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  const provider=async input=>input.kind==='brief-verification'?(input.check===check?{passed:false,reason:'This goal is not current.',rejection_scope:'source-claims',rejected_source_ids:[goal.id]}:{passed:true,reason:'Fictional review passed.'}):'Rejected private model prose.';
  const result=await run(provider,query,store,'brief-factual-'+check),saved=store.get('notes',result.record_id).content;
- assert.doesNotMatch(saved,/Prepare a fictional guide/);
+ assert.match(saved,/Prepare a fictional guide/);
 });
 
 for(const check of ['source-facts','plain-words-and-delivery'])test('a '+check+' non-source rejection permits a factual fallback',async()=>{
@@ -326,6 +326,22 @@ test('a draft where every sentence breaks a rule sends the short fallback and op
  assert.ok(items[0].refusals.some(e=>/voice check failed: realm/.test(e)));
 });
 
+test('a goal title with an em dash does not stop the cut fallback from going out',async()=>{
+ const {store,query}=fixture(['BANNED-WORD: realm']);store.save('goals',{title:'Ship v1 \u2014 launch',status:'adopted'});
+ const provider=async input=>verifies(input)||'The realm is here.';
+ const result=await run(provider,query,store,'brief-dash-goal');
+ const saved=store.get('notes',result.record_id);
+ assert.ok(saved.content.length);assert.doesNotMatch(saved.content,/\u2014/);assert.doesNotMatch(saved.content,/Ship v1/);
+});
+
+test('the cut fallback gives a next action for the saved goal',async()=>{
+ const {store,query}=fixture(['BANNED-WORD: realm']);store.save('goals',{title:'Plan the fictional trip',status:'adopted'});
+ const provider=async input=>verifies(input)||'The realm is here.';
+ const result=await run(provider,query,store,'brief-cut-next'),saved=store.get('notes',result.record_id);
+ assert.match(saved.content,/One of your saved goals is Plan the fictional trip\./);
+ assert.match(saved.content,/^Next: Ask Godspeed to work on Plan the fictional trip and show you one concrete result today\.$/m);
+});
+
 test('the existing cut fallback is not sent when its explanation breaks a voice rule',async()=>{
  const {store,query}=fixture(['BANNED-WORD: realm','BANNED-WORD: briefing']);
  const provider=async input=>verifies(input)||'The realm is here.';
@@ -380,9 +396,8 @@ test('a required line that opens with a banned opener is left out and reported, 
 });
 
 // Archon R1: a claim the fact check rejected never comes back in the factual fallback, for every
-// kind of source the fallback can name (goal, verified work, dated obligation, health value).
+// kind of source the fallback can name (verified work, dated obligation, health value).
 for(const [kind,save,claim,reason] of [
- ['goal',store=>store.save('goals',{title:'Prepare a fictional guide',status:'adopted'}),/fictional guide/i,'Prepare a fictional guide is unsupported'],
  ['verified work',store=>store.save('work_items',{kind:'draft',title:'Checked fictional outline',state:'verified'}),/fictional outline/i,'The claim that the checked fictional outline was verified is unsupported'],
  ['obligation',store=>store.save('deadlines',{title:'Submit fictional application',status:'open',due_at:'2027-01-01T00:00:00Z'}),/fictional application/i,'Submit fictional application is not a current obligation'],
  ['health value',store=>store.save('health_observations',{metric:'Fictional energy',value:6,observed_at:new Date().toISOString()}),/Fictional energy/i,'Fictional energy: 6 is stale'],
@@ -394,17 +409,29 @@ for(const [kind,save,claim,reason] of [
  assert.ok(query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback').reasons.includes(reason));
 });
 
-test('a rejected goal is left out while another saved goal still gives the action',async()=>{
- const {store,query}=fixture([]);const rejected=store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});store.save('goals',{title:'Plant the fictional garden',status:'adopted'});
- const provider=async input=>input.kind==='brief-verification'?sourceRejects(input,'Prepare a fictional guide is unsupported',[rejected.id]):'Unsupported draft.';
- const result=await run(provider,query,store,'brief-rejected-one-goal'),content=store.get('notes',result.record_id).content;
- assert.doesNotMatch(content,/fictional guide/i);assert.match(content,/Ask Godspeed to work on Plant the fictional garden/);
+for(const workFirst of [true,false])test('a refused goal is still named, and the goal with verified work is named first ('+(workFirst?'work goal saved first':'work goal saved last')+')',async()=>{
+ const {store,query}=fixture([]),titles=['Plant the fictional garden','Prepare a fictional guide'];
+ const [first,second]=titles.map(title=>store.save('goals',{title,status:'adopted'})),worked=workFirst?first:second,idle=workFirst?second:first;
+ store.save('work_items',{kind:'draft',title:'Checked fictional outline',state:'verified',goal_id:worked.id});
+ const provider=async input=>input.kind==='brief-verification'?sourceRejects(input,idle.title+' is unsupported',[idle.id]):'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-goal-with-work-'+workFirst),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.match(content,new RegExp('One of your saved goals is '+worked.title));assert.doesNotMatch(content,new RegExp(idle.title));
+ assert.match(content,/review the work Godspeed verified/);
+});
+
+test('a refused first draft ends as one honest fallback with a repair item and no work marked done',async()=>{
+ const {store,query}=fixture([]),goal=store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const item=store.save('work_items',{kind:'draft',title:'Fictional first draft',state:'open',goal_id:goal.id});
+ let drafts=0;
+ const provider=async input=>{if(input.kind==='brief-verification')return readerFails(input,'The draft is not useful enough.');drafts++;return 'Rejected private model prose.';};
+ const result=await run(provider,query,store,'brief-refused-first-draft'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.equal(drafts,2);assert.match(content,/could not be written today/);assert.match(content,/Prepare a fictional guide/);
+ assert.equal(repairs(query).length,1);assert.equal(store.get('work_items',item.id).state,'open');assert.doesNotMatch(content,/Fictional first draft/);
 });
 
 // A source rejection is retained across both attempts, so a first-attempt rejection still holds
 // when the rewrite fails for a different reason.
 for(const [kind,save,claim] of [
- ['goal',store=>store.save('goals',{title:'Prepare a fictional guide',status:'adopted'}),/fictional guide/i],
  ['verified work',store=>store.save('work_items',{kind:'draft',title:'Checked fictional outline',state:'verified'}),/fictional outline/i],
  ['obligation',store=>store.save('deadlines',{title:'Submit fictional application',status:'open',due_at:'2027-01-01T00:00:00Z'}),/fictional application/i],
  ['health value',store=>store.save('health_observations',{metric:'Fictional energy',value:6,observed_at:new Date().toISOString()}),/Fictional energy/i],
@@ -423,7 +450,7 @@ test('a first-attempt source rejection holds after a differently rejected rewrit
  const provider=async input=>{if(input.kind!=='brief-verification')return 'Unsupported draft.';checks++;
   return checks<=2?(input.check==='source-facts'?{passed:false,reason:'Prepare release notes is unsupported',rejection_scope:'source-claims',rejected_source_ids:[goal.id]}:{passed:false,reason:'The draft is not useful enough.',rejection_scope:'non-source',rejected_source_ids:[]}):(input.check==='source-facts'?{passed:true,reason:'Fictional facts checked.'}:{passed:false,reason:'The rewrite is too vague',rejection_scope:'non-source',rejected_source_ids:[]});};
  const result=await run(provider,query,store,'brief-first-attempt-reason'),content=store.get('notes',result.record_id).content;
- assert.equal(result.fallback,true);assert.doesNotMatch(content,/release notes/i);
+ assert.equal(result.fallback,true);assert.match(content,/release notes/i);
 });
 
 // A malformed source-claim review leaves no safe inventory for the factual fallback: the brief is the
@@ -439,10 +466,10 @@ for(const [name,verdict] of [
  const provider=async input=>input.kind==='brief-verification'?(input.check==='source-facts'?verdict:{passed:false,reason:'Unclear',rejection_scope:'non-source',rejected_source_ids:[]}):'Unsupported private draft.';
  const result=await run(provider,query,store,'brief-unidentified-'+name.replaceAll(' ','-')),saved=store.get('notes',result.record_id);
  assert.equal(result.fallback,true);assert.match(saved.content,/^Your full morning briefing for \d{4}-\d{2}-\d{2} could not be written today/);
- assert.doesNotMatch(saved.content,/fictional contract|Unsupported private draft/);
+ assert.match(saved.content,/One of your saved goals is Cancel the fictional contract\./);assert.doesNotMatch(saved.content,/Unsupported private draft/);assert.match(saved.content,/^Next: Ask Godspeed to work on Cancel the fictional contract and/m);
  const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');
  assert.equal(receipt.state,'verified');assert.equal(receipt.honest_note,true);assert.match(receipt.fallback_error,/Could not make a checked factual fallback/);
- assert.equal(receipt.rejected_draft,'Unsupported private draft.');assert.ok(receipt.reasons.includes(verdict.reason));
+ assert.match(receipt.rejected_draft,/^Unsupported private draft\.\n\nNext: /);assert.ok(receipt.reasons.includes(verdict.reason));
  assert.equal(query.rows('notifications').filter(n=>n.status==='ready').length,1);assert.equal(repairs(query).filter(row=>row.note_id===saved.id).length,1);
 });
 

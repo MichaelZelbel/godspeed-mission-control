@@ -19,10 +19,10 @@ import {waitingSteps} from './waiting-steps.mjs';
 import {localPath} from './local-path.mjs';
 import {currentHealth,healthSafeReply,unknownHealthColumns,PHONE_VIA} from './health-inputs.mjs';
 import {cycleOperation} from './cycle-operations.mjs';
-import {finishedWork,finishedLine,plainTitle,nextLineError} from './briefing-done.mjs';
+import {finishedWork,finishedLine,plainTitle,nextLineError,hasNextLine} from './briefing-done.mjs';
 import {addonCommand} from './native-personal.mjs';
 import {dayOf} from './trackers.mjs';
-import {linkFacts,worldFacts,ownerRelationships,newestOnly,fieldList} from './world-facts.mjs';
+import {linkFacts,ownerRelationships,newestOnly,fieldList} from './world-facts.mjs';
 const {checkPromises,promiseSayings}=createRequire(import.meta.url)('../../tools/promises.js');
 const BRIEFING_SOURCE_SELECTORS=Object.freeze({
  notes:({actionSources,previousNotes,dayNotes})=>[...new Map([...actionSources,...previousNotes,...dayNotes].map(note=>[note.id,note])).values()],
@@ -41,6 +41,11 @@ const BRIEFING_SOURCE_SELECTORS=Object.freeze({
  lead_entries:({contribution})=>contribution?[contribution]:[],
 });
 export const BRIEFING_SOURCE_TABLES=Object.freeze(Object.keys(BRIEFING_SOURCE_SELECTORS));
+// The only job receipts the brief reads: other kinds, such as the spend guard's (#974), are not its source.
+const briefRehearsals=rows=>rows.filter(r=>r.kind==='brief-rehearsal').slice(-2);
+// What the brief would read out of a table's raw rows: the one place a source table is narrower than the table.
+const BRIEFING_RAW_READS={job_receipts:briefRehearsals};
+export const briefingReads=(table,rows)=>(BRIEFING_RAW_READS[table]||(all=>all))(rows);
 // The day a briefing note belongs to is the day it was asked for (brief_day), which a write that
 // commits after local midnight must not move; notes saved before that field have only created_at.
 const briefedOn=(note,zone)=>note.source_app==='morning-brief'&&(note.brief_day||(note.created_at&&dayOf(new Date(note.created_at),zone)));
@@ -69,16 +74,33 @@ const briefRequests=JSON.parse(fs.readFileSync(new URL('../assistant-files/godsp
 const BRIEF_REQUESTS=Object.fromEntries(Object.entries(briefRequests.asks).map(([language,asks])=>[language,new Set(asks)]));
 const BRIEF_REQUEST_FRAMES=Object.fromEntries(Object.entries(briefRequests.frames).map(([language,frames])=>[language,frames.map(frame=>new RegExp(frame))]));
 
-export function asksForTodaysBrief(text){
- if(typeof text!=='string'||[...text].length>80)return false;
+export function asksForTodaysBrief(text){return Boolean(briefRequestLanguage(text));}
+
+// The language ('en', 'de') of a message that only asks for today's brief, else null.
+export function briefRequestLanguage(text){
+ if(typeof text!=='string'||[...text].length>80)return null;
  const plain=text.toLowerCase().replaceAll('’',"'").replace(/[^\p{L}\p{N}_\s']/gu,' ').replace(/\s+/g,' ').trim();
  for(const language of Object.keys(BRIEF_REQUESTS)){
   const candidates=new Set([plain]);
   for(const frame of BRIEF_REQUEST_FRAMES[language])for(const candidate of [...candidates])candidates.add(candidate.replace(frame,'').trim());
-  if([...candidates].some(candidate=>BRIEF_REQUESTS[language].has(candidate)))return true;
+  if([...candidates].some(candidate=>BRIEF_REQUESTS[language].has(candidate)))return language;
  }
- return false;
+ return null;
 }
+
+// No brief saved yet this morning (#1070): the chat says so plainly and offers to make one. It writes
+// no brief of its own and saves none; a hidden brief is not "none saved", so it gets no such answer.
+const NO_BRIEF_YET={en:'No morning briefing has been saved yet this morning. Would you like me to make one? Just ask me to, and I will.',de:'Heute Morgen wurde noch kein Morgenbriefing gespeichert. Soll ich eines erstellen? Sag einfach Bescheid.'};
+export function missingBriefAnswer(store,message){
+ const language=briefRequestLanguage(message);
+ if(!language)return null;
+ const today=savedBriefToday(store);
+ return today.hidden||today.note?null:NO_BRIEF_YET[language];
+}
+
+// Today's saved briefing when the message only asks for it, else null. Every chat answers such a
+// message with this note and asks no AI, so no check of the AI stands in front of it (#1039).
+export function savedBriefAnswer(store,message){return asksForTodaysBrief(message)?savedBriefToday(store).note:null;}
 
 export async function briefing(job,{store,query,provider,now=new Date(),notices}){
  if(job.rehearsal){
@@ -125,7 +147,7 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
  const leftOut=[];
  const watch=visibleRows(query,'watch_topics').filter(t=>!t.paused&&t.include_in_brief);
  if(watch.length)await procedure({id:job.id+'-sources',kind:'watch',topic_ids:watch.map(t=>t.id)},{store,query,provider});
- const rehearsals=visibleRows(query,'job_receipts').filter(r=>r.kind==='brief-rehearsal').slice(-2);
+ const rehearsals=briefRehearsals(visibleRows(query,'job_receipts'));
  const previousNotes=visibleRows(query,'notes').filter(n=>n.source_app==='morning-brief').slice(-3);
  const zone=installationZone(store),today=dayOf(now,zone),dayNotes=notesAboutDay(visibleRows(query,'notes'),today,now.getTime());
  const currentDecision=visibleRows(query,'decisions').filter(d=>dayOf(new Date(d.created_at),zone)===today&&(d.state==null||d.state==='selected')).at(-1)||null;
@@ -202,7 +224,7 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
  // owner's calendar is not read as the owner's own trip when a note or fact names someone else (#386).
  // Failing to read it costs this part, not the morning.
  const peopleAround=()=>{try{return query.withSnapshot(()=>{
-  const own=visibleRows(query,'profile_facts').filter(r=>!r.removed_at&&!r.deleted_at),facts=newestOnly([...own,...linkFacts(query),...worldFacts(query,own)],fieldList(store.root),today);
+  const own=visibleRows(query,'profile_facts').filter(r=>!r.removed_at&&!r.deleted_at),facts=newestOnly([...own,...linkFacts(query)],fieldList(store.root),today);
   const names=new Map(visibleRows(query,'contacts').map(c=>[c.id,c.name])),holds=f=>(!f.valid_from||f.valid_from<=today)&&(!f.valid_to||f.valid_to>today);
   return {relationships:ownerRelationships(query,facts,today).current,facts:facts.filter(f=>(f.valid_from||f.valid_to)&&holds(f)).slice(0,40).map(f=>({id:String(f.id),subject:f.subject_type==='self'?'you':f.subject_name||names.get(f.subject_id||f.contact_id)||null,attribute:f.attribute,value:f.value,valid_from:f.valid_from||null,valid_to:f.valid_to||null,evidence:f.evidence_quote||null}))};
  });}catch{return {relationships:[],facts:[],unavailable:true};}};
@@ -219,17 +241,29 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
  // The same words may open a later day's briefing; within one day they are a repeat (#195).
  const savedToday=visibleRows(query,'notes').filter(n=>briefedOn(n,zone)===today);
  const codeGate=text=>{const errors=[];if(typeof text!=='string'||!text.trim())errors.push('Briefing produced no text');else{if(context.cycle_heads_up&&!text.split(/\r?\n/).some(line=>line.trim()===context.cycle_heads_up))errors.push('Include the cycle heads-up line word for word, as one line of its own');if(context.charm_line&&!text.split(/\r?\n/).some(line=>line.trim()===context.charm_line))errors.push('Include the Charm Challenge line word for word, as one line of its own');if(context.done_line&&!text.split(/\r?\n/).some(line=>line.trim()===context.done_line))errors.push('Include the finished work line word for word, as one line of its own');if(text.includes('\u2014'))errors.push('Use the configured plain writing style');if(context.contribution&&(!text.includes(context.contribution.content)||!text.includes(context.contribution.link)))errors.push('Include the complete checked contribution and its usable link');if(voice){const checked=checkVoice(text,voice);if(checked.configured&&!checked.passed)errors.push('Configured voice check failed: '+checked.hits.map(h=>h.value).join(', '));}if(savedToday.some(n=>n.content.trim()===text.trim()))errors.push('The same note was already saved today; do not repeat it');}return errors;};
+ const text=(value,max=500)=>typeof value==='string'&&value.trim()&&value.length<=max&&!/[\r\n\u0000-\u001f]/.test(value)?value.trim():null;
+ const goalsWorkedFirst=(excluded=()=>false)=>{
+  const workedOn=new Set(context.work.filter(row=>row.state==='verified'&&row.kind!=='repair'&&row.goal_id!=null&&!excluded(row)).map(row=>row.goal_id));
+  return [...context.goals].sort((a,b)=>Number(workedOn.has(b.id))-Number(workedOn.has(a.id)));
+ };
+ // Every fallback names an active goal by its record title alone, which no refused sentence can make unsupported (#1104).
+ const goalSentence=title=>'One of your saved goals is '+title+'.';
+ const goalLine=()=>{const row=goalsWorkedFirst().find(r=>text(r.title));return row?goalSentence(text(row.title)):null;};
+ // The one action a fallback can always offer for a saved goal; the first-day brief is judged on having a concrete next action.
+ const goalNext=()=>{const row=goalsWorkedFirst().find(r=>text(r.title));return row?'Next: Ask Godspeed to work on '+text(row.title)+' and show you one concrete result today.':null;};
+ const passes=(head,line)=>line&&!codeGate([head,line].join('\n\n')).length&&!ruleRefusals(line,voice).length?line:null;
  const factualFallback=rejectedIds=>{
   const parts=[],excluded=row=>row?.id!=null&&rejectedIds.has(String(row.id));
   const add=line=>{if(!line)return false;const candidate=[...parts,line].join('\n\n');if(codeGate(candidate).some(error=>!error.startsWith('Include ')))return false;parts.push(line);return true;};
   const addFirst=(rows,line)=>rows.some(row=>add(line(row)));
-  const text=(value,max=500)=>typeof value==='string'&&value.trim()&&value.length<=max&&!/[\r\n\u0000-\u001f]/.test(value)?value.trim():null;
   add('Your full morning briefing for '+today+' could not be written today, because the checks refused what was drafted. A repair item has been opened for it.');
   const contribution=context.contribution;
   if(contribution&&([contribution.id,contribution.note_id,...contribution.source_ids].some(id=>id!=null&&rejectedIds.has(String(id)))))context.contribution=null;
   const required=[context.done_line,context.cycle_heads_up,context.charm_line].filter(Boolean);
-  const goal=context.goals.find(row=>!excluded(row)&&text(row.title)),anyGoal=context.goals.some(row=>!excluded(row));
-  addFirst(context.goals,row=>!excluded(row)&&text(row.title)?'One of your saved goals is '+text(row.title)+'.':null);
+  // A goal line states only the record's own title, which no refused draft sentence can make unsupported, so a rejected id never drops it (#1105).
+  const goals=goalsWorkedFirst(excluded);
+  const goal=goals.find(row=>text(row.title)),anyGoal=goals.length>0;
+  addFirst(goals,row=>text(row.title)?goalSentence(text(row.title)):null);
   const verified=context.work.filter(row=>row.state==='verified'&&row.kind!=='repair'&&!excluded(row)).sort((a,b)=>String(b.verification?.at||b.updated_at||'').localeCompare(String(a.verification?.at||a.updated_at||'')));
   // Work the daily round filed in the work register reaches the notebook as a legacy row with its
   // fields as written, WHAT for its title (9 November 2026: a first day's verified playbook went
@@ -269,8 +303,9 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
   const due=context.deadlines.filter(row=>deadlineLive(row,now.getTime())&&row.due_at&&Number.isFinite(Date.parse(row.due_at))&&Date.parse(row.due_at)>=now.getTime()&&clean(row.title)).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at))[0];
   const next=goal&&due?'Next: open '+clean(due.title)+' and choose the first step to finish before '+(due.native_file?String(due.due_at).slice(0,10):dayOf(new Date(due.due_at),due.timezone||zone))+'.':null;
   for(const opening of ['Your full morning briefing for '+today+' could not be written today, because the checks refused what was drafted. A repair item has been opened for it.','The full note for '+today+' could not be written. A repair item is open.']){
-   const action=next&&!codeGate([opening,next].join('\n\n')).length&&!ruleRefusals(next,voice).length?next:null;
-   const text=[opening,...own,...(action?[action]:[])].join('\n\n');
+   const action=passes(opening,next)||passes(opening,goalNext());
+   const goalPart=passes(opening,goalLine());
+   const text=[opening,...(goalPart?[goalPart]:[]),...own,...(action?[action]:[])].join('\n\n');
    if(!codeGate(text).length&&!ruleRefusals(text,voice).length)return text;
   }
   return null;
@@ -295,6 +330,12 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
  // The lines Godspeed requires word for word, and the text with any of them a cut lost put back.
  // The finished work line goes first in the model's note, once (#377).
  const doneFirst=text=>!text||!context.done_line||text.split(/\r?\n/).some(line=>line.trim()===context.done_line)?text:context.done_line+'\n\n'+text;
+ // The writer is asked for a "Next:" line but a free model sometimes puts its step under another heading, and the first-day brief is judged on a concrete next action. A missing line is supplied here, before the checks, so their receipts hash the final text. It is never a gate: an existing line is kept whatever its verb (#449) and a refused line leaves the note as written.
+ const withNext=text=>{
+  if(!text||hasNextLine(text))return text;
+  const line=passes(text,goalNext());
+  return line?text.trimEnd()+'\n\n'+line:text;
+ };
  const requiredLines=()=>[...healthSummaryLines,unknownWeekLine,context.done_line,context.cycle_heads_up,context.charm_line].filter(Boolean);
  const protectedLines=()=>{const c=context.contribution;return [...requiredLines(),...(c?[...c.content.split(/\r?\n/),c.link]:[])];};
  const restoreRequired=text=>{const c=context.contribution,missing=[...requiredLines().filter(line=>!text.split(/\r?\n/).some(l=>l.trim()===line)),...(c&&!text.includes(c.content)?[c.content]:[]),...(c&&!text.includes(c.link)?[c.link]:[])];return {text:missing.length?text.trimEnd()+'\n\n'+missing.join('\n\n'):text,missing};};
@@ -333,7 +374,7 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
   const raw=await provider({kind:'morning-brief',phase:attempt?'one-rewrite':'write',context:{...context,...(attempt?{rejected_draft:modelDraft,check_feedback:feedback}:{})},contract:writerContract+(attempt?' Correct the rejected note using these exact failure reasons. This is the single permitted rewrite. Keep every numbered item and the decision or fact it carries. Change only the sentences the reasons name. Leave an item out only when a reason says its core fact is unsupported.':'')});
   let healthError=null;
   try{modelDraft=healthSafeReply(raw,'text',health);}catch(error){healthError=error.message;modelDraft='';}
-  draft=[...healthSummaryLines,unknownWeekLine,doneFirst(modelDraft)].filter(Boolean).join('\n\n');
+  draft=[...healthSummaryLines,unknownWeekLine,doneFirst(withNext(modelDraft))].filter(Boolean).join('\n\n');
   const code=[...(healthError?[healthError]:[]),...codeGate(draft)],facts=await verify(draft,'source-facts'),reader=await verify(draft,'plain-words-and-delivery');
   // The "Next:" line's verb is a request on the first draft only (owner, PR #449, 12 November 2026):
   // it may ask for the one rewrite, and whatever the rewrite says is kept, never cut or replaced for it.
@@ -383,7 +424,9 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
    // Nothing useful is left: the short note that says so, with the lines Godspeed owes word for word.
    const day=new Date().toISOString().slice(0,10),own_lines=[...required,...(c?[c.content,c.link]:[])];
    const refusals=[...code,...remaining.filter(e=>!code.includes(e))];
-   const fallbackText=['Your full morning briefing for '+day+' could not be written today, because what was drafted broke your writing rules. A repair item has been opened for it.',...own_lines].join('\n\n');
+   const fallbackHead='Your full morning briefing for '+day+' could not be written today, because what was drafted broke your writing rules. A repair item has been opened for it.';
+   const fallbackGoal=passes(fallbackHead,goalLine()),fallbackNext=passes(fallbackHead,goalNext());
+   const fallbackText=[fallbackHead,...(fallbackGoal?[fallbackGoal]:[]),...own_lines,...(fallbackNext?[fallbackNext]:[])].join('\n\n');
    const fallbackErrors=codeGate(fallbackText);
    if(fallbackErrors.length){
     await store.saveAsync('job_receipts',{kind:'brief-cut',job_id:job.id,state:'failed',errors:code,cut:cut.cut,restored:missing,draft_hash:hash(draft),fallback_errors:fallbackErrors,finished_at:new Date().toISOString()});
@@ -406,7 +449,7 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
   // The checked brief is already deliverable: a failure in this optional step leaves it as it was.
   try{
    const raw=await provider({kind:'morning-brief',phase:'thin-repair',context:{...context,thin_draft:draft,missing:{action_artifacts:thin.missing_actions,news:missingNews}},contract:writerContract+' The checked note in thin_draft gives the owner nothing to decide and too little fresh news. Write it again, keeping what it says, and add the decisions and news in missing.'});
-   const repaired=[...healthSummaryLines,unknownWeekLine,doneFirst(healthSafeReply(raw,'text',health))].filter(Boolean).join('\n\n');
+   const repaired=[...healthSummaryLines,unknownWeekLine,doneFirst(withNext(healthSafeReply(raw,'text',health)))].filter(Boolean).join('\n\n');
    if(!codeGate(repaired).length){
     const facts=await verify(repaired,'source-facts'),reader=await verify(repaired,'plain-words-and-delivery');
     if(facts.verdict.passed===true&&reader.verdict.passed===true){draft=repaired;check=facts.receipt;deliveryCheck=reader.receipt;thin=thinCheck(draft,context);thinRepair=thin.thin?'still-thin':'passed';}

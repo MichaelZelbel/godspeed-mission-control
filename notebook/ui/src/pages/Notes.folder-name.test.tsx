@@ -20,7 +20,7 @@ vi.mock('@/components/chat/GlobalAIChatFAB',()=>({GlobalAIChatFAB:()=>null}));
 vi.mock('@/components/notes/NoteEditor',()=>({NoteEditor:()=>null}));
 vi.mock('@/components/notes/NoteList',()=>({NoteList:()=>null}));
 vi.mock('@/components/ui/sidebar',()=>({useSidebar:()=>({setOpen:vi.fn()})}));
-vi.mock('@/hooks/use-mobile',()=>({useIsMobile:()=>false}));
+vi.mock('@/hooks/use-mobile',()=>({useIsMobile:()=>false,usePanesTogether:()=>true}));
 vi.mock('@/lib/flags',()=>({OFFLINE_CORE:false}));
 vi.mock('@/integrations/supabase/client',()=>({supabase:{from:()=>{const q:any={select:()=>q,order:()=>q,eq:()=>q,then:(resolve:any)=>Promise.resolve({data:[],error:null}).then(resolve)};return q;}}}));
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as any;
@@ -54,4 +54,9 @@ it('names the box in the New Folder dialog "Folder name"',async()=>{
   const box=within(dialog).getByLabelText('Folder name',{exact:true});
   expect(box.tagName).toBe('INPUT');
   expect(within(dialog).getByRole('textbox',{name:'Folder name'})).toBe(box);
+  const labels=(box as HTMLInputElement).labels!;
+  expect(labels).toHaveLength(1);
+  expect(labels[0]).toHaveTextContent(/^Folder name$/);
+  clickLabel(labels[0]);
+  expect(document.activeElement).toBe(box);
 });

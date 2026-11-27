@@ -10,9 +10,9 @@
 #   - the moment you save a change (the post-commit hook in your mission control folder)
 #   - once an hour, for whatever happened while the computer was asleep
 #
-# Each run sends what changed UP (tools/notebook-sync.py) and then brings the notebook's
-# facts DOWN into world/ (tools/world-pull.py). The two arrows ride in one run because
-# they share everything that can go wrong: the key, the python, the lock.
+# Each run sends what changed UP (tools/notebook-sync.py). The arrow DOWN, the notebook's facts
+# written into world/ as files (tools/world-pull.py), is gone: facts are the notebook's own
+# records, and the notebook's own Menerio import (Settings) is how they arrive (#90).
 #
 # IT IS SILENT AND HARMLESS WHEN YOU HAVE NO NOTEBOOK. A mission control built from the book has no
 # notebook and needs none: everything in the book works on plain files. No connection
@@ -174,8 +174,6 @@ if [ ! -f "$SYNC" ]; then
   say "the notebook program is not installed on this computer"
   exit 0
 fi
-PULL="$SELF_DIR/world-pull.py"
-[ -f "$PULL" ] || PULL="$GODSPEED/tools/world-pull.py"
 
 # The arrow UP: what changed in the folder, into the notebook, for search.
 #
@@ -183,8 +181,7 @@ PULL="$SELF_DIR/world-pull.py"
 # the whole godspeed into an online account are two decisions, and until today they were one:
 # two test readers of the book, one with clients' notes in her godspeed and one with
 # patients', both stopped at that sentence and would not connect at all. The installer now
-# asks, the answer is one line in ~/.godspeed/device.env, and no line means no. The arrow DOWN
-# below follows the same answer.
+# asks, the answer is one line in ~/.godspeed/device.env, and no line means no.
 MIRROR="${GODSPEED_NOTEBOOK_MIRROR:-}"
 if [ -z "$MIRROR" ] && [ -r "$HOMEDIR/.godspeed/device.env" ]; then
   MIRROR="$(sed -n 's/^[[:space:]]*GODSPEED_NOTEBOOK_MIRROR=//p' "$HOMEDIR/.godspeed/device.env" | head -1 | tr -d '\r')"
@@ -198,37 +195,4 @@ else
   say "copying between your mission control and Menerio is switched off on this computer, so nothing was sent or fetched"
 fi
 
-# The arrow DOWN, in the same run: the notebook's facts, kept as files in world/, so
-# they survive without the notebook. It rides here rather than on its own schedule
-# because a second job would duplicate every guard above.
-#
-# IT FOLLOWS THE SAME ANSWER AS THE ARROW UP (2026-09-20, second round of test readers).
-# Pulling your own facts onto your own disk sends nothing anywhere, and for one afternoon
-# it therefore ran whatever the reader had answered. Both readers found it only in the
-# chapter's last section, as "one more thing comes to you unasked", in a mission control whose chapter
-# on limits is about nothing happening unasked. A reader who says no gets a notebook and nothing
-# moving in the background in either direction. One switch, one sentence to explain.
-#
-# AND IT SAVES WHAT IT BROUGHT, ON ONE COMPUTER (2026-10-01). Nothing ever committed the
-# files the pull wrote, so the facts were in no history at all, and every computer carried
-# the same pile of unsaved changes, which also stops the freshness pull above. The pull now
-# commits exactly what it touched (--commit; it never pushes). Two computers each saving
-# their own snapshot of the same record would meet in git as a conflict, so only one
-# computer keeps the facts: GODSPEED_WORLD_KEEPER=0 in ~/.godspeed/device.env on every
-# other one, and those get the facts through git like any other file. No line means this
-# computer keeps them, which is right for the reader with one computer.
-KEEPER="${GODSPEED_WORLD_KEEPER:-}"
-if [ -z "$KEEPER" ] && [ -r "$HOMEDIR/.godspeed/device.env" ]; then
-  KEEPER="$(sed -n 's/^[[:space:]]*GODSPEED_WORLD_KEEPER=//p' "$HOMEDIR/.godspeed/device.env" | tail -1 | tr -d '\r"')"
-fi
-if [ "$MIRROR" = "1" ] && [ -f "$PULL" ]; then
-  if [ "$KEEPER" = "0" ]; then
-    say "world pull: skipped, another computer keeps the facts and they arrive through git (GODSPEED_WORLD_KEEPER=0)"
-  else
-    wout="$("$PY" "$PULL" --apply --commit --repo-root "$GODSPEED" 2>&1)"
-    wrc=$?
-    say "world pull exit $wrc: $(printf '%s' "$wout" | tail -3 | tr '\n' ' ')"
-    [ -n "$VERBOSE" ] && printf '%s\n' "$wout"
-  fi
-fi
 exit 0

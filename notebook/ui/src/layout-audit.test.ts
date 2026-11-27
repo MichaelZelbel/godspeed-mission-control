@@ -7,37 +7,61 @@ import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type CDPSession, type Page } from "playwright-core";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { startNotebook, type RealNotebook } from "@/test/real-notebook";
+// The seed's habit is a coach file, the one owner of its days (habit-trackers.mjs), so it is written
+// with the coach's own writer, the way a chat's "track walk to work" makes one.
+import { addArea } from "../../../third-party/addons/godspeed-coach/lib/areas.mjs";
+import { addHabit } from "../../../third-party/addons/godspeed-coach/lib/habits.mjs";
+// The id the product serves a habit under is the tracker's own (`habit-<area>-<slug>`), so the
+// seed reads it from there instead of re-declaring the format.
+import { habitId } from "../../core/habit-trackers.mjs";
 
-// One check over every page the router serves, at a phone's width and a desktop's width, on an empty
-// workspace and on one with a note, a person, a moment and a media item (#734). It drives the built
-// notebook in a real browser and fails on:
-//   - text that is cut off, an input's placeholder or value included;
-//   - text drawn under another element (what is painted at the middle of the text is something else);
+// One check over every page the router serves, at 320, 375, 768 and 1280 px, on an empty workspace
+// and on one with an item of every kind the router shows a page for (note, person, moment, media,
+// group, collection with an item, world item, habit), each named in one long unbroken word and in
+// one long name with spaces (#734, #887). It drives the built notebook in a real browser and fails
+// on:
+//   - text that is cut off, an input's placeholder included (an enabled input's value is not cut
+//     off: the input scrolls it; a disabled input cannot scroll, so its value counts);
+//   - text drawn under another element, a fixed or floating element included (what is painted at
+//     the middle of the text is something else);
 //   - a field with no name a screen reader can read, or a label that names no field;
-// on each page and in the dialog its main add button opens. Text cut off at one width was fixed one
-// component at a time five times (#502, #553, #573, #728, #733), and unnamed fields twice (#697, #732).
-// No page, rule or element is exempt: a false alarm is fixed in the rule, with a case below that
-// shows it.
+// on each page, in the dialog its main add button opens, and in every role=tab view on it. Text cut
+// off at one width was fixed one component at a time five times (#502, #553, #573, #728, #733), and
+// unnamed fields twice (#697, #732). No page, rule or element is exempt: a false alarm is fixed in
+// the rule, with a case below that shows it.
 
 const UI_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PAGE_AUDIT = readFileSync(fileURLToPath(new URL("./test/layout-audit-page.js", import.meta.url)), "utf8");
 
 type Finding = { rule: string; element: string };
-type Seeded = { note: string; person: string; group: string };
+type Seeded = {
+  note: string;
+  person: string;
+  group: string;
+  groupSlug: string;
+  world: string;
+  collection: string;
+  collectionSlug: string;
+  collectionItem: string;
+  habit: string;
+  habitUnbroken: string;
+  /** The token of the seeded note's public share, so /shared/:token opens the real shared page. */
+  sharedToken: string;
+};
 type RouteCheck = {
   pattern: string;
   /** The addresses to open: on the empty workspace `seeded` is null. */
   urls: (seeded: Seeded | null) => string[];
   /** A redirect: where it must land. The page there is checked under its own pattern. */
   redirectsTo?: string;
-  /** The accessible name of the page's main add button, when it opens a dialog. */
-  addButton?: string;
+  /** The accessible name of the page's main add button, when it opens a dialog. The first name that is on the page wins: an empty workspace shows a different one than a filled one. */
+  addButton?: string | string[];
 };
 
 const MISSING = "missing";
 const ROUTES: RouteCheck[] = [
   { pattern: "/setup", urls: () => ["/setup"] },
-  { pattern: "/shared/:token", urls: () => [`/shared/${MISSING}`] },
+  { pattern: "/shared/:token", urls: (s) => (s ? [`/shared/${s.sharedToken}`] : [`/shared/${MISSING}`]) },
   { pattern: "/", urls: () => ["/"], redirectsTo: "/dashboard" },
   { pattern: "/dashboard", urls: () => ["/dashboard"] },
   { pattern: "/dashboard/chat", urls: () => ["/dashboard/chat"] },
@@ -51,7 +75,7 @@ const ROUTES: RouteCheck[] = [
   { pattern: "/dashboard/people", urls: () => ["/dashboard/people"], addButton: "Add person" },
   { pattern: "/dashboard/people/:id", urls: (s) => [`/dashboard/people/${s ? s.person : MISSING}`] },
   { pattern: "/dashboard/world", urls: () => ["/dashboard/world"] },
-  { pattern: "/dashboard/world/:id", urls: () => [`/dashboard/world/${MISSING}`] },
+  { pattern: "/dashboard/world/:id", urls: (s) => [s ? `/dashboard/world/${s.world}` : `/dashboard/world/${MISSING}`] },
   { pattern: "/dashboard/profile", urls: () => ["/dashboard/profile"] },
   { pattern: BRAIN_PAGE.path, urls: () => [BRAIN_PAGE.path], addButton: "Add a rule" },
   { pattern: BRAIN_PAGE.oldPath, urls: () => [BRAIN_PAGE.oldPath], redirectsTo: BRAIN_PAGE.path },
@@ -59,16 +83,16 @@ const ROUTES: RouteCheck[] = [
   { pattern: "/dashboard/media", urls: () => ["/dashboard/media"] },
   { pattern: "/dashboard/review-queue", urls: () => ["/dashboard/review-queue"] },
   { pattern: "/dashboard/groups", urls: () => ["/dashboard/groups"], addButton: "New Group" },
-  { pattern: "/dashboard/groups/:slug", urls: () => [`/dashboard/groups/${MISSING}`] },
+  { pattern: "/dashboard/groups/:slug", urls: (s) => [s ? `/dashboard/groups/${s.groupSlug}` : `/dashboard/groups/${MISSING}`] },
   { pattern: "/dashboard/actions", urls: () => ["/dashboard/actions"], addButton: "Add Action" },
   { pattern: "/dashboard/activity", urls: () => ["/dashboard/activity"] },
   { pattern: "/dashboard/review", urls: () => ["/dashboard/review"] },
-  { pattern: "/collections", urls: () => ["/collections"], addButton: "or create a blank collection" },
+  { pattern: "/collections", urls: () => ["/collections"], addButton: ["or create a blank collection", "New blank collection"] },
   { pattern: "/collections/templates", urls: () => ["/collections/templates"] },
-  { pattern: "/collections/:slug/schema", urls: () => [`/collections/${MISSING}/schema`] },
-  { pattern: "/collections/:slug/:itemId", urls: () => [`/collections/${MISSING}/${MISSING}`] },
-  { pattern: "/collections/:slug", urls: () => [`/collections/${MISSING}`] },
-  { pattern: "/trackers/habits/:id", urls: () => [`/trackers/habits/${MISSING}`] },
+  { pattern: "/collections/:slug/schema", urls: (s) => [`/collections/${s ? s.collectionSlug : MISSING}/schema`] },
+  { pattern: "/collections/:slug/:itemId", urls: (s) => [s ? `/collections/${s.collectionSlug}/${s.collectionItem}` : `/collections/${MISSING}/${MISSING}`] },
+  { pattern: "/collections/:slug", urls: (s) => [`/collections/${s ? s.collectionSlug : MISSING}`] },
+  { pattern: "/trackers/habits/:id", urls: (s) => (s ? [`/trackers/habits/${s.habit}`, `/trackers/habits/${s.habitUnbroken}`] : [`/trackers/habits/${MISSING}`]) },
   { pattern: "/dashboard/graph", urls: () => ["/dashboard/graph"] },
   { pattern: "/:name/*", urls: () => ["/timeline"], redirectsTo: "/dashboard/timeline" },
   { pattern: "*", urls: () => ["/no-such-page"] },
@@ -112,18 +136,39 @@ function buildUi(outDir: string): Promise<void> {
 // shows "Kept on this computer only", the badge #728 was about.
 const PIXEL = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
+// The seed's names. Every kind of item gets one name that is a single long word, so only word
+// breaking can keep it inside a card or row (#871), and one long name with spaces, so only
+// wrapping between words can. The collection's name is the longest the product makes: the form
+// refuses more than 60 characters.
+const UNBROKEN = "Dampfschifffahrtsgesellschaftsvorstand";
+const SPACED = "Quarterly review of the community orchard volunteers and the shared harvest ledger";
+const COLLECTION_SPACED = "Long reading list of books about cities and their makers";
+
 async function seed(notebook: RealNotebook): Promise<Seeded> {
-  const insert = (table: string, values: Record<string, unknown>) => notebook.query({ table, operation: "insert", values, selection: "id", single: true });
+  const insert = (table: string, values: Record<string, unknown>, selection = "id") => notebook.query({ table, operation: "insert", values, selection, single: true });
+  if (UNBROKEN.length < 30 || SPACED.length < 70 || COLLECTION_SPACED.length > 60) throw new Error("the seed's names are not the long names the check must see");
   const note = await insert("notes", { title: "Trip to Lisbon", content: "Book the train." });
+  const sharedNote = await insert("notes", { title: UNBROKEN, content: "Break the word, not the page." });
+  await insert("notes", { title: SPACED, content: "Wrap between the words." });
   const person = await insert("contacts", { name: "Ada Lovelace" });
-  // A group whose name does not fit one line on any width: a card that clips it (#867) is what the
-  // audit's clipped-text rule must flag on the groups page.
-  const group = await insert("contact_groups", { name: "Seed round investors for the 2027 expansion" });
-  // And one whose name holds a word no box fits, so word breaking, not wrapping between words, is
-  // what keeps it inside the card and the people tree's row (#867).
-  const unbroken = await insert("contact_groups", { name: "Donaudampfschifffahrtsgesellschaft Investoren" });
+  await insert("contacts", { name: UNBROKEN });
+  await insert("contacts", { name: SPACED });
+  // A group whose name does not fit one line on any width: a card that clips or overruns it (#867) is
+  // what the audit's clipped-text rule must flag on the groups page. One name of each shape, like
+  // every other kind: the spaced one wraps between words, the unbroken one only word breaking keeps
+  // inside its card and the people tree's row (#867).
+  const group = await insert("contact_groups", { name: SPACED }, "id,slug");
+  const unbroken = await insert("contact_groups", { name: UNBROKEN });
   if (!unbroken.id) throw new Error("the unbroken-name group did not insert");
+  // A public share of one seeded note, so /shared/:token opens the real shared page, not the
+  // missing placeholder: the share link is a route the router serves, and a visitor who follows one
+  // sees a page the audit must judge too (#887).
+  const sharedToken = "layout-audit-share-token";
+  const shared = await insert("shared_notes", { note_id: sharedNote.id, share_token: sharedToken, is_active: true });
+  if (!shared.id) throw new Error("the shared-note row did not insert");
   await insert("moments", { title: "Lunch with Ada", happened_at: "2026-11-10", status: "happened", impact_level: 2, person_id: person.id, source: "manual" });
+  await insert("moments", { title: UNBROKEN, happened_at: "2026-11-11", status: "happened", impact_level: 2, person_id: person.id, source: "manual" });
+  await insert("moments", { title: SPACED, happened_at: "2026-11-12", status: "happened", impact_level: 2, person_id: person.id, source: "manual" });
   const form = new FormData();
   form.append("file", new Blob([PIXEL, Buffer.alloc(51 * 1024 * 1024)], { type: "image/png" }), "photo.png");
   form.append("path", `owner/${note.id}/photo.png`);
@@ -131,7 +176,32 @@ async function seed(notebook: RealNotebook): Promise<Seeded> {
   const upload = await response.json();
   if (!response.ok) throw new Error(`The media upload failed: ${JSON.stringify(upload)}`);
   await insert("media_analysis", { note_id: note.id, storage_path: upload.data.path, media_type: "image", original_filename: "photo.png", analysis_status: "complete", description: "A photo", topics: [] });
-  return { note: note.id, person: person.id, group: group.id };
+  // Media with no note keeps its file's own name as the card's title (MediaLibrary.tsx). Each file of
+  // its own path: rows of one path are pages of one document, not cards of their own.
+  for (const [file, name] of [[UNBROKEN, UNBROKEN], ["spaced", SPACED]] as const) {
+    const own = new FormData();
+    own.append("file", new Blob([PIXEL], { type: "image/png" }), "pixel.png");
+    own.append("path", `owner/media/${file}.png`);
+    const ownResponse = await fetch(`${notebook.base}/api/media/upload?bucket=note-attachments`, { method: "POST", body: own });
+    const ownUpload = await ownResponse.json();
+    if (!ownResponse.ok) throw new Error(`The media upload failed: ${JSON.stringify(ownUpload)}`);
+    await insert("media_analysis", { storage_path: ownUpload.data.path, media_type: "image", original_filename: `${name}.png`, analysis_status: "complete", description: "A photo", topics: [] });
+  }
+  // A collection with an item, so /collections/:slug, its /schema page and an item's own page all
+  // open on the seeded workspace: the empty collection's own empty state is what the empty
+  // workspace run already checks.
+  const collection = await insert("collections", { name: UNBROKEN, slug: UNBROKEN.toLowerCase(), visibility: "personal", field_schema: [] }, "id,slug");
+  const collectionItem = await insert("collection_items", { collection_id: collection.id, title: UNBROKEN, data: {} });
+  const spacedCollection = await insert("collections", { name: COLLECTION_SPACED, slug: COLLECTION_SPACED.toLowerCase().replace(/[^a-z0-9]+/g, "-"), visibility: "personal", field_schema: [] }, "id,slug");
+  await insert("collection_items", { collection_id: spacedCollection.id, title: SPACED, data: {} });
+  const world = await insert("entities", { name: UNBROKEN, entity_type: "place" });
+  await insert("entities", { name: SPACED, entity_type: "place" });
+  addArea(notebook.root, { slug: "health", title: "Health", rhythm: "weekly sunday", starts: "2026-11-01" });
+  const habit = await addHabit(notebook.root, { area: "health", title: SPACED, doneMeans: "walked", days: "daily" }, "2026-11-01");
+  if (!habit.file) throw new Error("the seeded habit did not get a coach file");
+  const unbrokenHabit = await addHabit(notebook.root, { area: "health", title: UNBROKEN, doneMeans: "walked", days: "daily" }, "2026-11-01");
+  if (!unbrokenHabit.file) throw new Error("the seeded unbroken habit did not get a coach file");
+  return { note: note.id, person: person.id, group: group.id, groupSlug: group.slug, world: world.id, collection: collection.id, collectionSlug: collection.slug, collectionItem: collectionItem.id, habit: habitId(habit), habitUnbroken: habitId(unbrokenHabit), sharedToken };
 }
 
 // Loaded: no request in flight, fonts in, no sign-in or loading spinner, and no animation still on
@@ -203,23 +273,56 @@ async function auditPage(page: Page, cdp: CDPSession, base: string, url: string,
     return landed === route.redirectsTo ? [] : [{ rule: "redirect", element: `lands on ${landed}, not ${route.redirectsTo}` }];
   }
   const found = await auditShown(page, cdp);
+  // Every view the page shows through its tabs (only the page's own: a hidden tab in a dialog is
+  // not visible and is checked when that dialog opens).
+  const tabs = page.locator('[role="tab"]');
+  for (let i = 0; i < (await tabs.count()); i++) {
+    const tab = tabs.nth(i);
+    if (!(await tab.isVisible()) || (await tab.isDisabled())) continue;
+    const name = ((await tab.textContent()) ?? "").trim();
+    await tab.click();
+    await settle(page);
+    for (const f of await auditShown(page, cdp)) found.push({ ...f, element: `tab "${name}": ${f.element}` });
+  }
   if (!route.addButton) return found;
-  const button = page.getByRole("button", { name: route.addButton, exact: true }).first();
-  if (!(await button.count())) return [...found, { rule: "add button", element: `no button "${route.addButton}"` }];
+  const names = Array.isArray(route.addButton) ? route.addButton : [route.addButton];
+  let button = null as ReturnType<Page["getByRole"]> | null;
+  let name = "";
+  for (const candidate of names) {
+    const foundButton = page.getByRole("button", { name: candidate, exact: true }).first();
+    if (await foundButton.count()) { button = foundButton; name = candidate; break; }
+  }
+  if (!button) return [...found, { rule: "add button", element: `no button ${names.map((n) => `"${n}"`).join(" or ")}` }];
   await button.click();
   const opened = await page.getByRole("dialog").first().waitFor({ timeout: 5000 }).then(() => true, () => false);
-  if (!opened) return [...found, { rule: "add button", element: `"${route.addButton}" opened no dialog` }];
+  if (!opened) return [...found, { rule: "add button", element: `"${name}" opened no dialog` }];
   await settleAnimations(page);
-  const inDialog = (await auditShown(page, cdp)).map((f) => ({ ...f, rule: `in the "${route.addButton}" dialog: ${f.rule}` }));
+  const inDialog = (await auditShown(page, cdp)).map((f) => ({ ...f, rule: `in the "${name}" dialog: ${f.rule}` }));
   await page.keyboard.press("Escape");
   return [...found, ...inDialog];
 }
 
-const WIDTHS = [{ width: 375, height: 812 }, { width: 1280, height: 900 }];
+const WIDTHS = [
+  { width: 320, height: 568 },
+  { width: 375, height: 812 },
+  { width: 768, height: 1024 },
+  { width: 1280, height: 900 },
+];
 
 async function auditEveryPage(browser: Browser, notebook: RealNotebook, seeded: Seeded | null, viewport: { width: number; height: number }) {
   const workspace = seeded ? "seeded" : "empty";
-  const stable = (url: string) => (seeded ? url.replace(seeded.note, "<note>").replace(seeded.person, "<person>") : url);
+  const stable = (url: string) =>
+    seeded
+      ? url
+          .replace(seeded.note, "<note>")
+          .replace(seeded.person, "<person>")
+          .replace(seeded.groupSlug, "<group>")
+          .replace(seeded.world, "<world>")
+          .replace(seeded.collectionItem, "<item>")
+          .replace(seeded.collectionSlug, "<collection>")
+          .replace(seeded.habit, "<habit>")
+          .replace(seeded.habitUnbroken, "<habit>")
+      : url;
   const context = await browser.newContext({ viewport });
   try {
     const page = await context.newPage();
@@ -318,8 +421,19 @@ describe("the audit's rules on pages built for them", { timeout: 20_000 }, () =>
     expect(await audit(sizedParagraph(13, 1 / 64))).toEqual([]);
   });
 
-  it("reports a wrapped line whose last glyph runs 1/64 px past its box", async () => {
-    expect(await audit(sizedParagraph(4, 1 / 64))).toEqual(['clipped: p "Kept on this computer only"']);
+  // A glyph further than a pixel past its box is cut off. Within a pixel, a box sized exactly to its
+  // text reads it up to a layout step (1/64 px) past the edge under another font or browser build,
+  // though the layout put the text inside and nothing hides it (#887's CI runners' fonts), so the
+  // rule holds that close for a fit. One word on its own, so no other word can overflow the box:
+  // half a pixel past is such a fit, 2 px past is a cut.
+  it("reports a word that sticks out 2 px past its box and passes one within a pixel", async () => {
+    const word = (past: number) => `<p id="w" style="margin:0">alphabet</p><script>
+      const p = document.getElementById("w"), range = document.createRange();
+      range.selectNodeContents(p.firstChild);
+      p.style.width = (range.getBoundingClientRect().width - ${past}) + "px";
+    </script>`;
+    expect(await audit(word(2))).toEqual(['clipped: p "alphabet"']);
+    expect(await audit(word(0.5))).toEqual([]);
   });
 
   it("reports an input whose placeholder does not fit", async () => {
@@ -327,9 +441,32 @@ describe("the audit's rules on pages built for them", { timeout: 20_000 }, () =>
     expect(line).toMatch(/^clipped: input "Search": its text needs [\d.]+ px, the box has [\d.]+$/);
   });
 
+  it("passes an input whose value is longer than its box, and still reports the placeholder", async () => {
+    // An enabled input scrolls its own value (the group's name does this in its edit form, #887);
+    // a placeholder has nothing typed into it and nothing to scroll it into view with.
+    expect(await audit(`<input aria-label="Name" placeholder="Short" value="Supercalifragilisticexpialidociousgroupname" style="width:80px">`))
+      .toEqual([]);
+    expect(await audit(`<input aria-label="Search" placeholder="Search every note you ever wrote" value="Typed" style="width:80px">`))
+      .toHaveLength(1);
+  });
+
+  it("reports a disabled input whose value is longer than its box", async () => {
+    // A disabled input cannot take focus, so nothing scrolls its value into view: it is measured
+    // like a placeholder (the settings page's disabled email field, #887).
+    expect(await audit(`<input aria-label="Email" value="ada.lovelace@looming-largescaleanalyticalengine.works" disabled style="width:80px">`))
+      .toHaveLength(1);
+  });
+
   it("reports text with a badge drawn over it", async () => {
     expect(await audit(`<div style="position:relative"><p style="margin:0">A paragraph</p><span style="position:absolute;left:0;top:0;width:200px;height:20px;background:red"></span></div>`))
       .toEqual(['under another element: p "A paragraph" under span ""']);
+  });
+
+  it("reports text a fixed element draws over, the floating chat button included", async () => {
+    // A fixed cover sits over the window at every scroll, so the sticky-header scroll cannot move
+    // the text out from under it: the floating chat button over a card is what this reports (#887).
+    expect(await audit(`<div style="height:550px"></div><p style="margin:0">A paragraph</p><button style="position:fixed;bottom:10px;left:0;width:200px;height:60px;background:red">Chat</button>`))
+      .toEqual(['under another element: p "A paragraph" under button "Chat"']);
   });
 
   it("reports a field with no name and a label that names no field", async () => {
@@ -419,13 +556,36 @@ describe("every page at a phone's and a desktop's width", () => {
     }, 240_000);
 
     it(`finds nothing cut off, covered or unnamed on a seeded workspace at ${viewport.width} px`, async () => {
-      // A seed that did not show would make this a second empty run.
+      // A seed that did not show would make this a second empty run. Every seeded detail route
+      // shows the item it was seeded with, not its missing state: a stale id would make the audit
+      // below audit a "not found" page, which none of its rules would report.
       const context = await browser.newContext({ viewport });
       try {
         const page = await context.newPage();
-        for (const [url, ...texts] of [["/dashboard/timeline", "Lunch with Ada"], ["/dashboard/people", "Ada Lovelace"], ["/dashboard/media", "Kept on this computer only"], ["/dashboard/notes", "Trip to Lisbon"], ["/dashboard/groups", "Seed round investors for the 2027 expansion", "Donaudampfschifffahrtsgesellschaft Investoren"]]) {
+        for (const [url, ...texts] of [
+          ["/dashboard/timeline", "Lunch with Ada"],
+          ["/dashboard/people", "Ada Lovelace"],
+          ["/dashboard/media", "Kept on this computer only"],
+          ["/dashboard/notes", "Trip to Lisbon"],
+          [`/dashboard/notes/${seeded.note}`, "Book the train."],
+          [`/dashboard/people/${seeded.person}`, "Ada Lovelace"],
+          [`/dashboard/groups/${seeded.groupSlug}`, SPACED],
+          ["/dashboard/groups", SPACED, UNBROKEN],
+          [`/dashboard/world/${seeded.world}`, UNBROKEN],
+          ["/dashboard/world", UNBROKEN, SPACED],
+          [`/collections/${seeded.collectionSlug}`, UNBROKEN, "New Item"],
+          [`/collections/${seeded.collectionSlug}/schema`, UNBROKEN],
+          [`/collections/${seeded.collectionSlug}/${seeded.collectionItem}`, UNBROKEN],
+          [`/trackers/habits/${seeded.habit}`, SPACED],
+          [`/trackers/habits/${seeded.habitUnbroken}`, UNBROKEN],
+          [`/shared/${seeded.sharedToken}`, UNBROKEN],
+          ["/collections", COLLECTION_SPACED],
+          ["/dashboard/media", `${UNBROKEN}.png`],
+        ]) {
           await page.goto(seededNotebook.base + url);
-          for (const text of texts) await page.getByText(text).first().waitFor({ timeout: 15_000 });
+          // The first match in the DOM may be a hidden pane (a tree beside the open detail), so a
+          // visible one is what proves the page shows the item.
+          for (const text of texts) await page.getByText(text).filter({ visible: true }).first().waitFor({ timeout: 15_000 });
         }
       } finally {
         await context.close();
@@ -435,13 +595,12 @@ describe("every page at a phone's and a desktop's width", () => {
     }, 240_000);
   }
 
-  // The group page with a real, long name (#863): the audit above meets it only as "group not
-  // found", because the seed has no group. The seed is not given one here either: the list page's
-  // cards clip a long name at both widths, which is a fault of its own, apart from this fix, and
-  // would turn the page-wide check red for something this change does not touch. So the header is
-  // checked on its own: the audit's rules on the name and the two buttons, and the name's whole
-  // box against each button's box, at a phone's width and at 320 px, the narrowest phone the
-  // header must hold. On main this fails: the buttons squeezed the name to one letter.
+  // The group page with a real, long name (#863): the page-wide audit above opens it with the
+  // seed's own group, whose name is the long spaced one; this check gives the header a name of its
+  // own so the header is judged apart from the list, on its own: the audit's rules on the name and
+  // the two buttons, and the name's whole box against each button's box, at a phone's width and at
+  // 320 px, the narrowest phone the header must hold. On main this fails: the buttons squeezed the
+  // name to one letter.
   it("shows a group's whole name with its Add Member and Edit buttons at a phone's width", async () => {
     const name = "Seed round investors for the 2027 expansion";
     const group = await seededNotebook.query({ table: "contact_groups", operation: "insert", values: { name }, selection: "id,slug", single: true });
@@ -993,6 +1152,63 @@ describe("every page at a phone's and a desktop's width", () => {
     }
     expect(failures, failures.join("\n")).toEqual([]);
   }, 60_000);
+
+  // A collection page at phone widths (#1045): the action row's buttons, main reaching the
+  // window's bottom (no empty band under the page) and every Filters field inside the window,
+  // also when the page was scrolled before Filters opened. On main the band is 96 px.
+  it("fits a collection page's actions, bottom and Filters inside the window at a phone's width", async () => {
+    const collection = await seededNotebook.query({ table: "collections", operation: "insert", values: { name: "Phone fit collection", slug: "phone-fit-collection" }, selection: "id,slug", single: true });
+    expect(collection?.slug ?? null).toBeTruthy();
+    // Filters and the search row show once the collection holds an item.
+    await seededNotebook.query({ table: "collection_items", operation: "insert", values: { collection_id: collection.id, data: { title: "One item" } }, selection: "id", single: true });
+    const failures: string[] = [];
+    for (const viewport of [{ width: 320, height: 640 }, { width: 375, height: 667 }, { width: 390, height: 844 }]) {
+      const context = await browser.newContext({ viewport });
+      try {
+        const page = await context.newPage();
+        await page.goto(`${seededNotebook.base}/collections/${collection.slug}`);
+        await settle(page);
+        const w = viewport.width;
+        const base = await page.evaluate(() => {
+          const main = document.querySelector("main");
+          const row = [...document.querySelectorAll("button")].find((b) => (b.textContent || "").trim() === "New Item")?.parentElement;
+          if (!main || !row) return { missing: true } as const;
+          const out: string[] = [];
+          if (Math.round(main.getBoundingClientRect().bottom) < window.innerHeight - 1) out.push(`main ends ${Math.round(window.innerHeight - main.getBoundingClientRect().bottom)} px above the window's bottom`);
+          for (const b of row.querySelectorAll("button")) {
+            const r = b.getBoundingClientRect();
+            if (r.left < 0 || r.right > window.innerWidth + 0.5) out.push(`action "${(b.textContent || "").trim()}" lies outside the window (${Math.round(r.left)}..${Math.round(r.right)})`);
+          }
+          return { missing: false, out } as const;
+        });
+        if (base.missing) { failures.push(`${w} px: main or the action row is missing`); continue; }
+        failures.push(...base.out.map((f) => `${w} px: ${f}`));
+        const trigger = page.getByRole("button", { name: /^Filters/ });
+        await trigger.scrollIntoViewIfNeeded();
+        await page.evaluate(() => { const m = document.querySelector("main"); if (m) m.scrollTop = 40; window.scrollBy(0, 40); });
+        await trigger.click();
+        await page.getByText("Filters", { exact: true }).last().waitFor({ timeout: 15_000 });
+        await settle(page);
+        const panel = await page.evaluate(() => {
+          const el = document.querySelector("[data-radix-popper-content-wrapper] > *") as HTMLElement | null;
+          if (!el) return null;
+          const out: string[] = [];
+          const r = el.getBoundingClientRect();
+          if (r.top < 0 || r.left < 0 || r.right > window.innerWidth + 0.5 || r.bottom > window.innerHeight + 0.5) out.push(`the Filters panel lies outside the window: top ${Math.round(r.top)}, left ${Math.round(r.left)}, right ${Math.round(r.right)}, bottom ${Math.round(r.bottom)}`);
+          for (const i of el.querySelectorAll("input, select, button")) {
+            const b = i.getBoundingClientRect();
+            if (b.width && (b.left < r.left - 0.5 || b.right > r.right + 0.5)) out.push(`a Filters control runs outside the panel sideways (${Math.round(b.left)}..${Math.round(b.right)})`);
+          }
+          return out;
+        });
+        if (!panel) failures.push(`${w} px: the Filters panel did not open`);
+        else failures.push(...panel.map((f) => `${w} px: ${f}`));
+      } finally {
+        await context.close();
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  }, 90_000);
 
   // A group member's sheet at a phone's width (#941): the List tab's row button opens it, so the
   // page-wide check meets it only behind the "group not found" page, and nothing audited it. On

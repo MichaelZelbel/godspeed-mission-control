@@ -18,7 +18,7 @@ test('the first setup gives each starting routine a real result, never "Invalid 
   const reply=await fetch('http://127.0.0.1:'+service.address.port+'/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({goal:'Run a 10k by spring',timezone:'Europe/Berlin'})});
   assert.equal(reply.status,200);
   const {results}=await reply.json(),byId=Object.fromEntries(results.map(r=>[r.id,r]));
-  assert.deepEqual(Object.keys(byId).sort(),['coaching','deadline-reminder','profiling','review']);
+  assert.deepEqual(Object.keys(byId).sort(),['coaching','deadline-reminder','memory-daily','profiling','review']);
   for(const r of results)assert.doesNotMatch(String(r.error||''),/Invalid time value/,r.id);
   // The deadline reminder is due at once and runs; the other three are not due yet and say when they first run.
   assert.notEqual(byId['deadline-reminder'].state,'not run');assert.notEqual(byId['deadline-reminder'].state,'not due');

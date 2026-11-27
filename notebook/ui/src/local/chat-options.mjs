@@ -13,6 +13,24 @@ export function listenForChatOptions(listener){
  return()=>window.removeEventListener(CHAT_OPTIONS_EVENT,receive);
 }
 
+// Said by every surface that shows the shared state; it claims nothing about the connection, which a failed read cannot tell.
+export const MODEL_LIST_UNAVAILABLE='The list of AI models could not be loaded.';
+export const MODEL_LIST_RETRY='It will try again shortly.';
+
+// A failed model list is asked again after 5 s, 15 s and 60 s, then once a minute (#1124).
+const RETRY_DELAYS=[5000,15000,60000];
+export function retryDelay(failures){return RETRY_DELAYS[Math.min(Math.max(failures,1),RETRY_DELAYS.length)-1];}
+
+// The shared read (the Dashboard's and every chat's one query) keeps this count of failed reads in a
+// row. A composer whose own read failed leaves the retrying to it while it is still within its pace,
+// so a chat open on a failing list asks once per step, not twice (#1124).
+let sharedFailures=0,sharedFailureAt=0;
+export function sharedReadFailed(){sharedFailureAt=Date.now();sharedFailures++;}
+export const sharedFailureCount=()=>sharedFailures;
+// True when this read ended a run of failures.
+export function sharedReadSucceeded(){const recovered=sharedFailures>0;sharedFailures=0;return recovered;}
+export function sharedReadRetrying(){return sharedFailures>0&&Date.now()-sharedFailureAt<=retryDelay(sharedFailures)+2000;}
+
 export function isCurrentAIError(message){
  return /Your AI (?:key or sign-in was refused|could not be reached|is connected only to the notebook)/.test(String(message||''));
 }

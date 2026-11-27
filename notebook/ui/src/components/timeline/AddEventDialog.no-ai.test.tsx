@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// #812: a moment saved by hand while no AI is connected says so and points to Settings, Your AI,
-// the way the refused and unreachable cases already do (#796). When the tab's picture still says an
+// #784 and #812: a moment with people saved while no AI is connected says so and points to Settings,
+// Your AI. A moment without people keeps the plain confirmation. When the tab's picture still says an
 // AI is connected, the decision is made when the moment is saved, from the extraction's own answer:
 // the connection may have been removed while the tab was open, so the cached picture can still say
 // one is connected. When the tab's own status already says none is (#881), no extraction is asked
@@ -9,7 +9,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { NO_AI_STATUS } from "../../../../core/no-ai.mjs";
-import { NO_AI_FACTS } from "./moment-form.mjs";
 import AddEventDialog from "./AddEventDialog";
 import { WAIT } from "@/test/wait-limits";
 
@@ -43,13 +42,20 @@ vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
 
 class NoResize { observe() {} unobserve() {} disconnect() {} }
 globalThis.ResizeObserver ??= NoResize as any;
+Element.prototype.scrollIntoView ??= () => {};
 
 // What the server answers for the extraction when no AI is connected (core/domains.mjs).
 const serverSaid = (message: string) => ({ data: null, error: { message } });
+const ada = { id: "person-ada", name: "Ada Fictional", relationship: null };
+const NO_AI_FACTS = NO_AI_STATUS + ", so no facts about its people were pulled out. Connect your AI service in Settings, Your AI.";
 
-async function saveMoment() {
-  render(<AddEventDialog people={[]} onCreated={() => {}} open onOpenChange={() => {}} />);
+async function saveMoment(withPerson = true) {
+  render(<AddEventDialog people={withPerson ? [ada] : []} onCreated={() => {}} open onOpenChange={() => {}} />);
   fireEvent.change(await screen.findByPlaceholderText("Short title for this moment", undefined, WAIT), { target: { value: "A saved moment" } });
+  if (withPerson) {
+    fireEvent.click(screen.getByRole("combobox", { name: "People" }));
+    fireEvent.click(await screen.findByRole("option", { name: ada.name }, WAIT));
+  }
   fireEvent.click(screen.getByRole("button", { name: "Create Moment" }));
   await waitFor(() => expect(toast).toHaveBeenCalled(), WAIT);
   expect(state.inserted).toContain("moments");
@@ -81,7 +87,27 @@ describe("saving a moment by hand while no AI is connected", () => {
     // The tab's own status already says no AI is connected, so nothing is asked of it: no
     // extraction request is made at all, and the answer is the same #812 line.
     expect(invoke).not.toHaveBeenCalled();
-    await waitFor(() => expect(toast).toHaveBeenLastCalledWith({ title: "Moment created", description: NO_AI_FACTS }), WAIT);
+    expect(toast).toHaveBeenCalledTimes(1);
+    expect(toast).toHaveBeenCalledWith({ title: "Moment created", description: NO_AI_FACTS });
+    expect(state.inserted.filter((table) => table === "moments")).toHaveLength(1);
+    expect(state.inserted).toContain("moment_participants");
+  });
+
+  it("keeps the plain confirmation when no AI is connected and the moment has no people", async () => {
+    state.aiAvailability = "none";
+    await saveMoment(false);
+    expect(toast).toHaveBeenCalledTimes(1);
+    expect(toast).toHaveBeenCalledWith({ title: "Moment created" });
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("keeps the plain confirmation when the extraction reports no AI and the moment has no people", async () => {
+    state.providerConfigured = true;
+    invoke.mockResolvedValue(serverSaid(NO_AI_STATUS + ". Connect your AI service in Settings, Your AI, before analysis."));
+    await saveMoment(false);
+    await waitFor(() => expect(invoke).toHaveBeenCalledOnce(), WAIT);
+    expect(toast).toHaveBeenCalledTimes(1);
+    expect(toast).toHaveBeenCalledWith({ title: "Moment created" });
   });
 
   it("keeps the plain confirmation when the AI works", async () => {

@@ -4082,9 +4082,12 @@ refuses 'a selected work card that names another result file' first-day "$FD/wro
 for table in "${SERVER_SPARSE_TABLES[@]}"; do
   sparse=${table//_/-}
   copy "$FD/good" "$FD/populated-$sparse"
-  printf '{"data":[{"id":"seeded-%s"}]}\n' "$sparse" >"$FD/populated-$sparse/sparse-$sparse.json"
+  printf '{"data":[{"id":"seeded-%s","kind":"brief-rehearsal"}]}\n' "$sparse" >"$FD/populated-$sparse/sparse-$sparse.json"
   refuses "a brief with seeded $sparse context" first-day "$FD/populated-$sparse" 'required sparse installed state'
 done
+copy "$FD/good" "$FD/spend-guard-receipt"
+printf '{"data":[{"id":"spend-guard-1","kind":"spend-guard"}]}\n' >"$FD/spend-guard-receipt/sparse-job-receipts.json"
+passes 'a first day whose only job receipt is the spend guard, which the brief never reads' first-day "$FD/spend-guard-receipt" 'a fresh Docker install'
 copy "$FD/good" "$FD/no-brief-sources"
 : >"$FD/no-brief-sources/briefing-source-tables.txt"
 refuses 'a first day whose installed product names no briefing sources' first-day "$FD/no-brief-sources" 'briefing-source-tables.txt is not in what the scenario kept'
@@ -5353,7 +5356,7 @@ if mv "$HFD_STATE" "$HFD_MISSING" \
   && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check >"$HFD_OUTPUT" 2>&1 \
   && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --no-backup --yes >>"$HFD_OUTPUT" 2>&1 \
   && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --backup >>"$HFD_OUTPUT" 2>&1 \
-  && ! grep -q '1.1.0' "$HFD_OUTPUT" \
+  && ! grep -q '1\.1\.0' "$HFD_OUTPUT" \
   && mv "$HFD_MISSING" "$HFD_STATE"; then
   ok 'the local Hermes fixture refuses every state-dependent update without fabricating a release'
 else
@@ -6122,6 +6125,66 @@ refuses 'a clipped phone-width state label' notebook-assistant-journeys "$N/clip
 copy "$N/good" "$N/http-disagrees"; node -e 'let x=require(process.argv[1]);x.snapshots.find(v=>v.surface==="http-status"&&v.state==="connected").httpAgreement=false;require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/http-disagrees/ai-state-evidence.json"
 refuses 'direct HTTP and page state disagreement' notebook-assistant-journeys "$N/http-disagrees" 'incomplete or contradicts'
 
+# ======================================================= talk-preparation-installed
+talk_prep_good() {
+  local folder=$1
+  rm -rf "$folder"; mkdir -p "$folder"
+  printf 'Run a fictional 10k\n' >"$folder/goal.txt"
+  printf '1795514400\n' >"$folder/run-requested.txt"
+  printf '{"id":"job7","title":"Coaching talk preparation","last_run_at":null,"last_status":null,"last_error":null}\n' >"$folder/routine.json"
+  printf '{"started":true,"id":"job7"}\n' >"$folder/run-now.json"
+  printf '{"id":"job7","title":"Coaching talk preparation","last_run_at":"2026-11-24T10:00:30Z","last_status":"ok","last_error":null}\n' >"$folder/routine-after.json"
+  printf '{"coach-prep":{"at":"2026-11-24T10:00:30Z","failed":null}}\n' >"$folder/routine-status.json"
+  printf 'weekly-check-in 2026-11-25: prepared (coach/weekly-check-in/prep/2026-11-25.md)\n' >"$folder/summary.txt"
+  printf 'coach/weekly-check-in/prep/2026-11-25.md\n' >"$folder/prep-path.txt"
+  printf 'AREA: weekly-check-in\nTALK: 2026-11-25 18:00\nPREPARED: 2026-11-24T10:00:20Z\nSTATE: ready\n\n## The opening\nYour goal is to run a fictional 10k.\n' >"$folder/prep.md"
+  printf 'ready: coach/weekly-check-in/prep/2026-11-25.md\n' >"$folder/prep-check.txt"
+  printf 'Area weekly-check-in, preparation ready.\n' >"$folder/brief.txt"
+  printf 'started-by-this-route=none\nrunning-after=none\n' >"$folder/cleanup.txt"
+}
+section talk-preparation-installed
+T=$TMP/talk-preparation
+talk_prep_good "$T/good"
+passes 'a ready preparation written by the installed routine after a public Run now' talk-preparation-installed "$T/good" 'the coach'"'"'s own gate accepts'
+passes 'a re-judged folder without the AI key does not claim a leak scan' talk-preparation-installed "$T/good" 'was not scanned for it'
+GODSPEED_SCENARIO_AI_KEY=scenario-secret-never-retain passes 'a judged folder with the AI key claims the leak scan' talk-preparation-installed "$T/good" 'AI key is not in its evidence'
+copy "$T/good" "$T/no-run-now"; printf '{"error":"Choose an existing Hermes task"}\n' >"$T/no-run-now/run-now.json"
+refuses 'a Run now the notebook did not start' talk-preparation-installed "$T/no-run-now" 'did not answer Run now'
+copy "$T/good" "$T/other-routine"; printf '{"started":true,"id":"job9"}\n' >"$T/other-routine/run-now.json"
+refuses 'a Run now for another routine' talk-preparation-installed "$T/other-routine" 'did not answer Run now'
+copy "$T/good" "$T/other-record"; sed -i 's/"id":"job7"/"id":"job9"/' "$T/other-record/routine-after.json"
+refuses 'a run record that belongs to another routine' talk-preparation-installed "$T/other-record" 'another routine'
+copy "$T/good" "$T/old-run"; sed -i 's/2026-11-24T10:00:30Z/2026-11-01T10:00:30Z/' "$T/old-run/routine-after.json"
+refuses 'a run record from before Run now' talk-preparation-installed "$T/old-run" 'no run that began after'
+copy "$T/good" "$T/run-failed"; sed -i 's/"last_status":"ok"/"last_status":"error"/' "$T/run-failed/routine-after.json"
+refuses 'a run that ended in error' talk-preparation-installed "$T/run-failed" 'ended its run as "error"'
+copy "$T/good" "$T/status-failed"; printf '{"coach-prep":{"at":"2026-11-24T10:00:30Z","failed":"one talk could not be prepared ahead"}}\n' >"$T/status-failed/routine-status.json"
+refuses 'an assistant record that says the routine failed' talk-preparation-installed "$T/status-failed" 'coach-prep routine failed'
+copy "$T/good" "$T/no-prep"; : >"$T/no-prep/prep-path.txt"; : >"$T/no-prep/prep.md"
+refuses 'a run that wrote no preparation' talk-preparation-installed "$T/no-prep" 'wrote no coach'
+copy "$T/good" "$T/draft"; sed -i 's/^STATE: ready/STATE: draft/' "$T/draft/prep.md"
+refuses 'a preparation that stays a draft' talk-preparation-installed "$T/draft" 'is not ready'
+copy "$T/good" "$T/stale"; sed -i 's/^PREPARED: .*/PREPARED: 2026-10-01T10:00:00Z/' "$T/stale/prep.md"
+refuses 'a preparation dated before the run' talk-preparation-installed "$T/stale" 'not dated at the run'
+copy "$T/good" "$T/undated"; sed -i '/^PREPARED:/d' "$T/undated/prep.md"
+refuses 'a preparation with no date' talk-preparation-installed "$T/undated" 'not dated at the run'
+copy "$T/good" "$T/gate-refuses"; printf 'not ready: no opening\n' >"$T/gate-refuses/prep-check.txt"
+refuses 'a preparation the coach'"'"'s gate does not accept' talk-preparation-installed "$T/gate-refuses" 'own gate does not accept'
+copy "$T/good" "$T/unnamed"; printf 'nothing to prepare\n' >"$T/unnamed/summary.txt"
+refuses 'a summary that does not name the preparation' talk-preparation-installed "$T/unnamed" 'does not name the preparation'
+copy "$T/good" "$T/left-behind"; printf 'started-by-this-route=none\nrunning-after=1234\n' >"$T/left-behind/cleanup.txt"
+refuses 'a process left behind' talk-preparation-installed "$T/left-behind" 'left no process'
+copy "$T/good" "$T/no-status"; : >"$T/no-status/routine-status.json"
+refuses 'an assistant record with no entry for the routine' talk-preparation-installed "$T/no-status" 'no coach-prep entry'
+copy "$T/good" "$T/bad-title"; sed -i 's/Coaching talk preparation/Weekly review/' "$T/bad-title/routine.json"
+refuses 'a routine that is not the talk preparation' talk-preparation-installed "$T/bad-title" 'is not "Coaching talk preparation"'
+copy "$T/good" "$T/bad-path"; printf 'notes/2026-11-25.md\n' >"$T/bad-path/prep-path.txt"
+refuses 'a preparation outside coach/<area>/prep/' talk-preparation-installed "$T/bad-path" 'is not coach/<area>/prep/<day>.md'
+copy "$T/good" "$T/no-brief"; : >"$T/no-brief/brief.txt"
+refuses 'a coach that printed no brief' talk-preparation-installed "$T/no-brief" 'printed no brief'
+copy "$T/good" "$T/leak"; printf 'scenario-secret-never-retain\n' >"$T/leak/leak.txt"
+GODSPEED_SCENARIO_AI_KEY=scenario-secret-never-retain refuses 'an AI key in retained evidence' talk-preparation-installed "$T/leak" 'leaked into retained evidence'
+
 # ================================================================ the night's report
 # report-night.mjs opens, comments on and closes the issues of a failed night; its own tests stand a
 # fake GitHub in for the real one.
@@ -6186,6 +6249,83 @@ if node "$ROOT/notebook/scripts/run-tests.mjs" "$ROOT/notebook/test/addon-carrie
 else
   cat "$TMP/addon-carried-hashes.log"
   bad "addon-carried-hashes.test.mjs: its cases fail"
+fi
+
+# night-proof.sh: the night proves the newest main commit that stage-for-run.sh accepts, never more than it allows.
+section "night-proof.sh: the night proves the newest commit that can be proved (#820)"
+NP="$ROOT/scenarios/night-proof.sh"
+# Its own small repository: ONE and TWO change nothing the server image carries, THREE changes the notebook.
+NP_REPO="$TMP/np-repo"
+mkdir -p "$TMP/np-public/beta"
+cp "$ROOT/stage.json" "$TMP/np-public/beta/stage.json"
+mkdir -p "$NP_REPO/third-party/addons"
+git -C "$NP_REPO" init -q
+printf '#!/bin/sh
+echo installer
+' >"$NP_REPO/install-godspeed.sh"
+printf '[]
+' >"$NP_REPO/third-party/addons/sources.json"
+git -C "$NP_REPO" add -A
+git -C "$NP_REPO" -c user.name=t -c user.email=t@t commit -q -m one
+NP_ONE=$(git -C "$NP_REPO" rev-parse HEAD)
+echo two >"$NP_REPO/two"
+git -C "$NP_REPO" add -A
+git -C "$NP_REPO" -c user.name=t -c user.email=t@t commit -q -m two
+NP_TWO=$(git -C "$NP_REPO" rev-parse HEAD)
+mkdir -p "$NP_REPO/notebook"
+echo changed >"$NP_REPO/notebook/x"
+git -C "$NP_REPO" add -A
+git -C "$NP_REPO" -c user.name=t -c user.email=t@t commit -q -m three
+NP_THREE=$(git -C "$NP_REPO" rev-parse HEAD)
+printf '%s:v2-sha-%s %s
+' "$SFR_IMAGE" "$NP_TWO" "$SFR_DA" >"$TMP/np-images-two"
+printf '%s:v2-sha-%s %s
+' "$SFR_IMAGE" "$NP_ONE" "$SFR_DB" >"$TMP/np-images-one"
+printf '%s:v2-sha-%s %s
+' "$SFR_IMAGE" "$NP_THREE" "$SFR_DA" >"$TMP/np-images-three"
+np() { # <images file> <head> <folder> [public raw]
+  NP_OUT=$(GODSPEED_SCENARIO_REPO=$NP_REPO GODSPEED_SCENARIO_PUBLIC_RAW=${4:-file://$TMP/np-public} GODSPEED_SCENARIO_IMAGES=$1 \
+    GITHUB_STEP_SUMMARY=$TMP/np-summary bash "$NP" "$2" "$3" 2>"$TMP/np.err"); NP_CODE=$?
+}
+: >"$TMP/np-summary"
+np "$TMP/np-images-two" "$NP_THREE" "$TMP/np-1"
+if [ "$NP_CODE" = 0 ] && [ "$(printf '%s\n' "$NP_OUT" | tail -1)" = "proof=$NP_TWO" ] \
+  && [ "$(printf '%s\n' "$NP_OUT" | head -1)" = "ref=this-commit" ] \
+  && [ "$(node "$ROOT/stage/stage.mjs" "$TMP/np-1/this-commit/stage.json" get productCommit)" = "$NP_TWO" ] \
+  && grep -qF "The night proves ${NP_TWO:0:7}, the newest main commit whose server image exists; ${NP_THREE:0:7} is proved by the next night." "$TMP/np-summary"; then
+  ok "a newest commit with no image yet: the night proves the next older one that has its own, and says so"
+else
+  bad "night fallback to the older commit (exit $NP_CODE: $NP_OUT; $(cat "$TMP/np.err"))"
+fi
+: >"$TMP/np-summary"
+np "$TMP/np-images-three" "$NP_THREE" "$TMP/np-2"
+if [ "$NP_CODE" = 0 ] && [ "$(printf '%s\n' "$NP_OUT" | tail -1)" = "proof=$NP_THREE" ] && [ ! -s "$TMP/np-summary" ]; then
+  ok "a newest commit with its own image is proved itself, with no extra line in the summary"
+else
+  bad "night proves the newest commit when its image exists (exit $NP_CODE: $NP_OUT)"
+fi
+np "$TMP/np-images-one" "$NP_THREE" "$TMP/np-3"
+if [ "$NP_CODE" = 0 ] && [ "$(printf '%s\n' "$NP_OUT" | tail -1)" = "proof=$NP_TWO" ]; then
+  ok "an older commit is taken on the ancestor rule only when no image input changed in between"
+else
+  bad "night ancestor rule (exit $NP_CODE: $NP_OUT; $(cat "$TMP/np.err"))"
+fi
+np "$TMP/sfr-images-none" "$NP_THREE" "$TMP/np-4"
+if [ "$NP_CODE" = 1 ] && ! printf '%s' "$NP_OUT" | grep -q proof= && grep -qF 'No commit in the newest 50' "$TMP/np.err"; then
+  ok "no commit in the window can be proved: the night fails as before"
+else
+  bad "night with no image anywhere (exit $NP_CODE: $NP_OUT)"
+fi
+np "$TMP/np-images-two" "$NP_THREE" "$TMP/np-5" file:///no/such/place
+if [ "$NP_CODE" = 1 ] && grep -qF 'could not be read' "$TMP/np.err" && ! grep -qF 'No commit in the newest 50' "$TMP/np.err"; then
+  ok "another failure (the public stage unreadable) stops at once, not walked past"
+else
+  bad "night with an unreadable public stage (exit $NP_CODE: $(cat "$TMP/np.err"))"
+fi
+if grep -q 'night-proof.sh' "$ROOT/.github/workflows/scenarios.yml" && grep -q "steps.night.outputs.proof" "$ROOT/.github/workflows/scenarios.yml"; then
+  ok "scenarios.yml uses night-proof.sh for the schedule and hands its commit to every job as proof"
+else
+  bad "scenarios.yml does not use night-proof.sh"
 fi
 
 printf '\n%s of %s pass.\n' "$PASS" "$((PASS + FAIL))"

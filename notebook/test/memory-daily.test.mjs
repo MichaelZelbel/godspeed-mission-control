@@ -34,8 +34,8 @@ test('the daily memory does not end a fact the person entered',async t=>{
 });
 
 test('concurrent daily-memory runs submit one archive piece once',async t=>{
- const root=workspace(t),row={id:'once',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);let calls=0,entered,release;const started=new Promise(resolve=>entered=resolve),gate=new Promise(resolve=>release=resolve),model=async()=>{calls++;entered();await gate;return answer(row);};
- const first=rememberWhatYouSaid({root,now,model});await started;const second=rememberWhatYouSaid({root,now,model});await new Promise(resolve=>setTimeout(resolve,30));assert.equal(calls,1,'the waiting run has not sent the same private message');release();const [one,two]=await Promise.all([first,second]);assert.equal(calls,1);assert.equal(one.completed+two.completed,1);
+ const root=workspace(t),store=new Store(root),query=new QueryService(store),nb={store,query,domains:new Domains(query)},row={id:'once',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);let calls=0,entered,release;const started=new Promise(resolve=>entered=resolve),gate=new Promise(resolve=>release=resolve),model=async()=>{calls++;entered();await gate;return answer(row);};
+ const first=rememberWhatYouSaid({root,...nb,now,model});await started;const second=rememberWhatYouSaid({root,...nb,now,model});await new Promise(resolve=>setTimeout(resolve,30));assert.equal(calls,1,'the waiting run has not sent the same private message');release();const [one,two]=await Promise.all([first,second]);assert.equal(calls,1);assert.equal(one.completed+two.completed,1);
 });
 
 test('an interrupted notebook event recovers every participant before consuming its receipt',async t=>{
@@ -107,7 +107,7 @@ print(json.dumps([bool(collector.MACHINE_BANNER.match(text)) for text in json.lo
 test('a failed model piece remains eligible for the next night',async t=>{
  const root=workspace(t),row={id:'retry',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);let calls=0;
  const failed=await rememberWhatYouSaid({root,now,model:async()=>{calls++;throw Error('offline');}});assert.equal(failed.failed,1);assert.equal(calls,3);assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'routines','remember-what-you-said','state.json'))).consumed,[]);
- const done=await rememberWhatYouSaid({root,now,model:async()=>answer(row)});assert.equal(done.completed,1);assert.ok(fs.existsSync(path.join(root,'world','claims')),'a starter writes the world fallback');
+ const store=new Store(root),query=new QueryService(store),done=await rememberWhatYouSaid({root,store,query,domains:new Domains(query),now,model:async()=>answer(row)});assert.equal(done.completed,1);assert.equal(query.rows('claims').length,1);
 });
 
 test('a refused deadline leaves its prepared piece unread and recovery does not ask the model again',async t=>{
@@ -143,42 +143,16 @@ test('a message read before a refused deadline is not sent again when a newer me
  assert.deepEqual(sent,[['read-a'],['read-b']],'the recovered message goes to the AI once, and only the new one is sent');assert.equal(later.completed,2);
 });
 
-test('a starter entity file is reused, not rewritten, when the routine names the same person',async t=>{
- const root=workspace(t),entity=path.join(root,'world','entities','peter-mueller.md'),original='---\nslug: peter-mueller\nname: Peter Mueller\naliases: [Peter, Pete]\nmenerio_id: p-1\n---\nOld friend from school.\n';fs.mkdirSync(path.dirname(entity),{recursive:true});fs.writeFileSync(entity,original);
- const row={id:'peter',at:'2026-11-02T12:00:00Z',text:'Pete just moved to Hamburg, I heard today'};archive(root,[row]);
- for(const [name,id] of [['Peter Mueller','a'],['Pete','b']]){await rememberWhatYouSaid({root,now,model:async()=>({people:[{id,name}],facts:[{subject:{kind:'new-person',id},kind:'home-city',value:'Hamburg',date:'2026-11-02',one_or_many:'one',citation:{id:'peter',quote:'Pete just moved to Hamburg'}}]})});
-  fs.rmSync(path.join(root,'routines'),{recursive:true,force:true});}
- assert.equal(fs.readFileSync(entity,'utf8'),original);assert.deepEqual(fs.readdirSync(path.join(root,'world','entities')),['peter-mueller.md']);
- assert.deepEqual(fs.readdirSync(path.join(root,'world','claims')).map(n=>n.split('--')[0]),['peter-mueller'],'an alias fact already filed is not filed twice');
-});
-
-test('the world fallback ends only facts filed by daily memory',async t=>{
- const root=workspace(t),claims=path.join(root,'world','claims');fs.mkdirSync(claims,{recursive:true});
- const manual='---\nsubject: me\norigin: user_manual\nattribute: lives-in\nvalue: Kiel\nvalid_from: 2026-01-01\n---\nTyped by me.\n',legacy='---\nsubject: me\nattribute: lives-in\nvalue: Bremen\nvalid_from: 2025-01-01\n---\nOld import.\n',routine='---\nsubject: me\norigin: remember-what-you-said\nattribute: lives-in\nvalue: Bonn\nvalid_from: 2026-02-01\n---\nI moved to Bonn.\n';
- for(const [name,text] of [['manual.md',manual],['legacy.md',legacy],['routine.md',routine]])fs.writeFileSync(path.join(claims,name),text);
- const row={id:'world-ownership',at:'2026-11-01T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);await rememberWhatYouSaid({root,now,model:async()=>answer(row)});
- assert.equal(fs.readFileSync(path.join(claims,'manual.md'),'utf8'),manual);assert.equal(fs.readFileSync(path.join(claims,'legacy.md'),'utf8'),legacy);
- assert.equal(frontMatter(fs.readFileSync(path.join(claims,'routine.md'),'utf8')).fields.valid_to,'2026-11-01');
- const filed=fs.readdirSync(claims).map(name=>frontMatter(fs.readFileSync(path.join(claims,name),'utf8')).fields).find(fields=>fields.value==='Hamburg');assert.equal(filed.origin,'remember-what-you-said');assert.equal(filed.valid_to,undefined);
-});
-
 test('a world file the starter formats allow is read the way it was written',()=>{
  const text='---\nsubject: me\nattribute: lives-in\nvalue: "you" said it\nnickname: *Bear*\nproject: [draft] memoir\npriority: #1 priority\nowner: null\naliases: [Peter, "Pete"]\n---\nbody\n',{fields,body}=frontMatter(text);
  assert.deepEqual({value:fields.value,nickname:fields.nickname,project:fields.project,priority:fields.priority,owner:fields.owner,aliases:fields.aliases,body},{value:'"you" said it',nickname:'*Bear*',project:'[draft] memoir',priority:'#1 priority',owner:'',aliases:["Peter","Pete"],body:'body'});
 });
 
-test('a hand-written entity of any other type is reused for a thing of that name',async t=>{
- const root=workspace(t),dir=path.join(root,'world','entities');fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'bluebird-garden.md'),'---\nslug: bluebird-garden\nname: Bluebird Garden\ntype: project\n---\n');
- const row={id:'garden',at:'2026-11-02T12:00:00Z',text:'The Bluebird Garden opened in Hamburg today'};archive(root,[row]);
- await rememberWhatYouSaid({root,now,model:async()=>({things:[{id:'g',name:'Bluebird Garden'}],facts:[{subject:{kind:'new-thing',id:'g'},kind:'city',value:'Hamburg',date:'2026-11-02',one_or_many:'one',citation:{id:'garden',quote:'Bluebird Garden opened in Hamburg'}}]})});
- assert.deepEqual(fs.readdirSync(dir),['bluebird-garden.md']);assert.match(fs.readdirSync(path.join(root,'world','claims'))[0],/^bluebird-garden--/);
-});
-
 test('an impossible model date refuses that item and files the rest',async t=>{
  const root=workspace(t),row={id:'dates',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);
  const good=answer(row).facts[0],bad={...good,kind:'work-city',value:'Berlin',date:'2026-13-01'};
- const result=await rememberWhatYouSaid({root,now,model:async()=>({facts:[bad,good]})});
- assert.equal(result.completed,1);assert.equal(result.failed,0);assert.equal(fs.readdirSync(path.join(root,'world','claims')).length,1);
+ const store=new Store(root),query=new QueryService(store),result=await rememberWhatYouSaid({root,store,query,domains:new Domains(query),now,model:async()=>({facts:[bad,good]})});
+ assert.equal(result.completed,1);assert.equal(result.failed,0);assert.equal(query.rows('claims').length,1);
  const logs=fs.readdirSync(path.join(root,'routines','remember-what-you-said','runs','2026-11-07')).map(n=>fs.readFileSync(path.join(root,'routines','remember-what-you-said','runs','2026-11-07',n),'utf8')).join('');assert.match(logs,/private-or-invalid/);
 });
 
@@ -195,4 +169,11 @@ test('the request names a doctor as a fixed fact, so "my new doctor is" becomes 
  const root=workspace(t),request=modelRequest({messages:[{id:'doctor-1',at:'2026-11-01T12:00:00Z',text:'my new doctor is Dr. Lang'}],query:null,root});
  assert.ok(JSON.parse(request.prompt).fixed_fact_names.some(line=>line.startsWith('doctor:')),'a doctor is one of the fixed fact names');
  assert.match(request.system,/who their doctor is\) is a fact dated from that day/);
+});
+
+test('without a notebook a fact is not filed and its message stays unread',async t=>{
+ const root=workspace(t),row={id:'bare',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);
+ const result=await rememberWhatYouSaid({root,now,model:async()=>answer(row)});
+ assert.equal(result.completed,0);assert.equal(result.failed,1);assert.ok(!fs.existsSync(path.join(root,'world')));
+ assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'routines','remember-what-you-said','state.json'))).consumed,[]);
 });

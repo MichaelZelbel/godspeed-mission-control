@@ -29,9 +29,8 @@ export function useAICreditsGate() {
     if (!credits) return true;
 
     // Zero-grant plans (free tier with 0 credits) and a spent balance both
-    // block. Callers simply return on false, and LowBalanceBanner hides itself
-    // for zero-grant plans, so the reason has to be said here or the AI button
-    // looks broken.
+    // block. Callers simply return on false, so the reason has to be said here
+    // or the AI button looks broken.
     if (credits.creditsGranted === 0 || credits.remainingCredits <= 0) {
       showToast.error(creditsBlockedMessage(credits));
       return false;

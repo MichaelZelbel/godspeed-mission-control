@@ -1,14 +1,16 @@
 import {NO_AI_CHAT,NO_AI_ANALYSIS,readReply,unreadableReply} from './no-ai.mjs';
 import {plainAIError,publishAIFunctions} from './ai-outcome.mjs';
 import {momentDraft} from './moment-draft.mjs';
+import {assertRealClaimDates} from './real-dates.mjs';
 import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
 import {startCharmJudgement} from './charm-judgement.mjs';
 import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
-import {asksForTodaysBrief,savedBriefToday} from './briefing.mjs';
+import {savedBriefAnswer,missingBriefAnswer} from './briefing.mjs';
 import {NOTEBOOK_CHAT_FUNCTIONS} from './notebook-chat.mjs';
 
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
 import {draftEvent} from './draft-event.mjs';
+import {draftChatMoments} from './chat-moments.mjs';
 import {momentDates} from './timestamps.mjs';
 import {NOTE_TYPES,processNote} from './proposals.mjs';
 import {NoteProcessing,PIPELINE,contentFingerprint,skipsProcessing} from './processing.mjs';
@@ -47,7 +49,7 @@ import {leadWords} from './lead-commands.mjs';
 import {radarWords} from './radar-lifecycle.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
 import {retireShares} from './shares.mjs';
-import {hasCoachAreas,resolvedCoachArea,coachTalkStart,coachTalkRecordProblem,coachTalkRecordOpening,coachTalkCorrectedOpening,coachTalkRetryMessage,markCoachTalkShown,coachTalkRecordShownOpening} from './coach-chat.mjs';
+import {hasCoachAreas,resolvedCoachArea,coachTalkStart,coachTalkRecordProblem,coachTalkRecordOpening,coachTalkCorrectedOpening,coachTalkDays,removeStrayCoachTalks,coachTalkRetryMessage,markCoachTalkShown,coachTalkRecordShownOpening} from './coach-chat.mjs';
 import {canStartTalk} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 // The note screens' content hash (ui/src/lib/note-ai-edit.ts hashNoteContent,
 // FNV-1a and the length): what a chat request says the owner was looking at.
@@ -158,7 +160,7 @@ export function weekNotes(notes){
 // test (test/ai-provider-outcomes.test.mjs) drives every declared name — the true ones through
 // every outcome, the false ones against the counting stub, which they must never reach.
 export const AI_DISPATCH=Object.freeze({
-  'conversation-chat':true,'note-chat':true,'collection-chat':true,'draft-event':true,
+  'conversation-chat':true,'note-chat':true,'collection-chat':true,'draft-event':true,'draft-chat-moments':true,
   'process-note':true,'generate-profile-suggestions':true,'enrich-people':true,
   'extract-moment-profile':true,'analyze-media':true,'analyze-pdf':true,
   'classify-profile-fact':true,'generate_collection_schema':true,'weekly-review':true,
@@ -208,6 +210,7 @@ export class Domains {
     const fields=fieldList(this.store.root),given = input.attribute || slug(input.label).replaceAll('-', '_'),listed=!!given&&fields.listed(given);
     const attribute = listed?fields.canonical(given):given, value = String(input.value || '').trim();
     if (!attribute || !value) throw new Error('A fact needs a label and value');
+    assertRealClaimDates({attribute,value,valid_from:input.valid_from,valid_to:input.valid_to},name=>fields.canonical(name));
     if (factSuppressed(this.query,{subject_type,subject_id,attribute,value})) return { ok: true, facts: [{ attribute, outcome: 'suppressed', reason: 'Previously rejected by the user' }] };
     return this.store.withLock(() => {
       // The values of this fact: under this name and, for a listed kind, under
@@ -335,6 +338,7 @@ export class Domains {
     // the AI is asked (#861).
     if(!(name in AI_DISPATCH))throw new Error('Processing function has not been ported: ' + name);
     if(name==='draft-event')return draftEvent(this.provider,input);
+    if(name==='draft-chat-moments')return draftChatMoments(this.provider,input);
     if(name==='retrieve-memory')return retrieveNoteWindows(this.query,input.query||input.message||'');
     // A message from the page that shows who the assistant is carries that page's numbered parts,
     // and its answer says whether any of them changed, so the page shows the change (16 October 2026).
@@ -353,12 +357,17 @@ export class Domains {
       input={...input,conversation_id:conversationRuntimeId(input)};
       if(!input.message)input={...input,message:input.messages?.filter(m=>m.role==='user').at(-1)?.content||''};
     }
-    if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode!=='summarize'&&asksForTodaysBrief(input.message)){
-      const saved=savedBriefToday(this.store).note;
+    if(NOTEBOOK_CHAT_FUNCTIONS.includes(name)&&input.mode!=='summarize'){
+      const saved=savedBriefAnswer(this.store,input.message);
       if(saved){
         const reply=String(saved.content||'');
         await this.store.saveAsync('conversation_messages',{role:'assistant',content:reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'morning-brief'},undefined,{signal:input.signal});
         return {reply};
+      }
+      const missing=missingBriefAnswer(this.store,input.message);
+      if(missing){
+        await this.store.saveAsync('conversation_messages',{role:'assistant',content:missing,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'morning-brief-missing'},undefined,{signal:input.signal});
+        return {reply:missing};
       }
     }
     if(name==='conversation-chat'&&chatOf(input.conversation_id)&&!String(input.message||'').startsWith('/')){
@@ -373,14 +382,15 @@ export class Domains {
       const files=input.uploadedFiles||[];if(files.length)chatAttachments(this.mediaRoot,files,carriedRoot(this.store));
       const nativeFiles=files.map(item=>({name:item.name||item.path,path:this.media(item.path).file}));
       const start=await this.nativeCoachStart(input);
+      const talkDaysBefore=start?coachTalkDays(this.store,start):null;
       // The Charm Challenge's slip judgement runs while the assistant works (core/charm-judgement.mjs).
       const judged=startCharmJudgement(this,input);
       const ask=message=>this.nativeAgent({...input,message,nativeFiles,page_context:input[IDENTITY_PAGE],step_context:input.step_context,coach_talk_start:start});
       let result=await ask(input.message).catch(error=>{judged.drop();throw error;});
       let problem=start&&coachTalkRecordProblem(this.store,start,result.reply,{requireShown:start.continuing});
-      // A record with the wrong opening is corrected to the prepared one, and the talk opens from it
-      // without another call (issue #495).
-      const corrected=problem&&coachTalkCorrectedOpening(this.store,start);
+      // A record with the wrong opening, or none for the start's day, is corrected to the prepared one,
+      // and the talk opens from it without another call (issues #495, #971).
+      let corrected;try{corrected=problem&&coachTalkCorrectedOpening(this.store,start);}catch(error){judged.drop();throw error;}
       if(corrected){result={...result,reply:corrected};problem=null;}
       // A reply that misses the opening its talk record rightly holds is asked for once more, with the
       // guard's reason; a second miss opens the talk from the record (issue #489).
@@ -391,6 +401,8 @@ export class Domains {
         if(!problem)result=again;
         else{const opening=coachTalkRecordOpening(this.store,start);if(opening){result={...again,reply:opening};problem=null;}}
       }
+      // The assistant's wrong-day record must not stay open beside the start's own talk (issue #984).
+      if(start){try{removeStrayCoachTalks(this.store,start,talkDaysBefore);}catch(error){judged.drop();throw error;}}
       if(problem){judged.drop();throw Error(problem);}
       if(start?.opening)judged.drop();else result.reply=await judged.end(result.reply);
       await this.store.saveAsync('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'hermes'},undefined,{signal:input.signal});

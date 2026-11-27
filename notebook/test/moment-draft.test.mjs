@@ -79,3 +79,9 @@ test('a suggestion stops after twenty seconds and aborts the underlying AI call'
   const rejected=assert.rejects(pending,error=>error.message===AI_STALLED);
   t.mock.timers.tick(DRAFT_BUDGET_MS);await rejected;assert.equal(signal.aborted,true);assert.equal(store.list('moments').length,0);
 });
+
+test('a draft whose end is before its start carries no end',()=>{
+  assert.equal(momentDraft({happened_at:'2025-03-05',happened_end:'2025-03-01'}).happened_end,null);
+  assert.equal(momentDraft({happened_at:'2025-03-05',happened_end:'2025-03-05'}).happened_end,'2025-03-05');
+  assert.equal(momentDraft({happened_at:'2025-03-05',happened_end:'2025-03-09'}).happened_end,'2025-03-09');
+});

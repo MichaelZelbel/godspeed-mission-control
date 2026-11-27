@@ -121,43 +121,6 @@
       "rpcs": []
     },
     {
-      "source": "src/components/dashboard/DiscoveryFeed.tsx",
-      "tables": [
-        "dismissed_suggestions",
-        "note_connections"
-      ],
-      "functions": [
-        "suggest-connections"
-      ],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/dashboard/TodaysConnections.tsx",
-      "tables": [],
-      "functions": [
-        "find-connections"
-      ],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/dashboard/widgets/GettingStartedChecklist.tsx",
-      "tables": [],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/dashboard/widgets/GroupPulseCard.tsx",
-      "tables": [],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/dashboard/widgets/NotesStatsRow.tsx",
-      "tables": [],
-      "functions": [],
-      "rpcs": []
-    },
-    {
       "source": "src/components/dashboard/widgets/ProfileWidget.tsx",
       "tables": [],
       "functions": [],
@@ -193,14 +156,6 @@
       "source": "src/components/graph/GraphAnalytics.tsx",
       "tables": [],
       "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/graph/OrphanNotesDetector.tsx",
-      "tables": [],
-      "functions": [
-        "compute-connections"
-      ],
       "rpcs": []
     },
     {
@@ -438,7 +393,7 @@
       "rpcs": []
     },
     {
-      "source": "src/components/notes/NoteChatPanel.tsx",
+      "source": "src/components/chat/GlobalAIChatFAB.tsx",
       "tables": [
         "notes"
       ],
@@ -534,16 +489,6 @@
         "notes"
       ],
       "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/onboarding/FirstCapturesWizard.tsx",
-      "tables": [
-        "notes"
-      ],
-      "functions": [
-        "quick-capture"
-      ],
       "rpcs": []
     },
     {
@@ -731,12 +676,6 @@
       "rpcs": []
     },
     {
-      "source": "src/components/profile/AgentInstructionsTab.tsx",
-      "tables": [],
-      "functions": [],
-      "rpcs": []
-    },
-    {
       "source": "src/components/profile/EntryForm.tsx",
       "tables": [],
       "functions": [],
@@ -849,173 +788,8 @@
       "rpcs": []
     },
     {
-      "source": "src/components/settings/AppIntegrations.tsx",
-      "tables": [
-        "connected_apps"
-      ],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/ConnectedGodspeedsCard.tsx",
-      "tables": [
-        "godspeed_connections"
-      ],
-      "functions": [],
-      "rpcs": []
-    },
-    {
       "source": "src/components/settings/CreditsDisplay.tsx",
       "tables": [],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/DiscordIntegration.tsx",
-      "tables": [
-        "discord_connections"
-      ],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/GitHubSyncSettings.tsx",
-      "tables": [
-        "github_connections",
-        "github_sync_log"
-      ],
-      "functions": [
-        "github-proxy",
-        "github-sync-pull"
-      ],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/GoogleDriveScans.tsx",
-      "tables": [
-        "gdrive_imports"
-      ],
-      "functions": [
-        "gdrive-proxy",
-        "gdrive-sync"
-      ],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/ImportMigrate.tsx",
-      "tables": [],
-      "functions": [
-        "backfill-moment-profile-extraction",
-        "backfill-profile-extraction",
-        "backfill-wikilinks",
-        "enrich-people",
-        "quick-capture"
-      ],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/ImportVaultDialog.tsx",
-      "tables": [],
-      "functions": [
-        "github-import-vault"
-      ],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/IntegrationsOverview.tsx",
-      "tables": [
-        "connected_apps",
-        "discord_connections",
-        "gdrive_connections",
-        "github_connections",
-        "mcp_api_tokens",
-        "telegram_connections"
-      ],
-      "functions": [
-        "mc-api-keys"
-      ],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/LocalReplicaPanel.tsx",
-      "tables": [],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/MCPConnectionManager.tsx",
-      "tables": [
-        "mcp_api_tokens"
-      ],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/NotificationPreferences.tsx",
-      "tables": [
-        "notification_preferences"
-      ],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/SingleFileIntegration.tsx",
-      "tables": [],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/SlackIntegration.tsx",
-      "tables": [
-        "connected_apps"
-      ],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/StaffAccessCard.tsx",
-      "tables": [],
-      "functions": [],
-      "rpcs": [
-        "my_staff_access_log"
-      ]
-    },
-    {
-      "source": "src/components/settings/SyncConflictsPanel.tsx",
-      "tables": [
-        "github_sync_log"
-      ],
-      "functions": [
-        "github-people-sync",
-        "github-sync-pull"
-      ],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/SyncDashboard.tsx",
-      "tables": [
-        "contact_groups",
-        "contacts",
-        "github_connections",
-        "github_sync_log",
-        "notes"
-      ],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/TelegramIntegration.tsx",
-      "tables": [
-        "telegram_connections"
-      ],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/components/settings/UserMcpServersManager.tsx",
-      "tables": [
-        "user_mcp_servers"
-      ],
       "functions": [],
       "rpcs": []
     },
@@ -1400,28 +1174,10 @@
       "rpcs": []
     },
     {
-      "source": "src/hooks/useGroupPulse.ts",
-      "tables": [
-        "action_items",
-        "contact_group_memberships",
-        "contact_groups"
-      ],
-      "functions": [],
-      "rpcs": []
-    },
-    {
       "source": "src/hooks/useGroups.ts",
       "tables": [
         "contact_groups",
         "wiki_pages"
-      ],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/hooks/useLogActivity.ts",
-      "tables": [
-        "activity_events"
       ],
       "functions": [],
       "rpcs": []
@@ -1452,15 +1208,6 @@
       "source": "src/hooks/useNoteSharing.ts",
       "tables": [
         "shared_notes"
-      ],
-      "functions": [],
-      "rpcs": []
-    },
-    {
-      "source": "src/hooks/useOrphanNotes.ts",
-      "tables": [
-        "note_connections",
-        "notes"
       ],
       "functions": [],
       "rpcs": []
@@ -1663,12 +1410,6 @@
       "rpcs": []
     },
     {
-      "source": "src/lib/mc-connect.ts",
-      "tables": [],
-      "functions": [],
-      "rpcs": []
-    },
-    {
       "source": "src/lib/mc-ranking.ts",
       "tables": [],
       "functions": [],
@@ -1687,16 +1428,6 @@
       "tables": [],
       "functions": [],
       "rpcs": []
-    },
-    {
-      "source": "src/lib/note-ai-enrollment.ts",
-      "tables": [],
-      "functions": [
-        "wiki-ingest"
-      ],
-      "rpcs": [
-        "capture_note_with_lexicon"
-      ]
     },
     {
       "source": "src/lib/note-content.ts",
@@ -1911,12 +1642,6 @@
       ]
     },
     {
-      "source": "src/pages/Dashboard.tsx",
-      "tables": [],
-      "functions": [],
-      "rpcs": []
-    },
-    {
       "source": "src/pages/GroupDetail.tsx",
       "tables": [
         "contact_group_memberships",
@@ -1990,16 +1715,6 @@
       "rpcs": [
         "wiki_rollback_revision"
       ]
-    },
-    {
-      "source": "src/pages/Settings.tsx",
-      "tables": [
-        "profiles"
-      ],
-      "functions": [
-        "delete-my-account"
-      ],
-      "rpcs": []
     },
     {
       "source": "src/pages/TimelinePage.tsx",

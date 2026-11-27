@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {Plus,ArrowUp,Square,Mic,Volume2,VolumeX,X,FileText,Loader2} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
-import {listenForChatOptions,loadChatOptions} from '@/local/chat-options.mjs';
+import {listenForChatOptions,loadChatOptions,retryDelay,sharedReadRetrying} from '@/local/chat-options.mjs';
 import {CHAT_AVAILABILITY_CHANGED,type ChatAvailability} from './ChatConnectionEmptyState';
 
 export type ChatFile={path:string;name:string;type:string;text?:string};
@@ -14,10 +14,13 @@ export default function ChatComposer(p:Props){
   const [options,setOptions]=useState<{current:string;label?:string;connected?:boolean;usable?:boolean;availability?:ChatAvailability;models:Array<{id:string;efforts:string[]}>}>({current:'',models:[]});
   const [modelError,setModelError]=useState(''),[modelAttempt,setModelAttempt]=useState(0);
   const canRecord=!!navigator.mediaDevices?.getUserMedia&&typeof MediaRecorder!=='undefined';
-  useEffect(()=>{let alive=true,request:AbortController|undefined;
-    const refresh=()=>{request?.abort();const currentRequest=request=new AbortController();setModelError('');loadChatOptions({signal:currentRequest.signal}).then(data=>{if(alive){setOptions(data);p.onModel(data.usable===false?'':data.current);if(data.usable===false)p.onEffort('');}}).catch(e=>{if(alive&&!currentRequest.signal.aborted)setModelError(e.message||'Model choices could not be loaded. Try again.');});};
-    refresh();const interval=window.setInterval(refresh,5000);window.addEventListener(CHAT_AVAILABILITY_CHANGED,refresh);
-    return()=>{alive=false;window.clearInterval(interval);window.removeEventListener(CHAT_AVAILABILITY_CHANGED,refresh);request?.abort();};
+  useEffect(()=>{let alive=true,request:AbortController|undefined,timer:number|undefined,failures=0;
+    // A failed read is retried on the shared pace; while the shared read is itself retrying, this one waits for it (#1124).
+    const wait=()=>{window.clearTimeout(timer);timer=window.setTimeout(()=>{if(failures&&sharedReadRetrying())wait();else refresh();},failures?retryDelay(failures):5000);};
+    const refresh=()=>{window.clearTimeout(timer);request?.abort();const currentRequest=request=new AbortController();setModelError('');
+      loadChatOptions({signal:currentRequest.signal}).then(data=>{failures=0;if(alive){setOptions(data);p.onModel(data.usable===false?'':data.current);if(data.usable===false)p.onEffort('');}}).catch(e=>{if(currentRequest.signal.aborted)return;failures++;if(alive)setModelError(e.message||'Model choices could not be loaded. Try again.');}).finally(()=>{if(alive&&!currentRequest.signal.aborted)wait();});};
+    refresh();window.addEventListener(CHAT_AVAILABILITY_CHANGED,refresh);
+    return()=>{alive=false;window.clearTimeout(timer);window.removeEventListener(CHAT_AVAILABILITY_CHANGED,refresh);request?.abort();};
   },[modelAttempt]);
   useEffect(()=>listenForChatOptions(data=>{setOptions(data);p.onModel(data.usable===false?'':data.current);if(data.usable===false)p.onEffort('');}),[p.onModel,p.onEffort]);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;clearTimeout(recordingTimer.current);audioRequest.current?.abort();if(recorder.current?.state==='recording')recorder.current.stop();recorder.current?.stream.getTracks().forEach(t=>t.stop());window.speechSynthesis?.cancel();};},[]);
@@ -62,11 +65,11 @@ export default function ChatComposer(p:Props){
     }catch(e:any){stream?.getTracks().forEach(t=>t.stop());audioRequest.current=null;if(mounted.current){setListening(false);p.onError(e.name==='NotAllowedError'?'Allow microphone access to dictate your message.':e.name==='NotFoundError'?'No microphone was found. Connect one to use dictation.':'The microphone could not start. Please try again.');}}
   };
   const playback=()=>{playbackUtterance.current=null;speechSynthesis.cancel();if(speaking){setSpeaking(false);return;}const utterance=new SpeechSynthesisUtterance(p.reply.replace(/[#*`]/g,''));playbackUtterance.current=utterance;utterance.onend=()=>{if(playbackUtterance.current===utterance)setSpeaking(false);};utterance.onerror=event=>{if(playbackUtterance.current!==utterance||!mounted.current)return;setSpeaking(false);if(!['canceled','interrupted'].includes(event.error))p.onError('Audio playback could not start. Check your device’s voice settings.');};speechSynthesis.speak(utterance);speechSynthesis.resume();setSpeaking(true);};
-  return <div className={'chat-composer rounded-2xl border bg-background shadow-sm '+(dragging?'ring-2 ring-primary':'')} onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)} onDrop={e=>{e.preventDefault();setDragging(false);if(!p.busy)void addFiles(e.dataTransfer.files);}}>
+  return <div className={'chat-composer rounded-2xl border bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring '+(dragging?'ring-2 ring-primary':'')} onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)} onDrop={e=>{e.preventDefault();setDragging(false);if(!p.busy)void addFiles(e.dataTransfer.files);}}>
     {p.context&&<div className="border-b px-4 py-2 text-xs text-muted-foreground truncate" title={p.context}>{p.context}</div>}
     {modelError&&<div className="px-4 pt-3 text-xs"><p role="alert">{modelError}</p><Button variant="ghost" size="sm" disabled={p.busy} onClick={()=>setModelAttempt(n=>n+1)}>Reload model choices</Button></div>}
     {p.files.length>0&&<div className="flex flex-wrap gap-2 px-3 pt-3">{p.files.map((file,i)=><div key={file.path} className="flex items-center gap-2 rounded-lg border px-2 py-1 text-xs max-w-full">{file.type.startsWith('image/')?<img alt="" className="h-8 w-8 rounded object-cover" src={'/api/media/file/'+encodeURIComponent(file.path)}/>:<FileText className="h-4 w-4 shrink-0"/>}<span className="truncate max-w-40">{file.name}</span><Button variant="ghost" size="icon" className="h-10 w-10" aria-label={'Remove '+file.name} disabled={p.busy} onClick={()=>p.onFiles(p.files.filter((_,n)=>n!==i))}><X className="h-4 w-4"/></Button></div>)}</div>}
-    <Textarea aria-label="Message" placeholder="Ask Godspeed..." value={p.value} onChange={e=>p.onChange(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();if(!p.busy&&!uploading&&!listening&&!transcribing)p.onSend();}}} rows={p.compact?1:2} className={(p.compact?"min-h-14 ":"min-h-20 ")+"max-h-48 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 px-4 py-3"}/>
+    <Textarea aria-label="Message" placeholder="Ask Godspeed..." value={p.value} onChange={e=>p.onChange(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();if(!p.busy&&!uploading&&!listening&&!transcribing)p.onSend();}}} rows={p.compact?1:2} className={(p.compact?"min-h-14 ":"min-h-20 ")+"max-h-48 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-4 py-3"}/>
     {(listening||transcribing)&&<div role="status" className="px-4 pb-1 text-xs text-muted-foreground">{listening?'Listening… Click the microphone to finish.':'Turning your speech into text…'}</div>}
     <div className="flex flex-nowrap items-center gap-1 px-2 pb-2" data-chat-toolbar>
       <input ref={picker} type="file" multiple className="hidden" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.txt,.md,.csv,.json,.log,.xml,.html,.yaml,.yml" aria-label="Choose attachments" onChange={e=>{if(e.target.files)void addFiles(e.target.files);}}/>

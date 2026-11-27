@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { slug, readableSlug, hash, identityIds } from './records/store.mjs';
+import { slug, readableSlug, hash, identityIds, envelopeFields } from './records/store.mjs';
+import {COPY_TYPES} from './copy-types.mjs';
 import {nativeRows} from './native-personal.mjs';
 import {dueRows} from './native-due.mjs';
 import {assertAssistantRecord,assertAssistantLinks} from './assistant-mutations.mjs';
@@ -11,13 +12,31 @@ import {isTalkGate,talkArea,talkCalendar} from './routine-times.mjs';
 // The weekly check-in's own day and time, for Settings > Routine times (routine-times.mjs).
 const talkRow=(job,root)=>{if(!isTalkGate(job))return {};const calendar=talkCalendar(talkArea(root));return calendar?{calendar,talk:true}:{};};
 import {nativeCardRows} from './card-commands.mjs';
-import {momentDates} from './timestamps.mjs';
+import {momentDates,endsBeforeStart,END_BEFORE_START} from './timestamps.mjs';
+import {assertRealDate,assertRealClaimDates} from './real-dates.mjs';
+import {fieldList} from './fields.mjs';
+import {activityRows,tracked} from './activity.mjs';
 // A record with no name and no nickname (only written before 2.0.0-beta.14, issue 266) is not listed
 // among the people, though it stays on disk with whatever links to it.
 import {personNames} from './person-names.mjs';
 
+// A moment as read: the stored original with every correction laid over it by sequence, then id.
+// A correction's patch replaces the one before it key by key; the write check judges the same merge.
+const applyCorrections=(original,corrections)=>corrections.slice().sort((a,b)=>a.sequence-b.sequence||String(a.id).localeCompare(String(b.id))).reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original);
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
-export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
+// The columns each kind has in the app's schema (the screens were written
+// against notebook/ui/src/integrations/supabase/types.ts), parsed rather than
+// kept as a second list that would drift, for the write-filter check below
+// (issue 950). Kinds the schema does not know are judged by their rows instead.
+const schemaColumns = new Map();
+{
+  const text = fs.readFileSync(fileURLToPath(new URL('../ui/src/integrations/supabase/types.ts', import.meta.url)), 'utf8');
+  for (const kind of text.slice(0, text.indexOf('\n    Functions: {')).matchAll(/\n      ([a-z_0-9]+): \{\n        Row: \{\n([\s\S]*?)\n        \}/g))
+    schemaColumns.set(kind[1], new Set([...kind[2].matchAll(/^          ([a-z_0-9]+)\??:/gm)].map(column => column[1])));
+}
+// Tables of the unreachable pages Menerio shipped, whose files are gone from the tree but whose records stay.
+const deleted = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../data/deleted-source-inventory.json', import.meta.url)), 'utf8'));
+export const tables = new Set([...inventory.dependencies.flatMap(d => d.tables), ...deleted.tables].filter(t => t !== 'note-attachments'));
 for (const table of ['goals', 'jobs', 'job_receipts', 'settings', 'permissions', 'decisions', 'habits', 'journal', 'deadlines', 'comments', 'notifications', 'note_conversations', 'import_mappings','record_history','event_corrections','embeddings']) tables.add(table);
 for(const table of ['health_episodes','medications','health_observations','watch_topics','watch_observations','domain_watches','domain_watch_observations','outside_numbers','subscriptions','forecasts','work_items','coach_talks','connector_status','work_tool_receipts','approvals','command_receipts'])tables.add(table);
 // The Lexicon's records (Menerio's wiki pages, their sources and revisions)
@@ -36,7 +55,7 @@ tables.add('tracker_proposals');tables.add('tracker_deletions');
 // A meal held for its one question about an amount, and her answer (D-321 step 5).
 tables.add('food_questions');
 // What the notebook has already copied out of due/ and world/events/, per old file (due-copy.mjs).
-tables.add('due_copies');
+for(const type of COPY_TYPES)tables.add(type);
 const defaults = {
   // Postgres filled in status; an item saved without one would now be left
   // out by Actions' .neq("status", "dismissed"), since NULL <> x is not true.
@@ -66,9 +85,11 @@ function splitFilters(text){let depth=0,quoted=false,part='',items=[];for(let i=
 const unquote=value=>value.length>1&&value.startsWith('"')&&value.endsWith('"')?value.slice(1,-1).replace(/\\([\s\S])/g,'$1'):value;
 const list=value=>Array.isArray(value)?value:splitFilters(String(value).replace(/^\(([\s\S]*)\)$/,'$1')).map(unquote);
 const negate=result=>result===null?null:!result;
+const partPattern=/^(.+?)\.(not\.)?(eq|neq|is|in|like|ilike|gt|gte|lt|lte)\.([\s\S]*)$/;
+const nestedOps=['and','or','not.and','not.or'];
 function filterExpression(row,text){
-  for(const op of ['and','or','not.and','not.or'])if(text.startsWith(op+'(')&&text.endsWith(')')){const result=condition(row,[op.replace('not.',''),'',text.slice(op.length+1,-1)]);return op.startsWith('not.')?negate(result):result;}
-  const match=text.match(/^(.+?)\.(not\.)?(eq|neq|is|in|like|ilike|gt|gte|lt|lte)\.([\s\S]*)$/);if(!match)throw new Error('Invalid filter expression');
+  for(const op of nestedOps)if(text.startsWith(op+'(')&&text.endsWith(')')){const result=condition(row,[op.replace('not.',''),'',text.slice(op.length+1,-1)]);return op.startsWith('not.')?negate(result):result;}
+  const match=text.match(partPattern);if(!match)throw new Error('Invalid filter expression');
   const [,key,not,op,raw]=match,value=op==='in'?list(raw):/^(null|true|false)$/.test(raw)?JSON.parse(raw):unquote(raw);
   const result=condition(row,[op,key,value]);return not?negate(result):result;
 }
@@ -114,6 +135,7 @@ const comparisons=new Set(['eq','neq','in','contains','overlaps','gt','gte','lt'
 // reached condition() and failed as "object is not iterable", which an assistant is shown only as
 // "Something went wrong on the server" (the book's capture run, Finding 5).
 const filterExample='["eq","id","<id>"]';
+const operations=['select','insert','upsert','update','delete'];
 const filterHelp='Each filter is a list of three: an operator, a column and a value, for example '+filterExample;
 export function checkFilters(filters){
   if(!Array.isArray(filters))throw new Error('filters is a list. '+filterHelp+'.');
@@ -121,6 +143,82 @@ export function checkFilters(filters){
     if(!Array.isArray(f)||f.length<2||typeof f[0]!=='string'||typeof f[1]!=='string')throw new Error(filterHelp+'; got '+String(JSON.stringify(f)).slice(0,120)+'.');
     if(!['or','and','not','is'].includes(f[0])&&!comparisons.has(f[0]))throw new Error('Unsupported filter '+f[0]+'. '+filterHelp+'.');
     if(f[0]==='not'&&(!Array.isArray(f[2])||typeof f[2][0]!=='string'))throw new Error('A "not" filter is ["not","<column>",["<operator>",<value>]].');
+  }
+}
+// Issue 950: an update or delete whose filter could never pick a record used to
+// answer 200 with nothing changed, so a typo in a field name looked the same as
+// "no record matched". Refused here, before anything is read or written, the
+// way the no-filter refusal in execute() is: a clause with no value or an empty
+// or null one (null is the value "is" is for), or a field the kind does not
+// have. A field every stored record carries (records/store.mjs, envelopeFields)
+// needs no kind judgment, and a well-formed filter that simply matches nothing
+// still answers 200, and reads keep every filter they accept.
+const head=key=>key.replaceAll('->>','.').replaceAll('->','.').split('.')[0];
+const short=f=>String(JSON.stringify(f)).slice(0,120);
+// Kinds outside the old UI schema still have fields of their own. Keep these
+// beside the write check and derive them from the code that creates each kind,
+// so an empty kind is judged the same way as one that already has records.
+// Notes also expose two computed list fields and document skip_processing for
+// add-ons, although none of the three has to be stored on a fresh notebook.
+const declaredFields=new Map(Object.entries({
+  comments:['note_id','content','author'],
+  goals:['title','own_words','status','areas','progress','measure','lead','changes','kind','area','deadline','serves','depends_on','protected','importance','legacy_fields','legacy_log','legacy_source','legacy_content'],
+  note_conversations:['context_key','state','completed_request_ids'],
+  notes:['skip_processing','content_preview','content_length'],
+}).map(([kind,fields])=>[kind,new Set(fields)]));
+export function checkWriteFilters(table,filters,rows){
+  const columns=schemaColumns.get(table),declared=declaredFields.get(table),judged=!!columns||!!declared||rows.length>0;
+  // hasOwn, not `in`: the fallback would make every Object.prototype name
+  // (toString, constructor, ...) a "known" field on every kind.
+  const known=field=>envelopeFields.has(field)||Object.hasOwn(defaults[table]||{},field)||columns?.has(field)||declared?.has(field)||rows.some(r=>r&&Object.hasOwn(r,field));
+  // The fields an or() or and() text names, nested parts included. A part the
+  // PostgREST grammar does not read is refused here, and so is an empty and()
+  // or not.or(), which is true for every row: both are otherwise left to
+  // filterExpression and condition, which run per row, so on a kind with no
+  // records nothing would refuse them (issue 950).
+  const empty=f=>new Error('The filter '+short(f)+' has an empty value, so it cannot pick any record. '+filterHelp+'.');
+  // negated: inside a not, every empty nested part is refused, since the not
+  // turns the ones that match nothing into ones true for every row.
+  const walk=(f,text,negated,keys)=>{for(const part of splitFilters(String(text))){
+    const nested=nestedOps.find(op=>part.startsWith(op+'(')&&part.endsWith(')'));
+    if(nested){
+      const inner=part.slice(nested.length+1,-1);
+      if(!inner.trim()&&(negated||nested==='and'||nested==='not.or'))throw empty(f);
+      walk(f,inner,negated,keys);
+    }
+    else{const match=part.match(partPattern);if(!match)throw new Error('Invalid filter expression');
+      // An empty in-list matches nothing; negated, by not. or inside a not, it is true for every row.
+      if(match[3]==='in'&&(match[2]||negated)&&!list(match[4]).length)throw empty(f);
+      keys.add(match[1]);}}};
+  const keysOf=f=>{
+    if(f[0]!=='or'&&f[0]!=='and')return [f[1]];
+    const keys=new Set();walk(f,f[2],false,keys);return [...keys];
+  };
+  for(const f of filters){
+    if(f.length<3)throw new Error('The filter '+short(f)+' is missing its value. '+filterHelp+'.');
+    let keys;
+    if(f[0]==='not'){
+      keys=[f[1]];
+      // The clause is read per row by condition(); on a kind with no records
+      // nothing would read it, so it is judged here like condition judges it.
+      // A not inside the not is followed down: ["not",["eq","Ana"]].
+      let inner=f[2];
+      for(;;){
+        if(inner.length<2)throw new Error('The filter '+short(f)+' is missing its value. '+filterHelp+'.');
+        if(!['is','or','and','not'].includes(inner[0])&&!comparisons.has(inner[0]))throw new Error('Unsupported filter '+inner[0]+'. '+filterHelp+'.');
+        if(inner[0]!=='not')break;
+        if(!Array.isArray(inner[1])||typeof inner[1][0]!=='string')throw new Error('A "not" filter is ["not","<column>",["<operator>",<value>]].');
+        inner=inner[1];
+      }
+      if(inner[0]!=='is'&&(inner[1]===''||inner[1]===null))throw empty(f);
+      // A not over an empty in-list is true for every row.
+      if(inner[0]==='in'&&!list(inner[1]).length)throw empty(f);
+      // The text of an or/and inside a not gets the walk top-level text gets.
+      if(inner[0]==='or'||inner[0]==='and'){const set=new Set();walk(f,inner[1],true,set);keys.push(...set);}
+    }
+    else if(f[0]!=='is'&&(f[2]===''||f[2]===null))throw new Error('The filter '+short(f)+' has an empty value, so it cannot pick any record. '+filterHelp+'.');
+    if(!keys)keys=keysOf(f);
+    if(judged)for(const key of keys)if(!known(head(key)))throw new Error(table+' has no field "'+head(key)+'", so this filter cannot pick any record. '+filterHelp+'.');
   }
 }
 function condition(row, [op, key, value]) {
@@ -231,7 +329,7 @@ export class QueryService {
       if(type!=='moments'){memo.set(type,values);return values;}
       const byMoment=new Map();for(const c of ofType('event_corrections')){let l=byMoment.get(c.moment_id);if(!l)byMoment.set(c.moment_id,l=[]);l.push(c);}
       // Dates as ISO 8601, the shape the Menerio screens read (timestamps.mjs).
-      const corrected=values.map(original=>{const corrections=(byMoment.get(original.id)||[]).slice().sort((a,b)=>a.sequence-b.sequence||a.id.localeCompare(b.id));return momentDates(corrections.reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original));}).filter(r=>!r.removed_at);
+      const corrected=values.map(original=>momentDates(applyCorrections(original,byMoment.get(original.id)||[]))).filter(r=>!r.removed_at);
       memo.set(type,corrected);return corrected;
     };
     const get=(type,id)=>this.store.records.get(type+'/'+id)||ofType(type).find(r=>(r.former_ids||[]).includes(id))||ofType(type).find(r=>(r.aliases||[]).includes(id));
@@ -257,11 +355,7 @@ export class QueryService {
     });
     if(table==='conversation_messages')return list(table).map(r=>({...r,person_id:r.person_id||r.contact_id||null}));
     if(table==='activity_events'){
-      const tracked=new Set(['notes','contacts','claims','entities','collections','collection_items','moments','contact_groups','contact_group_memberships','action_items','contact_topics','profile_categories','fact_slots']);
-      const label={notes:'note',contacts:'person',claims:'fact',entities:'world entity',collections:'collection',collection_items:'collection item',moments:'event',contact_groups:'group',contact_group_memberships:'group membership',action_items:'action',contact_topics:'discussion topic',profile_categories:'profile category',fact_slots:'fact setting'};
-      const current=all().filter(r=>tracked.has(r.type)),prior=list('record_history').filter(r=>tracked.has(r.source_type)).map(r=>r.snapshot),versions=[...prior,...current];
-      const derived=versions.map(r=>({id:'activity-'+hash([r.uid,r.revision,r.updated_at]).slice(0,32),actor_id:'owner',user_id:'owner',item_id:r.id,item_type:label[r.type],action:r.removed_at?'delete':r.revision===1?'create':'update',created_at:r.updated_at,metadata:{source_uid:r.uid,revision:r.revision}}));
-      for(const r of list('event_corrections'))derived.push({id:'activity-'+r.uid,actor_id:'owner',user_id:'owner',item_id:r.moment_id,item_type:'event',action:r.patch.removed_at?'delete':'update',created_at:r.created_at,metadata:{correction:true}});
+      const derived=activityRows({records:all().filter(r=>tracked.has(r.type)),history:list('record_history'),corrections:list('event_corrections'),find:(type,id)=>this.store.records.get(type+'/'+id)});
       return [...new Map([...list(table),...derived].map(r=>[r.id,r])).values()];
     }
     if(table==='weekly_reviews')return list(table).map(r=>({...r,review_data:{...r.review_data,gaps:typeof r.review_data?.gaps==='string'?[r.review_data.gaps]:r.review_data?.gaps||[]}}));
@@ -356,6 +450,9 @@ export class QueryService {
   execute(request) {
     const { table, operation = 'select', values, filters = [], orders = [], selection = '*', options = {}, single = false, maybeSingle = false, expected = {}, baselines = {} } = request;
     if (!tables.has(table)) throw new Error('Unknown record domain ' + table);
+    // Any other name used to fall into the write branch below and rewrite every
+    // record of the kind (issue 956); refuse it before anything is read.
+    if (!operations.includes(operation)) throw new Error('Unknown operation ' + JSON.stringify(operation) + '. The supported operations are ' + operations.join(', ') + '.');
     // A writer that sends its record under a misnamed field (the assistant's
     // "data" instead of "values") used to crash on the record itself and
     // answer the server's generic sentence, with no hint how to fix the
@@ -375,7 +472,12 @@ export class QueryService {
     // the join. Until 6 October 2026 it was checked against the row itself,
     // where that column never is, so a person's Groups tab was always empty.
     const embeds=embedsOf(selection),names=new Set(embeds.map(e=>e.alias)),embedded=f=>{const key=String(f[1]??''),dot=key.indexOf('.');return dot>0&&names.has(key.slice(0,dot));};
-    let rows = this.rows(table).filter(row => filters.every(f => embedded(f) || condition(row, f) === true));
+    // An update or delete whose filter cannot pick any record is refused before
+    // anything is read or written (issue 950); embedded-column filters are left
+    // to the embedded-records refusal below.
+    const all = this.rows(table);
+    if (operation === 'update' || operation === 'delete') checkWriteFilters(table, filters.filter(f => !embedded(f)), all);
+    let rows = all.filter(row => filters.every(f => embedded(f) || condition(row, f) === true));
     if (operation !== 'select') {
       if(filters.some(embedded))throw new Error('Filters on embedded records narrow reads only');
       // A delete stamped with the version the screen saw, matched against no
@@ -401,6 +503,7 @@ export class QueryService {
       rows = holding(() => {
         // ignoreDuplicates is ON CONFLICT DO NOTHING: an existing link keeps its metadata.
         const inputs = operation === 'insert' || operation === 'upsert' ? (Array.isArray(values) ? values : [values]).filter(value => !(operation === 'upsert' && options.ignoreDuplicates && existing(value))) : rows;
+        const batchSequence = new Map();
         const changed = inputs.map(value => {
           const old = operation === 'insert' ? null : operation === 'upsert' ? existing(value) : table==='moments'?value:this.store.get(table, value.id);
           if (operation === 'insert' && value.id && this.store.get(table, value.id)) throw new Error('Record already exists');
@@ -423,11 +526,34 @@ export class QueryService {
           const given = operation === 'delete' ? { removed_at: new Date().toISOString() } : operation === 'update' ? values : value;
           // A moment's dates are kept as ISO 8601 whoever writes them (timestamps.mjs).
           const payload = table === 'moments' ? momentDates(given) : given;
+          if(table==='moments'&&operation!=='delete')for(const key of ['happened_at','happened_end'])if(key in given)assertRealDate(key,given[key],'datetime');
+          if(table==='event_corrections'&&operation!=='delete')for(const key of ['happened_at','happened_end'])if(given.patch&&key in given.patch)assertRealDate(key,given.patch[key],'datetime');
+          if(table==='claims'&&operation!=='delete')assertRealClaimDates({...old,...payload},attribute=>fieldList(this.store.root).canonical(attribute),key=>key in payload&&(!old||payload[key]!==old[key]));
+          if(table==='moments'&&operation!=='delete'&&('happened_at' in payload||'happened_end' in payload)){
+            // #1032: a moment never ends before it starts; a change of one date is judged against the other as stored.
+            const current=operation==='upsert'&&old?(this.rows('moments').find(r=>r.id===old.id)||old):old;
+            const merged={...(current||defaults.moments),...payload};
+            if(endsBeforeStart(merged.happened_at,merged.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
+          }
           if(table==='moments'&&old){
-            const correction=this.store.prepare('event_corrections',{moment_id:old.id,patch:payload,sequence:this.store.list('event_corrections').filter(c=>c.moment_id===old.id).length+1,references:[{type:'moments',id:old.id,uid:old.uid}]});
+            // Above every correction already on the moment, removed ones too: the reader applies them all.
+            const sequence=Math.max(batchSequence.get(old.id)||0,...this.store.ofType('event_corrections').filter(c=>c.moment_id===old.id).map(c=>Number(c.sequence)||0))+1;
+            batchSequence.set(old.id,sequence);
+            const correction=this.store.prepare('event_corrections',{moment_id:old.id,patch:payload,sequence,references:[{type:'moments',id:old.id,uid:old.uid}]});
             return correction;
           }
           const record = this.store.prepare(table, { ...(defaults[table] || {}), ...old, ...payload }, old);
+          if(table==='event_corrections'&&operation!=='delete'){
+            // The same rule for a correction, judged under its real id on the set the reader merges (applyCorrections).
+            const dated=p=>p&&('happened_at' in p||'happened_end' in p);
+            const touches=dated(record.patch)||dated(old?.patch)||(old&&(old.moment_id!==record.moment_id||old.sequence!==record.sequence));
+            const original=touches&&this.store.get('moments',record.moment_id);
+            if(original&&!original.removed_at){
+              const others=this.store.ofType('event_corrections').filter(c=>c.moment_id===original.id&&c.id!==record.id);
+              const merged=momentDates(applyCorrections(original,[...others,record]));
+              if(endsBeforeStart(merged.happened_at,merged.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
+            }
+          }
           // Opening a person records when (last_viewed_at); that is not a change to them, and is
           // let through for a person saved without a name before the rule. Until issue 266 it was
           // refused, and the first open of such a person ended in this error.
@@ -442,10 +568,22 @@ export class QueryService {
           if(table==='collection_items'){
             const collection=this.store.get('collections',record.collection_id);if(!collection)throw new Error('Collection missing');
             const primary=collection.field_schema?.find(f=>f.primary);record.title=primary?String(record.data?.[primary.key]??'Untitled'):record.title||'Untitled';
-            for(const field of collection.field_schema||[]){const value=record.data?.[field.key];if(value==null||value==='')continue;if(['number','currency'].includes(field.type)&&!Number.isFinite(Number(value)))throw new Error('Expected a number for '+field.label);if(field.type==='boolean'&&typeof value!=='boolean')throw new Error('Expected true or false for '+field.label);if(field.type==='select'&&field.options?.length&&!field.options.includes(value))throw new Error('Unknown choice for '+field.label);}
+            for(const field of collection.field_schema||[]){const value=record.data?.[field.key];if(value==null||value==='')continue;if(['number','currency'].includes(field.type)&&!Number.isFinite(Number(value)))throw new Error('Expected a number for '+field.label);if(field.type==='boolean'&&typeof value!=='boolean')throw new Error('Expected true or false for '+field.label);if(field.type==='select'&&field.options?.length&&!field.options.includes(value))throw new Error('Unknown choice for '+field.label);if((field.type==='date'||field.type==='datetime')&&value!==old?.data?.[field.key])assertRealDate(field.label===field.key?field.label:field.label+' ('+field.key+')',value,field.type);}
           }
           record.references = this.references(table, record); return record;
         });
+        if((table==='moments'||table==='event_corrections')&&operation!=='delete'){
+          // The whole request is judged as the reader will merge it: stored corrections plus this batch's, a record of the same id replacing the stored one.
+          for(const id of new Set(changed.map(c=>c.moment_id))){
+            const original=this.store.get('moments',id);
+            if(!original||original.removed_at)continue;
+            const mine=changed.filter(c=>c.moment_id===id),mineIds=new Set(mine.map(c=>c.id));
+            if(!mine.some(c=>c.patch&&('happened_at' in c.patch||'happened_end' in c.patch)))continue;
+            const others=this.store.ofType('event_corrections').filter(c=>c.moment_id===id&&!mineIds.has(c.id));
+            const merged=momentDates(applyCorrections(original,[...others,...mine]));
+            if(endsBeforeStart(merged.happened_at,merged.happened_end))throw new Error(END_BEFORE_START+'. Choose an end date on or after the start date, or leave it empty.');
+          }
+        }
         const gone=operation==='delete'&&table==='contacts'?this.personBelongings(changed.map(c=>c.id)):operation==='delete'&&table==='contact_group_memberships'?this.membershipTwins(changed):[];
         this.store.commit([...changed,...gone]); return table==='moments'?this.rows(table).filter(r=>changed.some(c=>c.id===r.id||c.moment_id===r.id)):changed;
       });

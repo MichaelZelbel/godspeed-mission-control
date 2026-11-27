@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, createRef } from "react";
+import { type MouseEvent, useState, useEffect, useCallback, useRef, useId, createRef, useLayoutEffect } from "react";
 import { useEditor, useEditorState, EditorContent } from "@tiptap/react";
 import { Markdown } from "tiptap-markdown";
 import StarterKit from "@tiptap/starter-kit";
@@ -33,7 +33,7 @@ import { useGitHubConnection, useGitHubSyncExport, useSyncLogForNote } from "@/h
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import { ExternalNotePanel } from "./ExternalNotePanel";
 import { WebClipPreview } from "./WebClipPreview";
-import { ForwardToAppDialog } from "./ForwardToAppDialog";
+import { ForwardToAppDialog, useActiveConnectedApps } from "./ForwardToAppDialog";
 import { WikilinkAutocomplete } from "./WikilinkAutocomplete";
 import { EditorBubbleMenu } from "./EditorBubbleMenu";
 import { Separator } from "@/components/ui/separator";
@@ -431,6 +431,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: connectedApps = [] } = useActiveConnectedApps();
   const { data: ghConn } = useGitHubConnection();
   const ghSync = useGitHubSyncExport();
   const { data: syncLog } = useSyncLogForNote(note.id);
@@ -490,6 +491,10 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const [duplicateTarget, setDuplicateTarget] = useState<Note | null>(null);
   const [pendingDuplicateTitle, setPendingDuplicateTitle] = useState("");
   const [interactionGroupId, setInteractionGroupId] = useState<string | null>(null);
+  const interactionFieldId = useId();
+  const titleFieldId = useId();
+  const textLabelId = useId();
+  const sourceFieldId = useId();
   const [interactionType, setInteractionType] = useState("meeting");
   const [interactionSummary, setInteractionSummary] = useState(note.title);
   // Wikilink autocomplete state
@@ -503,7 +508,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
 
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
-  const titleInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const lastLocalContentRef = useRef(restored.content ?? note.content ?? "");
   const pendingSaveContentRef = useRef<string | null>(restored.content ?? null);
   const lastLocalTitleRef = useRef(restored.title ?? note.title ?? "");
@@ -753,7 +758,8 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       TaskListShortcut,
     ],
     editorProps: {
-      attributes: { "aria-label": "Note text" },
+      // The note's text box is named, like its title box (#742).
+      attributes: { role: "textbox", "aria-multiline": "true", "aria-labelledby": textLabelId },
       handleClick: (_view, _pos, event) => {
         const target = event.target as HTMLElement;
         const wikilinkEl = target.closest?.(".wikilink-node") as HTMLElement | null;
@@ -1185,6 +1191,25 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       .maybeSingle();
     return data as unknown as Note | null;
   };
+
+  // Size the title field to its wrapped text (also when the value is set from
+  // outside, or the panel is resized), so no line of the title is hidden.
+  const fitTitleHeight = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+  useLayoutEffect(() => {
+    fitTitleHeight(titleInputRef.current);
+    const el = titleInputRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let width = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth !== width) { width = el.clientWidth; fitTitleHeight(el); }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [title]);
 
   const handleTitleChange = (val: string) => {
     setTitle(val);
@@ -1741,9 +1766,11 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                     <Share2 className="mr-2 h-4 w-4" /> Share publicly
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => setShowForwardDialog(true)}>
-                  <Send className="mr-2 h-4 w-4" /> Send to app
-                </DropdownMenuItem>
+                {connectedApps.length > 0 && (
+                  <DropdownMenuItem onClick={() => setShowForwardDialog(true)}>
+                    <Send className="mr-2 h-4 w-4" /> Send to app
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           }
@@ -1829,10 +1856,15 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             beside the title it took the room the title needed, so on a narrow
             window the end of the title scrolled out of sight behind it. */}
         <div className="mb-4">
-          <input aria-label="Note title"
+          <label htmlFor={titleFieldId} className="block text-xs font-medium text-muted-foreground">Note title</label>
+          <textarea id={titleFieldId}
             ref={titleInputRef}
+            rows={1}
             value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
+            // A long title wraps onto further lines and the field grows to
+            // show all of it, instead of cutting it off at the panel's edge.
+            onInput={(e) => fitTitleHeight(e.currentTarget)}
+            onChange={(e) => handleTitleChange(e.target.value.replace(/[\r\n]+/g, " "))}
             onKeyDown={(e) => {
               // Enter ends the title and goes on in the note's text, as a
               // person expects; without this the next words joined the title
@@ -1848,7 +1880,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
               ed.view.focus();
             }}
             placeholder="Untitled"
-            className="w-full min-w-0 text-2xl font-bold font-display bg-transparent border-none outline-none placeholder:text-muted-foreground/40"
+            className="block w-full min-w-0 resize-none overflow-hidden break-words [overflow-wrap:anywhere] text-2xl font-bold font-display bg-transparent border-none outline-none placeholder:text-muted-foreground/40"
             disabled={note.is_trashed || note.is_external}
           />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 empty:hidden">
@@ -1888,7 +1920,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </div>
           )}
         {sourceMode ? (
-          <textarea aria-label="Markdown source"
+          <>
+          <label htmlFor={sourceFieldId} className="block text-xs font-medium text-muted-foreground">Markdown source</label>
+          <textarea id={sourceFieldId}
             value={sourceText}
             onChange={(e) => {
               setSourceText(e.target.value);
@@ -1905,8 +1939,10 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             placeholder="Markdown source…"
             disabled={note.is_trashed || note.is_external}
           />
+          </>
         ) : (
           <>
+            <label id={textLabelId} className="block text-xs font-medium text-muted-foreground" onClick={() => editor?.view.dom.focus()}>Note text</label>
             <EditorContent editor={editor} className="tiptap-editor" />
             {editor && !isMobile && !note.is_trashed && !note.is_external && (
               <EditorBubbleMenu
@@ -2016,7 +2052,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
                   type="button"
                   className="flex items-center gap-1 text-warning hover:underline"
                   title="This note changed on GitHub and here. Saves to GitHub wait until you choose a version."
-                  onClick={() => navigate("/dashboard/settings?tab=github")}
+                  onClick={() => navigate("/dashboard/settings#review-conflicts")}
                 >
                   <AlertCircle className="h-2.5 w-2.5" />
                   Sync conflict
@@ -2104,9 +2140,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Type</Label>
+            <Label htmlFor={`${interactionFieldId}-type`} onClick={(event: MouseEvent) => { event.preventDefault(); document.getElementById(`${interactionFieldId}-type`)?.focus(); }}>Type</Label>
             <Select value={interactionType} onValueChange={setInteractionType}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id={`${interactionFieldId}-type`}><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="chat">Chat</SelectItem>
                 <SelectItem value="meeting">Meeting</SelectItem>
@@ -2115,8 +2151,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Summary</Label>
+            <Label htmlFor={`${interactionFieldId}-summary`}>Summary</Label>
             <input
+              id={`${interactionFieldId}-summary`}
               value={interactionSummary}
               onChange={(event) => setInteractionSummary(event.target.value)}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"

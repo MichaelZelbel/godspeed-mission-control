@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { UserCircle, ArrowRight, Heart } from "lucide-react";
+import { UserCircle, ArrowRight } from "lucide-react";
 import { personLabel, personNames } from "@/components/timeline/people";
 import { showDate } from "@/lib/local-date";
 
@@ -46,7 +46,7 @@ export function RecentPeopleCard() {
             onClick={() => navigate("/dashboard/people")}
             className="w-full rounded-md px-2 py-3 text-left text-sm text-muted-foreground transition-colors hover:bg-accent"
           >
-            <Heart className="mb-1 inline h-4 w-4 text-primary" /> No one here yet. Add your first
+            No one here yet. Add your first
             person.
           </button>
         ) : (
@@ -58,9 +58,9 @@ export function RecentPeopleCard() {
                 className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
               >
                 <UserCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="truncate font-medium">{personLabel(person)}</span>
+                <span className="min-w-0 break-words font-medium">{personLabel(person)}</span>
                 {person.relationship && (
-                  <span className="truncate text-xs text-muted-foreground">{person.relationship}</span>
+                  <span className="min-w-0 break-words text-xs text-muted-foreground">{person.relationship}</span>
                 )}
                 {person.updated_at && (
                   <span className="ml-auto whitespace-nowrap text-[10px] text-muted-foreground">

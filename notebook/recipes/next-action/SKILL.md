@@ -115,7 +115,7 @@ If one of them says it is not installed, say so in the record and carry on with 
    written as a hold on what the line touches, never as a line in `decisions.md`:
    `mc-holds hold --subject <a slug on the line's TOUCHES> --steps "<the kind of step, one word>"
    --stance declined --words "<their words>"`. "Not yet, until X" is `--stance postponed` with
-   `--until <X's claim file in world/claims/>` (write that claim first if there is none), or
+   `--until <X's claim, by the name `mc-holds list` gives it>` (write that claim first if there is none), or
    `--to <the day>`. A held step stays off every card until the hold ends, and comes back then by
    itself. A line that touches nothing has nothing to hold on: cancel its item with their words
    (`mc-work cancel <id> --why "<their words>"`). A yes that reverses an earlier no or not yet ends
@@ -347,7 +347,7 @@ MAKE item for the runner (Step 4), and joins the ship list the day it is ready.
 
     ### <n>. <one line a stranger understands: what changes where>
     GOAL: <id>
-    TOUCHES: <the slugs of the world entities this move is about (world/entities/<slug>.md),
+    TOUCHES: <the slugs of the world entities this move is about (a person or thing in the notebook),
              comma-separated, or none>
     BET: <the weekly number now> -> <what you expect it to be seven days after this goes live>
     AIMS AT: <the LIMIT from the goal's research brief (a strategy's or project's without one:

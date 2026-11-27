@@ -43,6 +43,8 @@ vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
 
 class NoResize { observe() {} unobserve() {} disconnect() {} }
 globalThis.ResizeObserver ??= NoResize as any;
+Element.prototype.scrollIntoView ??= () => {};
+const ada = { id: "person-ada", name: "Ada Fictional", relationship: null };
 
 // The notebook's own answers, from one state: what /api/status says, and what Settings, Your AI
 // changes when it removes or connects the AI (server/main.mjs). The reconnect answers the way the
@@ -72,7 +74,7 @@ function renderDialog() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } } });
   render(
     <QueryClientProvider client={client}>
-      <AddEventDialog people={[]} onCreated={() => {}} open onOpenChange={() => {}} />
+      <AddEventDialog people={[ada]} onCreated={() => {}} open onOpenChange={() => {}} />
     </QueryClientProvider>,
   );
   return client;
@@ -80,6 +82,8 @@ function renderDialog() {
 
 async function saveMoment() {
   fireEvent.change(await screen.findByPlaceholderText("Short title for this moment", undefined, WAIT), { target: { value: "A saved moment" } });
+  fireEvent.click(screen.getByRole("combobox", { name: "People" }));
+  fireEvent.click(await screen.findByRole("option", { name: ada.name }, WAIT));
   fireEvent.click(screen.getByRole("button", { name: "Create Moment" }));
   await waitFor(() => expect(toast).toHaveBeenCalled(), WAIT);
   expect(state.inserted).toContain("moments");

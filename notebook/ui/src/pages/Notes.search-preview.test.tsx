@@ -20,7 +20,7 @@ vi.mock('@/components/chat/GlobalAIChatFAB',()=>({GlobalAIChatFAB:()=>null}));
 vi.mock('@/components/notes/NoteEditor',()=>({NoteEditor:({note}:any)=><div data-testid="editor">{note.content}</div>}));
 vi.mock('@/components/notes/NoteList',()=>({NoteList:({notes,onSelect}:any)=><div>{notes.map((n:any)=><button key={n.id} onClick={()=>onSelect(n.id)}>{n.title}</button>)}</div>}));
 vi.mock('@/components/ui/sidebar',()=>({useSidebar:()=>({setOpen:vi.fn()})}));
-vi.mock('@/hooks/use-mobile',()=>({useIsMobile:()=>false}));
+vi.mock('@/hooks/use-mobile',()=>({useIsMobile:()=>false,usePanesTogether:()=>true}));
 vi.mock('@/lib/flags',()=>({OFFLINE_CORE:false}));
 vi.mock('@/integrations/supabase/client',()=>({supabase:{from:()=>{const q:any={select:()=>q,order:()=>q,eq:()=>q,then:(resolve:any)=>Promise.resolve({data:[],error:null}).then(resolve)};return q;}}}));
 afterEach(()=>{cleanup();state.full=null;});

@@ -6,9 +6,10 @@ import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {MemoryRouter} from 'react-router-dom';
 import {ChatConnectionEmptyState,chatAIState,useChatOptions,stateSaid} from './ChatConnectionEmptyState';
 import {AI_CONNECTION_UNREADABLE_STATUS} from '../../../../core/no-ai.mjs';
+import {MODEL_LIST_RETRY,MODEL_LIST_UNAVAILABLE} from '../../local/chat-options.mjs';
 import { WAIT } from "@/test/wait-limits";
 
-afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+afterEach(()=>{cleanup();vi.unstubAllGlobals();try{window.localStorage.clear();}catch{}});
 
 const surfaces=['floating chat','note chat','collection chat','pop-out chat'];
 function show(options:unknown){
@@ -97,4 +98,77 @@ it('rides the check flag on the first read only, and gets it back when that read
   expect(calls[calls.length-1]).toContain('check=1');
   await client.refetchQueries({queryKey:['chat-options']});
   expect(calls[calls.length-1]).not.toContain('check=1');
+});
+
+// #963: the flag behind #822 lived in module memory, so a chat in one tab never let a Dashboard
+// arrival in another tab ask for a check: each tab had its own copy of the flag. Two module
+// instances of this module sharing one localStorage stand in for two tabs. The test above is the
+// same-context control: there, the arrival already asked for a check.
+it('lets a chat read in one tab make a Dashboard arrival in another tab ask for a check',async()=>{
+  const calls:string[]=[];
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
+    calls.push(String(url));
+    return new Response(JSON.stringify({connected:true,usable:true,availability:'ready'}),{status:200,headers:{'Content-Type':'application/json'}});
+  }));
+  // Tab A: a chat surface reads the shared state, which is what lets the next arrival confirm afresh.
+  const mod1=await import('./ChatConnectionEmptyState');
+  const {default:React}=await import('react');
+  const {render}=await import('@testing-library/react');
+  function Chat(){mod1.useChatOptions();return null;}
+  render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><Chat/></QueryClientProvider>);
+  await waitFor(()=>expect(calls.length).toBeGreaterThan(0),WAIT);
+  expect(calls[0]).not.toContain('check=1');
+  cleanup();
+
+  // Tab B: a fresh JS context, the same localStorage. Its Dashboard arrival must still ask for a check.
+  vi.resetModules();
+  const mod2=await import('./ChatConnectionEmptyState');
+  const React2=(await import('react')).default;
+  const lib2=await import('@testing-library/react');
+  function Probe(){mod2.useChatOptions({confirmOnMount:true});return null;}
+  lib2.render(React2.createElement(QueryClientProvider as any,{client:new QueryClient({defaultOptions:{queries:{retry:false}}})},React2.createElement(Probe)));
+  await waitFor(()=>expect(calls.length).toBeGreaterThan(1),WAIT);
+  expect(calls[calls.length-1]).toContain('check=1');
+});
+
+// #963 review: with the browser denying storage, the same tab keeps the flag in memory, as on main.
+it('still asks for a check on a Dashboard arrival after a chat read in the same tab when storage is denied',async()=>{
+  const calls:string[]=[];
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
+    calls.push(String(url));
+    return new Response(JSON.stringify({connected:true,usable:true,availability:'ready'}),{status:200,headers:{'Content-Type':'application/json'}});
+  }));
+  const denied=()=>{throw new DOMException('denied','SecurityError');};
+  vi.stubGlobal('localStorage',{getItem:denied,setItem:denied,removeItem:denied,clear:denied});
+  vi.resetModules();
+  const mod=await import('./ChatConnectionEmptyState');
+  const React=(await import('react')).default;
+  const lib=await import('@testing-library/react');
+  const client=()=>new QueryClient({defaultOptions:{queries:{retry:false}}});
+  function Chat(){mod.useChatOptions();return null;}
+  function Dash(){mod.useChatOptions({confirmOnMount:true});return null;}
+  lib.render(React.createElement(QueryClientProvider as any,{client:client()},React.createElement(Chat)));
+  await waitFor(()=>expect(calls.length).toBeGreaterThan(0),WAIT);
+  expect(calls[0]).not.toContain('check=1');
+  cleanup();
+  lib.render(React.createElement(QueryClientProvider as any,{client:client()},React.createElement(Dash)));
+  await waitFor(()=>expect(calls.length).toBeGreaterThan(1),WAIT);
+  expect(calls[calls.length-1]).toContain('check=1');
+});
+
+describe('a model list that cannot load (#1124)',()=>{
+  const fail=()=>vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({error:'no'}),{status:500,headers:{'Content-Type':'application/json'}})));
+  const mount=(ready:React.ReactNode)=>render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter><ChatConnectionEmptyState ready={ready}/></MemoryRouter></QueryClientProvider>);
+  it('says so in the chat notice without claiming a connection',async()=>{
+    fail();mount(<p>Ordinary ready state</p>);
+    expect(await screen.findByText(MODEL_LIST_UNAVAILABLE,undefined,WAIT)).toBeInTheDocument();
+    expect(screen.getByText(MODEL_LIST_RETRY)).toBeInTheDocument();
+    expect(document.querySelector('[data-chat-ai-state="models-unavailable"]')).not.toBeNull();
+  });
+  it('keeps an open conversation quiet, as before',async()=>{
+    fail();mount(null);
+    await new Promise(r=>setTimeout(r,200));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText('The list of AI models could not be loaded.')).toBeNull();
+  });
 });

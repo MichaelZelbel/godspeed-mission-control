@@ -121,7 +121,7 @@ export function ActivityFeed({ limit = 5, showViewAll = true }: ActivityFeedProp
                     <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-foreground">{formatAction(ev.action, ev.item_type, ev.metadata)}</p>
+                    <p className="text-sm text-foreground [overflow-wrap:anywhere]">{formatAction(ev.action, ev.item_type, ev.metadata, ev.item_name)}</p>
                     <p className="text-[11px] text-muted-foreground">{timeAgo(ev.created_at)}</p>
                   </div>
                 </li>

@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import {Store} from '../core/records/store.mjs';
@@ -52,16 +53,22 @@ test('all chat surfaces preserve a saved brief without adding a Charm Challenge'
  assert.equal(calls,0);
 });
 
-test('a brief request without a saved briefing keeps ordinary chat behavior',async t=>{
+test('a brief request without a saved briefing says plainly none is saved and offers one',async t=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-new-brief-chat-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
  const calls=[],provider=async input=>{calls.push(input.kind);return {reply:'The ordinary chat answer'};};
  const domains=new Domains(query,{provider});
  for(const [name,input] of chatInputs(store)){
-  const result=await domains.invoke(name,{...input,request_id:'brief-first-'+name,message:"today's brief"});
-  assert.equal(result.reply,'The ordinary chat answer');
+  for(const message of ["today's brief",'show me my morning briefing please','brief']){
+   const reply=(await domains.invoke(name,{...input,request_id:'brief-first-'+name+message,message})).reply;
+   assert.match(reply,/No morning briefing has been saved yet this morning/);assert.match(reply,/make one/);
+  }
  }
+ assert.match((await domains.invoke('conversation-chat',{conversation_id:'notebook:de',message:'Zeig mir das heutige Briefing, bitte.'})).reply,/noch kein Morgenbriefing gespeichert/);
  assert.equal(store.list('notes').filter(note=>note.source_app==='morning-brief').length,0);
- assert.deepEqual(calls,CHAT_SURFACES);
+ assert.deepEqual(calls,[]);
+ // Other requests stay ordinary chat.
+ assert.equal((await domains.invoke('conversation-chat',{conversation_id:'notebook:other',message:'what is on my plate?'})).reply,'The ordinary chat answer');
+ assert.ok(calls.includes('conversation-chat'));
 });
 
 test('candidate Telegram reports a definitely incomplete long saved brief',async t=>{
@@ -136,4 +143,33 @@ test('both notebook chat endpoints return the same saved brief',async t=>{
  const browser=await post('/api/browser-chat',{message:'mein Morgenbriefing',request_id:'01234567-1234-4234-8234-012345678902'});
  assert.equal(standard.data.reply,saved);assert.equal(browser.reply,saved);assert.equal(calls,0);
  assert.equal(service.query.rows('conversation_messages').filter(message=>message.role==='assistant'&&message.content===saved).length,2);
+});
+
+test('with the AI connected only to the notebook, the chat asked twice shows the saved brief word for word (#1039)',async t=>{
+ let aiRequests=0;
+ const endpoint=http.createServer(async(req,res)=>{for await(const chunk of req);aiRequests++;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({choices:[{message:{content:'Connected.'}}]}));});
+ await new Promise(resolve=>endpoint.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>endpoint.close(resolve)));
+ const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL','GODSPEED_MODEL_KEY','GODSPEED_MODEL'],env=Object.fromEntries(names.map(n=>[n,process.env[n]]));
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-saved-brief-settings-only-')),home=path.join(dir,'hermes-home'),assistant=path.join(dir,'assistant.json');
+ for(const n of names)delete process.env[n];
+ fs.mkdirSync(home,{recursive:true});fs.writeFileSync(assistant,JSON.stringify({verified:true,executable:'hermes',home}));process.env.GODSPEED_ORIGINAL_RUNTIME='on';process.env.GODSPEED_ASSISTANT_CONFIG=assistant;
+ const service=await createService({root:path.join(dir,'workspace'),port:0});
+ t.after(async()=>{await service.close();for(const n of names)if(env[n]===undefined)delete process.env[n];else process.env[n]=env[n];fs.rmSync(dir,{recursive:true,force:true});});
+ const origin='http://127.0.0.1:'+service.address.port,json={'Content-Type':'application/json'};
+ const connected=await fetch(origin+'/api/provider',{method:'POST',headers:json,body:JSON.stringify({url:'http://127.0.0.1:'+endpoint.address().port,key:'fictional-key',model:'fictional-model',routines:false})});
+ assert.equal(connected.status,200);
+ const ask=async message=>{const response=await fetch(origin+'/api/functions/conversation-chat',{method:'POST',headers:json,body:JSON.stringify({request_id:crypto.randomUUID(),conversation_id:'notebook:settings-only',message})});return [response,await response.json()];};
+ const [none,noneBody]=await ask("today's brief");
+ assert.equal(none.status,400);assert.match(noneBody.error,/connected only to the notebook/);
+ service.store.save('notes',{title:'Source',content:'REFUSED-1039 sentence from the source.'});
+ const content='Grounded 1039 briefing.\n\nNext: Work on the saved 1039 goal today.';saveBrief(service.store,content);
+ const before=aiRequests;
+ for(const message of ["today's brief",'my brief again']){
+  const [response,body]=await ask(message);
+  assert.equal(response.status,200);assert.equal(body.data.reply,content);assert.doesNotMatch(body.data.reply,/REFUSED-1039/);
+ }
+ const panel=await fetch(origin+'/api/functions/conversation-chat',{method:'POST',headers:json,body:JSON.stringify({request_id:crypto.randomUUID(),conversation_id:'notebook:settings-only-panel',messages:[{role:'user',content:"today's brief"}]})});
+ assert.equal(panel.status,200);assert.equal((await panel.json()).data.reply,content);
+ assert.equal(aiRequests,before);
+ assert.equal(service.query.rows('notes').filter(note=>note.source_app==='morning-brief').length,1);
 });
