@@ -400,6 +400,9 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
       const notesCreated: ChatMessage["notesCreated"] = Array.isArray(data.notes_created)
         ? data.notes_created
         : undefined;
+      const interimMsgs: ChatMessage[] = (Array.isArray(data.interim) ? data.interim : [])
+        .filter((text: unknown): text is string => typeof text === "string" && text !== "")
+        .map((content: string) => ({ role: "assistant", content }));
       const assistantMsg: ChatMessage = {
         role: "assistant",
         content: data.reply || "",
@@ -410,7 +413,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
       delete answeredUser.lastFailure;
       const updated: PersistedChatState = {
         ...nextState,
-        messages: [...nextState.messages.slice(0, at), answeredUser, assistantMsg, ...nextState.messages.slice(at + 1)],
+        messages: [...nextState.messages.slice(0, at), answeredUser, ...interimMsgs, assistantMsg, ...nextState.messages.slice(at + 1)],
       };
 
       // If a note-modifying tool ran, refresh the editor live + invalidate queries.

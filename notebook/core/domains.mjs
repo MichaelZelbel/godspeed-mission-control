@@ -391,7 +391,7 @@ export class Domains {
       // A record with the wrong opening, or none for the start's day, is corrected to the prepared one,
       // and the talk opens from it without another call (issues #495, #971).
       let corrected;try{corrected=problem&&coachTalkCorrectedOpening(this.store,start);}catch(error){judged.drop();throw error;}
-      if(corrected){result={...result,reply:corrected};problem=null;}
+      if(corrected){result={...result,reply:corrected,interim:[]};problem=null;}
       // A reply that misses the opening its talk record rightly holds is asked for once more, with the
       // guard's reason; a second miss opens the talk from the record (issue #489).
       else if(problem&&coachTalkRecordOpening(this.store,start)){
@@ -399,12 +399,14 @@ export class Domains {
         const again=await ask(coachTalkRetryMessage(input.message,problem)).catch(error=>{if(input.signal?.aborted){judged.drop();throw error;}return {reply:''};});
         problem=coachTalkRecordProblem(this.store,start,again.reply,{requireShown:false});
         if(!problem)result=again;
-        else{const opening=coachTalkRecordOpening(this.store,start);if(opening){result={...again,reply:opening};problem=null;}}
+        else{const opening=coachTalkRecordOpening(this.store,start);if(opening){result={...again,reply:opening,interim:[]};problem=null;}}
       }
       // The assistant's wrong-day record must not stay open beside the start's own talk (issue #984).
       if(start){try{removeStrayCoachTalks(this.store,start,talkDaysBefore);}catch(error){judged.drop();throw error;}}
       if(problem){judged.drop();throw Error(problem);}
       if(start?.opening)judged.drop();else result.reply=await judged.end(result.reply);
+      // What the assistant said on the way to its answer is kept before the answer, in order.
+      for(const content of result.interim||[])await this.store.saveAsync('conversation_messages',{role:'assistant',content,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'hermes'},undefined,{signal:input.signal});
       await this.store.saveAsync('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'hermes'},undefined,{signal:input.signal});
       if(start){coachTalkRecordShownOpening(this.store,start,result.reply);markCoachTalkShown(this.store,start);}
       return result;
