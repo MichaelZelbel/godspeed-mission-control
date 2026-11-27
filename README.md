@@ -35,7 +35,6 @@ Godspeed carries the Workouts add-on. With Hevy Pro, open **Settings** > **Worko
 Finishes the first day.
 
 - The first-day helper only says the first piece of work is ready after it has actually checked it, and it keeps a usable next step even when the AI formats the brief differently.
-- Updating over the first edition on Windows leaves a single "Godspeed Mission Control" entry in Apps. A restorable copy of the old entry is kept in the setup log folder, and choosing "keep both" removes nothing.
 
 ## New in 2.0.0-beta.34
 
