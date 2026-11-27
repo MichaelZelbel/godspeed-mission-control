@@ -405,6 +405,8 @@ export class Domains {
       if(start){try{removeStrayCoachTalks(this.store,start,talkDaysBefore);}catch(error){judged.drop();throw error;}}
       if(problem){judged.drop();throw Error(problem);}
       if(start?.opening)judged.drop();else result.reply=await judged.end(result.reply);
+      // What the assistant said on the way to its answer is kept before the answer, in order.
+      for(const content of result.interim||[])await this.store.saveAsync('conversation_messages',{role:'assistant',content,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'hermes'},undefined,{signal:input.signal});
       await this.store.saveAsync('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'hermes'},undefined,{signal:input.signal});
       if(start){coachTalkRecordShownOpening(this.store,start,result.reply);markCoachTalkShown(this.store,start);}
       return result;

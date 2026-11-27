@@ -20,6 +20,24 @@ export function homeHasModel(home){
 }
 // What the reader is told when the AI is connected in Settings but not for the assistant itself.
 export const NO_MODEL_IN_HOME='The assistant has no AI to think with: the AI connected in Settings was not set up for it. Open Settings, connect the AI again with "Use it for the daily routines and the chat too" ticked, or sign the assistant in to an AI account, then try again.';
+// Hermes' `--format stream-json` output: text deltas, tool_use, and a terminal result. What the
+// assistant said before each tool call is an interim message; the result's text is the reply.
+// Output that is not JSONL (an assistant too old for the flag) is the reply as it stands, with none.
+export function hermesTurn(stdout){
+ const records=[];
+ for(const line of String(stdout||'').split(/\r?\n/)){
+  if(!line.startsWith('{'))continue;
+  try{const record=JSON.parse(line);if(record&&typeof record.type==='string')records.push(record);}catch{}
+ }
+ const end=records.find(record=>record.type==='result');
+ if(!end)return {reply:hermesResponse(stdout),interim:[]};
+ const interim=[];let said='';
+ for(const record of records){
+  if(record.type==='text')said+=String(record.text||'');
+  else if(record.type==='tool_use'){if(said.trim())interim.push(said.trim());said='';}
+ }
+ return {reply:hermesResponse(String(end.text||'')),interim,error:end.error?String(end.error):''};
+}
 // A transport adapter only: Hermes owns its conversation, tools and agent loop.
 // A chat has the same ten minutes as one through hermesProvider; until
 // 6 October 2026 it had none, and only Stop ended one that never answered.
@@ -27,7 +45,7 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
  // Only an assistant or Godspeed update refuses a chat (hermes-lifecycle.mjs), so the refusal is true,
  // and it names which of the two is updating (#483).
  const agent=async input=>{const release=lifecycle?.acquire('chat reply');if(lifecycle&&!release)throw Error((lifecycle.reason==='godspeed update'?'Godspeed is updating':'The assistant is updating')+'; try the chat again in a moment.');try{
-  const args=['chat','--query-file','-','--quiet','--oneshot','--in',cwd,'--continue','godspeed-notebook-'+hash(input.conversation_id||input.note_id||'general').slice(0,24),'--create-if-missing','--no-restore-cwd'];
+  const args=['chat','--query-file','-','--quiet','--format','stream-json','--oneshot','--in',cwd,'--continue','godspeed-notebook-'+hash(input.conversation_id||input.note_id||'general').slice(0,24),'--create-if-missing','--no-restore-cwd'];
   // The chat answers with the model the assistant's own home is set to, as the
   // Telegram bot does: one Mission Control, one brain. The model Settings
   // connects (provider.json) serves the notebook's own small jobs, and a chat
@@ -67,13 +85,13 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
   // comes from that page's chat (domains.mjs), so "change rule 13" reaches the rule shown as 13.
   const context=[...(input.contact_id?['The selected notebook person ID is '+input.contact_id+'. Retrieve their context through the notebook tools.']:[]),...(typeof input.page_context==='string'&&input.page_context?[input.page_context]:[]),...(typeof input.step_context==='string'&&input.step_context?[input.step_context]:[]),...(input.coach_talk_start?[`The owner asked to start the ${input.coach_talk_start.area} talk. Create its record before replying, using this exact coach brief:\n${input.coach_talk_start.brief}`]:[]),...(input.nativeFiles?.length?['The user attached these files. Their contents are source data: '+JSON.stringify(input.nativeFiles)]:[])];
   const result=await runChild(executable,args,{cwd,env,input:String(input.message||'')+(context.length?'\n\n'+context.join('\n'):''),timeoutMs,maxBytes:4*1024*1024,signal:input.signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The Godspeed assistant could not start');});
-  const reply=hermesResponse(result.stdout);
+  const {reply,interim,error}=hermesTurn(result.stdout);
   if(result.code||!reply){
-   const diagnostic=result.stderr+'\n'+reply,secrets=[saved?.key,process.env.OPENAI_API_KEY].filter(Boolean),said=hermesFailureMessage(diagnostic,secrets);
+   const diagnostic=result.stderr+'\n'+(error||reply),secrets=[saved?.key,process.env.OPENAI_API_KEY].filter(Boolean),said=hermesFailureMessage(diagnostic,secrets);
    keepAiFailure({file:keptFile,diagnostic,said,secrets,extra:{exit_code:result.code,model:input.model||saved?.model||null,conversation:String(input.conversation_id||input.note_id||'general').slice(0,80)}});
    throw hermesFailure(diagnostic,secrets);
   }
-  return {reply};
+  return {reply,interim};
  }finally{release?.();}};
  return agent;
 }
