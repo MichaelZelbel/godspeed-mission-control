@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-11-28T03:14:24.945Z",
+  "checked_at": "2026-11-28T05:40:17.208Z",
   "complete": false,
   "items": [
     {
@@ -3967,7 +3967,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Add an optional add-on when the person asks for one. Use when they say \"add the Wingman\", \"install the video add-on\", \"add this add-on\" with a GitHub link, or ask for an add-on to be updated. Fetches it, sets it up, checks it and answers in one or two plain sentences saying where to start. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Add an optional add-on when the person asks for one. Use when they say \"add the Wingman\", \"install the video add-on\", \"add this add-on\" with a GitHub link, ask for an add-on to be updated, or say \"remove the Wingman\". Fetches it, sets it up, checks it and answers in one or two plain sentences saying where to start. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,

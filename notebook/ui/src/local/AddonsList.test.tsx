@@ -42,3 +42,25 @@ it("shows an add-on's page as a link with its title, and no link for an add-on w
   expect(link).toHaveAttribute('href','/addons/teston/');
   expect(screen.getAllByRole('link')).toHaveLength(1);
 });
+
+it('asks before removal and sends only the chosen data treatment',async()=>{
+  const bodies:string[]=[];
+  vi.stubGlobal('fetch',vi.fn(async(url:string,init:any)=>{
+    if(url==='/api/addons/remove'){bodies.push(init.body);return json({state:'removed',message:'Removed.'});}
+    return json({addons:[{...wingman,added:true,installed:true,removable:true}]});
+  }));
+  render(<AddonsList onError={()=>{}}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Remove the Wingman'},WAIT));
+  expect(screen.getByRole('group',{name:'Remove the Wingman'})).toBeInTheDocument();
+  expect(bodies).toEqual([]);
+  fireEvent.click(screen.getByRole('button',{name:'Cancel'}));
+  expect(bodies).toEqual([]);
+
+  fireEvent.click(screen.getByRole('button',{name:'Remove the Wingman'}));
+  fireEvent.click(screen.getByRole('button',{name:'Keep what it made'}));
+  await waitFor(()=>expect(bodies).toContain('{"addon":"wingman","data":"keep"}'),WAIT);
+
+  fireEvent.click(screen.getByRole('button',{name:'Remove the Wingman'}));
+  fireEvent.click(screen.getByRole('button',{name:'Delete it too'}));
+  await waitFor(()=>expect(bodies).toContain('{"addon":"wingman","data":"delete"}'),WAIT);
+});

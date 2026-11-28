@@ -141,3 +141,82 @@ test('the name Settings shows, "the Wingman", reaches the Wingman entry',()=>{
   for(const name of ['the Wingman','The Wingman','wingman','Wingman'])assert.equal(resolveAddon(name,catalog).id,'wingman');
   assert.equal(resolveAddon('the video add-on',catalog).id,'video');
 });
+
+// Removing an add-on (#1163). The test add-on's own remove writes its arguments and deletes its marker.
+function removable(){
+  const w=world(),remote=path.join(w.base,'remotes/acme/demo.git');
+  fs.writeFileSync(path.join(remote,'bin','demo.mjs'),`import fs from 'node:fs';const w=process.env.GODSPEED_WORKSPACE,v=process.argv[2];
+if(v==='setup')fs.writeFileSync(w+'/marker','x');
+if(v==='remove'){fs.appendFileSync(w+'/removed.txt',process.argv.slice(2).join(' ')+'\\n');if(process.env.STUCK)process.exit(1);if(!process.env.LINGER)fs.rmSync(w+'/marker',{force:true});}
+if(v==='check')process.exit(fs.existsSync(w+'/marker')?0:3);`);
+  git(remote,'commit','-qam','remove');
+  const catalog=[{...w.catalog[0],setup:['bin/demo.mjs','setup'],check:['bin/demo.mjs','check'],remove:['bin/demo.mjs','remove']},{id:'other',name:'the Other',repository:'acme/other',description:'x'}];
+  return {...w,catalog,make:(env={})=>new Addons({root:w.root,base:w.url,catalog,env:{...process.env,...env}})};
+}
+const copyOf=w=>path.join(w.root,'.godspeed','addons','demo');
+
+test('asking to remove without a choice asks keep or delete and changes nothing',async()=>{
+  const w=removable(),addons=w.make();await addons.add('demo');
+  const r=await addons.remove('demo');
+  assert.deepEqual([r.state,r.choices],['ask',['keep','delete']]);
+  assert.equal(fs.existsSync(path.join(w.root,'removed.txt')),false);assert.equal(fs.existsSync(copyOf(w)),true);
+});
+
+test('keep passes only --yes, then check says gone, and the copy and record are deleted',async()=>{
+  const w=removable(),addons=w.make();await addons.add('demo');
+  const r=await addons.remove('demo',{data:'keep'});
+  assert.deepEqual([r.state,r.message],['removed','I removed the Demo. What it made is still there.']);
+  assert.equal(fs.readFileSync(path.join(w.root,'removed.txt'),'utf8'),'remove --yes\n');
+  assert.equal(fs.existsSync(copyOf(w)),false);assert.deepEqual(readAdded(w.root),{});
+  assert.deepEqual([addons.list()[0].added,addons.list()[0].installed],[false,false]);
+});
+
+test('delete passes --delete-data before --yes',async()=>{
+  const w=removable(),addons=w.make();await addons.add('demo');
+  const r=await addons.remove('demo',{data:'delete'});
+  assert.equal(r.message,'I removed the Demo and deleted what it made.');
+  assert.equal(fs.readFileSync(path.join(w.root,'removed.txt'),'utf8'),'remove --delete-data --yes\n');
+  assert.equal(fs.existsSync(copyOf(w)),false);
+});
+
+test('an add-on without a remove command, or outside the list, is refused with the plain sentence',async()=>{
+  const w=removable(),addons=w.make();await addons.add('demo');
+  await assert.rejects(addons.remove('other',{data:'keep'}),{message:'This add-on cannot be removed by Godspeed yet.'});
+  await assert.rejects(addons.remove('someone/else',{data:'keep'}),{message:'This add-on cannot be removed by Godspeed yet.'});
+  await assert.rejects(addons.remove('other'),{message:'This add-on cannot be removed by Godspeed yet.'});
+  assert.equal(fs.existsSync(copyOf(w)),true);
+  assert.deepEqual(addons.list().map(e=>e.removable),[true,false]);
+});
+
+test('a remove that stops, or a check that does not say gone, deletes nothing',async()=>{
+  const w=removable();await w.make().add('demo');
+  await assert.rejects(w.make({STUCK:'1'}).remove('demo',{data:'delete'}),/its own remove stopped. Nothing was deleted/);
+  assert.equal(fs.existsSync(copyOf(w)),true);assert.ok(readAdded(w.root).demo);
+  await assert.rejects(w.make({LINGER:'1'}).remove('demo',{data:'keep'}),/still there after its own remove/);
+  assert.equal(fs.existsSync(copyOf(w)),true);assert.ok(readAdded(w.root).demo);
+});
+
+test('removing one add-on leaves another add-on and Godspeed\'s own files alone',async()=>{
+  const w=removable(),addons=w.make();await addons.add('demo');
+  const other=path.join(w.root,'.godspeed','addons','other');fs.mkdirSync(other,{recursive:true});fs.writeFileSync(path.join(other,'keep.txt'),'k');
+  fs.writeFileSync(path.join(w.root,'.godspeed','mine.txt'),'m');
+  const added=readAdded(w.root);added.other={repository:'acme/other'};fs.writeFileSync(path.join(w.root,'.godspeed','addons','added.json'),JSON.stringify(added));
+  await addons.remove('demo',{data:'keep'});
+  assert.equal(fs.readFileSync(path.join(other,'keep.txt'),'utf8'),'k');assert.equal(fs.readFileSync(path.join(w.root,'.godspeed','mine.txt'),'utf8'),'m');
+  assert.deepEqual(Object.keys(readAdded(w.root)),['other']);
+});
+
+test('removing an add-on that is not added says there is nothing to remove, and a bad choice is refused',async()=>{
+  const w=removable(),addons=w.make();
+  await assert.rejects(addons.remove('demo',{data:'keep'}),/is not added, so there is nothing to remove/);
+  await assert.rejects(addons.remove('demo',{data:'yes'}),/keep or delete/);
+});
+
+test('the command line asks before removing and refuses what it cannot remove',()=>{
+  const w=world(),cli=fileURLToPath(new URL('../bin/godspeed.mjs',import.meta.url)),env={...process.env,GODSPEED_WORKSPACE:w.root};
+  const out=execFileSync(process.execPath,[cli,'addon','remove','wingman'],{env,encoding:'utf8'});
+  assert.deepEqual([JSON.parse(out).state,JSON.parse(out).choices],['ask',['keep','delete']]);
+  assert.equal(fs.existsSync(path.join(w.root,'.godspeed')),false);
+  assert.throws(()=>execFileSync(process.execPath,[cli,'addon','remove','video','--keep'],{env,stdio:'pipe'}),/cannot be removed by Godspeed yet/);
+  assert.throws(()=>execFileSync(process.execPath,[cli,'addon','remove','wingman','--keep','--delete'],{env,stdio:'pipe'}),/not both/);
+});

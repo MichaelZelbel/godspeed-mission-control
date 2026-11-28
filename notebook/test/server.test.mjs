@@ -69,3 +69,20 @@ test('the add-ons route asks for the plain yes before installing a repository ou
     assert.equal((await (await add({addon:'acme/demo',confirmed:'yes'})).json()).state,'confirm');
   }finally{await service.close();}
 });
+
+test('the add-ons remove route asks before changing files, then keep removes only the fetched copy',async()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-addons-remove-route-'));
+  const copy=path.join(root,'.godspeed','addons','teston'),catalog=path.join(root,'catalog.json');
+  fs.mkdirSync(copy,{recursive:true});
+  fs.writeFileSync(path.join(copy,'teston.mjs'),`import fs from 'node:fs';\nconst marker=new URL('marker',import.meta.url);\nif(process.argv[2]==='remove'){fs.rmSync(marker);process.exit(0)}\nif(process.argv[2]==='check')process.exit(fs.existsSync(marker)?0:3);\n`);
+  fs.writeFileSync(path.join(copy,'marker'),'installed');
+  fs.writeFileSync(path.join(root,'.godspeed','addons','added.json'),JSON.stringify({teston:{checked_at:new Date().toISOString()}}));
+  fs.writeFileSync(catalog,JSON.stringify([{id:'teston',name:'the Teston',repository:'acme/teston',description:'Test.',setup:['teston.mjs','setup'],check:['teston.mjs','check'],remove:['teston.mjs','remove']}]))
+  const previous=process.env.GODSPEED_ADDON_CATALOG;process.env.GODSPEED_ADDON_CATALOG=catalog;
+  const service=await createService({root,port:0}),base='http://127.0.0.1:'+service.address.port;
+  const remove=async value=>{const response=await fetch(base+'/api/addons/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});assert.equal(response.status,200,await response.clone().text());return response.json();};
+  try{
+    const asked=await remove({addon:'teston'});assert.equal(asked.state,'ask');assert.equal(fs.existsSync(copy),true);
+    const kept=await remove({addon:'teston',data:'keep'});assert.equal(kept.state,'removed');assert.equal(fs.existsSync(copy),false);
+  }finally{await service.close();if(previous===undefined)delete process.env.GODSPEED_ADDON_CATALOG;else process.env.GODSPEED_ADDON_CATALOG=previous;}
+});

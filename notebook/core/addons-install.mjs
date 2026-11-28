@@ -17,6 +17,13 @@ import {atomic} from './records/store.mjs';
 // A refused fetch (a private repository this computer cannot read yet) hands the same fetch to
 // GitHubSignIn (core/sync/github-sign-in.mjs), which signs this computer in with GitHub's own
 // device login and runs it again. A password or token is never asked for or shown.
+//
+// REMOVING ONE (#1163) is the same path from the same three places. A catalog entry that has a
+// `remove` command can be removed: the person is asked first whether to keep what the add-on made
+// or delete it too (nothing is deleted unless they say delete), the add-on's own `remove
+// [--delete-data] --yes` runs from the fetched copy, its own check must then say it is not there
+// (exit 3), and only then the fetched copy and its record go. Only that one add-on's folder and
+// record are touched.
 const catalogFile=fileURLToPath(new URL('../../third-party/addons/catalog.json',import.meta.url));
 export const loadCatalog=(file=catalogFile)=>JSON.parse(fs.readFileSync(file,'utf8'));
 const folderOf=root=>path.join(root,'.godspeed','addons');
@@ -25,6 +32,7 @@ export const GITHUB='https://github.com/';
 const repositoryPattern=/^([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9._-]{1,100})$/;
 const refused=/authentication failed|could not read username|terminal prompts disabled|repository not found|returned error: (401|403|404)|access denied|permission denied/i;
 export const REFUSED='GitHub would not let this computer read that repository.';
+export const CANNOT_REMOVE='This add-on cannot be removed by Godspeed yet.';
 export const NOT_REACHED='That add-on could not be fetched from GitHub. Check the internet connection and ask again.';
 
 export function readAdded(root){try{return JSON.parse(fs.readFileSync(recordFile(root),'utf8'));}catch(error){if(error.code==='ENOENT')return {};throw error;}}
@@ -46,7 +54,7 @@ export function resolveAddon(want,catalog=loadCatalog()){
 // What Settings shows: every known add-on, with whether it has been added and checked.
 export function listAddons(root,{catalog=loadCatalog(),progress={}}={}){
   const added=readAdded(root);
-  return catalog.map(e=>({id:e.id,name:e.name,description:e.description,added:Boolean(added[e.id]?.checked_at),busy:progress[e.id]==='working',message:added[e.id]?.message||''}));
+  return catalog.map(e=>({id:e.id,name:e.name,description:e.description,added:Boolean(added[e.id]?.checked_at),installed:Boolean(added[e.id]),removable:Boolean(e.remove),busy:progress[e.id]==='working',message:added[e.id]?.message||''}));
 }
 
 const gitEnvironment=env=>({...env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'never',LC_ALL:'C'});
@@ -95,6 +103,21 @@ export async function installAddon(entry,{root,env=process.env,run=runChild,base
   return {id:entry.id,added:ok,message};
 }
 
+// Run the add-on's own remove, require its check to say it is gone (exit 3), then delete its fetched copy and record.
+// Throws a plain sentence and leaves the copy and the record when either step fails, so removing can be tried again.
+export async function removeAddon(entry,{root,env=process.env,run=runChild,data}){
+  if(!entry.known||!entry.remove)throw new Error(CANNOT_REMOVE);
+  const dir=path.join(folderOf(root),entry.id);
+  if(!fs.existsSync(dir))throw new Error(entry.name+' is not added, so there is nothing to remove.');
+  const first=await runStep([...entry.remove,...(data==='delete'?['--delete-data']:[]),'--yes'],{dir,root,env,run});
+  if(first.code!==0)throw new Error('Removing '+entry.name+' did not finish: its own remove stopped. Nothing was deleted by Godspeed.');
+  const second=await runStep(entry.check,{dir,root,env,run});
+  if(second.code!==3)throw new Error(entry.name+' is still there after its own remove, so its files were left.');
+  fs.rmSync(dir,{recursive:true,force:true});
+  const added=readAdded(root);delete added[entry.id];writeAdded(root,added);
+  return {id:entry.id,removed:true,message:'I removed '+entry.name+(data==='delete'?' and deleted what it made.':'. What it made is still there.')};
+}
+
 // One add-on at a time reaches the installer from Settings, the chat and the command line. A link
 // outside the list is installed only when `confirmed` says the person said yes to it.
 export class Addons{
@@ -118,5 +141,17 @@ export class Addons{
       // The sign-in runs the same fetch again once GitHub has the person's yes, and says how that went.
       return {state:'signing_in',id:entry.id,signIn:this.signIn.start(this.base+entry.repository+'.git',()=>attempt()),message:'Adding '+entry.name+' needs GitHub access first. Sign in with the link and code below; nothing else is asked.'};
     }
+  }
+  // `data` is 'keep' or 'delete'; without it nothing runs and the person is asked, keep first.
+  async remove(want,{data}={}){
+    const entry=resolveAddon(want,this.catalog);
+    if(!entry.known||!entry.remove)throw new Error(CANNOT_REMOVE);
+    if(data!==undefined&&data!=='keep'&&data!=='delete')throw new Error('Say keep or delete.');
+    if(data===undefined)return {state:'ask',id:entry.id,message:'Keep what '+entry.name+' made, or delete it too?',choices:['keep','delete']};
+    if(this.progress[entry.id]==='working')return {state:'working',id:entry.id,message:'Working on '+entry.name+' is already under way.'};
+    this.progress[entry.id]='working';
+    try{const r=await removeAddon(entry,{...this,data});this.outcome[entry.id]={state:'removed',message:r.message};return {state:'removed',id:entry.id,message:r.message};}
+    catch(error){this.outcome[entry.id]={state:'failed',message:error.message};throw error;}
+    finally{delete this.progress[entry.id];}
   }
 }
