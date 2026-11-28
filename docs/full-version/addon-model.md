@@ -308,3 +308,24 @@ should not make the folder itself, since nothing would read it, and should tell 
 updating Godspeed gives it its address. The one-line Docker server's Caddy runs in a container of its
 own and reads no such folder, and a computer has none. When Godspeed is uninstalled its Caddy stops
 reading the folder; the folder and the add-ons' files stay.
+
+## Adding and removing an add-on
+
+Godspeed adds an add-on when asked (a chat, Settings > Add-ons, or `godspeed addon add <name|repository>`),
+all through `notebook/core/addons-install.mjs`. It fetches the repository into `.godspeed/addons/<id>/`,
+runs the add-on's setup from the mission control folder (`GODSPEED_WORKSPACE` names it), then its check.
+An add-on in `third-party/addons/catalog.json` is added without a question; any other repository needs
+the person's plain yes first. A refused fetch goes to GitHub's device sign-in and is tried again.
+
+What an add-on promises:
+
+- **setup** is safe to run again. Adding an add-on that is already there fetches the newest copy and runs setup again.
+- **check** exits 0 when the add-on is installed and well, 1 when installed with a problem, 3 when not installed.
+  It may print `Start: <words or link>`; the reply tells the person where to start from it.
+- An add-on outside the catalog names its program in `package.json` `bin`; that program takes `setup` and `check`.
+
+Removing an add-on is a later change.
+
+`GODSPEED_ADDON_CATALOG` (a catalog file) and `GODSPEED_ADDON_BASE` (where repositories are fetched from)
+let the scenario `notebook/test/acceptance/add-ons.sh` run against a local test add-on; the same script
+runs against the real Wingman with `--real`.

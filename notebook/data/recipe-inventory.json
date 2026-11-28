@@ -223,5 +223,10 @@
     "name": "charm-challenge",
     "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "add-an-addon",
+    "classification": "source only",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   }
 ]

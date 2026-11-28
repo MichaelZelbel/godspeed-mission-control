@@ -34,6 +34,28 @@ if(args[0]==='prune-backups'){
  console.log(JSON.stringify(outcome,null,2));process.exit(outcome.failed.length?1:0);
 }
 if(!root)throw new Error('Set GODSPEED_WORKSPACE to your mission control folder');
+// godspeed addon add <name or owner/repo> [--yes] | list: the chat's way to add an add-on (core/addons-install.mjs).
+// It opens no notebook. A refused fetch signs this computer in to GitHub (a link and a code, never a password) and goes on.
+if(args[0]==='addon'){
+ const {Addons}=await import('../core/addons-install.mjs'),{GitHubSignIn}=await import('../core/sync/github-sign-in.mjs');
+ const signIn=new GitHubSignIn(),addons=new Addons({root,signIn});
+ if(args[1]==='list'){console.log(JSON.stringify(addons.list(),null,2));process.exit(0);}
+ if(args[1]!=='add'||!args[2]||args[2].startsWith('--'))throw Error('addon add NAME_OR_REPOSITORY [--yes] | addon list');
+ const r=await addons.add(args[2],{confirmed:args.includes('--yes')});
+ if(r.state==='signing_in'){
+  const live=()=>['signing_in','checking'].includes(signIn.status().state),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  // Without a terminal the code may not come at once: after 30 seconds say where to find the page instead of waiting silently.
+  for(let waited=0;live()&&!signIn.status().code&&waited<30000;waited+=500)await sleep(500);
+  const {code,url}=signIn.status();
+  if(code)console.log(JSON.stringify({state:'signing_in',message:r.message,code,url}));
+  else if(live())console.log(JSON.stringify({state:'signing_in',message:'Adding needs GitHub access first. GitHub has not given a code yet: open https://github.com/login/device and type the code GitHub shows this computer. Waiting up to 15 minutes.',url:'https://github.com/login/device'}));
+  while(live())await sleep(1000);
+  const outcome=addons.status(r.id);
+  console.log(JSON.stringify({state:outcome.state||'failed',message:outcome.message||signIn.status().message}));
+  process.exit(outcome.state==='added'?0:1);
+ }
+ console.log(JSON.stringify({state:r.state,message:r.message,...(r.repository?{repository:r.repository}:{})}));process.exit(r.state==='added'||r.state==='confirm'?0:1);
+}
 // The copy before an update opens no notebook (core/update-copy.mjs workspaceForCopy): opening it
 // reads every one of its files, which on one PC took over a minute of an update's seven-minute copy.
 if(args[0]==='backup'&&args.includes('--before-update')){

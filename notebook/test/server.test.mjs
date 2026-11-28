@@ -55,3 +55,17 @@ test('actual HTTP notebook CRUD, media preview, profile review, backup and resta
     const denied=await fetch(base+'/api/query',{method:'POST',headers:{'Content-Type':'application/json','Origin':'https://unrelated.example'},body:'{}'});assert.equal(denied.status,403);
   }finally{await service.close();}
 });
+
+test('the add-ons route asks for the plain yes before installing a repository outside the list',async()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-addons-route-'));
+  const service=await createService({root,port:0});
+  const base='http://127.0.0.1:'+service.address.port;
+  const add=async value=>(await fetch(base+'/api/addons/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)}));
+  try{
+    const asked=await add({addon:'acme/demo'});assert.equal(asked.status,200);
+    const body=await asked.json();assert.equal(body.state,'confirm');assert.equal(body.repository,'acme/demo');
+    assert.equal(fs.existsSync(path.join(root,'.godspeed','addons','acme--demo')),false);
+    // Only the boolean true counts as the yes.
+    assert.equal((await (await add({addon:'acme/demo',confirmed:'yes'})).json()).state,'confirm');
+  }finally{await service.close();}
+});

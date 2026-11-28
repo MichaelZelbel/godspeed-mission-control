@@ -1,0 +1,22 @@
+[
+  {
+    "id": "wingman",
+    "name": "the Wingman",
+    "aliases": ["godspeed-wingman", "wingman"],
+    "repository": "MichaelZelbel/godspeed-wingman",
+    "setup": ["bin/godspeed-wingman.mjs", "setup"],
+    "check": ["bin/godspeed-wingman.mjs", "check"],
+    "description": "Helps you with your dating life: it keeps a Dating page in your notebook.",
+    "start": "Open your Dating page in the notebook."
+  },
+  {
+    "id": "video",
+    "name": "the video add-on",
+    "aliases": ["mc-video", "video", "video-finishing"],
+    "repository": "MichaelZelbel/mc-video",
+    "setup": ["bin/mc-video.mjs", "setup"],
+    "check": ["bin/mc-video.mjs", "check"],
+    "description": "Finishes your videos: captions in one look, a vertical cut, and animated slides.",
+    "start": "Give it a video file and ask for captions."
+  }
+]
