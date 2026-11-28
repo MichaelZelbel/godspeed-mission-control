@@ -128,3 +128,9 @@ test('the command line asks before installing a repository outside the list',()=
   const out=execFileSync(process.execPath,[cli,'addon','add','acme/demo'],{env:{...process.env,GODSPEED_WORKSPACE:w.root},encoding:'utf8'});
   assert.equal(JSON.parse(out).state,'confirm');assert.equal(fs.existsSync(path.join(w.root,'.godspeed')),false);
 });
+
+test('the name Settings shows, "the Wingman", reaches the Wingman entry',()=>{
+  const catalog=loadCatalog();
+  for(const name of ['the Wingman','The Wingman','wingman','Wingman'])assert.equal(resolveAddon(name,catalog).id,'wingman');
+  assert.equal(resolveAddon('the video add-on',catalog).id,'video');
+});

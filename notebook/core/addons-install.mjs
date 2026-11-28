@@ -34,7 +34,9 @@ function writeAdded(root,added){fs.mkdirSync(folderOf(root),{recursive:true});at
 // accepts one of the two exactly.
 export function resolveAddon(want,catalog=loadCatalog()){
   const text=String(want||'').trim().replace(/^https:\/\/github\.com\//i,'').replace(/\.git$/i,'').replace(/\/+$/,'');
-  const known=catalog.find(e=>[e.id,e.repository,...(e.aliases||[])].some(name=>name.toLowerCase()===text.toLowerCase()));
+  // "the Wingman" (the name Settings shows) and "Wingman" both reach the entry: case and a leading "the" do not matter.
+  const plain=name=>String(name).toLowerCase().replace(/^the\s+/,'').trim();
+  const known=catalog.find(e=>[e.id,e.name,e.repository,...(e.aliases||[])].some(name=>plain(name)===plain(text)));
   if(known)return {...known,known:true};
   const match=repositoryPattern.exec(text);
   if(!match)throw new Error('I do not know an add-on by that name. Give me its GitHub repository (owner/name) or choose one from Settings > Add-ons.');

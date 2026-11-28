@@ -44,9 +44,11 @@ if(args[0]==='addon'){
  const r=await addons.add(args[2],{confirmed:args.includes('--yes')});
  if(r.state==='signing_in'){
   const live=()=>['signing_in','checking'].includes(signIn.status().state),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-  while(live()&&!signIn.status().code)await sleep(500);
+  // Without a terminal the code may not come at once: after 30 seconds say where to find the page instead of waiting silently.
+  for(let waited=0;live()&&!signIn.status().code&&waited<30000;waited+=500)await sleep(500);
   const {code,url}=signIn.status();
   if(code)console.log(JSON.stringify({state:'signing_in',message:r.message,code,url}));
+  else if(live())console.log(JSON.stringify({state:'signing_in',message:'Adding needs GitHub access first. GitHub has not given a code yet: open https://github.com/login/device and type the code GitHub shows this computer. Waiting up to 15 minutes.',url:'https://github.com/login/device'}));
   while(live())await sleep(1000);
   const outcome=addons.status(r.id);
   console.log(JSON.stringify({state:outcome.state||'failed',message:outcome.message||signIn.status().message}));
