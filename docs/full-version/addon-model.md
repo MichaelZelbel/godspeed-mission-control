@@ -326,6 +326,31 @@ An add-on's page needs no administrator step and works the same on a Linux serve
 
 This does not replace the Caddy file in "A web address for an add-on", which stays as it is. Limits: a notebook that is killed without stopping leaves the page's process running, and a restarted notebook's command then finds its port taken and tries again each minute until that process is gone; on a Mac only the command itself is stopped, not what it started.
 
+## An add-on's pages in the notebook
+
+An installed add-on can have its own entry in the notebook's menu, with pages drawn from the notebook's own components (so they look like the rest of the notebook, light and dark, on a phone and on a desktop). The door above, `/addons/<id>/`, is unchanged and stays the way to show an add-on's own web app.
+
+The add-on's catalog entry (`third-party/addons/catalog.json`) names two optional commands, run like `setup` and `check` (from the add-on's own folder, from the mission control folder, one program, no shell):
+
+- `pages`: prints JSON on stdout and exits 0. `changed`: the notebook runs it with `--field <part id>` after it wrote a bound field.
+- `action <id>` and `job <id>` are run through the same program as `pages` (`<program> action <id>`, `<program> job <id>`).
+
+```json
+{"format": 1, "menu": {"title": "Dating", "icon": "heart"},
+ "pages": [{"id": "profile", "title": "Profile", "parts": [
+   {"kind": "text", "id": "about", "title": "About", "bind": {"note": "Dating/Profile.md", "section": "About"}},
+   {"kind": "list", "id": "likes", "title": "Likes", "bind": {"note": "Dating/Profile.md", "section": "Likes"}},
+   {"kind": "action", "id": "scan", "title": "Scan", "action": "scan", "label": "Scan now", "inputs": [{"id": "name", "label": "Name"}]}]}]}
+```
+
+- Page and part ids use `a-z`, `0-9` and `-`. The page opens at `/dashboard/addons/<id>/<page>`. The menu entry shows `menu.title` and an icon from a short list (`book-heart`, `briefcase`, `camera`, `heart`, `sparkles`, `star`, `video`; any other name is a puzzle piece). It exists only while the add-on is added and its `pages` answers; remove the add-on and it is gone at once.
+- Part kinds: `steps` (`steps: [{title, state: done|current|todo}]`), `text`, `list`, `choice` (`text`, `choices: [{id, title}]`, `action`), `note` (`note`: a path under `notebook/`), `people` (`filter: {property, value}`: the people whose property has that value), `action` (`action`, `label`, `inputs`). A kind the notebook does not know shows as one plain line. Everything is shown as text; HTML or script from an add-on is never drawn or run.
+- `text` and `list` are bound with `bind: {note, section}`: `note` is the path of a note under `notebook/` (no `..`, no link, not outside), `section` the heading whose lines are the field (up to the next heading of the same or a higher level; a missing heading is added at the end). A list is the bullets under it. The note must already exist. The notebook, not the request, decides which note is written.
+- A field is saved after a pause in typing, through the same records path as the note editor (history, changes log, sync). Only that section changes; edits elsewhere in the note are kept. If the section changed since the page loaded it, nothing is written: the page shows the newer text beside what the person typed and they choose, and what they typed is also kept under Settings > Review conflicting edits. After a write the notebook runs `changed --field <part id>`; if that fails the text stays saved and the page says so.
+- `action <id>` gets the inputs as JSON on stdin and prints `{"state": "done|ask|failed|working", "message": "...", "refresh": false, "job": "<id>"}` (a `working` answer with a `job` is asked again with `job <id>` every two seconds; `refresh: true` reloads the page). A `pages` answer is read once per add, with 20 seconds to answer; `action` has 120 seconds. When `pages` fails, the add-on has no menu entry and Settings > Add-ons says so in one line.
+
+Limits: `files` parts and chat features come later. A note whose heading appears twice uses the first one.
+
 ## Adding and removing an add-on
 
 Godspeed adds an add-on when asked (a chat, Settings > Add-ons, or `godspeed addon add <name|repository>`; removed the same three ways, with `godspeed addon remove <name> [--keep|--delete]`),

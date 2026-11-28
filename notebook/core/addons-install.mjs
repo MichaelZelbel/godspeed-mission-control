@@ -26,7 +26,7 @@ import {atomic} from './records/store.mjs';
 // record are touched.
 const catalogFile=fileURLToPath(new URL('../../third-party/addons/catalog.json',import.meta.url));
 export const loadCatalog=(file=catalogFile)=>JSON.parse(fs.readFileSync(file,'utf8'));
-const folderOf=root=>path.join(root,'.godspeed','addons');
+export const folderOf=root=>path.join(root,'.godspeed','addons');
 const recordFile=root=>path.join(folderOf(root),'added.json');
 export const GITHUB='https://github.com/';
 const repositoryPattern=/^([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9._-]{1,100})$/;
@@ -80,7 +80,7 @@ function commandsOf(entry,dir){
   return {setup:[bin,'setup'],check:[bin,'check']};
 }
 
-async function runStep(args,{dir,root,env,run}){
+export async function runStep(args,{dir,root,env,run}){
   const program=path.resolve(dir,args[0]);
   if(!program.startsWith(dir+path.sep))throw new Error('That add-on points outside its own folder, so nothing was installed.');
   return run(process.execPath,[program,...args.slice(1)],{cwd:root,env:{...env,GODSPEED_WORKSPACE:root},timeoutMs:900000});

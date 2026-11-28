@@ -7,6 +7,8 @@
     "setup": ["bin/godspeed-wingman.mjs", "setup"],
     "check": ["bin/godspeed-wingman.mjs", "check"],
     "remove": ["bin/godspeed-wingman.mjs", "remove"],
+    "pages": ["bin/godspeed-wingman.mjs", "pages"],
+    "changed": ["bin/godspeed-wingman.mjs", "changed"],
     "description": "Helps you with your dating life: it keeps a Dating page in your notebook.",
     "start": "Open your Dating page in the notebook."
   },

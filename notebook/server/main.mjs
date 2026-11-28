@@ -21,6 +21,8 @@ import {conflictView,resolveSavedConflict} from '../core/conflicts.mjs';
 import { SyncRunner } from '../core/sync/runner.mjs';
 import {GitHubSignIn,connectRecordSync} from '../core/sync/github-sign-in.mjs';
 import {Addons} from '../core/addons-install.mjs';
+import {AddonNotebook} from '../core/addon-notebook.mjs';
+import {readField,writeField,noteOf,listItems,listText} from '../core/addon-fields.mjs';
 import {AddonPages} from '../core/addon-pages.mjs';
 import { restore } from '../core/archives.mjs';
 import {RecoveryRunner} from '../core/recovery-runner.mjs';
@@ -164,6 +166,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   connectMeaning(embeddingConfig(store.state));
   const githubSignIn=new GitHubSignIn();
   const addons=new Addons({root,signIn:githubSignIn});
+  const addonNotebook=new AddonNotebook({addons});
   // Late-bound: the doors this reads are made below.
   const pages=new AddonPages({root,ownPorts:()=>[server,webServer,localServer].map(door=>door?.address()?.port).filter(Boolean)});
   const syncNotConnected={state:'not_connected',error:'Sync is not connected, so nothing was synced. Your files are safe on this computer.',detail:'To connect it, open Settings, then Sync and schedule ownership, and press Connect record sync.'};
@@ -665,7 +668,41 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const input=JSON.parse(await body(req));return send(res,200,await connectRecordSync({url:input.url,configure:url=>syncRunner.configure(url),signIn:githubSignIn}));
       }
       // Settings > Add-ons: the shipped list, and the one way to add one (core/addons-install.mjs). A sign-in it starts is followed at /api/sync/sign-in.
-      if(route==='/api/addons'&&req.method==='GET'){const links=pages.list();return send(res,200,{addons:addons.list().map(a=>links[a.id]?{...a,page:links[a.id]}:a)});}
+      if(route==='/api/addons'&&req.method==='GET'){const links=pages.list();return send(res,200,{addons:await Promise.all(addons.list().map(async a=>({...a,...(links[a.id]?{page:links[a.id]}:{}),...(a.installed?await addonNotebook.summary(a.id):{})})))});}
+      // An add-on's pages in the notebook (core/addon-notebook.mjs): the page with its fields' current values, a field write, an action and a job. Each names an installed add-on and a part its own `pages` answered.
+      const addonRoute=/^\/api\/addons\/([a-z0-9-]{1,60})\/(pages|field|action|job)(?:\/([A-Za-z0-9._-]{1,80}))?$/.exec(route);
+      if(addonRoute){
+        const [,addonId,what,rest]=addonRoute,missing=()=>send(res,404,{error:'That page is not there.'});
+        if(what==='pages'&&req.method==='GET'&&rest){
+          const page=await addonNotebook.page(addonId,rest);if(!page)return missing();
+          const field=bind=>{try{return readField(store,bind);}catch(error){if(error.status)return '';throw error;}};
+          const parts=page.parts.map(p=>{
+            if(p.kind==='text')return {...p,value:field(p.bind)};
+            if(p.kind==='list')return {...p,items:listItems(field(p.bind))};
+            if(p.kind==='people')return {...p,people:store.list('contacts').filter(c=>String(c.metadata?.[p.filter.property]??c[p.filter.property]??'')===p.filter.value).map(c=>({id:c.id,name:c.name}))};
+            if(p.kind==='note'){let id='';try{id=noteOf(store,p.note).id;}catch{}return {...p,note:undefined,noteId:id};}
+            return p;
+          }).map(({bind,...p})=>p);
+          return send(res,200,{id:page.id,title:page.title,parts});
+        }
+        if(what==='field'&&req.method==='POST'&&!rest){
+          const input=JSON.parse(await body(req,262144)),page=await addonNotebook.page(addonId,String(input.page)),part=page?.parts.find(p=>p.id===input.part&&(p.kind==='text'||p.kind==='list'));
+          if(!part)return missing();
+          const list=part.kind==='list',asText=v=>list?(Array.isArray(v)?listText(v):null):v;
+          const value=asText(input.value),base=asText(input.base);
+          if(value===null||base===null)return send(res,400,{error:'Send the list as a list.'});
+          const result=await writeField(store,part.bind,{value,base});
+          const shape=text=>list?listItems(text):text;
+          if(result.state==='conflict')return send(res,409,{state:'conflict',current:shape(result.current),error:'This changed while you were typing. Both versions are kept.'});
+          return send(res,200,{state:'saved',value:shape(result.value),...await addonNotebook.changed(addonId,part.id)});
+        }
+        if(what==='action'&&req.method==='POST'&&!rest){
+          const input=JSON.parse(await body(req,65536)),page=await addonNotebook.page(addonId,String(input.page)),part=page?.parts.find(p=>p.id===input.part&&(p.kind==='action'||p.kind==='choice'));
+          if(!part?.action)return missing();
+          return send(res,200,await addonNotebook.action(addonId,part.action,input.input));
+        }
+        if(what==='job'&&req.method==='GET'&&rest){const answer=await addonNotebook.job(addonId,rest);return answer?send(res,200,answer):missing();}
+      }
       if(route==='/api/addons/remove'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,await addons.remove(input.addon,{data:input.data}));}
       if(route==='/api/addons/add'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,await addons.add(input.addon,{confirmed:input.confirmed===true}));}
       if(route==='/api/sync/sign-in'&&req.method==='GET')return send(res,200,{signIn:githubSignIn.status()});

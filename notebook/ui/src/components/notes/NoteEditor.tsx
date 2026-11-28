@@ -1,4 +1,5 @@
 import { type MouseEvent, useState, useEffect, useCallback, useRef, useId, createRef, useLayoutEffect } from "react";
+import { NOTE_AUTOSAVE_MS } from "@/lib/autosave";
 import { useEditor, useEditorState, EditorContent } from "@tiptap/react";
 import { Markdown } from "tiptap-markdown";
 import StarterKit from "@tiptap/starter-kit";
@@ -830,7 +831,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             }
           });
         }
-      }, 800);
+      }, NOTE_AUTOSAVE_MS);
 
 
     },

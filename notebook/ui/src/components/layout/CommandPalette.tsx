@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { addonIcon, addonPagePath, useAddonMenus } from "@/lib/addon-pages";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
 import {
@@ -114,6 +115,8 @@ export function CommandPalette() {
     setTimeout(fn, 0);
   };
 
+  const addonItems = useAddonMenus().flatMap((m) => m.pages.map((p) => ({ title: m.pages.length > 1 ? `${m.title}: ${p.title}` : m.title, url: addonPagePath(m.id, p.id), icon: addonIcon(m.icon) })));
+
   const noteItems = useMemo(() => (notes ?? []).slice(0, 50), [notes]);
 
   return (
@@ -147,7 +150,7 @@ export function CommandPalette() {
         <CommandSeparator />
 
         <CommandGroup heading="Navigate">
-          {NAV_ITEMS.map((item) => (
+          {[...NAV_ITEMS, ...addonItems].map((item) => (
             <CommandItem
               key={item.url}
               value={`nav ${item.title}`}
