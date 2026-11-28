@@ -12,7 +12,9 @@ for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))de
 
 const PAGE=`import http from 'node:http';import fs from 'node:fs';
 fs.writeFileSync('page-wrote',String(process.pid));
-http.createServer((req,res)=>{res.setHeader('x-cookie',req.headers.cookie||'');res.end(JSON.stringify({url:req.url,prefix:req.headers['x-forwarded-prefix'],host:req.headers.host,cwd:process.cwd(),cookie:req.headers.cookie||'',pid:process.pid}));}).listen(Number(process.argv[2]),'127.0.0.1');
+const page=http.createServer((req,res)=>{res.setHeader('x-cookie',req.headers.cookie||'');res.end(JSON.stringify({url:req.url,prefix:req.headers['x-forwarded-prefix'],host:req.headers.host,cwd:process.cwd(),cookie:req.headers.cookie||'',pid:process.pid}));});
+page.on('upgrade',(req,socket)=>{socket.end('HTTP/1.1 101 Switching Protocols\\r\\nConnection: Upgrade\\r\\nUpgrade: websocket\\r\\nx-url: '+req.url+'\\r\\nx-prefix: '+req.headers['x-forwarded-prefix']+'\\r\\n\\r\\n');});
+page.listen(Number(process.argv[2]),'127.0.0.1');
 `;
 const freePort=()=>new Promise(resolve=>{const s=net.createServer();s.listen(0,'127.0.0.1',()=>{const {port}=s.address();s.close(()=>resolve(port));});});
 const wait=async(check,ms=8000)=>{const end=Date.now()+ms;for(;;){const value=await check();if(value)return value;if(Date.now()>end)throw Error('timed out');await new Promise(r=>setTimeout(r,50));}};
@@ -59,9 +61,19 @@ test('a page answers only for a signed-in visit, with the prefix removed and the
   const unknown=await request(web,'/addons/nothing/',{host});
   assert.equal(unknown.status,303,'an unsigned visit cannot tell which pages exist');
 
-  // The unsigned upgrade is dropped without reaching the page.
-  const socket=net.connect(web,'127.0.0.1');socket.write('GET /addons/test/ws HTTP/1.1\r\nHost: '+host+'\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n');
-  await new Promise(resolve=>{socket.on('close',resolve);socket.on('error',resolve);});
+  // An upgrade is admitted by the same sign-in, Host and Origin rules as a request, and dropped otherwise.
+  const upgrade=(port,headers)=>new Promise(resolve=>{
+    const socket=net.connect(port,'127.0.0.1');let text='';
+    socket.write('GET /addons/test/ws?a=1 HTTP/1.1\r\n'+Object.entries({Connection:'Upgrade',Upgrade:'websocket',...headers}).map(([k,v])=>k+': '+v+'\r\n').join('')+'\r\n');
+    socket.on('data',c=>text+=c);socket.on('close',()=>resolve(text));socket.on('error',()=>resolve(text));
+  });
+  assert.equal(await upgrade(web,{Host:host}),'');
+  const admitted=await upgrade(web,{Host:host,Cookie:session,Origin:'https://'+host});
+  assert.match(admitted,/^HTTP\/1\.1 101/);assert.match(admitted,/x-url: \/ws\?a=1/);assert.match(admitted,/x-prefix: \/addons\/test/);
+  assert.equal(await upgrade(web,{Host:host,Cookie:session,Origin:'https://evil.example'}),'','a cross-site upgrade is refused');
+  assert.equal(await upgrade(local,{Host:'rebind.example'}),'','a foreign Host on the local door is refused');
+  assert.equal(await upgrade(local,{Host:'127.0.0.1:'+local,Origin:'https://evil.example'}),'','a cross-site upgrade on the local door is refused');
+  assert.match(await upgrade(local,{Host:'127.0.0.1:'+local,Origin:'http://127.0.0.1:'+local}),/^HTTP\/1\.1 101/);
   assert.deepEqual(errors.filter(line=>/add-on page/.test(line)),[]);
 });
 

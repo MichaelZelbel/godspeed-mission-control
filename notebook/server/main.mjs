@@ -374,20 +374,26 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     return Buffer.concat(chunks);
   }
   uiRoot = path.resolve(uiRoot || fileURLToPath(new URL('../ui/dist', import.meta.url)));
+  // The Host and Origin rules every door applies to a visit, the upgrade into an add-on's page included.
+  const refusedVisit = (remote, req, route) => {
+    const hostName = (req.headers.host || '').split(':')[0];
+    if (!remote && !['localhost', '127.0.0.1', '[', '::1'].includes(hostName)) return 'Unrecognized local host';
+    // An Origin that is not an address ("null" from a sandboxed page) is cross-site too.
+    // One exception: Continue on a one-time sign-in page. A browser sends "null"
+    // with a form whose page said no-referrer, which that page did until
+    // 16 October 2026, so every link the bot handed out was refused; the
+    // single-use code in the address is the credential there, not a session.
+    const signInPress = req.method === 'POST' && route.startsWith('/login/') && req.headers.origin === 'null';
+    if (req.headers.origin && !signInPress) { let from = null; try { from = new URL(req.headers.origin).host; } catch {} if (from !== req.headers.host) return 'Cross-site requests are refused'; }
+    return null;
+  };
   // One handler for both doors; `remote` and `auth` are the door's own.
   const handle = (remote, auth, onWebDoor = false) => async (req, res) => {
     const authorized = (req, route) => auth.authorized(req) || pairedMedia(req, route);
     try {
       const url = new URL(req.url, 'http://localhost'), route = url.pathname;
-      const hostName = (req.headers.host || '').split(':')[0];
-      if (!remote && !['localhost', '127.0.0.1', '[', '::1'].includes(hostName)) return send(res, 403, { error: 'Unrecognized local host' });
-      // An Origin that is not an address ("null" from a sandboxed page) is cross-site too.
-      // One exception: Continue on a one-time sign-in page. A browser sends "null"
-      // with a form whose page said no-referrer, which that page did until
-      // 16 October 2026, so every link the bot handed out was refused; the
-      // single-use code in the address is the credential there, not a session.
-      const signInPress = req.method === 'POST' && route.startsWith('/login/') && req.headers.origin === 'null';
-      if (req.headers.origin && !signInPress) { let from = null; try { from = new URL(req.headers.origin).host; } catch {} if (from !== req.headers.host) return send(res, 403, { error: 'Cross-site requests are refused' }); }
+      const refused = refusedVisit(remote, req, route);
+      if (refused) return send(res, 403, { error: refused });
       // A one-time sign-in link opens a page with one button, and only pressing
       // it (a POST) uses the link. Until 6 October 2026 any GET used it, so
       // Telegram's link-preview fetcher got the session and the owner's tap failed.
@@ -945,8 +951,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   let firstQueryTraced=false;
   const listen = (server, port, host) => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   const server = http.createServer(handle(remote, auth));
-  const upgradeFor=(door,auth)=>door.on('upgrade',(req,socket,head)=>{if(/^\/addons\//.test(new URL(req.url,'http://localhost').pathname)&&auth.authorized(req))pages.upgrade(req,socket,head);else socket.destroy();});
-  upgradeFor(server,auth);
+  const upgradeFor=(door,remote,auth)=>door.on('upgrade',(req,socket,head)=>{const route=new URL(req.url,'http://localhost').pathname;if(/^\/addons\//.test(route)&&!refusedVisit(remote,req,route)&&auth.authorized(req))pages.upgrade(req,socket,head);else socket.destroy();});
+  upgradeFor(server,remote,auth);
   // An older notebook gains its missing routines before the server answers, so Settings lists them at once.
   try{await scheduler.ensureStartingJobs?.();}catch{}
   await listen(server, port, host);
@@ -995,7 +1001,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   let webServer = null;
   if (web) {
     webServer = http.createServer(handle(true, web.auth, true));
-    upgradeFor(webServer, web.auth);
+    upgradeFor(webServer, true, web.auth);
     try { await listen(webServer, web.port, '127.0.0.1'); }
     catch (error) { console.error('Godspeed Mission Control: the web address\'s door on port ' + web.port + ' could not open: ' + error.message); webServer = null; }
   }
@@ -1126,7 +1132,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   if (localPort !== undefined && localPort !== null) {
     const localAuth = new WebAuth(store.state, { token, remote: false, now: authNow });
     localServer = http.createServer(handle(false, localAuth));
-    upgradeFor(localServer, localAuth);
+    upgradeFor(localServer, false, localAuth);
     try { await listen(localServer, Number(localPort), '127.0.0.1'); }
     catch (error) { await close(); throw error; }
   }
