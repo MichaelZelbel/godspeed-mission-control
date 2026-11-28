@@ -32,3 +32,13 @@ it('shows the GitHub sign-in link and code, and asks for no password',async()=>{
   expect(screen.getByRole('link',{name:"Open GitHub's sign-in page"})).toHaveAttribute('href','https://github.com/login/device');
   expect(screen.queryByLabelText(/password|token/i)).toBeNull();
 });
+
+it("shows an add-on's page as a link with its title, and no link for an add-on without one",async()=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>json({addons:[
+    {...wingman,id:'teston',name:'the Teston',description:'A test add-on.',added:true,page:{title:'Teston',path:'/addons/teston/'}},
+    {...wingman,added:true}]})));
+  render(<AddonsList onError={()=>{}}/>);
+  const link=await screen.findByRole('link',{name:'Teston'},WAIT);
+  expect(link).toHaveAttribute('href','/addons/teston/');
+  expect(screen.getAllByRole('link')).toHaveLength(1);
+});
