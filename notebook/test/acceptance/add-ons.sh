@@ -27,8 +27,8 @@ if (process.argv[2] === 'check') { console.log('Start: Open the Teston page.'); 
 process.exit(2);
 JS
   cat > "$work/src/bin/teston-page.mjs" <<'JS'
-import http from 'node:http'; import fs from 'node:fs';
-fs.writeFileSync('page-wrote', 'x');
+import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
+fs.writeFileSync(path.join(path.dirname(process.argv[1]), '..', 'page-wrote'), 'x');   // in the add-on's own folder
 http.createServer((req, res) => res.end('Teston page ' + req.url + ' ' + req.headers['x-forwarded-prefix'])).listen(Number(process.argv[2]), '127.0.0.1');
 JS
   ( cd "$work/src" && git init -q && git add . && git -c user.name=t -c user.email=t@t commit -qm test && git clone -q --bare . "$repo" ) || fail "could not make the test add-on"
@@ -67,18 +67,31 @@ if [ "$id" = teston ]; then
   mkdir -p "$GODSPEED_WORKSPACE/.godspeed/addons/teston"
   printf '{"command":["%s","%s","%s"],"port":%s,"title":"Teston"}' "$(command -v node)" "$GODSPEED_WORKSPACE/.godspeed/addons/teston/bin/teston-page.mjs" "$port" "$port" > "$GODSPEED_WORKSPACE/.godspeed/addons/teston/page.json"
 fi
-want="/addons/$id/"; jar="$work/jar"; ok=""
-code="$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{}' "$local_api/api/login-link" | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>console.log(JSON.parse(t).path))')" || fail "no sign-in link from the local door"
-curl -fsS -c "$jar" -o /dev/null -X POST -H "Origin: $address" "$address$code" || fail "could not sign in at $address"
+want="/addons/$id/"; ok=""
+# Sign in as the owner would: through a one-time link from the local door, or, on an install whose owner has not made an
+# account yet (a fresh server), by making one with the private setup link. The session cookie is sent by hand, because it is
+# marked Secure and the address this script is given may be plain http inside the machine.
+sid() { sed -n 's/^[Ss]et-[Cc]ookie: godspeed_session=\([^;]*\).*/\1/p' "$1" | tail -n 1 | tr -d '\r'; }
+path="$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{}' "$local_api/api/login-link" | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>console.log(JSON.parse(t).path))')" || fail "no sign-in link from the local door"
+case "$path" in
+  /setup#invite=*) curl -sS -D "$work/hdr" -o /dev/null -X POST -H "Origin: $address" -H 'Content-Type: application/json' \
+      -d "{\"invite\":\"${path#/setup#invite=}\",\"username\":\"scenario-owner\",\"password\":\"scenario-owner-password-1\"}" "$address/api/auth/setup" || fail "could not make the owner's account at $address" ;;
+  *) curl -sS -D "$work/hdr" -o /dev/null -X POST -H "Origin: $address" "$address$path" || fail "could not sign in at $address" ;;
+esac
+cookie="godspeed_session=$(sid "$work/hdr")"; [ "$cookie" != "godspeed_session=" ] || fail "signing in at $address gave no session: $(head -n 1 "$work/hdr")"
 for _ in $(seq 1 45); do
-  [ "$(curl -s -o /dev/null -w '%{http_code}' -b "$jar" "$address$want")" = 200 ] && { ok=1; break; }; sleep 2
+  [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Cookie: $cookie" "$address$want")" = 200 ] && { ok=1; break; }; sleep 2
 done
 [ -n "$ok" ] || fail "the page did not answer at $address$want when signed in"
-[ "$id" != teston ] || curl -s -b "$jar" "$address$want" | grep -q "Teston page / /addons/teston" || fail "the page did not see the stripped path and prefix"
+[ "$id" != teston ] || curl -s -H "Cookie: $cookie" "$address$want" | grep -q "Teston page / /addons/teston" || fail "the page did not see the stripped path and prefix"
+if [ "$id" = teston ]; then
+  curl -fsS -H "Cookie: $cookie" "$address/api/addons" | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>{const a=(JSON.parse(t).addons||[]).find(x=>x.id==="teston");process.exit(a&&a.page&&a.page.path==="/addons/teston/"&&a.page.title==="Teston"?0:1)})' \
+    || fail "a signed-in GET /api/addons does not carry the page (path /addons/teston/, title Teston) for teston"
+fi
 unsigned="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "$address$want")"
 case "$unsigned" in "303 "*"/setup?next="*) ;; *) fail "an unsigned visit was not sent to sign-in: $unsigned";; esac
 if [ "$id" = teston ]; then
-  [ "$(stat -c %U "$GODSPEED_WORKSPACE/page-wrote")" = "$(id -un)" ] || fail "the page's file does not belong to the assistant's account"
+  [ "$(stat -c %U "$GODSPEED_WORKSPACE/.godspeed/addons/teston/page-wrote")" = "$(id -un)" ] || fail "the page's file does not belong to the assistant's account"
 fi
 echo "ACCEPTANCE PASSED"
 }
