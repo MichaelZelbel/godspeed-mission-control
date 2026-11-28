@@ -7,16 +7,16 @@ async function call(route:string,body?:any){const r=await fetch('/api/'+route,{m
 const active=(s:any)=>s&&['signing_in','checking'].includes(s.state);
 export function AddonsList({onError}:{onError:(message:string)=>void}){
   const [addons,setAddons]=useState<any[]>([]),[signIn,setSignIn]=useState<any>(null),[working,setWorking]=useState(''),[said,setSaid]=useState('');
-  const load=async()=>{try{setAddons((await call('addons')).addons||[]);}catch{}};
+  const load=async()=>{try{setAddons((await call('addons')).addons||[]);}catch(error:any){onError(error.message);}};
   useEffect(()=>{void load();},[]);
   useEffect(()=>{
     if(!active(signIn))return;
-    const timer=setInterval(async()=>{try{const next=(await call('sync/sign-in')).signIn;setSignIn(next);if(!active(next)){setSaid(next.state==='connected'?'':next.message);await load();}}catch{}},2000);
+    const timer=setInterval(async()=>{try{const next=(await call('sync/sign-in')).signIn;setSignIn(next);if(!active(next)){setSaid(next.state==='failed'?next.message:'');await load();}}catch(error:any){onError(error.message);setSignIn(null);}},2000);
     return ()=>clearInterval(timer);
   },[signIn?.state]);
   const add=async(id:string)=>{setWorking(id);setSaid('');setSignIn(null);try{onError('');const r=await call('addons/add',{addon:id});if(r.state==='signing_in')setSignIn(r.signIn);else setSaid(r.message);await load();}catch(error:any){onError(error.message);}finally{setWorking('');}};
   return <section id="add-ons" className="border rounded p-4 space-y-3"><h2 className="text-xl">Add-ons</h2>
-    <ul className="space-y-2">{addons.map(a=><li key={a.id} className="flex items-center gap-3 flex-wrap"><span><strong>{a.name}</strong>: {a.description} <em>{a.added?'Added':'Not added'}</em></span><button className="border p-2" disabled={Boolean(working)||active(signIn)||a.busy} onClick={()=>add(a.id)}>{a.added?'Update':'Add'}<span className="sr-only"> {a.name}</span></button></li>)}</ul>
+    <ul className="space-y-2">{addons.map(a=><li key={a.id} className="flex items-center gap-3 flex-wrap"><span><strong>{a.name}</strong>: {a.description} <em>{a.added?'Added':'Not added'}</em>{!a.added&&a.message&&<> {a.message}</>}</span><button className="border p-2" disabled={Boolean(working)||active(signIn)||a.busy} onClick={()=>add(a.id)}>{a.added?'Update':'Add'}<span className="sr-only"> {a.name}</span></button></li>)}</ul>
     {said&&<p role="status">{said}</p>}
     {signIn&&signIn.state!=='idle'&&<div role="status" className="space-y-2"><p>{signIn.message}</p>
       {signIn.code&&active(signIn)&&<p className="text-2xl font-mono tracking-widest">{signIn.code}</p>}

@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
 import {Addons,resolveAddon,loadCatalog,readAdded,REFUSED} from '../core/addons-install.mjs';
 import {runChild} from '../core/child-process.mjs';
 // Adding an add-on (#1162), against a local test add-on repository: nothing reaches GitHub.
@@ -70,4 +70,61 @@ test('a refusal with no sign-in to offer, and a setup that stops, each say so pl
   fs.writeFileSync(path.join(w.base,'remotes/acme/demo.git/bin/demo.mjs'),'process.exit(3)');git(path.join(w.base,'remotes/acme/demo.git'),'commit','-qam','broken');
   await assert.rejects(new Addons({root:w.root,base:w.url,catalog:w.catalog}).add('demo'),/did not finish: its setup stopped/);
   assert.deepEqual(readAdded(w.root),{});
+});
+
+test('an unlisted repository never shares a folder or record with a listed one',async()=>{
+  const w=world(),other=path.join(w.base,'remotes','someone','demo.git');
+  fs.mkdirSync(path.join(other,'bin'),{recursive:true});
+  fs.writeFileSync(path.join(other,'package.json'),JSON.stringify({name:'demo',bin:{demo:'bin/demo.mjs'}}));
+  fs.writeFileSync(path.join(other,'bin','demo.mjs'),'process.exit(0)');
+  git(other,'init','-q');git(other,'add','-A');git(other,'commit','-qm','other');
+  const addons=new Addons({root:w.root,base:w.url,catalog:w.catalog});
+  assert.equal((await addons.add('demo')).state,'added');
+  assert.equal((await addons.add('someone/demo',{confirmed:true})).state,'added');
+  const added=readAdded(w.root);
+  assert.deepEqual(Object.keys(added).sort(),['demo','someone--demo']);
+  assert.equal(added.demo.repository,'acme/demo');assert.equal(added['someone--demo'].repository,'someone/demo');
+});
+
+test('a fetch into an existing folder uses the expected repository, not the folder\'s old origin',async()=>{
+  const w=world(),addons=new Addons({root:w.root,base:w.url,catalog:w.catalog});
+  await addons.add('demo');
+  const copy=path.join(w.root,'.godspeed','addons','demo');
+  git(copy,'remote','set-url','origin','file:///nowhere');
+  assert.equal((await addons.add('demo')).state,'added');
+});
+
+test('git runs in English so a refusal is recognised on any language setting',async()=>{
+  const w=world();let seen;
+  const run=(program,args,options)=>{seen=options.env.LC_ALL;return Promise.resolve({code:128,stdout:'',stderr:'remote: Repository not found.'});};
+  await assert.rejects(new Addons({root:w.root,base:w.url,catalog:w.catalog,run}).add('demo'),{message:REFUSED});
+  assert.equal(seen,'C');
+});
+
+test('a sign-in already under way is said plainly instead of being dropped',async()=>{
+  const w=world();
+  const run=()=>Promise.resolve({code:128,stdout:'',stderr:'fatal: could not read Username: terminal prompts disabled'});
+  const signIn={busy:true,start:()=>assert.fail('must not start')};
+  await assert.rejects(new Addons({root:w.root,base:w.url,catalog:w.catalog,run,signIn}).add('demo'),/Another GitHub sign-in is under way/);
+});
+
+test('a failing check records the add-on as not added, with a reason',async()=>{
+  const w=world(),remote=path.join(w.base,'remotes/acme/demo.git');
+  fs.writeFileSync(path.join(remote,'bin','demo.mjs'),'if(process.argv[2]==="check")process.exit(1);');git(remote,'commit','-qam','bad check');
+  const addons=new Addons({root:w.root,base:w.url,catalog:w.catalog});
+  const r=await addons.add('demo');
+  assert.equal(r.state,'problem');assert.match(r.message,/check found a problem/);
+  assert.equal(addons.list()[0].added,false);assert.match(addons.list()[0].message,/problem/);
+});
+
+test('an add-on whose commands point outside its folder is refused before anything runs',async()=>{
+  const w=world(),addons=new Addons({root:w.root,base:w.url,catalog:[{...w.catalog[0],setup:['../../../outside.mjs','setup'],check:['bin/demo.mjs','check']}]});
+  await assert.rejects(addons.add('demo'),/outside its own folder/);
+  assert.deepEqual(readAdded(w.root),{});
+});
+
+test('the command line asks before installing a repository outside the list',()=>{
+  const w=world(),cli=fileURLToPath(new URL('../bin/godspeed.mjs',import.meta.url));
+  const out=execFileSync(process.execPath,[cli,'addon','add','acme/demo'],{env:{...process.env,GODSPEED_WORKSPACE:w.root},encoding:'utf8'});
+  assert.equal(JSON.parse(out).state,'confirm');assert.equal(fs.existsSync(path.join(w.root,'.godspeed')),false);
 });

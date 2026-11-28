@@ -38,7 +38,7 @@ export function resolveAddon(want,catalog=loadCatalog()){
   if(known)return {...known,known:true};
   const match=repositoryPattern.exec(text);
   if(!match)throw new Error('I do not know an add-on by that name. Give me its GitHub repository (owner/name) or choose one from Settings > Add-ons.');
-  return {id:match[2].toLowerCase(),name:'the add-on '+match[2],repository:text,known:false};
+  return {id:(match[1]+'--'+match[2]).toLowerCase(),name:'the add-on '+match[2],repository:text,known:false};
 }
 
 // What Settings shows: every known add-on, with whether it has been added and checked.
@@ -47,14 +47,14 @@ export function listAddons(root,{catalog=loadCatalog(),progress={}}={}){
   return catalog.map(e=>({id:e.id,name:e.name,description:e.description,added:Boolean(added[e.id]?.checked_at),busy:progress[e.id]==='working',message:added[e.id]?.message||''}));
 }
 
-const gitEnvironment=env=>({...env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'never'});
+const gitEnvironment=env=>({...env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'never',LC_ALL:'C'});
 async function git(args,{cwd,env,run}){const r=await run('git',args,{cwd,env:gitEnvironment(env),timeoutMs:300000});return {...r,failed:r.code!==0};}
 
 async function fetchCopy(entry,{root,env,run,base}){
   const dir=path.join(folderOf(root),entry.id),url=base+entry.repository+'.git';
   fs.mkdirSync(folderOf(root),{recursive:true});
   const result=fs.existsSync(path.join(dir,'.git'))
-    ?await git(['fetch','--depth','1','origin','HEAD'],{cwd:dir,env,run}).then(async r=>r.failed?r:git(['reset','--hard','FETCH_HEAD'],{cwd:dir,env,run}))
+    ?await git(['fetch','--depth','1',url,'HEAD'],{cwd:dir,env,run}).then(async r=>r.failed?r:git(['reset','--hard','FETCH_HEAD'],{cwd:dir,env,run}))
     :await git(['clone','--depth','1',url,dir],{env,run});
   if(result.failed){const text=result.stderr+result.stdout;throw Object.assign(new Error(refused.test(text)?REFUSED:NOT_REACHED),{refused:refused.test(text)});}
   const head=await git(['rev-parse','HEAD'],{cwd:dir,env,run});
@@ -80,7 +80,7 @@ export async function installAddon(entry,{root,env=process.env,run=runChild,base
   const {dir,commit}=await fetchCopy(entry,{root,env,run,base});
   const {setup,check}=commandsOf(entry,dir);
   const first=await runStep(setup,{dir,root,env,run});
-  if(first.code!==0)throw new Error('Adding '+entry.name+' did not finish: its setup stopped. Nothing else was changed.');
+  if(first.code!==0)throw new Error('Adding '+entry.name+' did not finish: its setup stopped.');
   const second=await runStep(check,{dir,root,env,run});
   const ok=second.code===0,added=readAdded(root);
   const message=ok?'I added '+entry.name+'. '+(entry.start||'It is ready.'):'I added '+entry.name+', but its own check found a problem, so it may not work yet.';
@@ -108,6 +108,7 @@ export class Addons{
     try{const r=await attempt();return {state:r.added?'added':'problem',id:entry.id,message:r.message};}
     catch(error){
       if(!error.refused||!this.signIn)throw new Error(this.outcome[entry.id].message);
+      if(this.signIn.busy)throw new Error('Another GitHub sign-in is under way. Finish it, then ask again.');
       // The sign-in runs the same fetch again once GitHub has the person's yes, and says how that went.
       return {state:'signing_in',id:entry.id,signIn:this.signIn.start(this.base+entry.repository+'.git',()=>attempt()),message:'Adding '+entry.name+' needs GitHub access first. Sign in with the link and code below; nothing else is asked.'};
     }
