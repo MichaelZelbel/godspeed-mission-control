@@ -50,6 +50,7 @@ export function listAddons(root,{catalog=loadCatalog(),progress={}}={}){
 }
 
 const gitEnvironment=env=>({...env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'never',LC_ALL:'C'});
+// A person is present: they asked for this add-on, and a refused fetch goes to the device sign-in, never a window.
 async function git(args,{cwd,env,run}){const r=await run('git',args,{cwd,env:gitEnvironment(env),timeoutMs:300000});return {...r,failed:r.code!==0};}
 
 async function fetchCopy(entry,{root,env,run,base}){
@@ -94,7 +95,7 @@ export async function installAddon(entry,{root,env=process.env,run=runChild,base
 // One add-on at a time reaches the installer from Settings, the chat and the command line. A link
 // outside the list is installed only when `confirmed` says the person said yes to it.
 export class Addons{
-  constructor({root,signIn,env=process.env,run=runChild,base=GITHUB,catalog=loadCatalog()}){Object.assign(this,{root,signIn,env,run,base,catalog});this.progress={};this.outcome={};}
+  constructor({root,signIn,env=process.env,run=runChild,base=process.env.GODSPEED_ADDON_BASE||GITHUB,catalog=loadCatalog(process.env.GODSPEED_ADDON_CATALOG||undefined)}){Object.assign(this,{root,signIn,env,run,base,catalog});this.progress={};this.outcome={};}
   list(){return listAddons(this.root,{catalog:this.catalog,progress:this.progress});}
   status(id){return {working:this.progress[id]==='working',...(this.outcome[id]||{})};}
   async add(want,{confirmed=false}={}){
