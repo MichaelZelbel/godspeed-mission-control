@@ -30,6 +30,7 @@ import { useEffect, useRef } from "react";
 import { watchSidebarFit } from "@/lib/sidebar-fit";
 import { NavLink } from "@/components/NavLink";
 import { BRAIN_PAGE } from "@/lib/brain-page";
+import { addonIcon, addonPagePath, useAddonMenus } from "@/lib/addon-pages";
 import { BRAND, GUIDE_URL } from "@/lib/brand";
 import { brandLogo } from "@/lib/brand-assets";
 import { localDateISO, localTimeHM, parseInstant } from "@/lib/local-date";
@@ -51,6 +52,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarFooter,
   SidebarSeparator,
   useSidebar,
@@ -77,6 +81,7 @@ export function DashboardSidebar() {
   const isPremium = role === "premium" || role === "premium_gift" || role === "admin";
   const { completeness } = useProfileSummary();
   const pendingCount = useReviewQueueCount();
+  const addonMenus = useAddonMenus();
 
   // The list ends at an entry's edge, never in the middle of one, and says when more is below (#747).
   const listRef = useRef<HTMLDivElement>(null);
@@ -181,6 +186,43 @@ export function DashboardSidebar() {
             </SidebarGroup>
           </div>
         ))}
+
+        {addonMenus.length > 0 && (
+          <>
+            <SidebarSeparator />
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {addonMenus.map((menu) => {
+                    const Icon = addonIcon(menu.icon);
+                    const first = addonPagePath(menu.id, menu.pages[0].id);
+                    return (
+                      <SidebarMenuItem key={menu.id}>
+                        <SidebarMenuButton asChild isActive={isActive(`/dashboard/addons/${menu.id}`)} tooltip={menu.title}>
+                          <NavLink to={first}>
+                            <Icon className="h-4 w-4" />
+                            <span>{menu.title}</span>
+                          </NavLink>
+                        </SidebarMenuButton>
+                        {menu.pages.length > 1 && !collapsed && (
+                          <SidebarMenuSub>
+                            {menu.pages.map((page) => (
+                              <SidebarMenuSubItem key={page.id}>
+                                <SidebarMenuSubButton asChild isActive={isActive(addonPagePath(menu.id, page.id))}>
+                                  <NavLink to={addonPagePath(menu.id, page.id)}><span>{page.title}</span></NavLink>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))}
+                          </SidebarMenuSub>
+                        )}
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        )}
 
         <SidebarSeparator />
 

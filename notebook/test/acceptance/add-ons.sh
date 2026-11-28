@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# add-ons.sh: adding an add-on (#1162), serving its page (#1166), then removing it (#1163). Run as the account Godspeed runs under, on an install
+# add-ons.sh: adding an add-on (#1162), serving its page (#1166), its pages in the notebook (#1182), then removing it (#1163). Run as the account Godspeed runs under, on an install
 # the server installer made (GODSPEED_WORKSPACE is its mission control folder).
 #
 # The add-on's repository comes from a setting, so the same script proves a local test add-on and,
@@ -31,6 +31,13 @@ if (process.argv[2] === 'remove') {
   process.exit(0);
 }
 if (process.argv[2] === 'check') { console.log('Start: Open the Teston page.'); process.exit(fs.existsSync(marker) ? 0 : 3); }
+if (process.argv[2] === 'pages') {
+  console.log(JSON.stringify({ format: 1, menu: { title: 'Teston', icon: 'star' }, pages: [{ id: 'main', title: 'Main', parts: [
+    { kind: 'text', id: 'about', title: 'About', bind: { note: 'Teston.md', section: 'About' } }, { kind: 'action', id: 'go', title: 'Go', action: 'go', label: 'Go' }] }] }));
+  process.exit(0);
+}
+if (process.argv[2] === 'changed') { fs.appendFileSync(path.join(process.env.GODSPEED_WORKSPACE, '.godspeed', 'teston-changed'), process.argv.slice(3).join(' ') + '\n'); process.exit(0); }
+if (process.argv[2] === 'action') { fs.readFileSync(0); console.log(JSON.stringify({ state: 'done', message: 'Went.', refresh: false })); process.exit(0); }
 process.exit(2);
 JS
   cat > "$work/src/bin/teston-page.mjs" <<'JS'
@@ -40,7 +47,7 @@ http.createServer((req, res) => res.end('Teston page ' + req.url + ' ' + req.hea
 JS
   ( cd "$work/src" && git init -q && git add . && git -c user.name=t -c user.email=t@t commit -qm test && git clone -q --bare . "$repo" ) || fail "could not make the test add-on"
   cat > "$work/catalog.json" <<JSON
-[{"id":"teston","name":"the Teston","aliases":["teston"],"repository":"acme/teston","setup":["bin/teston.mjs","setup"],"check":["bin/teston.mjs","check"],"remove":["bin/teston.mjs","remove"],"description":"A test add-on.","start":"Open the Teston page."}]
+[{"id":"teston","name":"the Teston","aliases":["teston"],"repository":"acme/teston","setup":["bin/teston.mjs","setup"],"check":["bin/teston.mjs","check"],"remove":["bin/teston.mjs","remove"],"pages":["bin/teston.mjs","pages"],"changed":["bin/teston.mjs","changed"],"description":"A test add-on.","start":"Open the Teston page."}]
 JSON
   export GODSPEED_ADDON_CATALOG="$work/catalog.json" GODSPEED_ADDON_BASE="file://$work/remote/"
   name="the Teston"
@@ -101,6 +108,21 @@ if [ "$id" = teston ]; then
   [ "$(stat -c %U "$GODSPEED_WORKSPACE/.godspeed/addons/teston/page-wrote")" = "$(id -un)" ] || fail "the page's file does not belong to the assistant's account"
 fi
 
+# Fourth part: the add-on's pages in the notebook (#1182), as the signed-in owner of part 3: its menu entry, its page, a typed value
+# written into a note, and an action. Only the local test add-on has pages here.
+if [ "$id" = teston ]; then
+  api() { curl -fsS -H "Cookie: $cookie" -H "Origin: $address" -H 'Content-Type: application/json' "$@"; }
+  api -X POST -d '{"table":"notes","operation":"insert","values":{"title":"Teston","content":"# Teston\n\n## About\n\n"},"single":true}' "$address/api/query" >/dev/null || fail "could not make the note the page keeps its text in"
+  api "$address/api/addons" | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>{const a=(JSON.parse(t).addons||[]).find(x=>x.id==="teston");process.exit(a&&a.pages&&a.pages.title==="Teston"&&a.pages.pages[0].id==="main"?0:1)})' \
+    || fail "a signed-in GET /api/addons does not carry the add-on's menu entry"
+  api "$address/api/addons/teston/pages/main" | grep -q '"kind":"text"' || fail "the page endpoint did not answer for the signed-in owner"
+  api -X POST -d '{"page":"main","part":"about","value":"typed in the page","base":""}' "$address/api/addons/teston/field" | grep -q '"state":"saved"' || fail "a typed value was not saved"
+  grep -rq "typed in the page" "$GODSPEED_WORKSPACE/notebook" || fail "the typed value is not in the note file"
+  grep -q -- '--field about' "$GODSPEED_WORKSPACE/.godspeed/teston-changed" || fail "the add-on was not told the field changed"
+  api -X POST -d '{"page":"main","part":"go","input":{}}' "$address/api/addons/teston/action" | grep -q '"state":"done"' || fail "the action did not answer"
+  [ "$(curl -s -o /dev/null -w '%{http_code}' "$address/api/addons/teston/pages/main")" = 401 ] || fail "an unsigned call reached the page endpoint"
+fi
+
 # Removing it: asked first, keep leaves what it made, makes its page stop answering, and delete takes its data too.
 copy="$GODSPEED_WORKSPACE/.godspeed/addons/$id"
 data="$GODSPEED_WORKSPACE/.godspeed/teston-data"
@@ -113,6 +135,9 @@ echo "$out" | grep -q '"state":"removed"' || fail "remove --keep did not say rem
 node "$cli" addon list | grep -A4 "\"id\": \"$id\"" | grep -q '"added": false' || fail "Settings list still shows $id added"
 [ ! -e "$copy" ] || fail "the fetched copy is still there"
 [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Cookie: $cookie" "$address$want")" = 404 ] || fail "the page still answers after keep removal"
+if [ "$id" = teston ]; then
+  curl -fsS -H "Cookie: $cookie" "$address/api/addons" | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>{const a=(JSON.parse(t).addons||[]).find(x=>x.id==="teston");process.exit(a&&!a.pages?0:1)})' || fail "the add-on's menu entry is still there after removal"
+fi
 if [ "$id" = teston ]; then
   [ -f "$data" ] || fail "keep deleted the data the add-on made"
   (cd "$work" && GODSPEED_WORKSPACE="$GODSPEED_WORKSPACE" node "$work/src/bin/teston.mjs" check >/dev/null); [ $? -eq 3 ] || fail "check does not exit 3 after remove"

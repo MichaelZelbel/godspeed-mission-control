@@ -25,6 +25,7 @@ const Activity=lazy(()=>import('./pages/ActivityPage')),WeeklyReview=lazy(()=>im
 const KnowledgeGraph=lazy(()=>import('./pages/KnowledgeGraph'));
 // Godspeed's brain (lib/brain-page.ts): who it is, its rules, what it knows about you, its skills.
 const Identity=lazy(()=>import('./pages/Identity'));
+const AddonPage=lazy(()=>import('./pages/AddonPage'));
 // Its address until 16 October 2026 ("Identity"), with a section after # kept.
 function ToBrainPage(){const {search,hash}=useLocation();return <Navigate to={BRAIN_PAGE.path+search+hash} replace/>;}
 const Control=lazy(()=>import('./local/Control'));
@@ -83,6 +84,6 @@ export function AppRoutes(){return <Routes><Route path="/setup" element={<SetupR
   <Route path="/collections" element={<Collections/>}/><Route path="/collections/templates" element={<CollectionTemplates/>}/>
   <Route path="/collections/:slug/schema" element={<CollectionSchema/>}/><Route path="/collections/:slug/:itemId" element={<CollectionDetail/>}/><Route path="/collections/:slug" element={<CollectionDetail/>}/><Route path="/trackers/habits/:id" element={<HabitTracker/>}/>
   <Route path="/dashboard/graph" element={<KnowledgeGraph/>}/>
-  <Route path="/:name/*" element={<ShortAddress/>}/><Route path="*" element={<Unavailable/>}/>
+  <Route path="/dashboard/addons/:id/:page?" element={<AddonPage/>}/><Route path="/:name/*" element={<ShortAddress/>}/><Route path="*" element={<Unavailable/>}/>
 </Route></Routes>;}
 export default function App(){return <ThemeProvider attribute="class" defaultTheme="dark"><TooltipProvider><Toaster/><Sonner/><BrowserRouter><AuthProvider><AppRoutes/></AuthProvider></BrowserRouter></TooltipProvider></ThemeProvider>;}
