@@ -93,6 +93,9 @@ test('bad ids, unknown parts and a bind outside the notebook are refused',async(
   try{
     for(const route of ['/api/addons/nope/pages/profile','/api/addons/teston/pages/missing','/api/addons/teston/job/..%2Fx'])assert.equal((await w.get(route)).status,404,route);
     assert.equal((await w.post('/api/addons/teston/field',{page:'profile',part:'dates',value:'x',base:''})).status,404);
+    const note=w.service.store.save('notes',{title:'Dating Profile',content:NOTE});
+    assert.equal((await w.post('/api/addons/teston/field',{page:'profile',part:'about',value:'one\n## Sub\ntwo',base:'Old words.'})).status,400);
+    assert.equal(w.service.store.get('notes',note.id).content,NOTE);
     assert.equal((await w.post('/api/addons/teston/action',{page:'profile',part:'about',input:{}})).status,404);
   }finally{await w.close();}
 });

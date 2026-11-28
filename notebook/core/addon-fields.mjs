@@ -54,6 +54,7 @@ export function readField(store,bind){return readSection(noteOf(store,bind.note)
 // {state:'saved',value} or {state:'conflict',current} (nothing written). `base` is the section the page loaded.
 export async function writeField(store,bind,{value,base}){
   if(typeof value!=='string'||typeof base!=='string')throw plain('Send the new text and the text it started from.',{status:400});
+  if(value.split('\n').some(l=>headingLine.test(l)))throw plain('A line that starts with # would split this section, so the page could not show it again. Start that line with something else.',{status:400});
   return store.withLockAsync(()=>{
     const id=noteOf(store,bind.note).id;
     store.freshen([store.fileOf.get('notes/'+id)]);
