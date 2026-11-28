@@ -86,7 +86,10 @@ export async function installAddon(entry,{root,env=process.env,run=runChild,base
   if(first.code!==0)throw new Error('Adding '+entry.name+' did not finish: its setup stopped.');
   const second=await runStep(check,{dir,root,env,run});
   const ok=second.code===0,added=readAdded(root);
-  const message=ok?'I added '+entry.name+'. '+(entry.start||'It is ready.'):'I added '+entry.name+', but its own check found a problem, so it may not work yet.';
+  // The check may print `Start: <words or link>`; that line, when there, says where to start.
+  const said=(second.stdout||'').match(/^\s*Start:\s*(.+?)\s*$/mi)?.[1];
+  const start=said?(entry.start&&!entry.start.includes(said)?entry.start.replace(/\.?\s*$/,'')+': '+said:said):entry.start;
+  const message=ok?'I added '+entry.name+'. '+(start||'It is ready.'):'I added '+entry.name+', but its own check found a problem, so it may not work yet.';
   added[entry.id]={repository:entry.repository,commit,added_at:added[entry.id]?.added_at||now().toISOString(),...(ok?{checked_at:now().toISOString()}:{}),message};
   writeAdded(root,added);
   return {id:entry.id,added:ok,message};

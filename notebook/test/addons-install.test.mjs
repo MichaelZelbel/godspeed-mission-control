@@ -108,6 +108,13 @@ test('a sign-in already under way is said plainly instead of being dropped',asyn
   await assert.rejects(new Addons({root:w.root,base:w.url,catalog:w.catalog,run,signIn}).add('demo'),/Another GitHub sign-in is under way/);
 });
 
+test('a Start line printed by the check is in the reply',async()=>{
+  const w=world(),remote=path.join(w.base,'remotes/acme/demo.git');
+  const f=path.join(remote,'bin','demo.mjs');fs.writeFileSync(f,"if(process.argv[2]==='check')console.log('Start: https://example.com/x');\n"+fs.readFileSync(f,'utf8'));git(remote,'commit','-qam','start line');
+  const r=await new Addons({root:w.root,base:w.url,catalog:w.catalog}).add('demo');
+  assert.equal(r.state,'added');assert.match(r.message,/Open your Demo page: https:\/\/example.com\/x/);
+});
+
 test('a failing check records the add-on as not added, with a reason',async()=>{
   const w=world(),remote=path.join(w.base,'remotes/acme/demo.git');
   fs.writeFileSync(path.join(remote,'bin','demo.mjs'),'if(process.argv[2]==="check")process.exit(1);');git(remote,'commit','-qam','bad check');

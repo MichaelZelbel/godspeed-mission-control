@@ -41,6 +41,7 @@ echo "$before" | grep -A4 "\"id\": \"$id\"" | grep -q '"added": false' || fail "
 
 out="$(node "$cli" addon add "$name")" || fail "add failed: $out"
 echo "$out" | grep -q '"state":"added"' || fail "first add did not say added: $out"
+if [ "$id" = teston ]; then echo "$out" | grep -q 'Open the Teston page' || fail "the reply lacks the check's Start line: $out"; fi
 echo "$out" | grep -qE 'godspeed|node |\.mjs|bin/' && fail "the reply names a command: $out"
 node "$cli" addon list | grep -A4 "\"id\": \"$id\"" | grep -q '"added": true' || fail "Settings list does not show $id added"
 [ -f "$GODSPEED_WORKSPACE/.godspeed/addons/$id/.git/HEAD" ] || fail "no copy in .godspeed/addons/$id"
