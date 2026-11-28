@@ -11,7 +11,7 @@ const error=(res,status,message)=>{res.writeHead(status,{'Content-Type':'applica
 const stop=child=>process.platform==='darwin'?(child.exitCode===null&&child.kill(),Promise.resolve()):terminateOwnedTree(child).catch(()=>{});
 export class AddonPages{
  constructor({root,ownPorts,scan=15000,restartGap=60000,log=message=>console.error(message)}){
-  Object.assign(this,{root:path.resolve(root),ownPorts,scan,restartGap,log});this.pages=new Map();this.refused=new Map();this.timer=null;this.closed=false;this.scanning=null;
+  Object.assign(this,{root:path.resolve(root),ownPorts,scan,restartGap,log});this.pages=new Map();this.refused=new Map();this.timer=null;this.closed=false;
  }
  start(){this.update();this.timer=setInterval(()=>this.update(),this.scan);this.timer.unref?.();}
  // Settings lists the page of every add-on whose file is valid, running or between restarts.
