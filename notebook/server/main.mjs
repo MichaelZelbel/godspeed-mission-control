@@ -666,6 +666,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       // Settings > Add-ons: the shipped list, and the one way to add one (core/addons-install.mjs). A sign-in it starts is followed at /api/sync/sign-in.
       if(route==='/api/addons'&&req.method==='GET'){const links=pages.list();return send(res,200,{addons:addons.list().map(a=>links[a.id]?{...a,page:links[a.id]}:a)});}
+      if(route==='/api/addons/remove'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,await addons.remove(input.addon,{data:input.data}));}
       if(route==='/api/addons/add'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,await addons.add(input.addon,{confirmed:input.confirmed===true}));}
       if(route==='/api/sync/sign-in'&&req.method==='GET')return send(res,200,{signIn:githubSignIn.status()});
       if(route==='/api/sync/run'&&req.method==='POST'){

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# add-ons.sh: adding an add-on (#1162) and its page through the notebook (#1166). Run as the account Godspeed runs under, on an install
+# add-ons.sh: adding an add-on (#1162), serving its page (#1166), then removing it (#1163). Run as the account Godspeed runs under, on an install
 # the server installer made (GODSPEED_WORKSPACE is its mission control folder).
 #
 # The add-on's repository comes from a setting, so the same script proves a local test add-on and,
@@ -22,7 +22,14 @@ if [ "${1:-}" != "--real" ]; then
 #!/usr/bin/env node
 import fs from 'node:fs'; import path from 'node:path';
 const marker = path.join(process.env.GODSPEED_WORKSPACE, '.godspeed', 'teston-setups');
-if (process.argv[2] === 'setup') { fs.appendFileSync(marker, 'x'); process.exit(0); }   // safe to repeat
+const data = path.join(process.env.GODSPEED_WORKSPACE, '.godspeed', 'teston-data');
+if (process.argv[2] === 'setup') { fs.appendFileSync(marker, 'x'); fs.appendFileSync(data, ''); process.exit(0); }   // safe to repeat
+if (process.argv[2] === 'remove') {
+  if (!process.argv.includes('--yes')) process.exit(2);
+  fs.rmSync(marker, { force: true });
+  if (process.argv.includes('--delete-data')) fs.rmSync(data, { force: true });
+  process.exit(0);
+}
 if (process.argv[2] === 'check') { console.log('Start: Open the Teston page.'); process.exit(fs.existsSync(marker) ? 0 : 3); }
 process.exit(2);
 JS
@@ -33,7 +40,7 @@ http.createServer((req, res) => res.end('Teston page ' + req.url + ' ' + req.hea
 JS
   ( cd "$work/src" && git init -q && git add . && git -c user.name=t -c user.email=t@t commit -qm test && git clone -q --bare . "$repo" ) || fail "could not make the test add-on"
   cat > "$work/catalog.json" <<JSON
-[{"id":"teston","name":"the Teston","aliases":["teston"],"repository":"acme/teston","setup":["bin/teston.mjs","setup"],"check":["bin/teston.mjs","check"],"description":"A test add-on.","start":"Open the Teston page."}]
+[{"id":"teston","name":"the Teston","aliases":["teston"],"repository":"acme/teston","setup":["bin/teston.mjs","setup"],"check":["bin/teston.mjs","check"],"remove":["bin/teston.mjs","remove"],"description":"A test add-on.","start":"Open the Teston page."}]
 JSON
   export GODSPEED_ADDON_CATALOG="$work/catalog.json" GODSPEED_ADDON_BASE="file://$work/remote/"
   name="the Teston"
@@ -93,6 +100,29 @@ case "$unsigned" in "303 "*"/setup?next="*) ;; *) fail "an unsigned visit was no
 if [ "$id" = teston ]; then
   [ "$(stat -c %U "$GODSPEED_WORKSPACE/.godspeed/addons/teston/page-wrote")" = "$(id -un)" ] || fail "the page's file does not belong to the assistant's account"
 fi
+
+# Removing it: asked first, keep leaves what it made, makes its page stop answering, and delete takes its data too.
+copy="$GODSPEED_WORKSPACE/.godspeed/addons/$id"
+data="$GODSPEED_WORKSPACE/.godspeed/teston-data"
+out="$(node "$cli" addon remove "$name")" || fail "bare remove failed: $out"
+echo "$out" | grep -q '"state":"ask"' || fail "remove did not ask keep or delete first: $out"
+[ -d "$copy" ] || fail "asking to remove already deleted the copy"
+
+out="$(node "$cli" addon remove "$name" --keep)" || fail "remove --keep failed: $out"
+echo "$out" | grep -q '"state":"removed"' || fail "remove --keep did not say removed: $out"
+node "$cli" addon list | grep -A4 "\"id\": \"$id\"" | grep -q '"added": false' || fail "Settings list still shows $id added"
+[ ! -e "$copy" ] || fail "the fetched copy is still there"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -H "Cookie: $cookie" "$address$want")" = 404 ] || fail "the page still answers after keep removal"
+if [ "$id" = teston ]; then
+  [ -f "$data" ] || fail "keep deleted the data the add-on made"
+  (cd "$work" && GODSPEED_WORKSPACE="$GODSPEED_WORKSPACE" node "$work/src/bin/teston.mjs" check >/dev/null); [ $? -eq 3 ] || fail "check does not exit 3 after remove"
+fi
+
+out="$(node "$cli" addon add "$name")" || fail "adding again failed: $out"
+out="$(node "$cli" addon remove "$name" --delete)" || fail "remove --delete failed: $out"
+echo "$out" | grep -q '"state":"removed"' || fail "remove --delete did not say removed: $out"
+[ ! -e "$copy" ] || fail "the fetched copy is still there after delete"
+if [ "$id" = teston ]; then [ ! -e "$data" ] || fail "delete left the data the add-on made"; fi
 echo "ACCEPTANCE PASSED"
 }
 main "$@"

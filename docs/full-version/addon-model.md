@@ -328,7 +328,7 @@ This does not replace the Caddy file in "A web address for an add-on", which sta
 
 ## Adding and removing an add-on
 
-Godspeed adds an add-on when asked (a chat, Settings > Add-ons, or `godspeed addon add <name|repository>`),
+Godspeed adds an add-on when asked (a chat, Settings > Add-ons, or `godspeed addon add <name|repository>`; removed the same three ways, with `godspeed addon remove <name> [--keep|--delete]`),
 all through `notebook/core/addons-install.mjs`. It fetches the repository into `.godspeed/addons/<id>/`,
 runs the add-on's setup from the mission control folder (`GODSPEED_WORKSPACE` names it), then its check.
 An add-on in `third-party/addons/catalog.json` is added without a question; any other repository needs
@@ -341,7 +341,15 @@ What an add-on promises:
   It may print `Start: <words or link>`; the reply tells the person where to start from it.
 - An add-on outside the catalog names its program in `package.json` `bin`; that program takes `setup` and `check`.
 
-Removing an add-on is a later change.
+Removing works for a catalog entry that has a `remove` command (an argv like `setup`'s); any other add-on
+is refused with "This add-on cannot be removed by Godspeed yet." Godspeed first asks whether to keep what
+the add-on made or delete it too (keep is the default and comes first; a bare `addon remove` only asks).
+It then runs `remove [--delete-data] --yes` from `.godspeed/addons/<id>/`, passing `--delete-data` only
+when the person chose delete, then the add-on's `check`, which must exit 3. Only then are the fetched
+copy and its record deleted; if either step fails nothing is deleted and removing can be tried again.
+
+- **remove** must undo everything the add-on made active (recipe, hooks, routines, page) and be safe to run twice.
+  Without `--delete-data` it keeps the data the person made; with it, it deletes that data too.
 
 `GODSPEED_ADDON_CATALOG` (a catalog file) and `GODSPEED_ADDON_BASE` (where repositories are fetched from)
 let the scenario `notebook/test/acceptance/add-ons.sh` run against a local test add-on; the same script
