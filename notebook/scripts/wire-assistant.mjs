@@ -186,11 +186,23 @@ if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ['+GODSPEED_PLUGINS.ma
 else{
  const block=text.match(/^plugins:[^\n]*\n(?:[ \t]+[^\n]*\n|\n)*/m)?.[0]||'';
  const names=enabledGodspeedPlugins(configList(readConfigValue(text,['plugins','disabled'])));
- let updated=block;
- if(/  enabled:\s*\[([^\]]*)\]/.test(block))updated=block.replace(/  enabled:\s*\[([^\]]*)\]/,(_m,old)=>'  enabled: ['+[old.trim(),...names.filter(n=>!old.includes(n)).map(n=>JSON.stringify(n))].filter(Boolean).join(', ')+']');
- else if(/^  enabled:\s*\n/m.test(block))updated=block.replace(/^  enabled:\s*\n((?:    - [^\n]*\n)*)/m,(_m,old)=>'  enabled:\n'+old+names.filter(n=>!old.includes(n)).map(n=>'    - '+JSON.stringify(n)+'\n').join(''));
- else if(!/  enabled:/.test(block))updated=block+'  enabled: ['+names.map(n=>JSON.stringify(n)).join(', ')+']\n';
- else throw Error('The existing plugin configuration needs review before enabling personal workflows');
+ // Hermes' config writer can leave its old flow list beside a new block list. Its next plugin
+ // command refuses that file as duplicate YAML. Keep every user plugin and write one list before
+ // Hermes is asked to read the file again.
+ const lines=block.split('\n'),kept=[],enabled=[];let insert=-1;
+ for(let i=0;i<lines.length;){
+  const own=lines[i].match(/^  enabled:\s*(.*?)\s*$/);
+  if(!own){kept.push(lines[i++]);continue;}
+  if(insert<0)insert=kept.length;
+  enabled.push(...configList(own[1]));i++;
+  while(i<lines.length&&/^(?:    |  - )/.test(lines[i])){
+   const item=lines[i].match(/^\s*-\s*(.*?)\s*$/);if(item)enabled.push(...configList(item[1]));
+   i++;
+  }
+ }
+ const all=[...new Set([...enabled,...names])],line='  enabled: ['+all.map(JSON.stringify).join(', ')+']';
+ kept.splice(insert<0?kept.length-1:insert,0,line);
+ const updated=kept.join('\n');
  text=text.replace(block,updated);
 }
 const notebookTool=()=>{

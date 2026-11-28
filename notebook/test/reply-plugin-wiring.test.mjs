@@ -43,6 +43,19 @@ test('an already enabled list gains the reply plugin',t=>{
  assert.ok(configList(readConfigValue(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),['plugins','enabled'])).includes('godspeed-reply'));
 });
 
+test('duplicate plugin selections left by an assistant update become one list',t=>{
+ const {root,home}=setup(t);
+ fs.writeFileSync(path.join(home,'config.yaml'),'plugins:\n  clone_timeout_seconds: 300\n  enabled: []\n  enabled:\n    - "my-own"\n    - "godspeed-coach"\n  disabled: []\nmodel:\n  provider: auto\n');
+ const first=wire(root,home);assert.equal(first.status,0,first.stderr);
+ const text=fs.readFileSync(path.join(home,'config.yaml'),'utf8'),block=text.match(/^plugins:[^\n]*\n(?:[ \t]+[^\n]*\n|\n)*/m)?.[0]||'';
+ assert.equal((block.match(/^  enabled:/gm)||[]).length,1,block);
+ const enabled=configList(readConfigValue(text,['plugins','enabled']));
+ assert.ok(enabled.includes('my-own'),'the user plugin stays enabled');
+ assert.ok(enabled.includes('godspeed-reply'),'Godspeed plugins are enabled');
+ const again=wire(root,home);assert.equal(again.status,0,again.stderr);
+ assert.equal(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),text,'a later wiring remains unchanged');
+});
+
 test('one line names a second enabled plugin that registers transform_llm_output, and only that one',t=>{
  const {root,home}=setup(t);
  const own=(name,body)=>{const dir=path.join(home,'plugins',name);fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'__init__.py'),body);};
