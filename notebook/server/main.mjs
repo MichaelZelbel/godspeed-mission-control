@@ -20,6 +20,7 @@ import { FileSync } from '../core/sync/git.mjs';
 import {conflictView,resolveSavedConflict} from '../core/conflicts.mjs';
 import { SyncRunner } from '../core/sync/runner.mjs';
 import {GitHubSignIn,connectRecordSync} from '../core/sync/github-sign-in.mjs';
+import {Addons} from '../core/addons-install.mjs';
 import { restore } from '../core/archives.mjs';
 import {RecoveryRunner} from '../core/recovery-runner.mjs';
 import {BackupRunner} from '../core/backup-runner.mjs';
@@ -161,6 +162,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const connectMeaning=config=>{index.meaning?.close();index.meaning=new MeaningIndex(index,{config});};
   connectMeaning(embeddingConfig(store.state));
   const githubSignIn=new GitHubSignIn();
+  const addons=new Addons({root,signIn:githubSignIn});
   const syncNotConnected={state:'not_connected',error:'Sync is not connected, so nothing was synced. Your files are safe on this computer.',detail:'To connect it, open Settings, then Sync and schedule ownership, and press Connect record sync.'};
   const syncRunner=new SyncRunner(root,{onResult:result=>{sync.last=result;atomic(path.join(store.state,'sync-status.json'),JSON.stringify(result));}});
   const providerPath=path.join(store.state,'provider.json');
@@ -645,6 +647,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         // A computer not yet signed in to GitHub signs in once, then the same check runs again (github-sign-in.mjs).
         const input=JSON.parse(await body(req));return send(res,200,await connectRecordSync({url:input.url,configure:url=>syncRunner.configure(url),signIn:githubSignIn}));
       }
+      // Settings > Add-ons: the shipped list, and the one way to add one (core/addons-install.mjs). A sign-in it starts is followed at /api/sync/sign-in.
+      if(route==='/api/addons'&&req.method==='GET')return send(res,200,{addons:addons.list()});
+      if(route==='/api/addons/add'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,await addons.add(input.addon,{confirmed:input.confirmed===true}));}
       if(route==='/api/sync/sign-in'&&req.method==='GET')return send(res,200,{signIn:githubSignIn.status()});
       if(route==='/api/sync/run'&&req.method==='POST'){
         // A notebook that never connected sync is told so, instead of running git and showing its error.
