@@ -21,6 +21,7 @@ import {conflictView,resolveSavedConflict} from '../core/conflicts.mjs';
 import { SyncRunner } from '../core/sync/runner.mjs';
 import {GitHubSignIn,connectRecordSync} from '../core/sync/github-sign-in.mjs';
 import {Addons} from '../core/addons-install.mjs';
+import {AddonPages} from '../core/addon-pages.mjs';
 import { restore } from '../core/archives.mjs';
 import {RecoveryRunner} from '../core/recovery-runner.mjs';
 import {BackupRunner} from '../core/backup-runner.mjs';
@@ -163,6 +164,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   connectMeaning(embeddingConfig(store.state));
   const githubSignIn=new GitHubSignIn();
   const addons=new Addons({root,signIn:githubSignIn});
+  // Late-bound: the doors this reads are made below.
+  const pages=new AddonPages({root,ownPorts:()=>[server,webServer,localServer].map(door=>door?.address()?.port).filter(Boolean)});
   const syncNotConnected={state:'not_connected',error:'Sync is not connected, so nothing was synced. Your files are safe on this computer.',detail:'To connect it, open Settings, then Sync and schedule ownership, and press Connect record sync.'};
   const syncRunner=new SyncRunner(root,{onResult:result=>{sync.last=result;atomic(path.join(store.state,'sync-status.json'),JSON.stringify(result));}});
   const providerPath=path.join(store.state,'provider.json');
@@ -390,6 +393,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // Telegram's link-preview fetcher got the session and the owner's tap failed.
       // The page's own form must carry its origin (same-origin), and the code in
       // its address still never goes to another site.
+      // An add-on's page (core/addon-pages.mjs) is reached only by a visit this door counts as signed in; an unsigned one learns nothing of which pages exist.
+      if(route==='/addons'||route.startsWith('/addons/')){
+        if(!authorized(req,route)){
+          if(req.method==='GET'||req.method==='HEAD'){res.writeHead(303,{Location:'/setup?next='+encodeURIComponent(route+url.search),'Cache-Control':'no-store'});return res.end();}
+          return send(res,401,{error:'Sign in to continue.',code:auth.cookie(req)?'SESSION_EXPIRED':'SIGN_IN_REQUIRED'});
+        }
+        return pages.route(req,res);
+      }
       if(route.startsWith('/login/')){
         const code=route.slice(7),expiry=loginLinks.get(code),page=(status,{title,text,button,link})=>{res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'same-origin','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="'+(store.get('settings','ui-preferences')?.preferences?.theme==='light'?'light':'dark')+'"><title>Godspeed Mission Control</title><style>body{font-family:system-ui,sans-serif;background:hsl(222 30% 8%);color:hsl(220 15% 90%);margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem;box-sizing:border-box;line-height:1.5}main{max-width:28rem;width:100%;padding:2rem;border-radius:.75rem;border:1px solid hsl(220 15% 90%/.2);background:hsl(222 30% 11%)}p.brand{margin:0 0 1rem;font-size:.85rem;opacity:.7}h1{font-size:1.3rem;margin:0 0 .75rem}p{margin:0 0 1.25rem}.go{display:inline-block;font-size:1.05rem;padding:.6rem 1.4rem;border:0;border-radius:.5rem;background:hsl(217 75% 58%);color:#fff;text-decoration:none;cursor:pointer}'+(store.get('settings','ui-preferences')?.preferences?.theme==='light'?'body{background:hsl(216 43% 97%);color:hsl(225 62% 12%)}main{background:#fff;border-color:hsl(225 62% 12%/.2)}.go{background:hsl(220 70% 45%)}':'')+'</style><body><main><p class="brand">Godspeed Mission Control</p><h1>'+title+'</h1>'+(text?'<p>'+text+'</p>':'')+(button?'<form method="post"><button type="submit" class="go">Continue</button></form>':'')+(link?'<a class="go" href="'+link.href+'">'+link.label+'</a>':'')+'</main></body></html>');};
         if(!expiry||expiry<Date.now())return page(401,{title:'This sign-in link expired or was already used.',text:'Each sign-in link works once, for five minutes.',link:{href:'/dashboard',label:'Go to your notebook'}});
@@ -648,7 +659,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const input=JSON.parse(await body(req));return send(res,200,await connectRecordSync({url:input.url,configure:url=>syncRunner.configure(url),signIn:githubSignIn}));
       }
       // Settings > Add-ons: the shipped list, and the one way to add one (core/addons-install.mjs). A sign-in it starts is followed at /api/sync/sign-in.
-      if(route==='/api/addons'&&req.method==='GET')return send(res,200,{addons:addons.list()});
+      if(route==='/api/addons'&&req.method==='GET'){const links=pages.list();return send(res,200,{addons:addons.list().map(a=>links[a.id]?{...a,page:links[a.id]}:a)});}
       if(route==='/api/addons/add'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,await addons.add(input.addon,{confirmed:input.confirmed===true}));}
       if(route==='/api/sync/sign-in'&&req.method==='GET')return send(res,200,{signIn:githubSignIn.status()});
       if(route==='/api/sync/run'&&req.method==='POST'){
@@ -934,6 +945,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   let firstQueryTraced=false;
   const listen = (server, port, host) => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   const server = http.createServer(handle(remote, auth));
+  const upgradeFor=(door,auth)=>door.on('upgrade',(req,socket,head)=>{if(/^\/addons\//.test(new URL(req.url,'http://localhost').pathname)&&auth.authorized(req))pages.upgrade(req,socket,head);else socket.destroy();});
+  upgradeFor(server,auth);
   // An older notebook gains its missing routines before the server answers, so Settings lists them at once.
   try{await scheduler.ensureStartingJobs?.();}catch{}
   await listen(server, port, host);
@@ -982,6 +995,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   let webServer = null;
   if (web) {
     webServer = http.createServer(handle(true, web.auth, true));
+    upgradeFor(webServer, web.auth);
     try { await listen(webServer, web.port, '127.0.0.1'); }
     catch (error) { console.error('Godspeed Mission Control: the web address\'s door on port ' + web.port + ' could not open: ' + error.message); webServer = null; }
   }
@@ -1105,20 +1119,23 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     }
   },1000);reconcile.unref?.();
   let localServer = null;
-  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(automaticTimer);clearInterval(factTimer);clearInterval(journalMomentsTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();clearInterval(reconcile);rootWatcher?.close();for(const watcher of watchers.values())watcher.close();watchers.clear();for(const timer of rewatches.values())clearTimeout(timer);rewatches.clear();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
+  const close = async () => { await pages.close(); await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(automaticTimer);clearInterval(factTimer);clearInterval(journalMomentsTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();clearInterval(reconcile);rootWatcher?.close();for(const watcher of watchers.values())watcher.close();watchers.clear();for(const timer of rewatches.values())clearTimeout(timer);rewatches.clear();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
   // A container's main door listens on its network interface and always needs sign-in.
   // Add-ons and tools in that same container may use this opt-in, loopback-only door,
   // with the exact Host/Origin guards and API contract of a native local installation.
   if (localPort !== undefined && localPort !== null) {
-    localServer = http.createServer(handle(false, new WebAuth(store.state, { token, remote: false, now: authNow })));
+    const localAuth = new WebAuth(store.state, { token, remote: false, now: authNow });
+    localServer = http.createServer(handle(false, localAuth));
+    upgradeFor(localServer, localAuth);
     try { await listen(localServer, Number(localPort), '127.0.0.1'); }
     catch (error) { await close(); throw error; }
   }
+  pages.start();
   if(originalRuntime&&!assistantMissing){
     workouts=new WorkoutsAddon({root:store.root,address:()=>{const address=(localServer||server).address();return address&&typeof address==='object'?'http://127.0.0.1:'+address.port:null;}});
     scheduler.setWorkouts(workouts);
   }
-  return { server, store, index, query, domains, scheduler, sync, mediaSync, timelineRepair, address: server.address(), webAddress: webServer?.address() || null, localAddress: localServer?.address() || null, close };
+  return { pages, server, store, index, query, domains, scheduler, sync, mediaSync, timelineRepair, address: server.address(), webAddress: webServer?.address() || null, localAddress: localServer?.address() || null, close };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;

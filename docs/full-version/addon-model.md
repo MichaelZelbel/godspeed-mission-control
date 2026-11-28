@@ -309,6 +309,23 @@ updating Godspeed gives it its address. The one-line Docker server's Caddy runs 
 own and reads no such folder, and a computer has none. When Godspeed is uninstalled its Caddy stops
 reading the folder; the folder and the add-ons' files stay.
 
+## A page through the notebook
+
+An add-on's page needs no administrator step and works the same on a Linux server, Windows, a Mac and Docker: the notebook runs it and opens it for you. The add-on writes `.godspeed/addons/<id>/page.json`:
+
+```json
+{"command": ["node", "bin/your-add-on-page.mjs", "8431"], "port": 8431, "title": "Your add-on"}
+```
+
+- `command` is a list: the program, then its arguments (no shell). The notebook starts it under its own account with the mission control folder as the working directory, so every file the page writes belongs to the same account as the rest of the mission control.
+- `port` is the one the page listens on, on `127.0.0.1`, from 1024 to 65535. `title` is optional and is what Settings > Add-ons shows as the link.
+- The notebook reads the files within a minute (every 15 seconds): a new file starts the command, a changed file restarts it, a removed file stops it. A command that stops is started again, no more than once a minute. A command that cannot start is logged and tried again; the notebook keeps serving.
+- A visit to `https://<notebook address>/addons/<id>/` and below is passed to the page only when it is signed in to the notebook (on this computer's own door, which has no sign-in, it always is). A visit that is not signed in is sent to the sign-in page, and a page that is not running answers "not running right now".
+- The page sees the path with `/addons/<id>` taken off, and the header `X-Forwarded-Prefix: /addons/<id>`, so it builds its links with that prefix. It never receives the notebook's session cookie.
+- An `id` outside `a-z`, `0-9` and `-`, or a port the notebook itself uses (or another add-on's page names), is refused with one line in the notebook's log; nothing else changes.
+
+This does not replace the Caddy file in "A web address for an add-on", which stays as it is. Limits: a notebook that is killed without stopping leaves the page's process running, and a restarted notebook's command then finds its port taken and tries again each minute until that process is gone; on a Mac only the command itself is stopped, not what it started.
+
 ## Adding and removing an add-on
 
 Godspeed adds an add-on when asked (a chat, Settings > Add-ons, or `godspeed addon add <name|repository>`),
